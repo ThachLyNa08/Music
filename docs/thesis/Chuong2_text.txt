@@ -1,0 +1,225 @@
+
+CHƯƠNG 1: TỔNG QUAN ĐỀ TÀI
+1.1. MÔ TẢ ĐỀ TÀI
+MusicFlow - “Hệ thống phát nhạc trực tuyến tích hợp thuật toán gợi ý và tự động tạo danh sách phát dựa trên hành vi người dùng” là một ứng dụng web cung cấp trải nghiệm nghe nhạc được cá nhân hóa toàn diện. Thay vì chỉ dừng lại ở các chức năng quản lý âm nhạc thông thường, hệ thống tập trung vào việc thấu hiểu thói quen và sở thích của từng người dùng để mang đến những đề xuất âm nhạc phù hợp nhất.
+Hệ thống bao gồm các nhóm chức năng chính: quản lý tài khoản người dùng, phát nhạc trực tuyến, quản lý danh sách phát, hệ thống gợi ý bài hát dựa trên hành vi, tách nguồn âm thanh phục vụ hát karaoke, tạo danh sách phát tự động bằng lệnh ngôn ngữ tự nhiên, thanh toán nâng cấp tài khoản qua mã QR và quản trị hệ thống dành cho Admin.
+Để sử dụng hệ thống, người dùng cần đăng ký tài khoản bằng địa chỉ email và đặt mật khẩu. Trong quá trình đăng ký, người dùng được yêu cầu lựa chọn những thể loại âm nhạc yêu thích ban đầu. Thông tin này đóng vai trò quan trọng trong việc giải quyết bài toán Cold Start - tức là cung cấp nội dung gợi ý phù hợp ngay từ những lần sử dụng đầu tiên, trước khi hệ thống thu thập đủ dữ liệu hành vi nghe nhạc của người dùng đó.
+Khi đã đăng nhập, người dùng có thể tìm kiếm và phát nhạc trực tuyến thông qua giao diện web với trình phát nhạc (player bar) luôn hiển thị ở cuối màn hình. Trình phát hỗ trợ các thao tác cơ bản như phát, dừng, tua bài, điều chỉnh âm lượng, bật chế độ ngẫu nhiên (shuffle) và lặp lại (repeat). Mỗi hành vi nghe nhạc của người dùng – bao gồm thời gian nghe, tỷ lệ hoàn thành bài hát, thời điểm bỏ qua và nguồn gốc phát hiện bài hát – đều được hệ thống ghi nhận tự động để phục vụ cho việc phân tích và xây dựng mô hình gợi ý cá nhân hóa.
+Hệ thống gợi ý bài hát là tính năng cốt lõi của đề tài, được triển khai theo hướng tiếp cận kết hợp (Hybrid Approach). Cụ thể, với những người dùng đã có lịch sử nghe nhạc đủ lớn (từ 10 lượt nghe trở lên), hệ thống ứng dụng thuật toán Collaborative Filtering theo phương pháp Phân tích giá trị suy biến (SVD - Singular Value Decomposition) để gợi ý những bài hát mà những người dùng có sở thích tương tự đã nghe và yêu thích. Đối với người dùng mới hoặc người dùng có ít lịch sử nghe nhạc, hệ thống chuyển sang sử dụng Content-based Filtering dựa trên vector đặc trưng của bài hát (thể loại, nghệ sĩ) kết hợp với danh sách bài hát phổ biến nhất hệ thống trong tuần. Kết quả gợi ý được tính toán định kỳ bởi service Python và được lưu vào bộ nhớ đệm Redis để đảm bảo phản hồi nhanh cho người dùng.
+Bên cạnh gợi ý bài hát, hệ thống còn tự động tạo các danh sách phát cá nhân hóa theo nhiều tiêu chí khác nhau. Mỗi tuần, hệ thống tự động tạo một playlist "Weekly Mix" riêng cho từng người dùng dựa trên kết quả gợi ý của tuần đó. Ngoài ra, hệ thống còn phân tích khung giờ nghe nhạc của người dùng để tạo playlist theo tâm trạng (sáng – buổi tối) và theo dõi xu hướng thể loại được nghe nhiều hơn bình thường trong 3 ngày gần nhất để tạo playlist chuyên sâu theo thể loại.
+Hệ thống còn tích hợp tính năng Tạo danh sách phát bằng lệnh ngôn ngữ tự nhiên (AI Playlist Generator), cho phép người dùng nhập một yêu cầu tự do như "Tạo cho tôi list nhạc lofi để tập trung lập trình trong 2 tiếng" hoặc "Nhạc ballad buồn cho ngày mưa". Hệ thống sẽ gọi API Claude để phân tích và trích xuất các yếu tố như thể loại nhạc, tâm trạng, thời lượng mong muốn và ngôn ngữ bài hát, sau đó kết hợp với dữ liệu cá nhân hóa của người dùng để tạo ra một danh sách phát phù hợp. Mỗi bài hát trong danh sách được tạo đều có kèm theo giải thích ngắn gọn lý do tại sao nó được chọn, giúp người dùng hiểu được logic hoạt động của hệ thống.
+Tính năng Tách nguồn âm thanh (Stem Separation) cho phép người dùng chọn một bài hát từ thư viện để hệ thống xử lý tách biệt giọng ca và nhạc nền thành hai track độc lập, sử dụng thư viện trí tuệ nhân tạo Spleeter. Quá trình xử lý được thực hiện bất đồng bộ ở phía server Python và người dùng sẽ được thông báo qua Socket.IO khi hoàn tất. Sau khi tách xong, người dùng có thể sử dụng giao diện karaoke với hai thanh trượt âm lượng riêng biệt để điều chỉnh tỷ lệ giữa giọng hát và nhạc nền, phù hợp cho việc luyện hát karaoke ngay trên trình duyệt web. Tính năng tải xuống track nhạc nền (instrumental) chỉ khả dụng cho tài khoản Premium.
+Hệ thống cung cấp các gói dịch vụ Premium với quy trình thanh toán qua mã QR được tích hợp cổng thanh toán VNPay hoặc MoMo. Khi người dùng chọn gói dịch vụ, hệ thống tạo mã QR động hiển thị trực tiếp trên giao diện với đồng hồ đếm ngược thời gian hiệu lực. Sau khi quét QR và thanh toán thành công, cổng thanh toán gửi thông báo xác nhận (webhook) về server, hệ thống tự động kích hoạt gói Premium cho tài khoản người dùng và cập nhật giao diện theo thời gian thực thông qua Socket.IO mà không cần tải lại trang.
+Đối với quản trị viên hệ thống (Admin), ngoài các chức năng quản lý nội dung âm nhạc và tài khoản người dùng, Admin còn có thể theo dõi dashboard thống kê theo thời gian thực, xem báo cáo doanh thu, giám sát hàng đợi xử lý tách âm thanh và kích hoạt tái huấn luyện mô hình gợi ý thủ công khi cần thiết. Hệ thống sử dụng kiến trúc Microservice với ba thành phần chính: Vue.js cho giao diện, Node.js (Express) cho API và Socket.IO, và Python (FastAPI) cho các tác vụ tính toán AI và xử lý âm thanh, cùng MySQL làm cơ sở dữ liệu chính và Redis làm bộ nhớ đệm.
+1.2. CÁC CHỨC NĂNG CỦA HỆ THỐNG
+Hệ thống bao gồm các nhóm chức năng chính sau:
+a) Người dùng chưa có tài khoản (Khách):
+Đăng ký tài khoản: người dùng tạo tài khoản mới bằng địa chỉ email, đặt mật khẩu và chọn thể loại âm nhạc yêu thích ban đầu để phục vụ gợi ý Cold Start.
+b) Người dùng đã có tài khoản:
+Đăng nhập / Đăng xuất: xác thực bằng email và mật khẩu, hệ thống cấp JWT token để duy trì phiên đăng nhập.
+Quản lý thông tin cá nhân: xem và cập nhật tên hiển thị, ảnh đại diện, mật khẩu; xem thống kê cá nhân bao gồm tổng giờ nghe, thể loại yêu thích và top nghệ sĩ nghe nhiều nhất.
+Phát nhạc trực tuyến: tìm kiếm bài hát theo tên, nghệ sĩ hoặc album; phát nhạc qua trình phát nhúng với đầy đủ các thao tác play, pause, seek, shuffle, repeat và điều chỉnh âm lượng.
+Thích bài hát (Like): đánh dấu yêu thích bài hát, dữ liệu này được sử dụng làm tín hiệu phản hồi tường minh (explicit feedback) trong mô hình gợi ý.
+Xem và tương tác với trang nghệ sĩ / album: xem thông tin chi tiết, danh sách bài hát theo album, các bài hát khác của nghệ sĩ.
+
+c) Quản lý danh sách phát (Playlist):
+Tạo và quản lý playlist thủ công: tạo mới, đặt tên, thêm ảnh bìa, thêm/xóa bài hát và sắp xếp thứ tự các bài trong playlist.
+Xem playlist tự động do hệ thống tạo: bao gồm Weekly Mix (mỗi tuần), playlist theo Mood (sáng/tối) và playlist Genre Deep Dive theo xu hướng thể loại gần nhất.
+Chia sẻ playlist: đặt playlist ở chế độ công khai và chia sẻ đường dẫn cho người khác.
+d) Hệ thống gợi ý bài hát cá nhân hóa:
+Xem trang “Dành cho bạn”: hiển thị top 20 bài hát được gợi ý cá nhân hóa dựa trên lịch sử nghe nhạc của người dùng, được tính toán bởi thuật toán Collaborative Filtering (SVD).
+Gợi ý bài tương tự: khi đang nghe một bài hát, hệ thống hiển thị danh sách các bài có nội dung tương tự dựa trên Content-based Filtering.
+e) Tạo danh sách phát bằng lệnh ngôn ngữ tự nhiên (AI Playlist):
+Nhập lệnh (Prompt) bằng tiếng Việt hoặc tiếng Anh để mô tả danh sách nhạc mong muốn, ví dụ: "Tạo cho tôi list nhạc lofi để tập trung lập trình trong 2 tiếng".
+Hệ thống phân tích prompt, trả về danh sách bài hát phù hợp kèm giải thích lý do chọn từng bài. Người dùng có thể chỉnh sửa, lưu hoặc yêu cầu tạo lại với tiêu chí bổ sung.
+Gợi ý prompt mẫu: hiển thị các mẫu prompt phổ biến dưới dạng chip để người dùng click chọn nhanh.
+f) Tách nguồn âm thanh – Karaoke AI (Stem Separation):
+Chọn bài hát để tách âm thanh: hệ thống tách biệt giọng hát (vocals) và nhạc nền (instrumental) thành hai track độc lập bằng thư viện Spleeter. Quá trình xử lý diễn ra bất đồng bộ ở phía server.
+Phát nhạc Karaoke: giao diện phát nhạc với hai thanh trượt âm lượng độc lập cho phép tắt hoàn toàn giọng hát để hát karaoke hoặc tắt nhạc nền để luyện giọng.
+Lyrics Sync: lời bài hát được highlight theo thời gian thực phục vụ hát karaoke.
+Tải track nhạc nền (dành cho tài khoản Premium): tải xuống file instrumental dưới định dạng mp3.
+g) Thanh toán và nâng cấp tài khoản Premium:
+Chọn gói dịch vụ: xem và chọn gói Premium phù hợp (1 tháng, 3 tháng, 1 năm) với bảng so sánh quyền lợi giữa các gói.
+Thanh toán qua mã QR: hệ thống tạo mã QR động tích hợp cổng thanh toán VNPay/MoMo, hiển thị đồng hồ đếm ngược thời gian hiệu lực của mã (5 phút).
+Xác nhận và kích hoạt tự động: sau khi thanh toán thành công, tài khoản được nâng cấp ngay lập tức thông qua cơ chế webhook và Socket.IO mà không cần tải lại trang.
+Xem lịch sử giao dịch và gia hạn: xem danh sách các lần thanh toán, trạng thái giao dịch và gia hạn nhanh bằng QR khi gần hết hạn.
+h) Quản trị hệ thống (Admin):
+Quản lý nội dung âm nhạc: upload bài hát, nhập metadata, quản lý nghệ sĩ và album, hỗ trợ upload hàng loạt.
+Quản lý tài khoản người dùng: tìm kiếm, xem chi tiết hành vi nghe nhạc, khoá/mở khoá tài khoản và xem trạng thái gói dịch vụ.
+Dashboard thống kê: theo dõi số liệu thời gian thực về lượt nghe, người dùng hoạt động, bài hát hot, doanh thu theo tháng và số lượt sử dụng tính năng AI.
+Quản lý mô hình gợi ý: kích hoạt tái huấn luyện mô hình thủ công, xem log quá trình xử lý và kết quả đánh giá độ chính xác (Precision@K, NDCG).
+Giám sát hàng đợi Stem Separation: theo dõi trạng thái các job xử lý tách âm thanh, xử lý lỗi và điều chỉnh tài nguyên xử lý.
+Quản lý giao dịch thanh toán: xem toàn bộ giao dịch, xử lý hoàn tiền và xuất báo cáo doanh thu.
+
+
+
+Bảng 1 dưới đây tóm tắt các chức năng chính của hệ thống theo từng nhóm người dùng:
+STT
+Tên chức năng
+Mô tả tóm tắt
+Người dùng
+Nhóm 1: Quản lý tài khoản &amp; thông tin cá nhân
+1
+Đăng ký tài khoản
+Tạo tài khoản, chọn thể loại yêu thích ban đầu
+Khách
+2
+Đăng nhập / Đăng xuất
+Xác thực JWT, duy trì phiên đăng nhập
+Người dùng
+3
+Quản lý thông tin cá nhân
+Cập nhật hồ sơ, xem thống kê hành vi nghe nhạc
+Người dùng
+Nhóm 2: Phát nhạc &amp; Quản lý âm nhạc
+4
+Phát nhạc trực tuyến
+Phát, tua, shuffle, repeat, điều chỉnh âm lượng
+Người dùng
+5
+Tìm kiếm bài hát
+Tìm kiếm realtime theo bài hát, nghệ sĩ, album
+Người dùng
+6
+Thích bài hát (Like)
+Đánh dấu yêu thích, phục vụ mô hình gợi ý
+Người dùng
+Nhóm 3: Danh sách phát (Playlist)
+7
+Quản lý playlist thủ công
+Tạo, chỉnh sửa, thêm/xóa bài, chia sẻ
+Người dùng
+8
+Playlist tự động (Weekly Mix)
+Hệ thống tự tạo hàng tuần dựa trên CF
+Hệ thống
+9
+Playlist theo Mood &amp; Genre
+Tự động tạo theo khung giờ và xu hướng thể loại
+Hệ thống
+Nhóm 4: Hệ thống gợi ý (Recommendation Engine)
+10
+Gợi ý cá nhân hóa (CF – SVD)
+Top 20 bài dựa trên hành vi người dùng tương tự
+Hệ thống
+11
+Gợi ý bài tương tự (Content-based)
+Gợi ý bài có đặc trưng tương đồng đang phát
+Hệ thống
+12
+Xử lý Cold Start
+Gợi ý theo thể loại đã chọn + bài trending cho user mới
+Hệ thống
+Nhóm 5: Tạo Playlist bằng lệnh AI (AI Playlist Generator)
+13
+Nhập lệnh ngôn ngữ tự nhiên
+Phân tích prompt bằng Claude API, trích xuất mood, thể loại, tempo
+Người dùng
+14
+Tạo &amp; hiển thị playlist AI
+Trả về danh sách bài hát kèm giải thích lý do chọn
+Hệ thống
+15
+Tinh chỉnh &amp; lưu playlist AI
+Chỉnh sửa, regenerate với yêu cầu bổ sung, lưu vào thư viện
+Người dùng
+Nhóm 6: Tách nguồn âm thanh – Karaoke AI (Stem Separation)
+16
+Tách âm thanh bằng Spleeter
+Tách biệt vocals và instrumental bất đồng bộ phía server
+Người dùng / Hệ thống
+17
+Phát nhạc Karaoke &amp; Lyrics Sync
+Hai thanh trượt âm lượng độc lập, lời bài hát đồng bộ thời gian thực
+Người dùng
+18
+Tải track instrumental (Premium)
+Tải xuống file nhạc nền mp3 dành cho tài khoản Premium
+Người dùng Premium
+Nhóm 7: Thanh toán qua mã QR
+19
+Chọn gói &amp; tạo mã QR
+Tạo đơn hàng, sinh mã QR động qua VNPay/MoMo
+Người dùng / Hệ thống
+20
+Xác nhận &amp; kích hoạt Premium
+Webhook xác nhận thanh toán, kích hoạt qua Socket.IO realtime
+Hệ thống
+21
+Lịch sử giao dịch &amp; gia hạn
+Xem lịch sử, gia hạn nhanh, tải hoá đơn PDF
+Người dùng
+Nhóm 8: Quản trị hệ thống (Admin)
+22
+Quản lý nội dung âm nhạc
+Upload, chỉnh sửa metadata bài hát, nghệ sĩ, album
+Admin
+23
+Quản lý người dùng
+Tìm kiếm, xem hành vi, khoá/mở khoá tài khoản
+Admin
+24
+Dashboard thống kê
+Số liệu thời gian thực: lượt nghe, doanh thu, bài hot, lượt dùng AI
+Admin
+25
+Quản lý mô hình gợi ý
+Kích hoạt retrain, xem log và kết quả Precision@K, NDCG
+Admin
+26
+Giám sát Stem Separation &amp; Giao dịch
+Theo dõi job xử lý âm thanh, quản lý giao dịch và hoàn tiền
+Admin
+
+Bảng 1: Tóm tắt các chức năng chính của hệ thống MusicFlow
+
+CHƯƠNG 2: CƠ SỞ LÝ THUYẾT
+2.1. HỆ THỐNG GỢI Ý (RECOMMENDATION SYSTEM)
+Hệ thống gợi ý (Recommendation System) là một lớp bài toán trong lĩnh vực học máy (Machine Learning) và khai phá dữ liệu (Data Mining), với mục tiêu dự đoán và đề xuất những mục (item) mà một người dùng cụ thể có khả năng quan tâm, dựa trên dữ liệu lịch sử hành vi và đặc trưng nội dung. Hệ thống gợi ý đã được ứng dụng rộng rãi trong các nền tảng lớn như Spotify, Netflix và YouTube để cá nhân hóa trải nghiệm người dùng ở quy mô hàng triệu người.
+Trong đề tài này, hệ thống gợi ý đóng vai trò trung tâm, cho phép nền tảng phát nhạc tự động đề xuất bài hát phù hợp với từng người dùng dựa trên lịch sử nghe nhạc, hành vi tương tác và sở thích thể loại. Có hai phương pháp chính được nghiên cứu và áp dụng trong đề tài.
+2.1.1 Lọc cộng tác (Collaborative Filtering)
+Lọc cộng tác là phương pháp gợi ý dựa trên giả định rằng những người dùng có hành vi nghe nhạc tương tự trong quá khứ sẽ có xu hướng yêu thích những bài hát tương tự nhau trong tương lai. Phương pháp này không cần biết nội dung cụ thể của bài hát mà chỉ khai thác mối quan hệ giữa người dùng và bài hát thông qua ma trận tương tác user–item.
+Trong đề tài này, phương pháp SVD (Singular Value Decomposition – Phân tích giá trị kỳ dị) được sử dụng để phân rã ma trận user–item thành các nhân tử tiềm ẩn (latent factors). Giá trị trong ma trận là điểm đánh giá ngầm (implicit rating) được tính toán từ các hành vi nghe nhạc: tỷ lệ nghe hoàn thành bài hát (completion rate), thời điểm bỏ qua (skip), và hành động yêu thích (like). Thư viện Surprise của Python được sử dụng để huấn luyện mô hình SVD và tạo danh sách gợi ý top-K bài hát cho từng người dùng.
+Ưu điểm của lọc cộng tác là không phụ thuộc vào nội dung bài hát, do đó có khả năng phát hiện những sở thích tiềm ẩn mà người dùng chưa biết đến. Hạn chế chính là gặp khó khăn với người dùng mới chưa có đủ lịch sử nghe nhạc, còn gọi là vấn đề khởi động lạnh (Cold Start Problem).
+2.1.2 Lọc theo nội dung (Content-based Filtering)
+Lọc theo nội dung là phương pháp gợi ý dựa trên đặc trưng của chính bài hát, bao gồm thể loại (genre), nghệ sĩ, tốc độ nhịp điệu (tempo) và ngôn ngữ. Hệ thống sẽ xây dựng hồ sơ sở thích (user profile) của từng người dùng dựa trên những bài hát mà họ thường xuyên nghe đến cuối, từ đó gợi ý những bài hát có đặc trưng tương tự.
+Trong đề tài, kỹ thuật TF-IDF (Term Frequency–Inverse Document Frequency) được dùng để vector hóa các đặc trưng của bài hát, sau đó tính độ tương đồng cosine (cosine similarity) giữa các bài hát để tìm ra những bài có nội dung gần giống nhau. Thư viện scikit-learn của Python được sử dụng để thực hiện các bước tính toán này.
+Phương pháp lọc theo nội dung đặc biệt hiệu quả trong việc xử lý vấn đề khởi động lạnh: khi người dùng mới đăng ký và chọn thể loại âm nhạc yêu thích, hệ thống có thể ngay lập tức gợi ý những bài hát phù hợp mà không cần chờ tích lũy đủ lịch sử nghe nhạc.
+2.1.3 Phương pháp kết hợp (Hybrid Approach)
+Để tận dụng ưu điểm của cả hai phương pháp trên, đề tài áp dụng chiến lược kết hợp đơn giản: với người dùng có hơn 10 lượt nghe nhạc trong lịch sử, hệ thống ưu tiên sử dụng lọc cộng tác (SVD); với người dùng mới hoặc có ít lịch sử, hệ thống chuyển sang sử dụng lọc theo nội dung kết hợp danh sách bài hát thịnh hành (trending) trên toàn hệ thống. Kết quả gợi ý được đánh giá định lượng thông qua các chỉ số Precision@K và NDCG (Normalized Discounted Cumulative Gain).
+2.2. TÁCH NGUỒN ÂM THANH (AUDIO SOURCE SEPARATION) VÀ THƯ VIỆN SPLEETER
+Tách nguồn âm thanh (Audio Source Separation) là bài toán trong lĩnh vực xử lý tín hiệu âm thanh và học sâu (Deep Learning), với mục tiêu phân tách một bản ghi âm thanh hỗn hợp thành các thành phần độc lập như giọng hát (vocals) và nhạc nền (accompaniment). Đây là nền tảng kỹ thuật cho các ứng dụng karaoke, remix âm nhạc và phân tích âm nhạc.
+Spleeter là thư viện mã nguồn mở do Deezer Research phát triển, được xây dựng trên nền tảng TensorFlow và được công bố vào năm 2019. Spleeter sử dụng mô hình mạng nơ-ron tích chập U-Net để tách nguồn âm thanh. Thư viện cung cấp nhiều mô hình được huấn luyện sẵn (pre-trained models), trong đó mô hình 2-stem (vocals + accompaniment) phù hợp nhất cho chức năng karaoke của đề tài này, cho phép tách giọng ca sĩ ra khỏi nhạc nền với chất lượng cao mà không cần phần cứng GPU chuyên dụng.
+Do quá trình tách nguồn âm thanh đòi hỏi tài nguyên tính toán đáng kể, đề tài thiết kế chức năng này theo mô hình xử lý bất đồng bộ (asynchronous processing): người dùng gửi yêu cầu, hệ thống đưa vào hàng đợi xử lý và thông báo kết quả qua Socket.IO khi hoàn thành, thay vì chờ đợi đồng bộ. Kết quả tách âm thanh được lưu trữ trong bộ nhớ đệm (cache) trong vòng 7 ngày để tránh xử lý lặp lại đối với cùng một bài hát.
+2.3. MÔ HÌNH NGÔN NGỮ LỚN VÀ ỨNG DỤNG TẠO PLAYLIST TỰ ĐỘNG (LLM – LARGE LANGUAGE MODEL)
+Mô hình ngôn ngữ lớn (Large Language Model – LLM) là các mô hình học máy được huấn luyện trên tập dữ liệu văn bản khổng lồ, có khả năng hiểu và sinh ra ngôn ngữ tự nhiên ở mức độ gần với con người. Các LLM hiện đại như GPT-4 hay Claude của Anthropic đã được ứng dụng rộng rãi trong nhiều lĩnh vực, từ hỗ trợ viết lách, lập trình đến phân tích dữ liệu và ra quyết định.
+Trong đề tài này, Claude API của Anthropic được tích hợp vào tính năng tạo playlist bằng lệnh tự nhiên (AI Playlist Generator). Khi người dùng nhập một câu lệnh như "Tạo cho tôi danh sách nhạc lofi để tập trung lập trình trong 2 tiếng", hệ thống gửi prompt này đến Claude API để phân tích ý định (intent) và trích xuất các thuộc tính có cấu trúc bao gồm thể loại nhạc, cảm xúc (mood), thời lượng mong muốn, tempo và ngôn ngữ bài hát ưu tiên. Kết quả được trả về dưới dạng JSON có cấu trúc để hệ thống truy vấn cơ sở dữ liệu và kết hợp với dữ liệu cá nhân hóa của từng người dùng.
+Ưu điểm của việc sử dụng LLM cho bài toán này là khả năng hiểu ngôn ngữ tự nhiên linh hoạt, hỗ trợ cả tiếng Việt và tiếng Anh mà không cần xây dựng từ điển từ khóa cứng nhắc, đồng thời có thể suy luận được những yêu cầu ngầm định của người dùng.
+2.4. CÔNG NGHỆ VUE.JS
+Vue.js là một framework JavaScript mã nguồn mở dùng để xây dựng giao diện người dùng (User Interface) và các ứng dụng trang đơn (Single Page Application – SPA). Vue.js được Evan You phát triển và phát hành lần đầu vào năm 2014. So với các framework cùng thể loại như React hay Angular, Vue.js nổi bật với cú pháp đơn giản, dễ tiếp cận và tài liệu hướng dẫn chi tiết.
+Đề tài sử dụng Vue.js phiên bản 3 với Composition API, cho phép tổ chức logic của component theo từng chức năng thay vì theo vòng đời (lifecycle), giúp code dễ đọc và tái sử dụng hơn. Vite được sử dụng làm công cụ build thay thế cho Webpack truyền thống, mang lại tốc độ khởi động và hot-reload nhanh hơn đáng kể trong quá trình phát triển. Pinia được dùng để quản lý trạng thái (state management) toàn cục của ứng dụng, thay thế cho Vuex với API gọn nhẹ và hỗ trợ TypeScript tốt hơn.
+Vue.js được chọn cho đề tài này vì sự phù hợp với quy mô dự án, cộng đồng hỗ trợ lớn, và khả năng tích hợp thuận tiện với các thư viện xử lý âm thanh trên trình duyệt như Web Audio API – nền tảng để xây dựng trình phát nhạc và chức năng điều chỉnh âm lượng giọng hát / nhạc nền trong tính năng karaoke.
+2.5. CÔNG NGHỆ NODE.JS VÀ FRAMEWORK EXPRESS.JS
+Node.js là môi trường thực thi JavaScript mã nguồn mở, đa nền tảng, hoạt động ở phía máy chủ (server-side) trên nền tảng engine V8 của Google Chrome. Node.js sử dụng mô hình vòng lặp sự kiện (event loop) đơn luồng và xử lý bất đồng bộ (non-blocking I/O), cho phép xử lý hàng nghìn kết nối đồng thời với hiệu suất cao mà không tốn nhiều tài nguyên hệ thống. Đây là đặc điểm phù hợp với yêu cầu của một hệ thống phát nhạc trực tuyến, nơi nhiều người dùng có thể đồng thời yêu cầu stream âm thanh.
+Express.js là framework web tối giản và linh hoạt được xây dựng trên Node.js, cung cấp các công cụ để xây dựng API RESTful một cách nhanh chóng. Trong đề tài, Node.js và Express.js đảm nhận vai trò API Gateway: tiếp nhận yêu cầu từ frontend Vue.js, xử lý xác thực người dùng bằng JWT (JSON Web Token), điều phối giao tiếp với Python FastAPI service cho các tác vụ tính toán thuật toán gợi ý và tách âm thanh, đồng thời xử lý streaming file âm thanh qua HTTP Range Request để hỗ trợ tua nhạc.
+Node.js không được sử dụng cho các tác vụ tính toán nặng liên quan đến học máy vì những công việc đòi hỏi tính toán cao trên CPU sẽ chặn vòng lặp sự kiện và làm giảm hiệu suất hệ thống. Thay vào đó, các tác vụ này được tách riêng sang Python service, và Node.js chỉ đóng vai trò trung gian điều phối.
+2.6. CÔNG NGHỆ PYTHON VÀ FRAMEWORK FASTAPI
+Python là ngôn ngữ lập trình bậc cao, đa mục đích, được xem là ngôn ngữ tiêu chuẩn trong lĩnh vực học máy, khoa học dữ liệu và trí tuệ nhân tạo. Hệ sinh thái thư viện phong phú của Python bao gồm NumPy, pandas, scikit-learn, Surprise và TensorFlow, cho phép triển khai các thuật toán học máy một cách hiệu quả và nhanh chóng. Trong đề tài, Python đảm nhận toàn bộ tầng xử lý trí tuệ nhân tạo, bao gồm thuật toán gợi ý bài hát và tính năng tách nguồn âm thanh với Spleeter.
+FastAPI là một framework web hiện đại dành cho Python, được thiết kế để xây dựng API hiệu năng cao với cú pháp khai báo kiểu dữ liệu (type hints) của Python. FastAPI tự động sinh tài liệu API theo chuẩn OpenAPI (Swagger), hỗ trợ xử lý bất đồng bộ (async/await) và có hiệu suất tương đương với Node.js và Go. So với Flask – framework Python phổ biến khác – FastAPI có ưu điểm hơn về tốc độ xử lý, hỗ trợ kiểm tra kiểu dữ liệu tự động và khả năng xây dựng tài liệu API tự động, phù hợp với yêu cầu của đề tài là expose các endpoint tính toán thuật toán để Node.js gọi đến.
+2.7. HỆ QUẢN TRỊ CƠ SỞ DỮ LIỆU MYSQL
+MySQL là hệ quản trị cơ sở dữ liệu quan hệ (Relational Database Management System – RDBMS) mã nguồn mở, được phát triển bởi Oracle Corporation. MySQL sử dụng ngôn ngữ truy vấn có cấu trúc SQL và hỗ trợ đầy đủ các tính năng của cơ sở dữ liệu quan hệ như ràng buộc toàn vẹn dữ liệu, giao dịch (transaction), chỉ mục (index) và khóa ngoại (foreign key). MySQL chạy trên hầu hết các hệ điều hành phổ biến hiện nay và được sử dụng rộng rãi trong các ứng dụng web từ quy mô nhỏ đến lớn.
+Trong đề tài, MySQL được chọn làm hệ quản trị cơ sở dữ liệu chính vì dữ liệu âm nhạc có cấu trúc rõ ràng và mối quan hệ chặt chẽ giữa các thực thể: người dùng, bài hát, nghệ sĩ, album, thể loại, lịch sử nghe nhạc và playlist. Mô hình dữ liệu quan hệ của MySQL phù hợp tự nhiên với cấu trúc này và đảm bảo tính toàn vẹn dữ liệu. Bảng lịch sử nghe nhạc (listening_history) là bảng quan trọng nhất, lưu trữ các hành vi nghe nhạc như tỷ lệ nghe hoàn thành, thời điểm bỏ qua và nguồn tìm kiếm để phục vụ cho thuật toán gợi ý.
+2.8. HỆ THỐNG CACHE REDIS
+Redis (Remote Dictionary Server) là một hệ thống lưu trữ cấu trúc dữ liệu trong bộ nhớ (in-memory data structure store), mã nguồn mở, có thể được sử dụng như một cơ sở dữ liệu, bộ nhớ đệm (cache) và trình môi giới thông điệp (message broker). Redis hỗ trợ nhiều kiểu dữ liệu như chuỗi (string), danh sách (list), tập hợp (set) và bảng băm (hash), cho phép truy xuất dữ liệu với tốc độ cực kỳ nhanh do dữ liệu được lưu trữ trực tiếp trên RAM.
+Trong đề tài, Redis đảm nhận hai vai trò chính. Thứ nhất, Redis lưu trữ kết quả gợi ý bài hát đã được tính toán bởi Python service với khóa có dạng recommend:user:{id} và thời gian sống (TTL) là 3.600 giây. Khi Node.js nhận yêu cầu gợi ý từ frontend, hệ thống kiểm tra Redis trước: nếu kết quả đã có trong cache thì trả về ngay lập tức mà không cần gọi lại Python service, giúp giảm đáng kể thời gian phản hồi. Thứ hai, Redis được dùng để lưu trữ thông tin phiên đăng nhập và quản lý tốc độ yêu cầu (rate limiting). Việc bổ sung Redis vào kiến trúc hệ thống giúp nâng cao hiệu năng tổng thể và giảm tải cho cơ sở dữ liệu MySQL.
+2.9. THÔNG TIN THỜI GIAN THỰC VỚI SOCKET.IO
+Socket.IO là thư viện JavaScript mã nguồn mở cho phép giao tiếp hai chiều, thời gian thực (real-time) giữa trình duyệt web và máy chủ. Socket.IO chủ yếu sử dụng giao thức WebSocket, với HTTP long-polling là phương án dự phòng khi môi trường mạng không hỗ trợ WebSocket. Thư viện bao gồm hai thành phần: thư viện phía máy chủ tích hợp với Node.js và thư viện phía máy khách tích hợp với trình duyệt, cả hai đều chia sẻ API tương đương nhau.
+Trong đề tài, Socket.IO được sử dụng để truyền thông báo thời gian thực trong một số tình huống quan trọng: thông báo cho người dùng khi quá trình tách nguồn âm thanh bằng Spleeter hoàn thành; thông báo khi hệ thống tự động tạo playlist mới vào mỗi tuần; và cập nhật trạng thái thanh toán thành công từ cổng thanh toán mà không yêu cầu người dùng tải lại trang. Những tính năng này đảm bảo trải nghiệm người dùng mượt mà và liên tục.
+2.10. TÍCH HỢP THANH TOÁN QUA MÃ QR
+Thanh toán qua mã QR (Quick Response Code) là phương thức thanh toán không tiền mặt ngày càng phổ biến tại Việt Nam, cho phép người dùng quét mã bằng ứng dụng ngân hàng hoặc ví điện tử để thực hiện giao dịch nhanh chóng mà không cần nhập thông tin thẻ. Tiêu chuẩn VietQR được Ngân hàng Nhà nước Việt Nam phê duyệt là chuẩn mã QR liên ngân hàng thống nhất, cho phép người dùng của bất kỳ ngân hàng nào cũng có thể thanh toán.
+Trong đề tài, tính năng thanh toán qua mã QR được tích hợp thông qua cổng thanh toán VNPay hoặc MoMo để xử lý các giao dịch nâng cấp tài khoản Premium. Quy trình thanh toán bao gồm các bước: hệ thống tạo đơn hàng và gọi API cổng thanh toán để sinh mã QR động có thời hạn 5 phút; người dùng quét mã QR bằng ứng dụng ngân hàng; cổng thanh toán gửi webhook callback về server để xác nhận giao dịch; server xác thực chữ ký số (digital signature) của webhook và cập nhật trạng thái tài khoản người dùng; Socket.IO thông báo kết quả thanh toán đến giao diện người dùng theo thời gian thực. Toàn bộ thông tin giao dịch được lưu trữ trong cơ sở dữ liệu MySQL để phục vụ tra soát và xuất báo cáo doanh thu.
+2.11. CONTAINERIZATION VỚI DOCKER
+Docker là nền tảng mã nguồn mở cho phép đóng gói ứng dụng cùng toàn bộ môi trường phụ thuộc (dependencies, cấu hình, thư viện) vào một đơn vị tiêu chuẩn gọi là container. Mỗi container hoạt động độc lập và nhất quán trên mọi môi trường, từ máy tính phát triển đến máy chủ triển khai (deployment), giúp loại bỏ vấn đề "chạy được trên máy tôi nhưng không chạy được trên máy khác".
+Trong đề tài, Docker Compose được sử dụng để định nghĩa và khởi chạy toàn bộ hệ thống gồm năm dịch vụ trong một tệp cấu hình duy nhất: Vue.js frontend, Node.js backend, Python FastAPI service, MySQL và Redis. Mỗi dịch vụ chạy trong một container riêng biệt nhưng được kết nối với nhau qua mạng nội bộ của Docker. Cách tiếp cận này không chỉ đơn giản hóa quá trình cài đặt và phát triển mà còn chuẩn bị nền tảng cho việc triển khai ứng dụng lên các nền tảng đám mây trong tương lai.
+
+— Hết Chương 2 —

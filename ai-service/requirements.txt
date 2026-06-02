@@ -1,0 +1,17 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-dotenv==1.0.1
+mysql-connector-python==9.0.0
+redis==5.0.6
+httpx==0.27.0
+python-multipart==0.0.9
+
+# AI & Machine Learning
+scikit-learn==1.5.0
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+scikit-surprise==1.1.4
+
+# Audio processing (cài sau khi setup xong cơ bản)
+# spleeter==2.3.2

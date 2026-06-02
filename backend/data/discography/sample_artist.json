@@ -1,0 +1,38 @@
+{
+  "artist": {
+    "name": "Tên Nghệ Sĩ Mẫu"
+  },
+  "albums": [
+    {
+      "title": "Tên Album Tiêu Biểu",
+      "type": "album",
+      "release_date": "2024-01-01",
+      "cover_url": null,
+      "tracks": [
+        {
+          "title": "Tên Bài Hát Số 1",
+          "track_number": 1,
+          "duration_sec": 240
+        },
+        {
+          "title": "Tên Bài Hát Số 2",
+          "track_number": 2,
+          "duration_sec": 195
+        }
+      ]
+    },
+    {
+      "title": "Tên Đĩa Đơn",
+      "type": "single",
+      "release_date": "2024-02-14",
+      "cover_url": null,
+      "tracks": [
+        {
+          "title": "Tên Đĩa Đơn",
+          "track_number": 1,
+          "duration_sec": null
+        }
+      ]
+    }
+  ]
+}

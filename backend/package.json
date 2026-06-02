@@ -1,0 +1,37 @@
+{
+  "name": "musicflow-backend",
+  "version": "1.0.0",
+  "description": "MusicFlow – Backend API (Node.js + Express)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "sync": "node test_db.js",
+    "migrate-region": "node scripts/migrate_artist_region.js",
+    "migrate-premium": "node scripts/migrate.js",
+    "migrate-market": "node migrations/add_market_to_songs.js"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-validator": "^7.1.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.22.4",
+    "nctapi": "^1.0.0",
+    "node-cron": "^3.0.3",
+    "redis": "^4.6.15",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
