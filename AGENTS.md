@@ -1,23 +1,28 @@
 # MusicFlow Project Agents
 
-This file defines the intended local agent workspace created in Phase 1.
+This file records the current project layout and the local agent skill folders.
+
+## Source Applications
+
+- `apps/backend/`: Express API, Socket.IO, MySQL/Redis integration, backend scripts, and runtime uploads.
+- `apps/frontend/`: Vue/Vite frontend application.
+- `apps/ai-service/`: FastAPI service and supporting AI/download scripts.
+
+## Project Data And Documents
+
+- `database/`: schema, migration, and seed files.
+- `datasets/`: raw and processed import datasets.
+- `docs/`: thesis materials, design notes, and review reports.
+- `storage/`: manually organized non-runtime storage.
+- `apps/backend/uploads/`: runtime audio/image/upload files used by the app. Do not move this folder until media paths are audited against the database.
 
 ## Agent Skills
 
-- `agent-skills/musicflow-developer/`: backend, API, data flow, and integration guidance.
-- `agent-skills/musicflow-frontend-design/`: frontend UX, layout, and visual consistency guidance.
-- `agent-skills/musicflow-web-components/`: reusable Vue component guidance.
-- `agent-skills/musicflow-theme-factory/`: theme, color, and styling guidance.
-- `agent-skills/musicflow-testing/`: testing, verification, and regression-check guidance.
-- `agent-skills/musicflow-thesis-report/`: thesis, documentation, and report-writing guidance.
+- `agent-skills/musicflow-developer/`
+- `agent-skills/musicflow-frontend-design/`
+- `agent-skills/musicflow-web-components/`
+- `agent-skills/musicflow-theme-factory/`
+- `agent-skills/musicflow-testing/`
+- `agent-skills/musicflow-thesis-report/`
 
-## Phase 1 Scope
-
-Only root-level organization, database files, datasets, documents, and agent skill folders are arranged in this phase.
-
-Do not move these folders in Phase 1:
-
-- `backend/`
-- `frontend/`
-- `ai-service/`
-- `backend/uploads/`
+The `SKILL.md` files are intentionally left for a later phase.

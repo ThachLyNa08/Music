@@ -1,4 +1,0 @@
-Error: Referencing column 'user_id' and referenced column 'id' in foreign key constraint 'user_saved_playlists_ibfk_1' are incompatible.
-    at testConnection (D:\CaNhan\Luan_Van\backend\src\config\database.js:78:18)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async bootstrap (D:\CaNhan\Luan_Van\backend\src\server.js:15:3)

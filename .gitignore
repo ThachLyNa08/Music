@@ -4,15 +4,19 @@
 !.env.example
 spotify_tokens.json
 backend/spotify_tokens.json
+apps/backend/spotify_tokens.json
 
 # Dependencies
 node_modules/
 backend/node_modules/
 frontend/node_modules/
+apps/backend/node_modules/
+apps/frontend/node_modules/
 
 # Build output
 dist/
 frontend/dist/
+apps/frontend/dist/
 dist-ssr/
 
 # Logs
@@ -32,6 +36,7 @@ __pycache__/
 
 # Runtime media/storage
 backend/uploads/
+apps/backend/uploads/
 storage/
 uploads/
 
@@ -43,4 +48,54 @@ Thumbs.db
 !.vscode/extensions.json
 migration_error.txt
 backend/migration_error.txt
+apps/backend/migration_error.txt
 folder-tree-after-phase1.txt
+
+# dependencies
+node_modules/
+apps/*/node_modules/
+venv/
+.env
+.env.*
+!.env.example
+
+# build/cache
+dist/
+build/
+.cache/
+__pycache__/
+*.pyc
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# runtime uploads / media
+apps/backend/uploads/
+storage/audio/
+storage/images/
+storage/playlist_covers/
+
+# datasets
+datasets/raw/
+datasets/processed/
+
+# generated AI/audio outputs
+apps/ai-service/outputs/
+apps/ai-service/temp/
+apps/ai-service/cache/
+
+# database local dumps
+*.sql
+*.dump
+*.backup
+
+# OS
+Thumbs.db
