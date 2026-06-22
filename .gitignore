@@ -104,3 +104,22 @@ Thumbs.db
 !database/migrations/*.sql
 !database/schema/*.sql
 !database/seeds/*.sql
+
+# Python virtual environments
+.venv/
+**/.venv/
+apps/ai-service/.venv/
+
+# Local generated files
+apps/backend/uploads/
+apps/backend/exports/
+apps/ai-service/exports/
+*.log
+out.txt
+grep.txt
+scratch_*.js
+
+# Local prototype files
+musicflow_liquid_glass.html
+musicflow_user_dashboard.html
+playlist_gallery.html
