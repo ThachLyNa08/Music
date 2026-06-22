@@ -1,117 +1,119 @@
 <template>
-  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <!-- Overlay -->
-    <div 
-      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
-      @click="$emit('close')"
-    ></div>
-
-    <!-- Modal Content -->
-    <div class="relative w-full max-w-2xl user-modal overflow-hidden flex flex-col z-10">
+  <Teleport to="body">
+    <div v-if="show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md px-4">
       
-      <!-- Header -->
-      <div class="flex items-center justify-between p-6 pb-4">
-        <h2 class="text-2xl font-bold text-white">Chỉnh sửa hồ sơ</h2>
-        <button 
-          @click="$emit('close')"
-          class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      <!-- Overlay (click to close) -->
+      <div 
+        class="absolute inset-0"
+        @click="$emit('close')"
+      ></div>
 
-      <!-- Body -->
-      <div class="p-6 pt-2 flex flex-col md:flex-row gap-6">
+      <!-- Modal Content -->
+      <div class="relative w-full max-w-[720px] rounded-3xl border border-white/10 bg-[#101014] p-8 shadow-2xl flex flex-col">
         
-        <!-- Avatar Upload -->
-        <div class="flex-shrink-0 flex justify-center">
-          <div 
-            class="relative w-48 h-48 rounded-full overflow-hidden shadow-xl bg-white/10 flex items-center justify-center group cursor-pointer"
-            @click="triggerFileInput"
-          >
-            <img 
-              v-if="previewUrl || user?.avatar_url" 
-              :src="previewUrl || localFormatImageUrl(user?.avatar_url)" 
-              class="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40" 
-              @error="event => event.target.src = '/default-avatar.png'"
-            />
-            <span v-else class="text-6xl font-bold text-white group-hover:opacity-40">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
-            
-            <!-- Hover Overlay -->
-            <div class="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-              <svg class="w-8 h-8 text-white mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              <span class="text-sm font-medium text-white">Chọn ảnh</span>
-            </div>
-          </div>
-          <input 
-            ref="fileInput" 
-            type="file" 
-            accept="image/jpeg, image/png, image/webp" 
-            class="hidden" 
-            @change="handleAvatarChange"
-          />
-        </div>
-
-        <!-- Form Fields -->
-        <div class="flex-1 flex flex-col gap-4">
-          <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Tên hiển thị</label>
-            <input 
-              v-model="formData.name" 
-              type="text" 
-              class="user-input"
-              placeholder="Thêm tên hiển thị"
-              maxlength="100"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Giới thiệu (Bio)</label>
-            <textarea 
-              v-model="formData.bio" 
-              rows="4" 
-              class="user-input resize-none"
-              placeholder="Thêm một vài mô tả về bạn..."
-              maxlength="500"
-            ></textarea>
-          </div>
-        </div>
-      </div>
-
-      <!-- Error Message -->
-      <div v-if="errorMsg" class="px-6 text-red-400 text-sm font-medium">
-        {{ errorMsg }}
-      </div>
-
-      <!-- Footer -->
-      <div class="p-6 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 mt-auto">
-        <p class="text-xs text-gray-400 max-w-sm text-center sm:text-left">
-          Bằng cách tiếp tục, bạn đồng ý cho MusicFlow sử dụng tên và ảnh hồ sơ của bạn trong hệ thống.
-        </p>
-        <div class="flex gap-4">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-2xl font-bold text-white tracking-tight">Chỉnh sửa hồ sơ</h2>
           <button 
             @click="$emit('close')"
-            class="user-secondary-btn"
-            :disabled="loading"
+            class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer"
           >
-            Hủy
-          </button>
-          <button 
-            @click="saveProfile"
-            class="user-primary-btn min-w-[100px] disabled:opacity-50 disabled:hover:scale-100"
-            :disabled="loading || !isChanged"
-          >
-            <div v-if="loading" class="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-            <span v-else>Lưu</span>
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-      </div>
 
+        <!-- Body -->
+        <div class="flex flex-col md:flex-row gap-8">
+          
+          <!-- Avatar Upload -->
+          <div class="flex-shrink-0 flex justify-center md:justify-start">
+            <div 
+              class="relative w-48 h-48 rounded-full shadow-2xl bg-[#282828] flex items-center justify-center group cursor-pointer overflow-hidden border border-white/5"
+              @click="triggerFileInput"
+            >
+              <img 
+                v-if="previewUrl || user?.avatar_url" 
+                :src="previewUrl || localFormatImageUrl(user?.avatar_url)" 
+                class="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40" 
+                @error="event => event.target.src = '/default-avatar.png'"
+              />
+              <span v-else class="text-6xl font-bold text-white/50 group-hover:opacity-40 transition-opacity duration-300">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
+              
+              <!-- Hover Overlay -->
+              <div class="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-black/40">
+                <svg class="w-10 h-10 text-white mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span class="text-sm font-semibold text-white drop-shadow-md">Chọn ảnh</span>
+              </div>
+            </div>
+            <input 
+              ref="fileInput" 
+              type="file" 
+              accept="image/jpeg, image/png, image/webp" 
+              class="hidden" 
+              @change="handleAvatarChange"
+            />
+          </div>
+
+          <!-- Form Fields -->
+          <div class="flex-1 flex flex-col gap-5">
+            <div>
+              <input 
+                v-model="formData.name" 
+                type="text" 
+                class="w-full bg-[#3E3E3E]/40 text-white text-sm font-semibold px-4 py-3 rounded-lg border border-transparent focus:border-white/30 focus:bg-[#3E3E3E]/60 outline-none transition-all placeholder:text-gray-500"
+                placeholder="Tên hiển thị"
+                maxlength="100"
+              />
+            </div>
+            <div class="flex-1">
+              <textarea 
+                v-model="formData.bio" 
+                rows="5" 
+                class="w-full h-full bg-[#3E3E3E]/40 text-white text-sm font-medium px-4 py-3 rounded-lg border border-transparent focus:border-white/30 focus:bg-[#3E3E3E]/60 outline-none transition-all resize-none placeholder:text-gray-500"
+                placeholder="Thêm một vài mô tả về bạn..."
+                maxlength="500"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Message -->
+        <div v-if="errorMsg" class="mt-4 text-red-400 text-sm font-medium flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          {{ errorMsg }}
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p class="text-xs text-gray-400 max-w-sm text-center md:text-left font-medium leading-relaxed">
+            Bằng cách tiếp tục, bạn đồng ý cho MusicFlow sử dụng tên và ảnh hồ sơ của bạn trong hệ thống.
+          </p>
+          <div class="flex gap-3 w-full md:w-auto shrink-0 justify-end">
+            <button 
+              @click="$emit('close')"
+              class="px-6 py-3 bg-transparent text-white text-sm font-bold rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+              :disabled="loading"
+            >
+              Hủy
+            </button>
+            <button 
+              @click="saveProfile"
+              class="px-8 py-3 bg-[#1ED760] text-black text-sm font-bold rounded-full hover:scale-105 transition-transform cursor-pointer disabled:opacity-50 disabled:hover:scale-100 min-w-[100px] flex items-center justify-center"
+              :disabled="loading || !isChanged"
+            >
+              <div v-if="loading" class="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+              <span v-else>Lưu</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>

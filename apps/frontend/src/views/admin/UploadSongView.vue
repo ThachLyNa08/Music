@@ -44,14 +44,14 @@
 
         <div class="file-drop-zone" :class="{ 'has-file': audioFile }" @click="$refs.audioInput.click()">
           <input type="file" ref="audioInput" accept="audio/*" @change="handleAudio" hidden />
-          <svg v-if="!audioFile" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16v-8m0 0l-4 4m4-4l4 4M4 12v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg>
+          <MfIcon v-if="!audioFile" name="upload_file" size="48" />
           <div v-else class="file-success">🎵 {{ audioFile.name }}</div>
           <span>{{ audioFile ? 'Click to change audio' : 'Click to select Audio File (MP3/WAV)' }}</span>
         </div>
 
         <div class="file-drop-zone image-zone" :class="{ 'has-file': coverFile }" @click="$refs.coverInput.click()">
           <input type="file" ref="coverInput" accept="image/*" @change="handleCover" hidden />
-          <svg v-if="!coverFile" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <MfIcon v-if="!coverFile" name="image" size="48" />
           <div v-else class="file-success">🖼️ {{ coverFile.name }}</div>
           <span>{{ coverFile ? 'Click to change cover' : 'Optional: Select Cover Image (JPG/PNG)' }}</span>
         </div>

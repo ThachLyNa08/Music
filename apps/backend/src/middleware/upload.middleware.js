@@ -6,8 +6,9 @@ const fs = require('fs');
 const uploadDir = path.join(__dirname, '../../uploads');
 const audioDir = path.join(uploadDir, 'audio');
 const imageDir = path.join(uploadDir, 'images');
+const genreDir = path.join(uploadDir, 'genres');
 
-[uploadDir, audioDir, imageDir].forEach(dir => {
+[uploadDir, audioDir, imageDir, genreDir].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -17,6 +18,8 @@ const storage = multer.diskStorage({
       cb(null, audioDir);
     } else if (file.fieldname === 'cover' || file.fieldname === 'avatar') {
       cb(null, imageDir);
+    } else if (file.fieldname === 'genre_cover') {
+      cb(null, genreDir);
     } else {
       cb(new Error('Invalid field name'));
     }
@@ -49,7 +52,7 @@ const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'audio') {
     if (file.mimetype.startsWith('audio/')) cb(null, true);
     else cb(new Error('Chỉ chấp nhận file âm thanh (MP3, WAV, v.v.)'), false);
-  } else if (file.fieldname === 'cover' || file.fieldname === 'avatar') {
+  } else if (file.fieldname === 'cover' || file.fieldname === 'avatar' || file.fieldname === 'genre_cover') {
       if (file.mimetype.startsWith('image/')) cb(null, true);
       else cb(new Error('Chỉ chấp nhận file hình ảnh (JPG, PNG, v.v.)'), false);
   } else {

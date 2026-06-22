@@ -10,15 +10,20 @@
     ]"
     @click="handleClick"
   >
-    <div class="artist-card__image-wrap">
+    <div class="artist-card__image-wrap" :style="showInitials ? { backgroundColor: initialsColor } : {}">
       <img
+        v-if="!showInitials"
         :src="artistImage"
         :alt="artist?.name || 'Artist'"
         class="artist-card__image"
         loading="lazy"
+        decoding="async"
         referrerpolicy="no-referrer"
         @error="handleImageError"
       />
+      <div v-else class="artist-card__initials">
+        {{ artistInitials }}
+      </div>
     </div>
 
     <div class="artist-card__body">
@@ -34,7 +39,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
@@ -63,16 +68,32 @@ const props = defineProps({
 
 const router = useRouter()
 
-const fallbackImage = '/default-artist.png'
+const hasImageError = ref(false)
 
-const artistImage = computed(() => {
-  const raw =
-    props.artist?.image_url ||
+const artistImageRaw = computed(() => {
+  return props.artist?.image_url ||
     props.artist?.avatar_url ||
     props.artist?.cover_url ||
-    props.artist?.image
+    props.artist?.image || null
+})
 
-  return raw ? normalizeImageUrl(raw) : fallbackImage
+const artistImage = computed(() => {
+  return artistImageRaw.value ? normalizeImageUrl(artistImageRaw.value) : ''
+})
+
+const showInitials = computed(() => {
+  return hasImageError.value || !artistImageRaw.value
+})
+
+const artistInitials = computed(() => {
+  const name = props.artist?.name || 'N'
+  return name.charAt(0).toUpperCase()
+})
+
+const initialsColor = computed(() => {
+  const name = props.artist?.name || 'N'
+  const hue = Math.abs(name.charCodeAt(0) * 37) % 360
+  return `hsl(${hue}, 55%, 40%)`
 })
 
 const artistMeta = computed(() => {
@@ -106,8 +127,8 @@ function handleClick() {
   router.push({ name: 'ArtistProfile', params: { id } })
 }
 
-function handleImageError(event) {
-  event.target.src = fallbackImage
+function handleImageError() {
+  hasImageError.value = true
 }
 </script>
 
@@ -149,6 +170,17 @@ function handleImageError(event) {
   object-fit: cover;
 }
 
+.artist-card__initials {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
 .artist-card__body {
   width: 100%;
   margin-top: 14px;
@@ -188,6 +220,10 @@ function handleImageError(event) {
   height: 100px;
 }
 
+.artist-card--sm .artist-card__initials {
+  font-size: 36px;
+}
+
 .artist-card--sm .artist-card__body {
   margin-top: 12px;
 }
@@ -214,6 +250,10 @@ function handleImageError(event) {
   height: 116px;
 }
 
+.artist-card--compact .artist-card__initials {
+  font-size: 40px;
+}
+
 .artist-card--compact .artist-card__body {
   margin-top: 12px;
 }
@@ -231,6 +271,10 @@ function handleImageError(event) {
   .artist-card__image-wrap {
     width: 104px;
     height: 104px;
+  }
+
+  .artist-card__initials {
+    font-size: 36px;
   }
 
   .artist-card--compact {

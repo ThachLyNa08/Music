@@ -1,66 +1,106 @@
 <template>
   <div class="flex flex-col user-page-bg pb-4" v-if="!loadingData && playlist">
-    <!-- Header Hero -->
-    <div class="relative m-6 flex items-end gap-6 overflow-hidden rounded-[28px] border border-white/10 px-8 py-10 pt-20 bg-gradient-to-br from-violet-900/45 via-slate-950/70 to-slate-950">
-      <!-- Shadow and gradient overlay to blend with background -->
-      <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none"></div>
-      
-      <div class="w-[232px] h-[232px] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] flex-shrink-0 relative z-10 bg-white/10 flex items-center justify-center">
-        <CoverImage :src="getPlaylistCover(playlist)" class="w-full h-full object-cover rounded-lg shadow-2xl" />
-      </div>
+    <!-- Header Hero Section -->
+    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img 
+        :src="getPlaylistCover(playlist)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.38] scale-[1.18] blur-[34px] saturate-[1.15] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,11,20,0.88),rgba(9,11,20,0.68),rgba(9,11,20,0.95))] z-0 pointer-events-none"></div>
+      <!-- Indigo Tint Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-transparent to-indigo-500/10 z-0 pointer-events-none"></div>
 
-      <div class="flex flex-col gap-3 relative z-10 text-white mt-10 w-full">
-        <div class="text-sm font-bold tracking-wider flex items-center gap-2">
-          <span v-if="playlist.is_system" class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-md text-xs font-black uppercase tracking-widest border border-indigo-500/30">Playlist hệ thống</span>
-          <span v-else>{{ playlist.is_public ? 'Playlist Công Khai' : 'Playlist Riêng Tư' }}</span>
+      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+        <!-- Foreground Cover -->
+        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
+          <CoverImage :src="getPlaylistCover(playlist)" class="w-full h-full object-cover" />
         </div>
-        <h1 class="text-5xl md:text-7xl font-black tracking-tighter m-0 leading-none py-2">{{ playlist.name }}</h1>
-        <p class="text-gray-300 font-medium text-sm mt-2">{{ playlist.description || 'Không có mô tả.' }}</p>
-        <div class="flex items-center gap-2 text-sm font-semibold text-gray-300 mt-2">
-          <span>Tạo bởi <b class="text-white hover:underline cursor-pointer">{{ playlist.creator_name || 'MusicFlow' }}</b></span>
-          <span class="w-1 h-1 bg-white rounded-full mx-1"></span>
-          <span>{{ songs.length }} bài hát</span>
-          <span class="w-1 h-1 bg-white rounded-full mx-1"></span>
-          <span>Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-4 mt-6">
-          <PlaybackButton v-if="songs.length > 0" :is-playing="isCurrentPlaylistPlaying" @click="togglePlaylistPlayback" />
+
+        <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
+          <div class="hidden lg:flex items-center gap-2 mb-0.5 w-max text-xs font-bold uppercase tracking-wider text-white/70">
+            <span v-if="isSystemPlaylist" class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-md font-black uppercase tracking-widest border border-indigo-500/30">Playlist hệ thống</span>
+            <span v-else-if="isAiPlaylist" class="bg-purple-500/20 text-purple-300 px-2 py-1 rounded-md font-black uppercase tracking-widest border border-purple-500/30">AI Playlist</span>
+            <span v-else class="opacity-80">{{ playlist.is_public ? 'Playlist Công Khai' : 'Playlist Riêng Tư' }}</span>
+          </div>
+
+          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ playlist.name }}</h1>
           
-          <template v-if="canEdit">
-            <button class="bg-transparent border-none text-gray-400 font-bold px-4 py-2 hover:text-white hover:scale-105 transition-all cursor-pointer flex items-center gap-2" @click="editPlaylist">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-              Sửa
+          <p class="text-gray-300 font-medium text-sm lg:text-base mt-1 line-clamp-2 max-w-3xl">
+            {{ playlist.description || (isSystemPlaylist ? 'Playlist được tạo tự động bởi MusicFlow.' : 'Không có mô tả.') }}
+          </p>
+
+          <div class="flex items-center justify-center lg:justify-start gap-2 text-sm md:text-base font-semibold text-gray-300 mt-2 flex-wrap">
+            <span>Tạo bởi <b class="text-white hover:underline cursor-pointer">{{ playlist.creator_name || 'MusicFlow' }}</b></span>
+            
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+            <span class="hidden lg:block">{{ songs.length }} bài hát</span>
+            
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+            <span class="hidden lg:block">Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+          </div>
+
+          <!-- Mobile only metadata -->
+          <div class="flex lg:hidden items-center justify-center gap-2 text-xs font-semibold text-white/60 mt-1">
+            <span>{{ songs.length }} bài hát</span>
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1"></span>
+            <span>Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="playlist-actions mt-4 flex flex-wrap items-center justify-center lg:justify-start gap-4">
+            <PlaybackButton v-if="songs.length > 0" class="mr-2" :is-playing="isCurrentPlaylistPlaying" @click="togglePlaylistPlayback" />
+            
+            <template v-if="canEditMetadata">
+              <button class="bg-white/10 backdrop-blur-md border border-white/10 text-white font-bold px-4 py-2.5 rounded-full hover:bg-white/20 hover:scale-105 transition-all shadow-lg cursor-pointer flex items-center gap-2" @click="editPlaylist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                Sửa
+              </button>
+              <button class="bg-red-500/10 backdrop-blur-md border border-red-500/30 text-red-400 font-bold px-4 py-2.5 rounded-full hover:bg-red-500 hover:text-white hover:scale-105 transition-all shadow-lg cursor-pointer flex items-center gap-2" @click="deletePlaylist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                Xóa
+              </button>
+            </template>
+            
+            <button v-if="canCloneForEditing" class="w-14 h-14 rounded-full bg-indigo-500/10 backdrop-blur-md border border-indigo-500/30 text-indigo-300 flex items-center justify-center hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-105 transition-all shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" @click="handleClone" :disabled="isCloning" title="Tạo bản sao để chỉnh sửa">
+              <svg v-if="isCloning" class="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
             </button>
-            <button class="bg-transparent border-none text-gray-400 font-bold px-4 py-2 hover:text-red-400 hover:scale-105 transition-all cursor-pointer flex items-center gap-2" @click="deletePlaylist">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              Xóa
-            </button>
-          </template>
-          <template v-else-if="playlist.is_system">
-            <button v-if="!playlist.is_saved" class="bg-indigo-600 border-none text-white font-bold px-5 py-2.5 rounded-full hover:bg-indigo-500 hover:scale-105 transition-all cursor-pointer flex items-center gap-2 shadow-[0_4px_15px_rgba(99,102,241,0.4)]" @click="toggleSavePlaylist" :disabled="isSaving">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-              Lưu vào thư viện
-            </button>
-            <button v-else class="bg-transparent border border-indigo-500/50 text-indigo-300 font-bold px-5 py-2.5 rounded-full hover:bg-indigo-500/10 hover:text-white transition-all cursor-pointer flex items-center gap-2" @click="toggleSavePlaylist" :disabled="isSaving">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" class="text-indigo-400"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-              Đã lưu trong thư viện
-            </button>
-          </template>
+            <template v-else-if="isSystemPlaylist">
+              <button 
+                type="button"
+                class="w-14 h-14 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="isSaving"
+                @click="toggleSavePlaylist"
+                :title="playlist.is_saved ? 'Đã lưu vào thư viện' : 'Lưu vào thư viện'"
+              >
+                <!-- Check icon if saved -->
+                <svg v-if="playlist.is_saved" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" class="text-[#1ed760]">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <!-- Plus icon if not saved -->
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+            </template>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Song List Section -->
     <div class="mx-6 px-6 py-4 user-panel-soft flex-1 relative">
       
       <!-- Table Header -->
-      <div class="relative z-10 w-full mb-4 px-4 flex items-center gap-4 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/10 pb-2 mt-4 h-10">
+      <div class="relative z-10 w-full mb-4 px-4 flex items-center gap-4 text-xs font-bold text-white uppercase tracking-wider border-b border-white/10 pb-2 mt-4 h-10">
         <div class="w-8 text-center shrink-0">#</div>
         <div class="flex-1 pr-4">Tiêu đề</div>
-        <div class="flex-1 hidden md:block pr-4">Album</div>
-        <div class="flex-1 hidden md:block pr-4">Ngày thêm</div>
+        <div v-if="!isSystemPlaylist" class="flex-1 hidden md:block pr-4">Album</div>
+        <div class="flex-1 hidden md:block pr-4">{{ isSystemPlaylist ? 'Album' : 'Ngày thêm' }}</div>
         <div class="w-auto min-w-[80px] flex justify-end shrink-0 pr-8">
           <!-- Removed duration clock icon -->
         </div>
@@ -107,8 +147,9 @@
                 :song="song"
                 :index="idx + 1"
                 :showIndex="true"
-                :showAlbum="true"
+                :showAlbum="!isSystemPlaylist"
                 :showDateAdded="true"
+                :date-column-mode="isSystemPlaylist ? 'album' : 'date'"
                 :compact="false"
                 :isPlaying="player.currentSong?.id === song.id"
                 @play="playSong"
@@ -125,8 +166,9 @@
           :song="song"
           :index="idx + 1"
           :showIndex="true"
-          :showAlbum="true"
+          :showAlbum="!isSystemPlaylist"
           :showDateAdded="true"
+          :date-column-mode="isSystemPlaylist ? 'album' : 'date'"
           :compact="false"
           :isPlaying="player.currentSong?.id === song.id"
           @play="playSong"
@@ -136,7 +178,7 @@
       </div>
 
       <!-- Unified Recommendations & Search Section -->
-      <div v-if="canEdit" class="relative z-10 mt-8 pt-8 pb-12 border-t border-white/10">
+      <div v-if="canEditSongs" class="relative z-10 mt-8 pt-8 pb-12 border-t border-white/10">
         <PlaylistRecommendations 
           :playlistId="playlist.id"
           :existingSongIds="existingSongIds"
@@ -152,8 +194,11 @@
       :position="menuState.position"
       :song="menuState.song"
       :isLiked="library.isLiked(menuState.song)"
+      :playlistId="playlist?.id"
+      :canRemove="canEditSongs"
       @close="menuState.show = false"
       @add-to-playlist="handleAddToPlaylist"
+      @remove-from-playlist="removeSong"
       @toggle-like="toggleLike"
       @add-to-queue="handleAddToQueue"
       @go-to-song="handleGoToSong"
@@ -177,56 +222,110 @@
   </div>
 
   <!-- Edit Modal -->
-  <div v-if="showEditModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000]" @click.self="showEditModal = false">
-    <div class="user-modal w-full max-w-md">
-      <h2 class="m-0 mb-6 font-black text-2xl text-white">Sửa thông tin Playlist</h2>
-      <form @submit.prevent="submitEdit" class="flex flex-col gap-4">
-        <div class="flex flex-col gap-2">
-          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Tên Playlist</label>
-          <input v-model="editForm.name" type="text" required placeholder="Nhập tên mới..." class="px-4 py-3 rounded-xl border border-gray-700 bg-gray-800/50 text-white font-semibold outline-none focus:border-indigo-500 focus:bg-gray-800 transition-colors" />
-        </div>
-        
-        <div class="flex flex-col gap-2">
-          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Mô tả</label>
-          <input v-model="editForm.description" type="text" placeholder="Thêm mô tả..." class="px-4 py-3 rounded-xl border border-gray-700 bg-gray-800/50 text-white font-semibold outline-none focus:border-indigo-500 focus:bg-gray-800 transition-colors" />
-        </div>
-
-        <div class="flex items-center justify-between mt-2">
-          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Quyền riêng tư</label>
-          <select v-model="editForm.is_public" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-white font-semibold outline-none cursor-pointer">
-            <option :value="true">Công khai</option>
-            <option :value="false">Riêng tư</option>
-          </select>
+  <Teleport to="body">
+    <div v-if="showEditModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md px-4" @click.self="closeEditModal">
+      <div class="w-full max-w-[720px] rounded-3xl border border-white/10 bg-[#181818] p-6 shadow-2xl flex flex-col">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-white m-0">Sửa thông tin Playlist</h2>
+          <button @click="closeEditModal" class="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="Đóng">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <div class="mt-4" @click="$refs.editCoverInput.click()">
-          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider cursor-pointer">Ảnh bìa</label>
-          <input type="file" ref="editCoverInput" accept="image/*" @change="handleEditFile" hidden />
-          <div class="mt-2 p-4 border border-dashed border-indigo-500/50 rounded-xl text-center cursor-pointer font-bold text-sm bg-indigo-500/5 hover:bg-indigo-500/10 hover:border-indigo-500 transition-colors" :class="editForm.coverFile ? 'text-emerald-400' : 'text-indigo-400'">
-            <span v-if="!editForm.coverFile">Nhấp để tải ảnh lên</span>
-            <span v-else>🖼️ {{ editForm.coverFile.name }}</span>
+        <form @submit.prevent="submitEdit" class="flex flex-col gap-6">
+          <!-- Body -->
+          <div class="flex flex-col md:flex-row gap-6">
+            <!-- Cover -->
+            <div 
+              class="w-full md:w-[240px] h-[240px] shrink-0 bg-[#282828] rounded-xl flex items-center justify-center cursor-pointer group relative overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-transparent hover:border-white/20 transition-all"
+              @click="$refs.editCoverInput.click()"
+            >
+              <input type="file" ref="editCoverInput" accept="image/*" @change="handleEditFile" hidden />
+              
+              <!-- Preview -->
+              <img v-if="editPreviewUrl || getPlaylistCover(playlist)" :src="editPreviewUrl || getPlaylistCover(playlist)" class="w-full h-full object-cover absolute inset-0 z-0" />
+              
+              <!-- Empty state -->
+              <div v-else class="flex flex-col items-center gap-4 text-gray-400 group-hover:text-white z-10 transition-colors">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="w-16 h-16 opacity-50 group-hover:opacity-100 transition-opacity">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+                <span class="font-medium text-sm">Thêm ảnh bìa</span>
+              </div>
+              
+              <!-- Hover Overlay for preview -->
+              <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white z-10">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-10 h-10 mb-2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span class="font-medium text-sm">Đổi ảnh</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div class="flex-1 flex flex-col gap-4">
+              <input 
+                v-model="editForm.name" 
+                type="text" 
+                required 
+                placeholder="Tên playlist" 
+                class="w-full bg-[#2a2a2a] text-white text-sm font-semibold px-4 py-3 rounded-md outline-none focus:border-white/30 border border-transparent placeholder-gray-400 transition-colors"
+              />
+              <textarea 
+                v-model="editForm.description" 
+                placeholder="Thêm mô tả tùy chọn" 
+                class="w-full bg-[#2a2a2a] text-white text-sm px-4 py-3 rounded-md outline-none focus:border-white/30 border border-transparent placeholder-gray-400 resize-none flex-1 min-h-[120px] transition-colors"
+              ></textarea>
+            </div>
           </div>
-        </div>
 
-        <div class="flex gap-3 mt-8">
-          <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-transparent border border-gray-700 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white transition-colors" @click="showEditModal = false">Hủy</button>
-          <button type="submit" class="flex-1 py-3 rounded-xl font-bold bg-white text-black border-none cursor-pointer hover:scale-105 transition-transform" :disabled="isSubmitting">Lưu thay đổi</button>
-        </div>
-      </form>
-    </div>
-  </div>
+          <!-- Footer Options -->
+          <div class="flex flex-col md:flex-row items-center justify-between gap-4 pt-4 border-t border-white/10">
+            <div class="flex items-center gap-4 w-full md:w-auto">
+              <!-- Privacy Pill -->
+              <button type="button" @click="editForm.is_public = !editForm.is_public" class="flex items-center justify-center gap-2 px-3 py-1.5 w-[115px] rounded-full bg-[#2a2a2a] hover:bg-[#333] border border-white/10 text-xs font-semibold text-white transition-colors" :title="editForm.is_public ? 'Chuyển sang riêng tư' : 'Chuyển sang công khai'">
+                <svg v-if="editForm.is_public" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 shrink-0">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 shrink-0">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0110 0v4"></path>
+                </svg>
+                <span class="whitespace-nowrap">{{ editForm.is_public ? 'Công khai' : 'Riêng tư' }}</span>
+              </button>
+            </div>
 
-  <!-- Delete Modal -->
-  <div v-if="showDeleteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000]" @click.self="showDeleteModal = false">
-    <div class="user-modal w-full max-w-sm">
-      <h2 class="m-0 mb-4 font-black text-2xl text-white">Xóa Playlist?</h2>
-      <p class="text-gray-400 text-sm font-medium mb-8 leading-relaxed">Bạn có chắc chắn muốn xóa playlist <strong class="text-white">{{ playlist?.name }}</strong> không? Hành động này không thể hoàn tác.</p>
-      <div class="flex gap-3">
-        <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-transparent border border-gray-700 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white transition-colors" @click="showDeleteModal = false">Hủy</button>
-        <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all" @click="confirmDelete" :disabled="isSubmitting">Xóa vĩnh viễn</button>
+            <!-- Note & Submit -->
+            <div class="flex items-center gap-4 ml-auto w-full md:w-auto justify-end">
+              <span v-if="editForm.coverFile" class="text-[11px] text-gray-500 hidden md:inline">Hãy đảm bảo bạn có quyền sử dụng ảnh.</span>
+              <button type="button" class="text-sm font-bold text-gray-400 hover:text-white hover:scale-105 transition-transform px-4 py-2" @click="closeEditModal">Hủy</button>
+              <button type="submit" class="text-sm font-bold bg-[#1ed760] text-black px-6 py-2 rounded-full hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100" :disabled="isSubmitting || !editForm.name.trim()">
+                {{ isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi' }}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
-  </div>
+  </Teleport>
+
+  <!-- Delete Modal -->
+  <Teleport to="body">
+    <div v-if="showDeleteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]" @click.self="showDeleteModal = false">
+      <div class="user-modal w-full max-w-sm">
+        <h2 class="m-0 mb-4 font-black text-2xl text-white">Xóa Playlist?</h2>
+        <p class="text-gray-400 text-sm font-medium mb-8 leading-relaxed">Bạn có chắc chắn muốn xóa playlist <strong class="text-white">{{ playlist?.name }}</strong> không? Hành động này không thể hoàn tác.</p>
+        <div class="flex gap-3">
+          <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-transparent border border-gray-700 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white transition-colors" @click="showDeleteModal = false">Hủy</button>
+          <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all" @click="confirmDelete" :disabled="isSubmitting">Xóa vĩnh viễn</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -262,23 +361,53 @@ const loadingData = ref(true)
 const showEditModal = ref(false)
 const showDeleteModal = ref(false)
 const isSubmitting = ref(false)
+const isCloning = ref(false)
 const editForm = ref({ name: '', description: '', is_public: true, coverFile: null })
+const editPreviewUrl = ref(null)
 
 const addingSongIds = ref(new Set())
 const isReorderingSongs = ref(false)
 const playlistSongsBeforeDrag = ref([])
 
-const canEdit = computed(() => {
-  if (!playlist.value) return false
-  if (playlist.value.can_edit !== undefined) return !!playlist.value.can_edit
-  return false
+function isTruthyFlag(value) {
+  return value === true || value === 1 || value === '1'
+}
+
+const isSystemPlaylist = computed(() => {
+  const item = playlist.value
+  if (!item) return false
+  return item.type === 'system' || isTruthyFlag(item.is_system) || !!item.system_key
 })
+
+const isAiPlaylist = computed(() => {
+  const item = playlist.value
+  if (!item) return false
+  return item.type === 'ai' || item.generated_by === 'ai' || item.source === 'ai'
+})
+
+const isManualPlaylist = computed(() => {
+  if (!playlist.value) return false
+  return !isSystemPlaylist.value && !isAiPlaylist.value && (playlist.value.type || 'manual') === 'manual'
+})
+
+const isOwner = computed(() => {
+  const item = playlist.value
+  if (!item) return false
+  const currentUserId = auth.user?.id
+  const ownerId = item.owner_id ?? item.created_by ?? item.user_id
+  return !!item.is_owner || (currentUserId != null && ownerId != null && String(ownerId) === String(currentUserId))
+})
+
+const canEditPlaylist = computed(() => isManualPlaylist.value && isOwner.value)
+const canEditMetadata = computed(() => canEditPlaylist.value)
+const canEditSongs = computed(() => canEditPlaylist.value)
+const canCloneForEditing = computed(() => isAiPlaylist.value && !isSystemPlaylist.value)
 
 const songs = computed(() => Array.isArray(playlist.value?.songs) ? playlist.value.songs : [])
 
 const canReorderSongs = computed(() => {
   if (!playlist.value || songs.value.length <= 1) return false
-  if (!canEdit.value) return false
+  if (!canEditSongs.value) return false
   if (playlist.value.is_system || playlist.value.system_key) return false
   return (playlist.value.type || 'manual') === 'manual'
 })
@@ -306,6 +435,7 @@ const isCurrentPlaylistPlaying = computed(() => {
 })
 
 async function handleAddSong(song) {
+  if (!canEditSongs.value) return
   if (!song || existingSongIds.value.has(song.id)) return
   
   addingSongIds.value.add(song.id)
@@ -318,7 +448,7 @@ async function handleAddSong(song) {
   } catch (err) {
     const msg = err.response?.data?.message || 'Đã có lỗi xảy ra'
     if (msg.includes('exist') || msg.includes('tồn tại')) {
-      toast.showToast('Bài hát đã có trong playlist', 'error')
+      toast.showToast('Bài hát đã có trong playlist', 'warning')
     } else {
       toast.showToast(msg, 'error')
     }
@@ -337,11 +467,17 @@ async function fetchDetail(silent = false) {
       const res = await spotifyApi.getPlaylist(cleanId)
       if (res.data?.success) {
         playlist.value = res.data.data
+        if (Array.isArray(playlist.value?.songs)) {
+          playlist.value.songs = library.applyLikedStateToSongs(playlist.value.songs)
+        }
       }
     } else {
       const res = await playlistApi.getDetail(id)
       if (res.data?.success) {
         playlist.value = res.data.data
+        if (Array.isArray(playlist.value?.songs)) {
+          playlist.value.songs = library.applyLikedStateToSongs(playlist.value.songs)
+        }
       }
     }
   } catch (err) {
@@ -360,20 +496,42 @@ async function toggleSavePlaylist() {
       const res = await playlistApi.unsavePlaylist(playlist.value.id)
       if (res.data?.success) {
         playlist.value.is_saved = false
+        toast.showToast('Đã xóa khỏi thư viện', 'info')
       }
     } else {
       const res = await playlistApi.savePlaylist(playlist.value.id)
       if (res.data?.success) {
         playlist.value.is_saved = true
+        toast.showToast('Đã lưu vào thư viện', 'success')
       }
     }
     if (library.fetchPlaylists) {
       library.fetchPlaylists() // refresh library sidebar
     }
   } catch (err) {
-    alert(err.response?.data?.message || 'Có lỗi xảy ra khi lưu playlist')
+    toast.showToast(err.response?.data?.message || 'Có lỗi xảy ra khi lưu playlist', 'error')
   } finally {
     isSaving.value = false
+  }
+}
+
+async function handleClone() {
+  if (!playlist.value || isCloning.value) return
+  if (!canCloneForEditing.value) return
+  isCloning.value = true
+  try {
+    const res = await playlistApi.clonePlaylist(playlist.value.id)
+    if (res.data?.success) {
+      toast.showToast('Đã tạo bản sao thành công!', 'success')
+      router.push(`/playlist/${res.data.playlist_id}`)
+      if (library.fetchPlaylists) {
+        library.fetchPlaylists() // refresh library sidebar
+      }
+    }
+  } catch (err) {
+    toast.showToast(err.response?.data?.message || 'Có lỗi xảy ra khi tạo bản sao', 'error')
+  } finally {
+    isCloning.value = false
   }
 }
 
@@ -419,15 +577,6 @@ function getSongId(song) {
   return song?.id ?? song?.song_id ?? null
 }
 
-function setSongLikedState(song, liked) {
-  if (!song) return
-  song.is_liked = liked ? 1 : 0
-  song.isLiked = liked
-  song.liked = liked
-  song.is_favorite = liked ? 1 : 0
-  song.isFavorite = liked
-}
-
 function handlePlaylistDragStart() {
   if (!canReorderSongs.value) return
   playlistSongsBeforeDrag.value = [...songs.value]
@@ -461,49 +610,67 @@ async function handlePlaylistDragEnd(event) {
 }
 
 async function removeSong(songId) {
+  if (!canEditSongs.value) return;
   if(!confirm('Xóa bài này khỏi playlist?')) return;
   try {
     await playlistApi.removeSong(playlist.value.id, songId);
     await fetchDetail(true);
+    toast.showToast('Đã xóa bài hát khỏi danh sách phát', 'danger');
   } catch (e) {
-    alert('Lỗi xóa bài hát');
+    toast.showToast('Lỗi xóa bài hát', 'error');
   }
 }
 
 function deletePlaylist() {
+  if (!canEditMetadata.value) return;
   showDeleteModal.value = true;
 }
 
 async function confirmDelete() {
+  if (!canEditMetadata.value) return;
   isSubmitting.value = true;
   try {
     const res = await playlistApi.deletePlaylist(playlist.value.id);
     if (res.data?.success) {
       showDeleteModal.value = false;
+      toast.showToast('Đã xóa danh sách phát', 'danger');
       router.push('/library');
     }
   } catch (e) {
-    alert(e.response?.data?.message || 'Lỗi khi xóa playlist');
+    toast.showToast(e.response?.data?.message || 'Lỗi khi xóa playlist', 'error');
   } finally {
     isSubmitting.value = false;
   }
 }
 
 function editPlaylist() {
+  if (!canEditMetadata.value) return;
   editForm.value.name = playlist.value.name;
   editForm.value.description = playlist.value.description || '';
   editForm.value.is_public = playlist.value.is_public;
   editForm.value.coverFile = null;
+  editPreviewUrl.value = null;
   showEditModal.value = true;
+  document.body.style.overflow = 'hidden';
 }
 
 function handleEditFile(e) {
   if (e.target.files && e.target.files.length > 0) {
-    editForm.value.coverFile = e.target.files[0];
+    const file = e.target.files[0];
+    editForm.value.coverFile = file;
+    if (editPreviewUrl.value) URL.revokeObjectURL(editPreviewUrl.value);
+    editPreviewUrl.value = URL.createObjectURL(file);
   }
 }
 
+function closeEditModal() {
+  showEditModal.value = false;
+  document.body.style.overflow = '';
+  if (editPreviewUrl.value) URL.revokeObjectURL(editPreviewUrl.value);
+}
+
 async function submitEdit() {
+  if (!canEditMetadata.value) return;
   if (!editForm.value.name) return;
   
   isSubmitting.value = true;
@@ -518,9 +685,10 @@ async function submitEdit() {
   try {
     await playlistApi.update(playlist.value.id, fd);
     await fetchDetail(true);
-    showEditModal.value = false;
+    closeEditModal();
+    toast.showToast('Đã cập nhật danh sách phát');
   } catch (e) {
-    alert('Lỗi cập nhật playlist');
+    toast.showToast('Lỗi cập nhật playlist', 'error');
   } finally {
     isSubmitting.value = false;
   }
@@ -534,17 +702,6 @@ function handleOpenMenu({ song, x, y }) {
 async function toggleLike(song) {
   if (!song) return;
   await library.toggleLike(song)
-  const songId = getSongId(song)
-  const liked = library.isLiked(song)
-  setSongLikedState(song, liked)
-  if (menuState.value.song && String(getSongId(menuState.value.song)) === String(songId)) {
-    setSongLikedState(menuState.value.song, liked)
-  }
-  songs.value.forEach(item => {
-    if (String(getSongId(item)) === String(songId)) {
-      setSongLikedState(item, liked)
-    }
-  })
 }
 function handleAddToPlaylist(song) { library.openPlaylistModal(song) }
 function handleAddToQueue(song) { player.addToQueue(song) }

@@ -1,68 +1,88 @@
 <template>
   <div class="flex flex-col user-page-bg pb-4" v-if="album">
-    <!-- Header Hero -->
-    <div class="relative m-6 flex items-end gap-7 overflow-hidden rounded-[28px] border border-white/10 px-8 py-8 pt-12 bg-gradient-to-br from-violet-900/45 via-slate-950/70 to-slate-950 min-h-[360px]">
-      <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none"></div>
-      
-      <div class="w-[220px] h-[220px] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] flex-shrink-0 relative z-10 bg-white/10 flex items-center justify-center overflow-hidden">
-        <CoverImage :src="getItemCover(album)" />
-      </div>
+    <!-- Header Hero Section -->
+    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img 
+        :src="getItemCover(album)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.38] scale-[1.18] blur-[34px] saturate-[1.2] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,11,20,0.86),rgba(9,11,20,0.68),rgba(9,11,20,0.94))] z-0 pointer-events-none"></div>
+      <!-- Pink/Purple Tint Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-transparent to-pink-500/10 z-0 pointer-events-none"></div>
 
-      <div class="flex flex-col gap-3 relative z-10 text-white w-full pb-1">
-        <div class="text-sm font-bold tracking-wider flex items-center gap-2 uppercase">
-          {{ album.album_type === 'single' ? 'SINGLE' : (album.album_type === 'compilation' ? 'COMPILATION' : 'ALBUM') }}
+      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+        <!-- Foreground Cover -->
+        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
+          <CoverImage :src="getItemCover(album)" class="w-full h-full object-cover" />
         </div>
-        <h1 class="text-5xl md:text-6xl xl:text-7xl font-black tracking-tighter m-0 leading-[0.95] py-2 max-w-5xl">{{ album.title }}</h1>
-        <div class="flex items-center gap-2 text-sm font-semibold text-gray-300 mt-2">
-          <img v-if="album.artist_avatar_url" :src="$formatImageUrl(album.artist_avatar_url)" @error="event => event.target.src = '/default-cover.png'" class="w-6 h-6 rounded-full object-cover" />
-          <RouterLink :to="'/artist/' + album.artist_id" class="text-white hover:underline cursor-pointer font-bold">{{ album.artist_name }}</RouterLink>
-          <span class="w-1 h-1 bg-white rounded-full mx-1"></span>
-          <span>{{ album.song_count }} bài hát</span>
-          <span class="w-1 h-1 bg-white rounded-full mx-1"></span>
-          <span>{{ formatTotalDuration(album.total_duration_sec) }}</span>
-          <span class="w-1 h-1 bg-white rounded-full mx-1"></span>
-          <span>{{ formatNumber(album.total_plays) }} lượt nghe</span>
-        </div>
-        
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-4 mt-5">
-          <PlaybackButton
-            :is-playing="isAlbumPlaying"
-            :disabled="!album.songs || album.songs.length === 0"
-            @click="toggleAlbumPlayback"
-          />
+
+        <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
+          <span class="hidden lg:inline-block text-xs font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">
+            {{ album.album_type === 'single' ? 'SINGLE' : (album.album_type === 'compilation' ? 'COMPILATION' : 'ALBUM') }}
+          </span>
+          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ album.title }}</h1>
           
-          <!-- Add to Library Button -->
-          <div class="album-library-action relative inline-flex group/tooltip">
-            <button 
-              type="button"
-              class="w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/15 hover:scale-105 transition-all duration-200 border border-white/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="isLibraryLoading"
-              @click.stop.prevent="handleToggleLibrary"
-            >
-              <!-- Check icon if saved -->
-              <svg v-if="isSavedToLibrary" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" class="text-emerald-400">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-              <!-- Plus icon if not saved -->
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-              </svg>
-            </button>
-            <!-- Tooltip -->
-            <div class="album-library-tooltip absolute left-1/2 -translate-x-1/2 bottom-full mb-3 opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all duration-200 whitespace-nowrap user-dropdown text-xs font-semibold px-3 py-2 z-50">
-              {{ isSavedToLibrary ? 'Đã thêm vào thư viện' : 'Thêm vào thư viện' }}
+          <div class="flex items-center justify-center lg:justify-start gap-2 text-sm md:text-base font-bold text-white/90 mt-1 flex-wrap">
+            <img v-if="album.artist_avatar_url" :src="$formatImageUrl(album.artist_avatar_url)" @error="event => event.target.src = '/default-cover.png'" class="w-6 h-6 rounded-full object-cover shadow-sm hidden md:block" />
+            <RouterLink :to="'/artist/' + album.artist_id" class="text-white hover:text-[#1ed760] transition font-bold text-base md:text-lg">{{ album.artist_name }}</RouterLink>
+            
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+            <span class="hidden lg:block">{{ album.song_count }} bài hát</span>
+            
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+            <span class="hidden lg:block">{{ formatTotalDuration(album.total_duration_sec) }}</span>
+            
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+            <span class="hidden lg:block">{{ formatNumber(album.total_plays) }} lượt nghe</span>
+          </div>
+
+          <!-- Mobile only metadata -->
+          <div class="flex lg:hidden items-center justify-center gap-2 text-xs font-semibold text-white/60 mt-1">
+            <span>{{ album.song_count }} bài hát</span>
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1"></span>
+            <span>{{ formatTotalDuration(album.total_duration_sec) }}</span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="album-actions mt-4 flex items-center justify-center lg:justify-start gap-4">
+            <PlaybackButton class="mr-2" :is-playing="isAlbumPlaying" :disabled="!album.songs || album.songs.length === 0" @click="toggleAlbumPlayback" />
+            
+            <!-- Add to Library Button -->
+            <div class="album-library-action relative inline-flex group/tooltip">
+              <button 
+                type="button"
+                class="w-12 h-12 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="isLibraryLoading"
+                @click.stop.prevent="handleToggleLibrary"
+              >
+                <!-- Check icon if saved -->
+                <svg v-if="isSavedToLibrary" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" class="text-[#1ed760]">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <!-- Plus icon if not saved -->
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+              <!-- Tooltip -->
+              <div class="album-library-tooltip absolute left-1/2 -translate-x-1/2 bottom-full mb-3 opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all duration-200 whitespace-nowrap user-dropdown text-xs font-semibold px-3 py-2 z-50">
+                {{ isSavedToLibrary ? 'Đã thêm vào thư viện' : 'Thêm vào thư viện' }}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Song List Section -->
     <div class="mx-6 px-6 py-4 user-panel-soft flex-1 relative">
       
       <!-- Table Header -->
-      <div class="relative z-10 w-full mb-4 px-4 flex items-center text-sm font-semibold text-slate-400 border-b border-white/10 pb-2 mt-4 h-10">
+      <div class="relative z-10 w-full mb-4 px-4 flex items-center text-sm font-semibold text-white border-b border-white/10 pb-2 mt-4 h-10">
         <div class="w-12 text-center shrink-0">#</div>
         <div class="flex-1 min-w-0">Tiêu đề</div>
         <div class="w-28 text-right pr-4 hidden sm:block">Lượt nghe</div>
@@ -188,7 +208,7 @@ async function handleToggleLibrary() {
       addToast('Đã thêm vào thư viện thành công!')
     } else {
       await albumApi.removeFromLibrary(album.value.id)
-      addToast('Đã xóa khỏi thư viện!')
+      addToast('Đã xóa khỏi thư viện!', 'danger')
     }
   } catch (err) {
     isSavedToLibrary.value = previous
@@ -223,6 +243,9 @@ async function fetchAlbumDetail() {
     const res = await albumApi.getById(route.params.id)
     if (res.data?.success) {
       album.value = res.data.data
+      if (Array.isArray(album.value?.songs)) {
+        album.value.songs = library.applyLikedStateToSongs(album.value.songs)
+      }
       // Sync library state from API response
       isSavedToLibrary.value = Boolean(
         album.value?.is_saved ||

@@ -28,7 +28,9 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['"Be Vietnam Pro"', 'Inter', 'sans-serif'],
+        sans: ['Inter', 'sans-serif'],
+        display: ['"Playfair Display"', 'serif'],
+        body: ['Inter', 'sans-serif'],
       },
       boxShadow: {
         soft: '0 8px 32px 0 rgba(31, 38, 135, 0.07)',

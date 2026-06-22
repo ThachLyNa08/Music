@@ -197,6 +197,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
+import { usePlayerStore } from '@/stores/player'
+import api from '@/api/axios'
 
 defineProps({
   isQueueOpen: {
@@ -208,6 +210,7 @@ defineProps({
 const router = useRouter()
 const authStore = useAuthStore()
 const notification = useNotificationStore()
+const playerStore = usePlayerStore()
 
 const isNotiOpen = ref(false)
 const notiMenuRef = ref(null)
@@ -264,12 +267,36 @@ function toggleUserMenu() {
   if (isUserMenuOpen.value) isNotiOpen.value = false
 }
 
-function handleNotiClick(noti) {
-  if (!noti.is_read) {
-    notification.markAsRead(noti.id)
+function getNotificationTarget(noti) {
+  if (noti?.type === 'karaoke_ready') {
+    return noti.data?.target_route || '/karaoke'
   }
-  if (noti.link) {
-    router.push(noti.link)
+  return noti?.link || noti?.data?.target_route || null
+}
+
+async function handleNotiClick(noti) {
+  if (!noti.is_read) {
+    await notification.markAsRead(noti.id)
+  }
+
+  // Handle karaoke specific notification to set the song
+  if (noti.type === 'karaoke_ready' && noti.data?.song_id) {
+    const songId = noti.data.song_id
+    if (playerStore.currentSong?.id !== songId) {
+      try {
+        const { data } = await api.get(`/songs/${songId}/detail`)
+        if (data && data.data) {
+          playerStore.setSong(data.data, [], 'karaoke')
+        }
+      } catch (err) {
+        console.error('Cannot fetch karaoke song', err)
+      }
+    }
+  }
+
+  const target = getNotificationTarget(noti)
+  if (target) {
+    router.push(target)
   }
   isNotiOpen.value = false
 }

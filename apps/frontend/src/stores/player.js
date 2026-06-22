@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { spotifyApi } from '@/api/spotify'
 import api from '@/api/axios'
 import { addToast } from '@/utils/toast'
@@ -15,6 +15,8 @@ export const usePlayerStore = defineStore('player', () => {
   const volume = ref(1)
 
   const shuffle = ref(false)
+  const shuffleOrder = ref([])
+  const shufflePosition = ref(0)
   const repeat = ref('none')
   const spotifyPlayer = ref(null)
   const spotifyDeviceId = ref(null)
@@ -40,6 +42,44 @@ export const usePlayerStore = defineStore('player', () => {
   let trackingTimer = null
   let isTrackingCurrentSong = false
   let isAutoContinuing = false
+
+  const upcomingQueue = computed(() => {
+    if (!queue.value || queue.value.length === 0) return []
+    if (shuffle.value) {
+      if (shufflePosition.value + 1 >= shuffleOrder.value.length) return []
+      return shuffleOrder.value.slice(shufflePosition.value + 1).map(idx => queue.value[idx]).filter(Boolean)
+    }
+    return queue.value.slice(queueIndex.value + 1)
+  })
+
+  const effectiveQueue = computed(() => {
+    if (!queue.value || queue.value.length === 0) return []
+    if (shuffle.value) {
+      return shuffleOrder.value.map(idx => queue.value[idx]).filter(Boolean)
+    }
+    return queue.value
+  })
+
+  function buildShuffleOrder(currentIndex = queueIndex.value) {
+    if (!queue.value || queue.value.length === 0) {
+      shuffleOrder.value = []
+      shufflePosition.value = 0
+      return
+    }
+    const order = Array.from({ length: queue.value.length }, (_, i) => i)
+    if (currentIndex >= 0 && currentIndex < order.length) {
+      order.splice(currentIndex, 1)
+    }
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[order[i], order[j]] = [order[j], order[i]]
+    }
+    if (currentIndex >= 0 && currentIndex < queue.value.length) {
+      order.unshift(currentIndex)
+    }
+    shuffleOrder.value = order
+    shufflePosition.value = 0
+  }
 
   function getSongId(song) {
     return song?.id ?? song?.song_id ?? song?.track_id ?? null
@@ -141,6 +181,8 @@ export const usePlayerStore = defineStore('player', () => {
         audio.value.load()
       } catch (e) {}
     }
+    shuffleOrder.value = []
+    shufflePosition.value = 0
   }
 
   function savePlayerSession(userId = null) {
@@ -153,6 +195,8 @@ export const usePlayerStore = defineStore('player', () => {
       currentTime: currentTime.value,
       volume: volume.value,
       isShuffle: shuffle.value,
+      shuffleOrder: shuffleOrder.value,
+      shufflePosition: shufflePosition.value,
       repeatMode: repeat.value,
       source: playbackSource.value,
       playbackContext: playbackContext.value,
@@ -180,6 +224,8 @@ export const usePlayerStore = defineStore('player', () => {
       queueIndex.value = state.currentIndex || 0
       volume.value = state.volume ?? 1
       shuffle.value = state.isShuffle || false
+      shuffleOrder.value = state.shuffleOrder || []
+      shufflePosition.value = state.shufflePosition || 0
       repeat.value = state.repeatMode || 'none'
       playbackSource.value = state.source || 'unknown'
       playbackContext.value = state.playbackContext || normalizePlaybackContext(currentSong.value, playbackSource.value)
@@ -421,12 +467,16 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }, 5000)
 
-    if (Array.isArray(newQueue) && newQueue.length > 0) {
+    let queueChanged = false
+
+    if (Array.isArray(newQueue) && newQueue.length > 0 && queue.value !== newQueue) {
       queue.value = newQueue
+      queueChanged = true
       const indexInQueue = explicitIndex !== null ? explicitIndex : findSongIndex(newQueue, song)
       queueIndex.value = indexInQueue >= 0 ? indexInQueue : 0
     } else if (!queue.value.length) {
       queue.value = [song]
+      queueChanged = true
       queueIndex.value = 0
     } else {
       const indexInQueue = findSongIndex(queue.value, song)
@@ -459,6 +509,19 @@ export const usePlayerStore = defineStore('player', () => {
       song.spotify_uri = song.audio_url
     }
 
+    if (shuffle.value) {
+      if (queueChanged) {
+        buildShuffleOrder(queueIndex.value)
+      } else {
+        const pos = shuffleOrder.value.indexOf(queueIndex.value)
+        if (pos >= 0) {
+          shufflePosition.value = pos
+        } else {
+          buildShuffleOrder(queueIndex.value)
+        }
+      }
+    }
+
     spotifyError.value = ''
     savePlayerSession()
 
@@ -469,6 +532,11 @@ export const usePlayerStore = defineStore('player', () => {
       } catch (error) {
         spotifyError.value = error.message || 'Cannot play Spotify track'
         console.warn('Spotify playback failed, falling back to preview:', error)
+      }
+
+      // Auto-fill queue if it's the last song
+      if (queue.value.length === queueIndex.value + 1 && !isAutoContinuing) {
+        autoContinueQueue(false).catch(err => console.warn('Prefetch auto-continue failed:', err))
       }
     }
 
@@ -486,6 +554,11 @@ export const usePlayerStore = defineStore('player', () => {
         isPlaying.value = false
         console.warn('[Player] audio play failed:', error)
       })
+
+      // Auto-fill queue if it's the last song
+      if (queue.value.length === queueIndex.value + 1 && !isAutoContinuing) {
+        autoContinueQueue(false).catch(err => console.warn('Prefetch auto-continue failed:', err))
+      }
     } else {
       if (spotifyPlayer.value && isSpotifyActive.value) {
         spotifyPlayer.value.pause().catch((err) => console.warn('Cannot pause Spotify player:', err))
@@ -502,19 +575,34 @@ export const usePlayerStore = defineStore('player', () => {
 
   function addToQueue(song) {
     queue.value.push(song)
+    if (shuffle.value) {
+      const insertAt = shufflePosition.value + 1 + Math.floor(Math.random() * (Math.max(1, shuffleOrder.value.length - shufflePosition.value)))
+      shuffleOrder.value.splice(insertAt, 0, queue.value.length - 1)
+    }
     addToast('Đã thêm vào hàng đợi')
     if (!currentSong.value) playSong(song)
     else savePlayerSession()
   }
 
   function removeFromQueue(index) {
+    if (shuffle.value) {
+      const pos = shuffleOrder.value.indexOf(index)
+      if (pos >= 0) {
+        shuffleOrder.value.splice(pos, 1)
+        if (pos < shufflePosition.value) shufflePosition.value--
+      }
+      for (let i = 0; i < shuffleOrder.value.length; i++) {
+        if (shuffleOrder.value[i] > index) shuffleOrder.value[i]--
+      }
+    }
+    
     if (index === queueIndex.value) {
       next()
     } else if (index < queueIndex.value) {
       queueIndex.value--
     }
     queue.value.splice(index, 1)
-    addToast('Đã xóa khỏi hàng đợi')
+    addToast('Đã xóa khỏi hàng đợi', 'info')
     savePlayerSession()
   }
 
@@ -528,6 +616,9 @@ export const usePlayerStore = defineStore('player', () => {
       queueIndex.value = nextIndex >= 0 ? nextIndex : Math.min(queueIndex.value, Math.max(queue.value.length - 1, 0))
     } else {
       queueIndex.value = Math.min(queueIndex.value, Math.max(queue.value.length - 1, 0))
+    }
+    if (shuffle.value) {
+      buildShuffleOrder(queueIndex.value)
     }
     savePlayerSession()
   }
@@ -560,9 +651,13 @@ export const usePlayerStore = defineStore('player', () => {
     else audio.value.pause()
   }
 
-  async function next() {
+  async function next(fromEnded = false) {
     if (!queue.value.length) {
-      isPlaying.value = false
+      if (isAutoContinuing) return
+      const continued = await autoContinueQueue()
+      if (!continued) {
+        isPlaying.value = false
+      }
       return
     }
 
@@ -574,25 +669,40 @@ export const usePlayerStore = defineStore('player', () => {
 
     let nextIndex
     if (shuffle.value) {
-      if (queue.value.length === 1) {
-        nextIndex = repeat.value === 'all' ? 0 : queueIndex.value + 1
+      shufflePosition.value++
+      if (shufflePosition.value >= shuffleOrder.value.length) {
+        if (repeat.value === 'all') {
+          buildShuffleOrder()
+          nextIndex = shuffleOrder.value[0]
+        } else {
+          shufflePosition.value--
+          if (isAutoContinuing) return
+          const continued = await autoContinueQueue()
+          if (!continued) {
+            isPlaying.value = false
+            currentTime.value = 0
+            savePlayerSession()
+          }
+          return
+        }
       } else {
-        do {
-          nextIndex = Math.floor(Math.random() * queue.value.length)
-        } while (nextIndex === queueIndex.value)
+        nextIndex = shuffleOrder.value[shufflePosition.value]
       }
     } else {
       nextIndex = queueIndex.value + 1
-    }
-
-    if (nextIndex >= queue.value.length) {
-      if (repeat.value === 'all') {
-        nextIndex = 0
-      } else {
-        isPlaying.value = false
-        currentTime.value = 0
-        savePlayerSession()
-        return
+      if (nextIndex >= queue.value.length) {
+        if (repeat.value === 'all') {
+          nextIndex = 0
+        } else {
+          if (isAutoContinuing) return
+          const continued = await autoContinueQueue()
+          if (!continued) {
+            isPlaying.value = false
+            currentTime.value = 0
+            savePlayerSession()
+          }
+          return
+        }
       }
     }
 
@@ -605,9 +715,25 @@ export const usePlayerStore = defineStore('player', () => {
       return
     }
     if (!queue.value.length) return
-    let prevIndex = queueIndex.value - 1
-    if (prevIndex < 0) {
-      prevIndex = repeat.value === 'all' ? queue.value.length - 1 : 0
+    let prevIndex
+    if (shuffle.value) {
+      if (shufflePosition.value > 0) {
+        shufflePosition.value--
+        prevIndex = shuffleOrder.value[shufflePosition.value]
+      } else {
+        if (repeat.value === 'all') {
+          shufflePosition.value = shuffleOrder.value.length - 1
+          prevIndex = shuffleOrder.value[shufflePosition.value]
+        } else {
+          seek(0)
+          return
+        }
+      }
+    } else {
+      prevIndex = queueIndex.value - 1
+      if (prevIndex < 0) {
+        prevIndex = repeat.value === 'all' ? queue.value.length - 1 : 0
+      }
     }
     await playAtIndex(prevIndex)
   }
@@ -666,7 +792,7 @@ export const usePlayerStore = defineStore('player', () => {
           : findSongIndex(queue.value, currentSong.value)
 
       if (shuffle.value || currentIndex < queue.value.length - 1) {
-        await next()
+        await next(true)
         return
       }
 
@@ -698,7 +824,7 @@ export const usePlayerStore = defineStore('player', () => {
     return response.data?.data?.songs || response.data?.songs || []
   }
 
-  async function autoContinueQueue() {
+  async function autoContinueQueue(autoPlayNext = true) {
     if (isAutoContinuing) return false
 
     const current = currentSong.value
@@ -736,6 +862,15 @@ export const usePlayerStore = defineStore('player', () => {
       const firstAddedIndex = queue.value.length
       queue.value = [...queue.value, ...additions]
       playbackContext.value = context
+      
+      if (shuffle.value) {
+        const newIndices = additions.map((_, i) => firstAddedIndex + i)
+        for (let i = newIndices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[newIndices[i], newIndices[j]] = [newIndices[j], newIndices[i]]
+        }
+        shuffleOrder.value.push(...newIndices)
+      }
 
       const currentIndex =
         queueIndex.value >= 0 && queueIndex.value < queue.value.length
@@ -743,12 +878,10 @@ export const usePlayerStore = defineStore('player', () => {
           : findSongIndex(queue.value, current)
       const nextIndex = currentIndex >= 0 ? currentIndex + 1 : firstAddedIndex
 
-      if (queue.value[nextIndex]) {
+      if (autoPlayNext && queue.value[nextIndex]) {
         await playAtIndex(nextIndex)
-        return true
       }
-
-      return false
+      return true
     } catch (error) {
       console.error('[Player] autoContinueQueue failed:', error)
       return false
@@ -758,13 +891,14 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function seek(time) {
+    const targetTime = Math.max(0, Math.min(Number(time) || 0, duration.value || Number(time) || 0))
     if (isSpotifyActive.value && spotifyPlayer.value) {
-      await spotifyPlayer.value.seek(time * 1000)
-      currentTime.value = time
+      await spotifyPlayer.value.seek(targetTime * 1000)
+      currentTime.value = targetTime
       return
     }
-    audio.value.currentTime = time
-    currentTime.value = time
+    audio.value.currentTime = targetTime
+    currentTime.value = targetTime
   }
 
   function setVolume(v) {
@@ -777,15 +911,34 @@ export const usePlayerStore = defineStore('player', () => {
     savePlayerSession()
   }
 
+  function setOriginalMuted(isMuted) {
+    if (audio.value) {
+      audio.value.muted = Boolean(isMuted)
+    }
+  }
+
   function toggleShuffle() {
     shuffle.value = !shuffle.value
+    if (shuffle.value) {
+      buildShuffleOrder()
+      addToast('Đã bật phát ngẫu nhiên', 'success')
+    } else {
+      addToast('Đã tắt phát ngẫu nhiên', 'info')
+    }
     savePlayerSession()
   }
 
   function toggleRepeat() {
-    if (repeat.value === 'none') repeat.value = 'all'
-    else if (repeat.value === 'all') repeat.value = 'one'
-    else repeat.value = 'none'
+    if (repeat.value === 'none') {
+      repeat.value = 'all'
+      addToast('Đã bật lặp danh sách', 'success')
+    } else if (repeat.value === 'all') {
+      repeat.value = 'one'
+      addToast('Đã bật lặp một bài', 'success')
+    } else {
+      repeat.value = 'none'
+      addToast('Đã tắt lặp lại', 'info')
+    }
     savePlayerSession()
   }
 
@@ -827,6 +980,10 @@ export const usePlayerStore = defineStore('player', () => {
     queueIndex,
     volume,
     shuffle,
+    shuffleOrder,
+    shufflePosition,
+    upcomingQueue,
+    effectiveQueue,
     repeat,
     spotifyReady,
     spotifyError,
@@ -845,6 +1002,7 @@ export const usePlayerStore = defineStore('player', () => {
     handleTrackEnded,
     seek,
     setVolume,
+    setOriginalMuted,
     toggleShuffle,
     toggleRepeat,
     playbackSource,

@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { publicSongCondition } = require('../utils/public.utils');
 
 function getUserId(req) {
   return req.user ? req.user.id : null;
@@ -96,7 +97,7 @@ async function getRegionChart(region, limit, userId) {
     LEFT JOIN listening_history lh
       ON lh.song_id = s.id
       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    WHERE s.is_active = TRUE
+    WHERE ${publicSongCondition('s')}
       AND ${config.condition}
     GROUP BY s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.play_count,
              s.artist_id, a.name, s.album_id, al.title, al.cover_url, g.name
@@ -112,7 +113,7 @@ async function getRegionChart(region, limit, userId) {
       ON lh.song_id = s.id
       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
       AND lh.listened_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
-    WHERE s.is_active = TRUE
+    WHERE ${publicSongCondition('s')}
       AND ${config.condition}
     GROUP BY s.id
     ORDER BY previous_plays DESC, s.play_count DESC

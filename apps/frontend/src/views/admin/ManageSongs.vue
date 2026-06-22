@@ -9,15 +9,10 @@
       <div class="flex gap-2">
         <!-- Optional Bulk Upload Button -->
         <button class="flex items-center gap-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          <MfIcon name="upload" size="16" />
           Upload hàng loạt
         </button>
-        <button @click="openAddModal" class="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-4 h-4">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Thêm bài hát
-        </button>
+        <AdminAddButton title="Thêm bài hát" @click="openAddModal" />
       </div>
     </div>
 
@@ -36,11 +31,8 @@
     <!-- Filters & Search -->
     <div class="flex flex-col md:flex-row gap-3 mb-5">
       <div class="relative flex-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
-          <circle cx="11" cy="11" r="8" />
-          <path stroke-linecap="round" d="m21 21-4.35-4.35" />
-        </svg>
-        <input v-model="store.filters.search" @keyup.enter="store.applyFilters" type="text" placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." class="w-full pl-9 pr-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm" />
+        <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+        <input v-model="store.filters.search" @input="handleSearchInput" @keyup.enter="store.applyFilters" type="text" placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." class="w-full pl-9 pr-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm" />
       </div>
       <div class="w-full md:w-40">
         <select v-model="store.filters.genreId" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
@@ -56,6 +48,15 @@
         </select>
       </div>
       <div class="w-full md:w-40">
+        <select v-model="store.filters.releaseStatus" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
+          <option value="">Tất cả phát hành</option>
+          <option value="draft">Nháp</option>
+          <option value="scheduled">Lên lịch</option>
+          <option value="published">Đã phát hành</option>
+          <option value="hidden">Đã ẩn</option>
+        </select>
+      </div>
+      <div class="w-full md:w-40">
         <select v-model="store.filters.sortBy" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
           <option value="created_at">Mới nhất</option>
           <option value="play_count">Lượt nghe</option>
@@ -63,9 +64,7 @@
           <option value="duration_sec">Thời lượng</option>
         </select>
       </div>
-      <button @click="store.resetFilters" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-        Reset
-      </button>
+      <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" />
     </div>
 
     <!-- Bulk Actions -->
@@ -81,62 +80,68 @@
         <button @click="handleBulkMarket('VPOP')" class="px-3 py-1.5 text-xs font-bold bg-white dark:bg-bg-surface text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Gán VPOP</button>
         <button @click="handleBulkMarket('KPOP')" class="px-3 py-1.5 text-xs font-bold bg-white dark:bg-bg-surface text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Gán KPOP</button>
         <button @click="handleBulkMarket('USUK')" class="px-3 py-1.5 text-xs font-bold bg-white dark:bg-bg-surface text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Gán USUK</button>
+        <div class="h-6 w-px bg-indigo-200 dark:bg-indigo-500/30 mx-1"></div>
+        <select v-model="bulkAssignGenreId" class="px-2 py-1.5 text-xs font-medium border border-indigo-200 dark:border-indigo-500/30 rounded-lg bg-white dark:bg-bg-surface text-indigo-600 dark:text-indigo-400 focus:outline-none">
+          <option value="">Chọn thể loại...</option>
+          <option v-for="g in formData.genres" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+        <button @click="handleBulkGenre" :disabled="!bulkAssignGenreId" class="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white border border-transparent rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Gán Thể loại</button>
       </div>
     </div>
 
     <!-- Data Table -->
-    <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl shadow-sm overflow-hidden mb-8">
-      <div v-if="store.loading.songs" class="p-12 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+    <div class="relative bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl shadow-sm overflow-hidden mb-8 min-h-[640px] flex flex-col">
+      <!-- Loading Overlay -->
+      <div v-if="store.loading.songs" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/55 dark:bg-bg-surface/60 backdrop-blur-[1px] transition-opacity duration-300">
         <div class="w-10 h-10 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-        <p class="font-medium text-sm">Đang tải danh sách bài hát...</p>
+        <p class="font-medium text-sm text-gray-700 dark:text-gray-300 shadow-white">Đang tải dữ liệu...</p>
       </div>
 
-      <div v-else-if="store.songs.length === 0" class="p-16 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-16 h-16 mb-4 text-gray-300 dark:text-gray-600">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 0v5.25m0-5.25l-10.5 3m0 0v5.25m0-5.25L3 18v-5.25m0 0l10.5-3" />
-        </svg>
+      <div v-if="store.songs.length === 0 && !store.loading.songs" class="flex-1 p-16 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+        <MfIcon name="music_off" size="64" className="mb-4 text-gray-300 dark:text-gray-600" />
         <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy bài hát nào</h3>
         <p class="text-sm dark:text-text-secondary">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
       </div>
 
-      <div v-else class="overflow-x-auto">
+      <div v-else class="flex-1 overflow-x-auto">
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-gray-50/50 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold border-b border-gray-100 dark:border-bg-border">
-              <th class="py-3 px-4 w-12 text-center">
+              <th class="py-3 px-4 w-12 text-center whitespace-nowrap">
                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               </th>
-              <th class="py-3 px-4 w-1/3">Tên Bài hát</th>
-              <th class="py-3 px-4">Nghệ sĩ</th>
-              <th class="py-3 px-4">Thị trường</th>
-              <th class="py-3 px-4 text-center">Trạng thái</th>
-              <th class="py-3 px-4 text-right">Hành động</th>
+              <th class="py-3 px-4 w-full min-w-[250px] whitespace-nowrap">Tên Bài hát</th>
+              <th class="py-3 px-4 min-w-[150px] whitespace-nowrap">Nghệ sĩ</th>
+              <th class="py-3 px-4 min-w-[120px] whitespace-nowrap">Thị trường</th>
+              <th class="py-3 px-4 min-w-[140px] text-center whitespace-nowrap">Phát hành</th>
+              <th class="py-3 px-4 min-w-[120px] text-center whitespace-nowrap">Trạng thái</th>
+              <th class="py-3 px-4 w-[100px] text-right whitespace-nowrap">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="song in store.songs" :key="song.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group">
+            <tr v-for="song in store.songs" :key="song.id" @click="goToDetail(song.id)" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group cursor-pointer">
               <!-- Checkbox -->
-              <td class="py-3 px-4 text-center">
+              <td class="py-3 px-4 text-center" @click.stop>
                 <input type="checkbox" :value="song.id" v-model="selectedSongIds" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               </td>
               <!-- Bài hát -->
-              <td class="py-3 px-4">
+              <td class="py-3 px-4 max-w-0">
                 <div class="flex items-center gap-3">
-                  <div class="relative w-10 h-10 flex-shrink-0 group-hover:scale-105 transition-transform">
-                    <img :src="$formatImageUrl(song.cover_url)" @error="e => e.target.src = '/default-cover.png'" class="w-full h-full rounded-md object-cover shadow-sm" />
-                    <button @click="previewSong(song)" class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  <div class="relative w-12 h-12 shrink-0 group-hover:scale-105 transition-transform duration-300">
+                    <img :src="$formatImageUrl(song.cover_url)" @error="e => e.target.src = '/default-cover.png'" loading="lazy" class="w-full h-full rounded-lg object-cover shadow-sm bg-gray-100" />
+                    <button @click.stop="previewSong(song)" class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MfIcon name="play_arrow" filled size="20" className="text-white" />
                     </button>
                   </div>
-                  <div class="flex flex-col overflow-hidden">
+                  <div class="flex flex-col min-w-0 flex-1">
                     <span class="text-sm font-bold text-gray-900 dark:text-white truncate" :title="song.title">{{ song.title }}</span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 font-medium">{{ formatDuration(song.duration_sec) }} • {{ song.play_count }} lượt nghe</span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 font-medium truncate">{{ formatDuration(song.duration_sec) }} • {{ song.play_count }} lượt nghe</span>
                   </div>
                 </div>
               </td>
               <!-- Nghệ sĩ -->
-              <td class="py-3 px-4">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 truncate max-w-[150px]" :title="song.artist_name || song.artist">
+              <td class="py-3 px-4 max-w-0">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 truncate max-w-full" :title="song.artist_name || song.artist">
                   {{ song.artist_name || song.artist || 'N/A' }}
                 </span>
               </td>
@@ -153,6 +158,11 @@
               </td>
               <!-- Trạng thái -->
               <td class="py-3 px-4 text-center">
+                <span class="inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold" :class="releaseBadgeClass(song)">
+                  {{ releaseLabel(song) }}
+                </span>
+              </td>
+              <td class="py-3 px-4 text-center" @click.stop>
                 <label class="relative inline-flex items-center cursor-pointer" :title="song.is_active ? 'Đang hoạt động' : 'Đã ẩn'">
                   <input type="checkbox" class="sr-only peer" :checked="song.is_active" @change="toggleStatus(song)">
                   <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -161,11 +171,11 @@
               <!-- Hành động -->
               <td class="py-3 px-4 text-right">
                 <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button @click="openEditModal(song)" class="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors focus:outline-none" title="Chỉnh sửa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
+                  <button @click.stop="openEditModal(song)" class="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors focus:outline-none" title="Chỉnh sửa">
+                    <MfIcon name="edit" size="20" />
                   </button>
-                  <button @click="confirmDelete(song)" class="p-2 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors focus:outline-none" title="Ẩn bài hát">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                  <button @click.stop="confirmDelete(song)" class="p-2 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors focus:outline-none" title="Xóa bài hát">
+                    <MfIcon name="delete" size="20" />
                   </button>
                 </div>
               </td>
@@ -176,25 +186,8 @@
 
       <!-- Pagination -->
       <div v-if="store.pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
-        <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">Trang {{ store.pagination.page }} / {{ store.pagination.totalPages }}</span>
-        <div class="flex gap-1">
-          <!-- First page -->
-          <button @click="store.setPage(1)" :disabled="store.pagination.page === 1" class="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-bg-card text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Trang đầu" aria-label="Trang đầu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M11 19.5 3.5 12 11 4.5" /><path stroke-linecap="round" stroke-linejoin="round" d="M20.5 19.5 13 12l7.5-7.5" /></svg>
-          </button>
-          <!-- Previous page -->
-          <button @click="store.setPage(store.pagination.page - 1)" :disabled="store.pagination.page === 1" class="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-bg-card text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Trang trước" aria-label="Trang trước">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-          </button>
-          <!-- Next page -->
-          <button @click="store.setPage(store.pagination.page + 1)" :disabled="store.pagination.page === store.pagination.totalPages" class="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-bg-card text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Trang sau" aria-label="Trang sau">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-          </button>
-          <!-- Last page -->
-          <button @click="store.setPage(store.pagination.totalPages)" :disabled="store.pagination.page === store.pagination.totalPages" class="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-bg-card text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Trang cuối" aria-label="Trang cuối">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M13 4.5 20.5 12 13 19.5" /><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 4.5 11 12l-7.5 7.5" /></svg>
-          </button>
-        </div>
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ store.pagination.page }} / {{ store.pagination.totalPages }}</span>
+        <AdminPagination :currentPage="store.pagination.page" :totalPages="store.pagination.totalPages" @update:currentPage="page => store.setPage(page)" />
       </div>
     </div>
 
@@ -217,7 +210,7 @@
       </div>
       <audio :src="$formatImageUrl(previewUrl)" controls autoplay class="h-8 max-w-[200px]"></audio>
       <button @click="previewUrl = null" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-white rounded-full">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <MfIcon name="close" size="20" />
       </button>
     </div>
 
@@ -233,20 +226,64 @@
       @close="closeModal"
       @submit="submitForm"
     />
+
+    <!-- Confirm Delete Modal -->
+    <Teleport to="body">
+      <div v-if="deleteModalOpen" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeDeleteModal"></div>
+        <div class="relative w-full max-w-md flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all p-6 text-center">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
+            <MfIcon name="warning" size="32" className="text-rose-600 dark:text-rose-400" />
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3" id="modal-title">Xác nhận xóa bài hát</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
+            Bạn có chắc chắn muốn xóa bài hát "<span class="font-bold text-gray-800 dark:text-gray-200">{{ songToDelete?.title }}</span>" khỏi hệ thống? Dữ liệu không thể khôi phục.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-3 justify-center w-full">
+            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-bg-card text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none transition-colors shadow-sm" @click="closeDeleteModal">
+              Hủy bỏ
+            </button>
+            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center items-center rounded-xl border border-transparent px-4 py-3 bg-rose-600 text-sm font-bold text-white shadow-sm hover:bg-rose-700 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="executeDelete" :disabled="deleting">
+              <div v-if="deleting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              {{ deleting ? 'Đang xóa...' : 'Xóa bài hát' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useAdminSongStore } from '@/store/adminSongStore';
+import { useRouter } from 'vue-router';
 import api from '@/api/axios';
 import SongFormModal from '@/components/admin/SongFormModal.vue';
 import SongGroupCards from '@/components/admin/SongGroupCards.vue';
 import TopSongsChart from '@/components/admin/charts/TopSongsChart.vue';
 import GenreDistributionChart from '@/components/admin/charts/GenreDistributionChart.vue';
 import MetadataIssuesPanel from '@/components/admin/MetadataIssuesPanel.vue';
+import AdminAddButton from '@/components/admin/AdminAddButton.vue';
+import AdminPagination from '@/components/admin/AdminPagination.vue';
+import AdminResetButton from '@/components/admin/AdminResetButton.vue';
+import { useToastStore } from '@/stores/toast';
 
 const store = useAdminSongStore();
+const router = useRouter();
+const toast = useToastStore();
+
+let searchTimeout = null;
+const handleSearchInput = () => {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    store.applyFilters();
+  }, 500);
+};
+
+function goToDetail(id) {
+  router.push(`/admin/songs/${id}`);
+}
 
 // Bulk Selection State
 const selectedSongIds = ref([]);
@@ -276,6 +313,26 @@ async function handleBulkMarket(market) {
   }
 }
 
+const bulkAssignGenreId = ref('');
+async function handleBulkGenre() {
+  if (!bulkAssignGenreId.value) return;
+  if (confirm(`Bạn có chắc muốn gán thể loại này cho ${selectedSongIds.value.length} bài hát?`)) {
+    try {
+      await api.post('/admin/genres/bulk-assign', {
+        songIds: selectedSongIds.value,
+        genreId: bulkAssignGenreId.value,
+        role: 'primary'
+      });
+      toast.showToast('Gán thể loại thành công', 'success');
+      selectedSongIds.value = [];
+      bulkAssignGenreId.value = '';
+      store.fetchSongs();
+    } catch (e) {
+      toast.showToast(e.response?.data?.message || 'Có lỗi khi gán thể loại', 'error');
+    }
+  }
+}
+
 // Group Navigation
 function handleGroupSelect(key) {
   store.setSelectedGroup(key);
@@ -285,6 +342,26 @@ function handleGroupSelect(key) {
 function groupLabel(key) {
   const map = { KPOP: 'Kpop', VPOP: 'Vpop', USUK: 'US-UK' };
   return map[key] || '';
+}
+
+function releaseLabel(song) {
+  if (song?.release_status === 'scheduled' && song?.effective_release_status === 'published') return 'Theo lịch'
+  return {
+    draft: 'Nháp',
+    scheduled: 'Lên lịch',
+    published: 'Đã phát hành',
+    hidden: 'Đã ẩn',
+  }[song?.release_status] || 'Không rõ'
+}
+
+function releaseBadgeClass(song) {
+  if (song?.release_status === 'scheduled' && song?.effective_release_status === 'published') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+  return {
+    draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    scheduled: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+    published: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
+    hidden: 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400',
+  }[song?.release_status] || 'bg-gray-100 text-gray-700'
 }
 
 // Preview Audio
@@ -363,11 +440,13 @@ async function submitForm(submitData) {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       statusMessage.value = 'Đã cập nhật bài hát thành công!';
+      toast.showToast('Cập nhật bài hát thành công!', 'success');
     } else {
       await api.post('/songs/upload', submitData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       statusMessage.value = 'Tải lên thành công!';
+      toast.showToast('Thêm bài hát thành công!', 'success');
     }
     
     // Re-fetch data from store
@@ -380,6 +459,7 @@ async function submitForm(submitData) {
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.';
     isError.value = true;
+    toast.showToast(statusMessage.value, 'error');
   } finally {
     saving.value = false;
   }
@@ -398,16 +478,35 @@ async function toggleStatus(song) {
   }
 }
 
-async function confirmDelete(song) {
-  if (confirm(`Bạn có chắc chắn muốn ẩn bài hát "${song.title}" khỏi hệ thống?`)) {
-    try {
-      await api.delete(`/admin/songs/${song.id}`);
-      store.fetchSongs();
-      store.fetchGroupsSummary();
-    } catch (err) {
-      console.error('Lỗi khi ẩn bài hát:', err);
-      alert('Không thể ẩn bài hát này');
-    }
+// Delete Modal State
+const deleteModalOpen = ref(false);
+const songToDelete = ref(null);
+const deleting = ref(false);
+
+function confirmDelete(song) {
+  songToDelete.value = song;
+  deleteModalOpen.value = true;
+}
+
+function closeDeleteModal() {
+  deleteModalOpen.value = false;
+  songToDelete.value = null;
+}
+
+async function executeDelete() {
+  if (!songToDelete.value) return;
+  deleting.value = true;
+  try {
+    await api.delete(`/admin/songs/${songToDelete.value.id}`);
+    store.fetchSongs();
+    store.fetchGroupsSummary();
+    toast.showToast('Xóa bài hát thành công', 'success');
+    closeDeleteModal();
+  } catch (err) {
+    console.error('Lỗi khi xóa bài hát:', err);
+    toast.showToast(err.response?.data?.message || 'Không thể xóa bài hát này', 'error');
+  } finally {
+    deleting.value = false;
   }
 }
 

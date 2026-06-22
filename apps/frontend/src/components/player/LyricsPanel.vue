@@ -5,15 +5,36 @@
         <p class="lyrics-panel__eyebrow">Lyrics</p>
         <h2 class="lyrics-panel__title">{{ song?.title || 'Chưa chọn bài hát' }}</h2>
       </div>
-      <span v-if="lyricsData?.provider" class="lyrics-panel__provider">{{ lyricsData.provider }}</span>
+      <div class="lyrics-panel__meta">
+        <button
+          v-if="!autoFollowLyrics && hasSyncedLyrics"
+          type="button"
+          class="lyrics-panel__follow-btn"
+          @click="resumeAutoFollow"
+        >
+          Theo dõi lời
+        </button>
+        <span v-if="lyricsData?.provider" class="lyrics-panel__provider">{{ lyricsData.provider }}</span>
+        <span v-if="showSyncBadge" class="lyrics-panel__sync-badge">{{ syncBadgeText }}</span>
+      </div>
+    </div>
+
+    <div
+      v-if="!showHeader && !autoFollowLyrics && hasSyncedLyrics"
+      class="lyrics-panel__follow-cta"
+    >
+      <button type="button" class="lyrics-panel__follow-btn" @click="resumeAutoFollow">
+        Theo dõi lời
+      </button>
     </div>
 
     <div
       ref="scrollContainer"
       class="lyrics-panel__body"
-      @wheel.passive="pauseAutoScroll"
-      @touchstart.passive="pauseAutoScroll"
-      @pointerdown="pauseAutoScroll"
+      @scroll.passive="handleUserScroll"
+      @wheel.passive="handleUserIntentScroll"
+      @touchstart.passive="handleUserIntentScroll"
+      @pointerdown="handleUserIntentScroll"
     >
       <div v-if="!songId" class="lyrics-panel__state">
         Chưa có bài hát đang phát
@@ -33,22 +54,27 @@
         {{ emptyLyricsMessage }}
       </div>
 
-      <div v-else-if="isPlainText" class="lyrics-panel__plain">
-        <p v-for="(line, index) in displayLines" :key="`${index}-${line.words}`" class="lyrics-panel__plain-line">
-          {{ line.words }}
-        </p>
+      <div v-else-if="isPlainLyrics" class="lyrics-panel__plain-wrap">
+        <div v-if="showPlainLyricsNotice" class="lyrics-panel__notice">
+          {{ plainLyricsNotice }}
+        </div>
+        <div class="lyrics-panel__plain">
+          <p v-for="(line, index) in plainLyricsLines" :key="`${index}-${line.words}`" class="lyrics-panel__plain-line">
+            {{ line.words }}
+          </p>
+        </div>
       </div>
 
       <div v-else class="lyrics-panel__synced">
         <p
-          v-for="(line, index) in displayLines"
-          :key="`${line.startTimeMs ?? index}-${line.words}`"
+          v-for="(line, index) in syncedLyricsLines"
+          :key="`${line.time ?? index}-${line.words}`"
           :ref="(el) => setLineRef(el, index)"
           class="lyrics-panel__line"
           :class="{
-            'lyrics-panel__line--active': index === activeLineIndex,
-            'lyrics-panel__line--past': index < activeLineIndex,
-            'lyrics-panel__line--future': index > activeLineIndex || activeLineIndex === -1,
+            'lyrics-panel__line--active': index === currentLyricIndex,
+            'lyrics-panel__line--past': index < currentLyricIndex,
+            'lyrics-panel__line--future': index > currentLyricIndex || currentLyricIndex === -1,
           }"
         >
           {{ line.words }}
@@ -59,8 +85,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUpdate, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onBeforeUpdate, ref, watch } from 'vue'
 import { getLyricsBySongId } from '@/api/lyrics'
+import { parseLrcLyrics } from '@/utils/parseLrcLyrics'
 
 const props = defineProps({
   song: {
@@ -79,6 +106,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  pauseAutoScroll: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const lyricsLoading = ref(false)
@@ -86,48 +117,70 @@ const lyricsError = ref(false)
 const lyricsData = ref(null)
 const scrollContainer = ref(null)
 const lineEls = ref([])
+const autoFollowLyrics = ref(true)
+const userScrolling = ref(false)
+const lastUserScrollAt = ref(0)
+let userScrollTimeout = null
+let isProgrammaticScroll = false
 let requestToken = 0
 let lastScrollAt = 0
-let autoScrollPausedUntil = 0
 
 const songId = computed(() => props.song?.id ?? props.song?.song_id ?? props.song?.track_id ?? null)
-const syncType = computed(() => lyricsData.value?.syncType || 'NONE')
+const syncedLyricsRaw = computed(() => {
+  const songSyncedLyrics = props.song?.syncedLyrics ?? props.song?.synced_lyrics ?? ''
+  const data = lyricsData.value || {}
+  return songSyncedLyrics || data.syncedLyrics || data.synced_lyrics || data.lrcLyrics || data.lrc_lyrics || ''
+})
+const plainLyricsRaw = computed(() => {
+  const songPlainLyrics = props.song?.lyrics ?? props.song?.plainLyrics ?? props.song?.plain_lyrics ?? ''
+  const data = lyricsData.value || {}
+  return songPlainLyrics || data.plainLyrics || data.plain_lyrics || ''
+})
+const parsedSyncedLyrics = computed(() => parseLrcLyrics(syncedLyricsRaw.value))
+const hasSyncedLyrics = computed(() => parsedSyncedLyrics.value.length > 0)
+const currentLyricIndex = ref(-1)
+const plainLyricsLines = computed(() => {
+  if (Array.isArray(lyricsData.value?.lines) && lyricsData.value.lines.length && !hasSyncedLyrics.value) {
+    return lyricsData.value.lines
+      .map((line) => ({ words: String(line?.words || '').trim() }))
+      .filter((line) => line.words)
+  }
 
-const displayLines = computed(() => {
-  const lines = Array.isArray(lyricsData.value?.lines) ? lyricsData.value.lines : []
-  return lines
-    .map((line) => ({
-      startTimeMs: toNumberOrNull(line?.startTimeMs),
-      endTimeMs: toNumberOrNull(line?.endTimeMs),
-      words: String(line?.words || '').trim(),
-    }))
+  return String(plainLyricsRaw.value || '')
+    .split(/\r?\n/)
+    .map((line) => ({ words: line.trim() }))
     .filter((line) => line.words)
 })
-
-const isPlainText = computed(() => syncType.value === 'PLAIN_TEXT')
+const syncedLyricsLines = computed(() => parsedSyncedLyrics.value.map((line) => ({ time: line.time, words: line.text })))
+const isInstrumental = computed(() => String(lyricsData.value?.syncType || '').toUpperCase() === 'INSTRUMENTAL')
+const isPlainLyrics = computed(() => !hasSyncedLyrics.value && plainLyricsLines.value.length > 0)
+const showPlainLyricsNotice = computed(() => isPlainLyrics.value)
+const plainLyricsNotice = 'Lời bài hát hiện chưa có đồng bộ thời gian.'
+const syncBadgeText = computed(() => {
+  if (hasSyncedLyrics.value) return 'Lyrics đồng bộ'
+  if (isPlainLyrics.value) return 'Chưa có lyrics đồng bộ'
+  return ''
+})
+const showSyncBadge = computed(() => Boolean(syncBadgeText.value))
+const activeLineText = computed(() => {
+  if (currentLyricIndex.value < 0) return ''
+  return syncedLyricsLines.value[currentLyricIndex.value]?.words || ''
+})
 
 const emptyLyricsMessage = computed(() => {
-  if (syncType.value === 'INSTRUMENTAL') return 'Bài hát không lời'
-  if (lyricsData.value?.error || syncType.value === 'NONE') return 'Chưa có lời bài hát cho bài này'
-  if (!displayLines.value.length) return 'Chưa có lời bài hát cho bài này'
+  if (isInstrumental.value) return 'Bài hát không lời'
+  if (lyricsData.value?.error) return 'Chưa có lời bài hát cho bài này'
+  if (!hasSyncedLyrics.value && !plainLyricsLines.value.length) return 'Chưa có lời bài hát cho bài này'
   return ''
 })
 
-const activeLineIndex = computed(() => {
-  if (syncType.value !== 'LINE_SYNCED' || !displayLines.value.length) return -1
+const activeLineIndex = computed(() => currentLyricIndex.value)
 
-  const currentTimeMs = Math.max(0, props.currentTime || 0) * 1000
-
-  return displayLines.value.findIndex((line, index, lines) => {
-    const start = line.startTimeMs ?? 0
-    const end = line.endTimeMs ?? 0
-
-    if (currentTimeMs < start) return false
-    if (end > start) return currentTimeMs < end
-
-    const nextLine = lines.slice(index + 1).find((item) => item.startTimeMs !== null && item.startTimeMs > start)
-    return nextLine ? currentTimeMs < nextLine.startTimeMs : currentTimeMs >= start
-  })
+defineExpose({
+  syncedLyricsLines,
+  currentLyricIndex,
+  hasSyncedLyrics,
+  lyricsLoading,
 })
 
 watch(
@@ -137,6 +190,13 @@ watch(
     const token = requestToken
     lyricsData.value = null
     lyricsError.value = false
+    lineEls.value = []
+    lastScrollAt = 0
+    autoFollowLyrics.value = true
+    userScrolling.value = false
+    lastUserScrollAt.value = 0
+    isProgrammaticScroll = false
+    clearUserScrollTimeout()
 
     if (!nextSongId) {
       lyricsLoading.value = false
@@ -149,7 +209,21 @@ watch(
       const response = await getLyricsBySongId(nextSongId)
       if (token !== requestToken) return
       lyricsData.value = response?.data || null
-    } catch (error) {
+
+      if (import.meta.env.DEV) {
+        const payload = lyricsData.value || {}
+        const syncedValue = payload.syncedLyrics ?? payload.synced_lyrics ?? props.song?.syncedLyrics ?? props.song?.synced_lyrics ?? ''
+        const plainValue = payload.plainLyrics ?? payload.plain_lyrics ?? props.song?.lyrics ?? ''
+        console.debug('[lyrics-panel] payload', {
+          songId: nextSongId,
+          hasLyrics: Boolean(plainValue),
+          hasSyncedLyrics: Boolean(syncedValue),
+          syncedLyricsLength: typeof syncedValue === 'string' ? syncedValue.length : 0,
+          parsedLineCount: parseLrcLyrics(typeof syncedValue === 'string' ? syncedValue : '').length,
+          syncType: payload.syncType || payload.lyricsSyncType || props.song?.lyricsSyncType || props.song?.lyrics_sync_type || null,
+        })
+      }
+    } catch {
       if (token !== requestToken) return
       lyricsError.value = true
       lyricsData.value = null
@@ -160,54 +234,140 @@ watch(
   { immediate: true }
 )
 
-watch(activeLineIndex, async (index) => {
-  if (index < 0 || syncType.value !== 'LINE_SYNCED') return
-  if (Date.now() < autoScrollPausedUntil) return
+watch(
+  [syncedLyricsLines, () => props.currentTime],
+  ([lines, currentTime]) => {
+    currentLyricIndex.value = resolveCurrentLyricIndex(lines, currentTime)
+
+    if (import.meta.env.DEV && hasSyncedLyrics.value) {
+      console.debug('[lyrics-panel] sync', {
+        currentTime: Number(currentTime) || 0,
+        currentLyricIndex: currentLyricIndex.value,
+        activeLineText: activeLineText.value,
+        parsedLyricsLength: lines.length,
+      })
+    }
+  },
+  { immediate: true }
+)
+
+watch(activeLineIndex, async (index, previousIndex) => {
+  if (index < 0 || !hasSyncedLyrics.value || index === previousIndex) return
+  if (!autoFollowLyrics.value || userScrolling.value || props.pauseAutoScroll) return
 
   const now = Date.now()
-  if (now - lastScrollAt < 450) return
+  if (now - lastScrollAt < 300) return
   lastScrollAt = now
 
   await nextTick()
   scrollActiveLineIntoContainer(index)
 })
 
+watch(hasSyncedLyrics, async (enabled) => {
+  if (!enabled || !autoFollowLyrics.value || props.pauseAutoScroll) return
+  await nextTick()
+  if (activeLineIndex.value >= 0) scrollActiveLineIntoContainer(activeLineIndex.value, 'auto')
+})
+
+watch(() => props.pauseAutoScroll, async (paused) => {
+  if (!paused && autoFollowLyrics.value && activeLineIndex.value >= 0) {
+    await nextTick()
+    scrollActiveLineIntoContainer(activeLineIndex.value, 'smooth')
+  }
+})
+
 onBeforeUpdate(() => {
   lineEls.value = []
+})
+
+onBeforeUnmount(() => {
+  clearUserScrollTimeout()
 })
 
 function setLineRef(el, index) {
   if (el) lineEls.value[index] = el
 }
 
-function pauseAutoScroll() {
-  autoScrollPausedUntil = Date.now() + 3000
+function handleUserIntentScroll() {
+  if (isProgrammaticScroll) return
+  autoFollowLyrics.value = false
+  userScrolling.value = true
+  lastUserScrollAt.value = Date.now()
+  scheduleUserScrollReset()
 }
 
-function scrollActiveLineIntoContainer(index) {
+function handleUserScroll() {
+  if (isProgrammaticScroll) return
+  autoFollowLyrics.value = false
+  userScrolling.value = true
+  lastUserScrollAt.value = Date.now()
+  scheduleUserScrollReset()
+}
+
+function clearUserScrollTimeout() {
+  if (userScrollTimeout) {
+    window.clearTimeout(userScrollTimeout)
+    userScrollTimeout = null
+  }
+}
+
+function scheduleUserScrollReset() {
+  clearUserScrollTimeout()
+  userScrollTimeout = window.setTimeout(() => {
+    userScrolling.value = false
+    autoFollowLyrics.value = true
+  }, 5000)
+}
+
+async function resumeAutoFollow() {
+  autoFollowLyrics.value = true
+  userScrolling.value = false
+  clearUserScrollTimeout()
+  await nextTick()
+  if (activeLineIndex.value >= 0) {
+    scrollActiveLineIntoContainer(activeLineIndex.value)
+  }
+}
+
+function scrollActiveLineIntoContainer(index, behavior = 'smooth') {
   const container = scrollContainer.value
   const activeEl = lineEls.value[index]
   if (!container || !activeEl) return
 
-  const containerRect = container.getBoundingClientRect()
-  const activeRect = activeEl.getBoundingClientRect()
-  const offset =
-    activeRect.top -
-    containerRect.top +
-    container.scrollTop -
-    container.clientHeight / 2 +
-    activeEl.clientHeight / 2
-
+  isProgrammaticScroll = true
+  
+  const offsetTop = activeEl.offsetTop
+  const clientHeight = container.clientHeight
+  const elHeight = activeEl.clientHeight
+  
   container.scrollTo({
-    top: Math.max(0, offset),
-    behavior: 'smooth',
+    top: offsetTop - clientHeight / 2 + elHeight / 2,
+    behavior,
   })
+
+  window.setTimeout(() => {
+    isProgrammaticScroll = false
+  }, 300)
 }
 
-function toNumberOrNull(value) {
-  if (value === null || value === undefined || value === '') return null
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
+function resolveCurrentLyricIndex(lines, currentTime) {
+  if (!Array.isArray(lines) || !lines.length) return -1
+
+  const safeCurrentTime = Math.max(0, Number(currentTime) || 0)
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const lineTime = Number(lines[index]?.time)
+    if (!Number.isFinite(lineTime)) continue
+
+    const nextLineTime = Number(lines[index + 1]?.time)
+    const isBeforeNext = !Number.isFinite(nextLineTime) || nextLineTime > safeCurrentTime
+
+    if (lineTime <= safeCurrentTime && isBeforeNext) {
+      return index
+    }
+  }
+
+  return safeCurrentTime < Number(lines[0]?.time || 0) ? -1 : lines.length - 1
 }
 </script>
 
@@ -218,6 +378,7 @@ function toNumberOrNull(value) {
   height: 100%;
   flex-direction: column;
   color: #ffffff;
+  position: relative;
 }
 
 .lyrics-panel__header {
@@ -226,6 +387,14 @@ function toNumberOrNull(value) {
   justify-content: space-between;
   gap: 16px;
   padding: 0 0 18px;
+}
+
+.lyrics-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .lyrics-panel__eyebrow {
@@ -246,25 +415,66 @@ function toNumberOrNull(value) {
   line-height: 1.15;
 }
 
-.lyrics-panel__provider {
+.lyrics-panel__provider,
+.lyrics-panel__sync-badge {
   flex-shrink: 0;
-  border: 1px solid rgba(34, 197, 94, 0.25);
   border-radius: 999px;
   padding: 5px 10px;
-  color: #86efac;
-  background: rgba(34, 197, 94, 0.08);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
+.lyrics-panel__provider {
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.lyrics-panel__sync-badge {
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  color: #ddd6fe;
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.lyrics-panel__follow-cta {
+  position: absolute;
+  top: 64px;
+  right: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.lyrics-panel__follow-btn {
+  pointer-events: auto;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #ede9fe;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.24);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+
+.lyrics-panel__follow-btn:hover {
+  background: rgba(76, 29, 149, 0.28);
+  border-color: rgba(196, 181, 253, 0.52);
+  transform: translateY(-1px);
+}
+
+.lyrics-panel__follow-btn:active {
+  transform: translateY(0);
+}
+
 .lyrics-panel__body {
-  min-height: 260px;
+  min-height: 220px;
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px 8px 12px 0;
+  padding: 8px 12px 8px 12px;
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
@@ -307,45 +517,78 @@ function toNumberOrNull(value) {
   width: min(560px, 92%);
 }
 
+.lyrics-panel__plain-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.lyrics-panel__notice {
+  align-self: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .lyrics-panel__synced,
 .lyrics-panel__plain {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 24px 0;
+  gap: 12px;
+  padding: 16px 0 20px;
 }
 
 .lyrics-panel__line,
 .lyrics-panel__plain-line {
   margin: 0;
   overflow-wrap: anywhere;
-  line-height: 1.28;
-  transition: color 0.22s ease, transform 0.22s ease, opacity 0.22s ease;
+  line-height: 1.38;
+  transition: color 0.22s ease, transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease, text-decoration-color 0.22s ease;
+  transform-origin: left center;
 }
 
 .lyrics-panel__line {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: clamp(20px, 3vw, 34px);
-  font-weight: 800;
+  color: rgba(161, 161, 170, 0.94);
+  opacity: 0.6;
+  font-size: clamp(18px, 1.8vw, 26px);
+  font-weight: 700;
+  text-decoration: none;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
 }
 
 .lyrics-panel__line--active {
   color: #ffffff;
-  transform: translateX(6px);
-  text-shadow: 0 0 24px rgba(34, 197, 94, 0.3);
+  opacity: 1;
+  font-weight: 850;
+  transform: scale(1.01);
+  text-shadow: 0 0 14px rgba(167, 139, 250, 0.16);
+  background: linear-gradient(90deg, #ffffff 0%, #faf5ff 52%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-decoration-line: underline;
+  text-decoration-color: #a78bfa;
 }
 
 .lyrics-panel__line--past {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(113, 113, 122, 0.92);
+  opacity: 0.56;
 }
 
 .lyrics-panel__line--future {
-  color: rgba(255, 255, 255, 0.52);
+  color: rgba(161, 161, 170, 0.96);
+  opacity: 0.64;
 }
 
 .lyrics-panel__plain-line {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: clamp(17px, 2.1vw, 24px);
+  color: rgba(228, 228, 231, 0.8);
+  font-size: clamp(16px, 1.6vw, 22px);
   font-weight: 650;
 }
 
@@ -361,7 +604,7 @@ function toNumberOrNull(value) {
 }
 
 .lyrics-panel--fullscreen .lyrics-panel__line {
-  font-size: clamp(26px, 4vw, 42px);
+  font-size: clamp(22px, 3.5vw, 36px);
 }
 
 @keyframes lyrics-shimmer {
@@ -371,13 +614,24 @@ function toNumberOrNull(value) {
 
 @media (max-width: 640px) {
   .lyrics-panel__body {
-    min-height: 300px;
+    min-height: 240px;
     padding-right: 2px;
   }
 
   .lyrics-panel__synced,
   .lyrics-panel__plain {
-    gap: 14px;
+    gap: 10px;
+    padding: 12px 0 16px;
+  }
+
+  .lyrics-panel__line {
+    font-size: clamp(16px, 5vw, 20px);
+    line-height: 1.4;
+  }
+
+  .lyrics-panel__plain-line {
+    font-size: clamp(14px, 4vw, 18px);
+    line-height: 1.4;
   }
 
   .lyrics-panel__line--active {

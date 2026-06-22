@@ -31,8 +31,9 @@ router.delete('/:id/save', playlistController.removeSavedPlaylistFromLibrary);
 // Playlist modifications (protected by assertCanEditPlaylist)
 router.patch('/:id', assertCanEditPlaylist, upload.fields([{ name: 'cover', maxCount: 1 }]), playlistController.updatePlaylist);
 router.delete('/:id', assertCanEditPlaylist, playlistController.deletePlaylist);
-router.patch('/:id/songs/reorder', playlistController.reorderPlaylistSongs);
+router.patch('/:id/songs/reorder', assertCanEditPlaylist, playlistController.reorderPlaylistSongs);
 router.post('/:id/songs', assertCanEditPlaylist, playlistController.addSongToPlaylist);
 router.delete('/:id/songs/:song_id', assertCanEditPlaylist, playlistController.removeSongFromPlaylist);
+router.post('/:id/clone', playlistController.clonePlaylist);
 
 module.exports = router;

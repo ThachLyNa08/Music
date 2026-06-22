@@ -2,3 +2,8 @@ node_modules/
 .env
 uploads/
 *.log
+
+*.sql
+!database/migrations/*.sql
+!database/schema/*.sql
+!database/seeds/*.sql

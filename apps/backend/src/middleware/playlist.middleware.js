@@ -23,9 +23,11 @@ async function assertCanEditPlaylist(req, res, next) {
     const isSystem =
       playlist.is_system === 1 ||
       playlist.is_system === true ||
+      playlist.is_system === '1' ||
       playlist.type === 'system';
+    const playlistType = String(playlist.type || 'manual').toLowerCase();
 
-    if (isSystem || playlist.system_key || playlist.type !== 'manual') {
+    if (isSystem || playlist.system_key || playlistType !== 'manual') {
       return res.status(403).json({
         success: false,
         message: 'Không thể chỉnh sửa playlist do hệ thống tạo'

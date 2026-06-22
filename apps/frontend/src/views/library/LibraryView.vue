@@ -1,20 +1,45 @@
 <template>
   <div class="library-page user-page-bg">
-    <div class="header-glass user-panel flex-col sm:flex-row sm:items-center gap-6">
-      <div class="flex items-center gap-4">
-        <div class="w-16 h-16 shrink-0 shadow-2xl rounded-full overflow-hidden hidden sm:block">
-          <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.library)" alt="Library" class="w-full h-full object-cover" />
+    <section class="library-hero relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img
+        :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.library)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-35 scale-[1.15] blur-[30px] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#0f172a]/30 z-0 pointer-events-none"></div>
+
+      <div class="library-hero-glow library-hero-glow-1 z-0"></div>
+      <div class="library-hero-glow library-hero-glow-2 z-0"></div>
+
+      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-8 w-full">
+        <img
+          :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.library)"
+          alt="Library"
+          class="library-cover w-[130px] h-[130px] lg:w-[180px] lg:h-[180px] object-cover rounded-2xl shadow-2xl border border-white/10 flex-shrink-0"
+        />
+
+        <div class="library-hero-content min-w-0 flex-1">
+          <div class="library-label">Cá nhân</div>
+          <h1 class="library-title">Thư viện của tôi</h1>
+          <p class="library-subtitle">Quản lý toàn bộ âm nhạc và playlist yêu thích của bạn</p>
+          <p class="library-meta">{{ playlistItems.length }} Playlist • {{ albumCount }} Album • {{ singleCount }} Single • {{ followedCount }} Nghệ sĩ</p>
+
+          <div class="library-actions mt-5">
+            <button type="button" class="library-primary-btn" @click="showCreateModal = true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Tạo playlist mới
+            </button>
+          </div>
         </div>
-        <h1>Thư viện của tôi</h1>
       </div>
-      <button class="btn-create user-primary-btn" @click="showCreateModal = true">
-        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-        Tạo playlist
-      </button>
-    </div>
+    </section>
     
     <!-- Tabs -->
-    <div class="tabs-container">
+    <div class="library-grid-wrap" ref="gridWrapRef">
+      <div class="tabs-container">
       <div class="flex gap-2 overflow-x-auto pb-2">
         <button 
           class="tab-btn px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap"
@@ -48,6 +73,7 @@
           <span v-if="followedCount > 0" class="ml-1 text-xs opacity-70">({{ followedCount }})</span>
         </button>
       </div>
+    </div>
     </div>
 
     <!-- Playlists Tab -->
@@ -174,14 +200,14 @@
 
       <div v-else class="playlist-grid artist-grid">
         <ArtistCard
-          v-for="artist in followedArtists"
+          v-for="artist in previewArtists"
           :key="artist.id || artist.artist_id"
           :artist="artist"
         />
       </div>
 
       <!-- View All Link -->
-      <div v-if="followedArtists.length > 0" class="view-all-container">
+      <div v-if="followedArtists.length > previewArtists.length" class="view-all-container">
         <button @click="$router.push('/me/followed-artists')" class="view-all-btn">
           Xem tất cả nghệ sĩ đã theo dõi
           <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
@@ -200,14 +226,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { playlistApi } from '@/api/playlist'
 import { useFollowedArtistsStore } from '@/stores/followedArtists'
+import { useToastStore } from '@/stores/toast'
 import CreatePlaylistModal from '@/components/playlist/CreatePlaylistModal.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import MediaCard from '@/components/common/MediaCard.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
 import { DEFAULT_SPECIAL_COVERS, normalizeAssetUrl } from '@/utils/imageUrl'
+
+const gridWrapRef = ref(null)
+const columnsCount = ref(6)
+let resizeObserver = null
+
+const toast = useToastStore()
 
 const playlists = ref([])
 const loading = ref(true)
@@ -239,6 +272,10 @@ const followedArtistsStore = useFollowedArtistsStore()
 const followedArtists = computed(() => followedArtistsStore.followedArtists)
 const followedLoading = computed(() => followedArtistsStore.loading)
 const followedCount = computed(() => followedArtistsStore.followedArtistCount)
+
+const previewArtists = computed(() => {
+  return followedArtists.value.slice(0, columnsCount.value * 2)
+})
 
 // Filter playlist items (exclude albums/singles)
 const playlistItems = computed(() => {
@@ -388,10 +425,27 @@ onMounted(() => {
   fetchPlaylists()
   // Fetch followed artists khi vào tab
   followedArtistsStore.fetchFollowedArtists()
+
+  resizeObserver = new ResizeObserver(entries => {
+    for (let entry of entries) {
+      const width = entry.contentRect.width
+      const isMobile = window.innerWidth <= 639
+      const minWidth = isMobile ? 140 : 160
+      const gap = isMobile ? 16 : 22
+      columnsCount.value = Math.max(2, Math.floor((width + gap) / (minWidth + gap)))
+    }
+  })
+  
+  if (gridWrapRef.value) {
+    resizeObserver.observe(gridWrapRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateItemsPerPage)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
 })
 
 async function handleCreate(form) {
@@ -408,9 +462,10 @@ async function handleCreate(form) {
     if (res.data?.success) {
       showCreateModal.value = false
       await fetchPlaylists() // reload list
+      toast.showToast('Đã tạo danh sách phát')
     }
   } catch (err) {
-    alert('Lỗi tạo playlist')
+    toast.showToast('Lỗi tạo danh sách phát', 'error')
   } finally {
     creating.value = false
   }
@@ -427,40 +482,111 @@ async function handleCreate(form) {
   min-height: 100%;
 }
 
-.header-glass {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  padding: 20px 28px;
+.library-hero {
+  margin-top: -32px;
+  margin-left: -48px;
+  margin-right: -48px;
+  margin-bottom: 32px;
 }
 
-.header-glass h1 {
-  font-size: 32px;
+.library-hero-glow {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(40px);
+  z-index: 1;
+}
+
+.library-hero-glow-1 {
+  width: 300px;
+  height: 300px;
+  right: -5%;
+  top: -20%;
+  background: rgba(139, 92, 246, 0.3);
+}
+
+.library-hero-glow-2 {
+  width: 250px;
+  height: 250px;
+  left: 10%;
+  bottom: -30%;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.library-label {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.library-title {
+  font-size: clamp(36px, 5vw, 64px);
   font-weight: 900;
-  margin: 0;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #7C3AED, #3B82F6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  margin: 0 0 12px;
+  color: #fff;
+  text-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
-.btn-create {
+.library-subtitle {
+  font-size: clamp(16px, 1.5vw, 18px);
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.library-meta {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  margin: 0 0 24px;
+}
+
+.library-actions {
   display: flex;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.library-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
+  height: 52px;
+  padding: 0 32px;
+  border-radius: 999px;
+  background: #1ED760;
+  color: #000000;
+  font-size: 16px;
+  font-weight: 800;
   border: none;
-  font-size: 15px;
-  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.2s;
+  box-shadow: 0 8px 24px rgba(30, 215, 96, 0.4);
 }
-.btn-create:hover {
-  transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 15px 35px rgba(124, 58, 237, 0.5);
+
+.library-primary-btn:hover {
+  transform: scale(1.04);
+  background: #1FDF64;
+  box-shadow: 0 12px 32px rgba(30, 215, 96, 0.6);
 }
-.btn-create svg {
-  width: 20px; height: 20px; fill: currentColor;
+
+.library-primary-btn:active {
+  transform: scale(0.96);
+  background: #169C46;
 }
 
 /* Tabs */
@@ -525,24 +651,24 @@ async function handleCreate(form) {
 
 .playlist-grid {
   display: grid;
-  grid-template-columns: repeat(5, 176px);
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 24px 22px;
-  justify-content: center;
 }
 
 .library-cards-grid {
   display: grid;
-  grid-template-columns: repeat(5, 176px);
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 24px 22px;
-  justify-content: center;
 }
 
 .artist-grid {
-  grid-template-columns: repeat(5, 166px);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 24px 22px;
 }
 
 .playlist-card {
-  width: 176px;
+  width: 100%;
   min-height: 218px;
   padding: 12px;
   text-decoration: none;
@@ -557,8 +683,9 @@ async function handleCreate(form) {
 }
 
 .card-art {
-  width: 152px;
-  height: 152px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  height: auto;
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 12px;
@@ -646,46 +773,24 @@ async function handleCreate(form) {
 }
 
 @media (max-width: 1279px) {
-  .playlist-grid {
-    grid-template-columns: repeat(4, 170px);
-  }
-
-  .artist-grid {
-    grid-template-columns: repeat(4, 166px);
-  }
-
   .playlist-card {
-    width: 170px;
     min-height: 212px;
-  }
-
-  .card-art {
-    width: 146px;
-    height: 146px;
   }
 }
 
 @media (max-width: 1023px) {
+  .library-hero {
+    margin-left: -28px;
+    margin-right: -28px;
+    margin-top: -28px;
+  }
+
   .library-page {
     padding: 28px 28px 144px;
   }
 
-  .playlist-grid {
-    grid-template-columns: repeat(3, 160px);
-  }
-
-  .artist-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
   .playlist-card {
-    width: 160px;
     min-height: 202px;
-  }
-
-  .card-art {
-    width: 136px;
-    height: 136px;
   }
 }
 
@@ -694,40 +799,35 @@ async function handleCreate(form) {
     padding: 22px 16px 144px;
   }
 
-  .header-glass {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
-    padding: 18px;
+  .library-hero {
+    margin-left: -16px;
+    margin-right: -16px;
+    margin-top: -22px;
+    padding: 24px 20px;
   }
-
-  .header-glass h1 {
-    font-size: 26px;
+  
+  .library-cover {
+    width: 160px;
+    height: 160px;
+    margin: 0 auto;
   }
-
-  .btn-create {
+  
+  .library-hero-content {
+    text-align: center;
     width: 100%;
+  }
+  
+  .library-actions {
     justify-content: center;
   }
 
-  .playlist-grid {
-    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  .playlist-grid, .library-cards-grid, .artist-grid {
     gap: 16px;
-  }
-
-  .artist-grid {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 
   .playlist-card {
-    width: 100%;
     min-height: 0;
-  }
-
-  .card-art {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1 / 1;
   }
 
   .pagination {

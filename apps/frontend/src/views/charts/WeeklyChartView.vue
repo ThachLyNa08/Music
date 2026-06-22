@@ -1,39 +1,53 @@
 <template>
-  <div class="user-page-bg px-6 py-8 pb-4">
-    <div class="mx-auto max-w-5xl">
-      <button
-        class="mb-6 rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-slate-300 transition hover:border-white hover:text-white"
-        type="button"
-        @click="$router.back()"
-      >
-        Quay lại
-      </button>
+  <div class="user-page-bg pb-4">
+    <!-- Hero Section Edge-to-Edge -->
+    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img 
+        :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.charts)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.38] scale-[1.18] blur-[34px] saturate-[1.2] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,11,20,0.88),rgba(9,11,20,0.64),rgba(9,11,20,0.95))] z-0 pointer-events-none"></div>
+      <!-- Tint Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-transparent to-purple-500/10 z-0 pointer-events-none"></div>
 
-      <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div class="flex flex-col sm:flex-row sm:items-end gap-6">
-          <div class="w-32 h-32 shrink-0 shadow-2xl rounded-xl overflow-hidden hidden sm:block">
-            <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.charts)" alt="Charts" class="w-full h-full object-cover" />
-          </div>
-          <div>
-            <p class="text-sm font-black uppercase text-violet-300">MusicFlow Charts</p>
-            <h1 class="mt-1 text-3xl font-black">{{ chartTitle }}</h1>
-            <p class="mt-2 text-sm font-semibold text-slate-400">Bảng xếp hạng theo lượt nghe trong 7 ngày gần nhất.</p>
-          </div>
+      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+        <!-- Foreground Cover -->
+        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden bg-white/10">
+          <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.charts)" class="w-full h-full object-cover" />
         </div>
 
-        <button
-          class="flex h-11 items-center justify-center gap-2 rounded-full bg-violet-500 px-5 font-black text-white transition hover:bg-violet-400 disabled:opacity-50"
-          type="button"
-          :disabled="songs.length === 0"
-          @click="playAll"
-        >
-          <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current">
-            <polygon points="7 4 19 12 7 20 7 4" />
-          </svg>
-          Phát tất cả
-        </button>
-      </header>
+        <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
+          <span class="hidden lg:inline-block text-xs font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">
+            MUSICFLOW CHARTS
+          </span>
+          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ chartTitle }}</h1>
+          
+          <p class="text-gray-300 font-medium text-sm lg:text-base mt-1 line-clamp-2 max-w-3xl">
+            Bảng xếp hạng theo lượt nghe trong 7 ngày gần nhất.
+          </p>
 
+          <!-- Action Buttons -->
+          <div class="mt-4 flex items-center justify-center lg:justify-start gap-4">
+            <button
+              class="flex h-14 w-14 items-center justify-center rounded-full bg-[#1ED760] text-black shadow-[0_8px_8px_rgba(0,0,0,0.3)] transition-all hover:scale-105 hover:bg-[#1FDF64] disabled:opacity-50 disabled:hover:scale-100 cursor-pointer"
+              type="button"
+              :disabled="songs.length === 0"
+              @click="playAll"
+            >
+              <svg viewBox="0 0 24 24" class="h-7 w-7 ml-1 fill-current">
+                <polygon points="6 4 20 12 6 20 6 4" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="mx-auto max-w-[1400px] px-6">
       <div class="user-panel overflow-hidden p-3">
         <div v-if="loading" class="space-y-2">
           <div v-for="item in 10" :key="item" class="h-16 animate-pulse rounded-xl bg-white/[0.06]"></div>
@@ -110,7 +124,7 @@ async function loadChart() {
   loading.value = true
   try {
     const res = await chartApi.getWeekly({ region: apiRegion.value, limit: 30 })
-    songs.value = res.data?.success ? normalizeSongs(res.data.data || []) : []
+    songs.value = res.data?.success ? library.applyLikedStateToSongs(normalizeSongs(res.data.data || [])) : []
   } catch (error) {
     console.warn('Không thể tải bảng xếp hạng:', error)
     songs.value = []
@@ -151,3 +165,6 @@ function handleShare(song) {
   navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`)
 }
 </script>
+
+<style scoped>
+</style>

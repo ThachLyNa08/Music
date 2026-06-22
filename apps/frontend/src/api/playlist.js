@@ -14,6 +14,7 @@ export const playlistApi = {
   reorderSongs: (playlistId, songIds) => api.patch(`/playlists/${playlistId}/songs/reorder`, { songIds }),
   removeSong: (playlistId, songId) => api.delete(`/playlists/${playlistId}/songs/${songId}`),
   deletePlaylist: (id) => api.delete(`/playlists/${id}`),
+  clonePlaylist: (id) => api.post(`/playlists/${id}/clone`),
 
   savePlaylist: (id) => api.post(`/playlists/${id}/save`),
   unsavePlaylist: (id) => api.delete(`/playlists/${id}/save`)

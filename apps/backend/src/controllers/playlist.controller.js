@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const spotifyService = require('../services/spotify.service');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const { VALID_SYSTEM_KEYS } = require('../services/systemPlaylist.service');
+const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
 
 function isValidSystemPlaylist(playlist) {
   return (
@@ -19,12 +20,36 @@ function isUserPlaylist(playlist) {
   );
 }
 
+function isSystemPlaylistRecord(playlist) {
+  return (
+    playlist &&
+    (
+      playlist.type === 'system' ||
+      playlist.is_system === 1 ||
+      playlist.is_system === true ||
+      playlist.is_system === '1' ||
+      !!playlist.system_key
+    )
+  );
+}
+
+function isAiPlaylistRecord(playlist) {
+  return (
+    playlist &&
+    (
+      playlist.type === 'ai' ||
+      playlist.generated_by === 'ai' ||
+      playlist.source === 'ai'
+    )
+  );
+}
+
 function isManualEditablePlaylist(playlist) {
   return (
     playlist &&
-    String(playlist.type || 'manual') === 'manual' &&
-    !(playlist.is_system === 1 || playlist.is_system === true) &&
-    !playlist.system_key
+    String(playlist.type || 'manual').toLowerCase() === 'manual' &&
+    !isSystemPlaylistRecord(playlist) &&
+    !isAiPlaylistRecord(playlist)
   );
 }
 
@@ -52,7 +77,7 @@ async function getPlaylistSongs(conn, playlistId, userId) {
      LEFT JOIN albums al ON s.album_id = al.id
      LEFT JOIN genres g ON s.genre_id = g.id
      LEFT JOIN song_likes sl ON sl.song_id = s.id AND sl.user_id = ?
-     WHERE ps.playlist_id = ?
+     WHERE ps.playlist_id = ? AND ${publicSongCondition('s')}
      ORDER BY ps.position ASC, ps.added_at ASC`,
     [userId, playlistId]
   );
@@ -121,6 +146,7 @@ exports.getMyPlaylists = async (req, res, next) => {
                  FROM playlist_songs ps2
                  JOIN songs s ON s.id = ps2.song_id
                  WHERE ps2.playlist_id = p.id
+                 AND ${publicSongCondition('s')}
                  AND COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, '')) IS NOT NULL
                  ORDER BY ps2.position ASC, ps2.added_at ASC
                  LIMIT 1
@@ -182,7 +208,7 @@ exports.getMyPlaylists = async (req, res, next) => {
           (
             SELECT COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, ''))
             FROM songs s
-            WHERE s.album_id = al.id AND s.is_active = TRUE
+            WHERE s.album_id = al.id AND ${publicSongCondition('s')}
             AND COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, '')) IS NOT NULL
             ORDER BY s.id ASC
             LIMIT 1
@@ -194,6 +220,11 @@ exports.getMyPlaylists = async (req, res, next) => {
       JOIN albums al ON al.id = ula.album_id
       LEFT JOIN artists ar ON ar.id = al.artist_id
       WHERE ula.user_id = ?
+        AND ${publicAlbumCondition('al')}
+        AND EXISTS (
+          SELECT 1 FROM songs s
+          WHERE s.album_id = al.id AND ${publicSongCondition('s')}
+        )
       ORDER BY ula.saved_at DESC
     `, [userId]);
     
@@ -239,6 +270,7 @@ exports.getPlaylistDetail = async (req, res, next) => {
                  FROM playlist_songs ps2
                  JOIN songs s ON s.id = ps2.song_id
                  WHERE ps2.playlist_id = p.id
+                 AND ${publicSongCondition('s')}
                  AND COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, '')) IS NOT NULL
                  ORDER BY ps2.position ASC, ps2.added_at ASC
                  LIMIT 1
@@ -273,7 +305,8 @@ exports.getPlaylistDetail = async (req, res, next) => {
     delete playlist.saved_playlist_id;
 
     // Check privacy
-    if (!playlist.is_public && !isOwner && !isSystem) {
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!playlist.is_public && !isOwner && !isSystem && !isAdmin) {
       return res.status(403).json({ success: false, message: 'Bạn không có quyền xem playlist này' });
     }
 
@@ -427,12 +460,15 @@ exports.removeSongFromPlaylist = async (req, res, next) => {
     const { id } = req.params;
     let { song_id } = req.params;
 
-    const [playlists] = await pool.query(`SELECT user_id, is_system, system_key FROM playlists WHERE id = ?`, [id]);
+    const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
     if (playlists.length === 0 || String(playlists[0].user_id) !== String(userId)) {
       return res.status(403).json({ success: false, message: 'Không có quyền sửa playlist này' });
     }
     if (playlists[0].is_system === 1 || playlists[0].system_key) {
       return res.status(403).json({ success: false, message: 'Không thể xóa bài hát khỏi playlist hệ thống' });
+    }
+    if (!isManualEditablePlaylist(playlists[0])) {
+      return res.status(403).json({ success: false, message: 'Chỉ có thể chỉnh sửa playlist thủ công' });
     }
 
     if (isNaN(song_id)) {
@@ -454,12 +490,15 @@ exports.updatePlaylist = async (req, res, next) => {
     const { id } = req.params;
     const { name, description, is_public } = req.body;
 
-    const [playlists] = await pool.query(`SELECT user_id, is_system, system_key FROM playlists WHERE id = ?`, [id]);
+    const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
     if (playlists.length === 0 || String(playlists[0].user_id) !== String(userId)) {
       return res.status(403).json({ success: false, message: 'Không có quyền sửa playlist này' });
     }
     if (playlists[0].is_system === 1 || playlists[0].system_key) {
       return res.status(403).json({ success: false, message: 'Không thể đổi tên/ảnh playlist hệ thống' });
+    }
+    if (!isManualEditablePlaylist(playlists[0])) {
+      return res.status(403).json({ success: false, message: 'Chỉ có thể chỉnh sửa playlist thủ công' });
     }
 
     let coverUrl = null;
@@ -511,16 +550,20 @@ exports.deletePlaylist = async (req, res, next) => {
     const userId = req.user.id;
     const { id } = req.params;
 
-    const [playlists] = await pool.query(`SELECT user_id, is_system, system_key FROM playlists WHERE id = ?`, [id]);
+    const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
     if (playlists.length === 0 || String(playlists[0].user_id) !== String(userId)) {
       return res.status(403).json({ success: false, message: 'Không có quyền xóa playlist này' });
     }
     if (playlists[0].is_system === 1 || playlists[0].system_key) {
       return res.status(403).json({ success: false, message: 'Không thể xóa playlist hệ thống' });
     }
+    if (!isManualEditablePlaylist(playlists[0])) {
+      return res.status(403).json({ success: false, message: 'Chỉ có thể xóa playlist thủ công' });
+    }
 
     // Xóa playlist_songs trước để tránh lỗi foreign key (nếu database chưa set CASCADE)
     await pool.query(`DELETE FROM playlist_songs WHERE playlist_id = ?`, [id]);
+    await pool.query(`DELETE FROM ai_playlists WHERE playlist_id = ?`, [id]);
     await pool.query(`DELETE FROM playlists WHERE id = ?`, [id]);
 
     res.json({ success: true, message: 'Đã xóa playlist' });
@@ -564,5 +607,73 @@ exports.removeSavedPlaylistFromLibrary = async (req, res, next) => {
   } catch (err) {
     require('fs').writeFileSync('error_log.txt', err.stack || err.toString());
     next(err);
+  }
+};
+
+exports.clonePlaylist = async (req, res, next) => {
+  const conn = await pool.getConnection();
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const [playlists] = await conn.query(
+      `SELECT id, user_id, name, description, cover_url, type, is_system, system_key, is_public FROM playlists WHERE id = ?`,
+      [id]
+    );
+
+    if (playlists.length === 0) {
+      return res.status(404).json({ success: false, message: 'Playlist không tồn tại' });
+    }
+
+    const playlist = playlists[0];
+    const isOwner = String(playlist.user_id) === String(userId);
+    const isSystem = isSystemPlaylistRecord(playlist);
+    const isAi = isAiPlaylistRecord(playlist);
+
+    if (isSystem) {
+      return res.status(403).json({
+        success: false,
+        message: 'Không thể tạo bản sao chỉnh sửa cho playlist hệ thống.'
+      });
+    }
+
+    if (!isOwner && !playlist.is_public && !isAi) {
+      return res.status(403).json({ success: false, message: 'Không có quyền truy cập playlist này' });
+    }
+
+    await conn.beginTransaction();
+
+    const newName = playlist.name ? playlist.name + ' (Bản sao)' : 'Playlist (Bản sao)';
+    const newDescription = playlist.description || '';
+
+    const [insertResult] = await conn.query(
+      `INSERT INTO playlists (user_id, name, description, cover_url, type, is_system, is_public, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'manual', 0, 0, NOW(), NOW())`,
+      [userId, newName, newDescription, playlist.cover_url]
+    );
+
+    const newPlaylistId = insertResult.insertId;
+
+    // Copy songs
+    await conn.query(
+      `INSERT INTO playlist_songs (playlist_id, song_id, position, added_at)
+       SELECT ?, song_id, position, NOW()
+       FROM playlist_songs
+       WHERE playlist_id = ?
+       ORDER BY position ASC, added_at ASC`,
+      [newPlaylistId, id]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: 'Đã tạo bản sao playlist', playlist_id: newPlaylistId });
+  } catch (err) {
+    try {
+      await conn.rollback();
+    } catch (rollbackErr) {
+      console.warn('Rollback clone playlist failed:', rollbackErr);
+    }
+    next(err);
+  } finally {
+    conn.release();
   }
 };

@@ -6,6 +6,7 @@
         :alt="songTitle"
         class="recent-song-card__cover"
         loading="lazy"
+        decoding="async"
         referrerpolicy="no-referrer"
         @error="handleImageError"
       />
@@ -136,7 +137,7 @@ function handleImageError(event) {
   width: 22px;
   height: 22px;
   margin-left: 2px;
-  fill: #ffffff;
+  fill: #000000;
 }
 
 .recent-song-card__title {

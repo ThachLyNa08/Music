@@ -121,9 +121,15 @@ async function getLyricsBySongId(songId) {
   }
 
   const [rows] = await pool.query(
-    `SELECT song_id, provider, sync_type, plain_lyrics, synced_lyrics, lyrics_json
-     FROM song_lyrics
-     WHERE song_id = ?
+    `SELECT
+       s.id AS song_id,
+       s.lyrics,
+       s.synced_lyrics,
+       s.lyrics_sync_type,
+       s.lyrics_provider,
+       s.lyrics_provider_id
+     FROM songs s
+     WHERE s.id = ?
      LIMIT 1`,
     [numericSongId]
   );
@@ -138,22 +144,35 @@ async function getLyricsBySongId(songId) {
   }
 
   const lyric = rows[0];
-  const lyricsJson = safeParseJson(lyric.lyrics_json);
+  const provider = lyric.lyrics_provider || 'lrclib';
+  const syncType = lyric.lyrics_sync_type || SYNC_TYPES.NONE;
+  const plainLyrics = lyric.lyrics || null;
+  const syncedLyrics = lyric.synced_lyrics || null;
+  const hasSyncedLyrics = typeof syncedLyrics === 'string' && syncedLyrics.includes('[00:');
   let lines = [];
 
-  if (lyric.sync_type === SYNC_TYPES.LINE_SYNCED) {
-    lines = Array.isArray(lyricsJson?.lines) && lyricsJson.lines.length > 0
-      ? lyricsJson.lines
-      : parseLrcToLines(lyric.synced_lyrics);
-  } else if (lyric.sync_type === SYNC_TYPES.PLAIN_TEXT) {
-    lines = plainLyricsToLines(lyric.plain_lyrics);
+  if (syncType === SYNC_TYPES.LINE_SYNCED && hasSyncedLyrics) {
+    lines = parseLrcToLines(syncedLyrics);
+  } else if (syncType === SYNC_TYPES.PLAIN_TEXT) {
+    lines = plainLyricsToLines(plainLyrics);
   }
 
   return {
     error: false,
     songId: numericSongId,
-    provider: lyric.provider || 'lrclib',
-    syncType: lyric.sync_type || SYNC_TYPES.NONE,
+    provider,
+    syncType,
+    lyrics: plainLyrics,
+    plainLyrics,
+    syncedLyrics,
+    synced_lyrics: syncedLyrics,
+    lyricsSyncType: syncType,
+    lyrics_sync_type: syncType,
+    lyricsProvider: provider,
+    lyrics_provider: provider,
+    lyricsProviderId: lyric.lyrics_provider_id || null,
+    lyrics_provider_id: lyric.lyrics_provider_id || null,
+    hasSyncedLyrics,
     lines,
   };
 }

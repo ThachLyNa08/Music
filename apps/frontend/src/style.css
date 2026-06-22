@@ -1,9 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap');
+
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+.mf-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 @layer components {
   .user-page-bg {
     @apply min-h-screen text-white;
@@ -62,11 +68,15 @@
   }
 
   .user-play-btn {
-    @apply flex items-center justify-center rounded-full bg-violet-500 text-white shadow-lg shadow-violet-950/40 transition hover:scale-105 hover:bg-violet-400;
+    @apply flex items-center justify-center rounded-full bg-[#1ED760] text-black transition duration-200 ease-out hover:scale-105 hover:bg-[#1FDF64] active:scale-95 active:bg-[#169C46];
   }
 
   .user-primary-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-extrabold text-black transition hover:scale-[1.02] hover:bg-emerald-400;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#1ED760] px-5 py-2.5 text-sm font-extrabold text-black transition duration-200 ease-out hover:scale-[1.02] hover:bg-[#1FDF64] active:scale-[0.98] active:bg-[#169C46] disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/40 disabled:hover:scale-100;
+  }
+
+  .mf-btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-[#1ED760] px-6 py-3 font-bold text-black transition duration-200 ease-out hover:bg-[#1FDF64] hover:scale-[1.02] active:bg-[#169C46] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/40 disabled:hover:scale-100;
   }
 
   .user-secondary-btn {
@@ -151,11 +161,11 @@
   }
 
   .home-play-btn {
-    @apply flex items-center justify-center rounded-full bg-violet-500 text-white shadow-lg shadow-violet-950/40 transition hover:scale-105 hover:bg-violet-400;
+    @apply flex items-center justify-center rounded-full bg-[#1ED760] text-black transition duration-200 ease-out hover:scale-105 hover:bg-[#1FDF64] active:scale-95 active:bg-[#169C46];
   }
 
   .home-primary-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-extrabold text-black transition hover:scale-[1.02] hover:bg-emerald-400;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#1ED760] px-5 py-2.5 text-sm font-extrabold text-black transition duration-200 ease-out hover:scale-[1.02] hover:bg-[#1FDF64] active:scale-[0.98] active:bg-[#169C46] disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/40 disabled:hover:scale-100;
   }
 
   .home-secondary-btn {
@@ -205,15 +215,52 @@
 }
 
 html {
-  font-family: 'Be Vietnam Pro', sans-serif;
+  font-family: 'Inter', sans-serif;
   color: #2d3436;
 }
 
+h1, h2, 
+.page-title, .section-title, .user-section-title, .home-section-title,
+.playlist-title, .artist-name, .karaoke-title, .song-title, .mf-title,
+.hero-title, .library-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Playfair Display', serif !important;
+  }
+  .font-body {
+    font-family: 'Inter', sans-serif !important;
+  }
+  .mf-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+  }
+  .mf-section-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+  }
+}
+
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(162, 155, 254, 0.3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(162, 155, 254, 0.6); }
+
+/* Hide scrollbar utility */
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
 
 /* ========================================
    UTILITY CLASSES
@@ -315,6 +362,25 @@ html {
   --border-color-hover: rgba(255, 255, 255, 0.12);
   --color-primary: #7C3AED;
   --color-primary-glow: rgba(124, 58, 237, 0.2);
+  --mf-green: #1ED760;
+  --mf-green-hover: #1FDF64;
+  --mf-green-active: #169C46;
+  --mf-green-subtle: rgba(30, 215, 96, 0.15);
+  
+  /* Toast Tokens */
+  --mf-toast-success: #1ED760;
+  --mf-toast-success-hover: #1FDF64;
+  --mf-toast-danger: #EF4444;
+  --mf-toast-danger-hover: #F87171;
+  --mf-toast-warning: #F59E0B;
+  --mf-toast-warning-hover: #FBBF24;
+  --mf-toast-info: #252525;
+  --mf-toast-info-border: rgba(255, 255, 255, 0.10);
+
+  --mf-toast-text-on-green: #000000;
+  --mf-toast-text-on-danger: #ffffff;
+  --mf-toast-text-on-warning: #000000;
+  --mf-toast-text-on-dark: #ffffff;
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.7);
   --text-muted: rgba(255, 255, 255, 0.45);

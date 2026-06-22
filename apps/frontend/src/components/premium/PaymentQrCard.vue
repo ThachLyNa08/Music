@@ -50,15 +50,25 @@
     </p>
 
     <!-- Check Status Button -->
-    <button 
-      @click="checkStatus"
-      :disabled="isChecking || isExpired"
-      class="w-full max-w-[280px] py-3 text-sm rounded-full font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-      :class="isChecking ? 'bg-white/10 text-white' : 'bg-accent-green text-black hover:bg-[#4cf479] hover:shadow-[0_0_20px_rgba(30,215,96,0.3)]'"
-    >
-      <span v-if="isChecking">Đang kiểm tra...</span>
-      <span v-else>Tôi đã thanh toán</span>
-    </button>
+    <div class="flex flex-col items-center w-full">
+      <p v-if="!isExpired" class="text-xs text-accent-green mb-3 flex items-center gap-2 animate-pulse font-medium">
+        <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Hệ thống đang tự động kiểm tra...
+      </p>
+
+      <button 
+        @click="checkStatus"
+        :disabled="isChecking || isExpired"
+        class="w-full max-w-[280px] py-2.5 text-sm rounded-full font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border border-white/20"
+        :class="isChecking ? 'bg-white/5 text-white/50' : 'bg-transparent text-white hover:bg-white/10 hover:border-white/40'"
+      >
+        <span v-if="isChecking">Đang kiểm tra...</span>
+        <span v-else>Kiểm tra ngay</span>
+      </button>
+    </div>
   </div>
 </template>
 

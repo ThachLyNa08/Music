@@ -1,23 +1,34 @@
 <template>
   <div class="followed-artists-page user-page-bg pb-4">
-    <!-- Header -->
-    <div class="user-panel mx-6 mt-6 flex flex-col sm:flex-row sm:items-end gap-6">
-      <div class="w-32 h-32 shrink-0 shadow-2xl rounded-full overflow-hidden hidden sm:block">
-        <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.followedArtists)" alt="Followed Artists" class="w-full h-full object-cover" />
-      </div>
-      <div>
-        <div class="flex items-center gap-3 mb-2">
-          <button @click="$router.back()" class="text-gray-400 hover:text-white transition-colors">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-            </svg>
-          </button>
-          <span class="text-sm text-gray-400 font-bold uppercase tracking-widest text-white/80">Thư viện</span>
+    <!-- Header Hero Section -->
+    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img
+        :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.followedArtists)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.32] scale-[1.18] blur-[30px] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay with Purple Tint -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#8b5cf6]/20 z-0 pointer-events-none"></div>
+
+      <div class="relative z-10 flex flex-col sm:flex-row items-center sm:items-center gap-6 sm:gap-8 w-full">
+        <!-- Foreground Avatar -->
+        <div class="w-[120px] h-[120px] lg:w-[160px] lg:h-[160px] rounded-full shadow-[0_15px_40px_rgba(0,0,0,0.6)] border-2 border-white/10 flex-shrink-0 overflow-hidden">
+          <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.followedArtists)" alt="Followed Artists" class="w-full h-full object-cover" />
         </div>
-        <h1 class="text-4xl md:text-6xl font-black text-white mb-2 tracking-tighter">Nghệ sĩ đã theo dõi</h1>
-        <p class="text-gray-400 font-medium">Những nghệ sĩ bạn quan tâm</p>
+        
+        <div class="flex flex-col gap-1 min-w-0 flex-1 text-center sm:text-left">
+          <span class="hidden sm:block text-sm font-bold uppercase tracking-wider text-white/70 mb-1">Hồ sơ</span>
+          <h1 class="text-4xl sm:text-5xl lg:text-[72px] font-black leading-[1.1] text-white tracking-tight mb-2 drop-shadow-lg">Nghệ sĩ đã theo dõi</h1>
+          <p class="text-white/70 font-medium text-sm sm:text-base mb-1">Những nghệ sĩ bạn quan tâm</p>
+          <div class="flex items-center justify-center sm:justify-start gap-2 text-sm text-white/50 font-semibold">
+            <span class="text-white font-bold">{{ artists.length }}</span>
+            <span>nghệ sĩ</span>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
 
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center py-20">
@@ -66,16 +77,26 @@
             </svg>
           </button>
         </div>
+
+        <!-- Placeholders để giữ nguyên chiều cao của Grid ở trang cuối -->
+        <div 
+          v-for="i in (itemsPerPage - paginatedArtists.length)" 
+          :key="`placeholder-${i}`" 
+          class="invisible pointer-events-none"
+        >
+          <ArtistCard :artist="{ name: 'Placeholder' }" />
+        </div>
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination">
-        <button class="pagination-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">&lt;</button>
-        <div class="pagination-pages">
-          <button v-for="page in totalPages" :key="`page-${page}`" class="page-dot" :class="{ active: page === currentPage }" @click="goToPage(page)">{{ page }}</button>
-        </div>
-        <span class="pagination-label">Trang {{ currentPage }} / {{ totalPages }}</span>
-        <button class="pagination-btn" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">&gt;</button>
+      <div class="mt-8 mb-4">
+        <UserPagination 
+          v-if="artists.length > 0"
+          v-model:page="currentPage" 
+          v-model:limit="itemsPerPage"
+          :total="artists.length" 
+          :showPageSize="false"
+        />
       </div>
     </div>
 
@@ -90,6 +111,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useFollowedArtistsStore } from '@/stores/followedArtists'
 import ToastManager from '@/components/common/ToastManager.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
+import UserPagination from '@/components/common/UserPagination.vue'
 import { DEFAULT_SPECIAL_COVERS, normalizeAssetUrl } from '@/utils/imageUrl'
 
 const router = useRouter()
@@ -127,7 +149,7 @@ watch(artists, () => {
 })
 
 const toastManager = ref(null)
-const showToast = (msg) => toastManager.value?.addToast(msg)
+const showToast = (msg, type = 'success') => toastManager.value?.addToast(msg, type)
 
 const localFormatImageUrl = (url) => {
   if (!url) return '/default-artist.png'
@@ -154,7 +176,7 @@ async function fetchArtists() {
 
 async function handleUnfollow(artist) {
   if (!authStore.isLoggedIn) {
-    showToast('Vui lòng đăng nhập')
+    showToast('Vui lòng đăng nhập', 'warning')
     router.push('/login')
     return
   }
@@ -166,7 +188,7 @@ async function handleUnfollow(artist) {
     showToast(`Đã bỏ theo dõi ${artist.name}`)
   } catch (err) {
     console.error('Unfollow error:', err)
-    showToast('Có lỗi xảy ra')
+    showToast('Có lỗi xảy ra', 'error')
   }
 }
 
@@ -180,72 +202,3 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateItemsPerPage)
 })
 </script>
-
-<style scoped>
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
-  margin-bottom: 12px;
-  width: 100%;
-}
-
-.pagination-pages {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pagination-btn,
-.page-dot {
-  min-width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.pagination-btn:hover:not(:disabled),
-.page-dot:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.page-dot.active {
-  background: #7C3AED;
-  border-color: #7C3AED;
-  color: #ffffff;
-}
-
-.pagination-label {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 13px;
-  font-weight: 700;
-  min-width: 86px;
-  text-align: center;
-}
-
-@media (max-width: 639px) {
-  .pagination {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .pagination-label {
-    order: 3;
-    width: 100%;
-  }
-}
-</style>

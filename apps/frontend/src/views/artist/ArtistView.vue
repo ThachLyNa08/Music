@@ -21,16 +21,32 @@
       }"
     >
       <div class="hero-content">
-        <div class="verified-badge flex items-center gap-2 mb-2" v-if="artist.total_plays > 100">
+        <div class="verified-badge flex items-center gap-2 mb-2" v-if="(artist.total_plays ?? artist.totalPlays ?? 0) > 100">
           <svg viewBox="0 0 24 24" class="w-6 h-6 text-blue-400" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
           <span class="text-sm font-medium tracking-wide">Nghệ sĩ được xác minh</span>
         </div>
         <h1 class="artist-name">{{ artist.name }}</h1>
         <p class="artist-stats mt-4 text-base font-medium">
           {{ formatNumber(artist.follower_count) }} người theo dõi •
-          {{ formatNumber(artist.total_plays) }} lượt nghe •
+          {{ formatNumber(artist.total_plays ?? artist.totalPlays ?? 0) }} lượt nghe •
           {{ formatNumber(artist.song_count) }} bài hát
         </p>
+        <p v-if="artistSummary" class="mt-4 max-w-2xl text-sm md:text-base font-medium leading-7 text-white/82 line-clamp-2">
+          {{ artistSummary }}
+        </p>
+        <div v-if="artistGenres.length" class="mt-4 flex max-w-3xl flex-wrap gap-2">
+          <span v-for="genre in artistGenres" :key="genre" class="rounded-full bg-white/12 px-3 py-1 text-xs font-bold text-white/90 backdrop-blur">
+            {{ genre }}
+          </span>
+        </div>
+        <div v-if="artist.followers || artist.popularity" class="mt-4 flex flex-wrap gap-3 text-xs font-bold text-white/82">
+          <span v-if="artist.followers" class="rounded-full bg-black/28 px-3 py-1.5">
+            Spotify followers: {{ formatNumber(artist.followers) }}
+          </span>
+          <span v-if="artist.popularity" class="rounded-full bg-black/28 px-3 py-1.5">
+            Popularity: {{ artist.popularity }}/100
+          </span>
+        </div>
       </div>
     </header>
 
@@ -207,8 +223,19 @@
                 <span class="text-gray-300 font-medium text-sm pb-0.5">người theo dõi</span>
               </div>
               <p class="text-white text-base md:text-lg font-medium leading-relaxed line-clamp-4 group-hover:line-clamp-none transition-all">
-                {{ artist.bio || 'Chưa có tiểu sử cho nghệ sĩ này.' }}
+                {{ artistSummary || 'Thông tin nghệ sĩ đang được cập nhật.' }}
               </p>
+              <a v-if="artist.bio_source_url" :href="artist.bio_source_url" target="_blank" rel="noreferrer" class="block mt-2 text-xs text-gray-300 hover:text-white underline" @click.stop>
+                Nguồn tiểu sử: {{ artist.bio_source === 'wikipedia' ? 'Wikipedia' : (artist.bio_source === 'lastfm' ? 'Last.fm' : artist.bio_source) }}
+              </a>
+              <div class="mt-5 flex flex-wrap gap-2">
+                <span v-for="genre in artistGenres" :key="`about-${genre}`" class="rounded-full bg-white/12 px-3 py-1 text-xs font-bold text-white/88">
+                  {{ genre }}
+                </span>
+                <a v-if="artist.external_url" :href="artist.external_url" target="_blank" rel="noreferrer" class="rounded-full bg-[#1ed760] px-3 py-1 text-xs font-bold text-black hover:bg-[#1fdf64]">
+                  Spotify
+                </a>
+              </div>
             </div>
           </div>
         </section>
@@ -286,6 +313,25 @@ const followLoading = ref(false)
 
 const activeDiscoTab = ref('singles')
 const DISPLAY_LIMIT = 8
+
+const artistGenres = computed(() => {
+  if (!artist.value) return []
+  if (Array.isArray(artist.value.genres)) return artist.value.genres.filter(Boolean)
+  if (Array.isArray(artist.value.genres_json)) return artist.value.genres_json.filter(Boolean)
+  if (typeof artist.value.genres_json === 'string') {
+    try {
+      const parsed = JSON.parse(artist.value.genres_json)
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+    } catch {
+      return []
+    }
+  }
+  return []
+})
+
+const artistSummary = computed(() => {
+  return artist.value?.short_bio || artist.value?.bio || ''
+})
 
 const filteredDiscography = computed(() => {
   if (!artist.value) return []
@@ -377,7 +423,7 @@ function toggleArtistPlayback() {
 // Xử lý Follow/Unfollow
 async function handleFollowToggle() {
   if (!authStore.isLoggedIn) {
-    showToast('Vui lòng đăng nhập để theo dõi nghệ sĩ')
+    showToast('Vui lòng đăng nhập để theo dõi nghệ sĩ', 'warning')
     router.push('/login')
     return
   }
@@ -401,7 +447,7 @@ async function handleFollowToggle() {
     }
   } catch (err) {
     console.error('Follow toggle error:', err)
-    showToast('Có lỗi xảy ra, vui lòng thử lại')
+    showToast('Có lỗi xảy ra, vui lòng thử lại', 'error')
   } finally {
     followLoading.value = false
   }
@@ -424,7 +470,7 @@ const menuState = ref({
 
 
 const toastManager = ref(null)
-const showToast = (msg) => toastManager.value?.addToast(msg)
+const showToast = (msg, type = 'success') => toastManager.value?.addToast(msg, type)
 
 function handleOpenMenu({ song, x, y }) {
   menuState.value = { show: true, position: { x, y }, song }
@@ -432,15 +478,11 @@ function handleOpenMenu({ song, x, y }) {
 
 async function handleToggleLike(songItem) {
   if (!authStore.isLoggedIn) {
-    showToast('Vui lòng đăng nhập để sử dụng chức năng này')
+    showToast('Vui lòng đăng nhập để sử dụng chức năng này', 'warning')
     return
   }
   if (!songItem) return
   await library.toggleLike(songItem)
-  const liked = library.isLiked(songItem)
-  songItem.is_liked = liked ? 1 : 0
-  songItem.isLiked = liked
-  songItem.liked = liked
 }
 
 function handleAddToQueue(song) {
@@ -450,7 +492,7 @@ function handleAddToQueue(song) {
 
 function handleAddToPlaylist(song) {
   if (!authStore.isLoggedIn) {
-    showToast('Vui lòng đăng nhập để sử dụng chức năng này')
+    showToast('Vui lòng đăng nhập để sử dụng chức năng này', 'warning')
     return
   }
   library.openPlaylistModal(song)
@@ -491,6 +533,12 @@ async function loadArtist() {
     const res = await api.get(`/artists/${route.params.id}`)
     if (res.data.success) {
       artist.value = res.data.data
+      if (Array.isArray(artist.value?.popular_songs)) {
+        artist.value.popular_songs = library.applyLikedStateToSongs(artist.value.popular_songs)
+      }
+      if (Array.isArray(artist.value?.songs)) {
+        artist.value.songs = library.applyLikedStateToSongs(artist.value.songs)
+      }
       
       // Sync follow state từ API
       isFollowing.value = artist.value.is_following === true

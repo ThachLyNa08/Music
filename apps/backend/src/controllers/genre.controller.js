@@ -1,11 +1,12 @@
 const { pool } = require('../config/database');
+const { publicSongCondition } = require('../utils/public.utils');
 
 exports.getAllGenres = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT g.id, g.name, g.slug, COUNT(s.id) as song_count
       FROM genres g
-      LEFT JOIN songs s ON g.id = s.genre_id AND s.is_active = TRUE
+      LEFT JOIN songs s ON g.id = s.genre_id AND ${publicSongCondition('s')}
       GROUP BY g.id
       ORDER BY song_count DESC
     `);

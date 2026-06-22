@@ -1,96 +1,121 @@
 <template>
-  <div class="search-page user-page-bg">
+  <div class="search-page search-page-enter pb-32 pt-8 px-4 sm:px-8 min-h-full">
     <!-- Search Bar -->
-    <section class="search-bar-section user-panel-soft">
-      <div class="search-bar" :class="{ focused: isInputFocused }">
-        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4.1-4.1" />
-        </svg>
-        <input
-          ref="searchInput"
-          v-model="query"
-          type="text"
-          placeholder="Bạn muốn nghe gì?"
-          aria-label="Tìm kiếm nhạc"
-          @focus="isInputFocused = true"
-          @blur="handleBlur"
-          @keyup.enter="executeSearch"
-        />
-        <button v-if="query.length > 0" class="clear-btn" @click="clearSearch" aria-label="Xóa">
-          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
-        </button>
+    <section class="relative max-w-lg mx-auto mb-10 z-10 search-reveal">
+      <div class="search-v6-wrapper" :class="{ 'is-focused': isInputFocused }">
+        <div class="search-v6">
+          <span class="sparkle">✦</span>
+          <input
+            ref="searchInput"
+            v-model="query"
+            type="text"
+            placeholder="Bạn muốn nghe gì?"
+            aria-label="Tìm kiếm nhạc"
+            @focus="isInputFocused = true"
+            @blur="handleBlur"
+            @keyup.enter="submitSearch"
+          />
+          <button v-if="query.length > 0 || committedQuery.length > 0" class="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex-shrink-0 z-10" @click="clearSearch" aria-label="Xóa">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Searches Dropdown -->
+      <div v-if="isInputFocused && query.length === 0 && recentSearches.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div class="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-white/5">
+          <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Tìm kiếm gần đây</span>
+          <button class="text-xs font-semibold text-gray-400 hover:text-white transition-colors" @mousedown.prevent="clearHistory">Xóa tất cả</button>
+        </div>
+        <div class="max-h-[300px] overflow-y-auto scrollbar-hide">
+          <div
+            v-for="(term, i) in recentSearches"
+            :key="i"
+            class="group flex items-center gap-3 px-4 py-3 hover:bg-white/10 cursor-pointer transition-colors"
+            @mousedown.prevent="applyRecentSearch(term)"
+          >
+            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4.1-4.1" /></svg>
+            <span class="text-sm font-medium text-white truncate flex-1">{{ term }}</span>
+            <button class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-white transition-all" @mousedown.prevent.stop="removeRecent(i)" aria-label="Xóa khỏi lịch sử">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Autocomplete Suggestions Dropdown -->
-      <div v-if="showSuggestions && suggestions.length > 0" class="suggestions-dropdown">
-        <div
-          v-for="(s, i) in suggestions"
-          :key="i"
-          class="suggestion-item"
-          @mousedown.prevent="applySuggestion(s)"
-        >
-          <div class="suggestion-icon-wrap">
-            <svg v-if="s.type === 'artist'" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-            <svg v-else-if="s.type === 'album'" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="12" r="3" /></svg>
-            <svg v-else viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-          </div>
-          <div class="suggestion-text">
-            <span class="suggestion-main">{{ s.text }}</span>
-            <span class="suggestion-sub">
-              {{ s.subtitle || (s.type === 'artist' ? 'Nghệ sĩ' : s.type === 'album' ? 'Album' : 'Bài hát') }}
-            </span>
+      <div v-if="showSuggestions && suggestions.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div class="px-4 py-3 border-b border-white/5 bg-white/5">
+          <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Gợi ý tìm kiếm</span>
+        </div>
+        <div class="max-h-[400px] overflow-y-auto scrollbar-hide">
+          <div
+            v-for="(s, i) in suggestions"
+            :key="i"
+            class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 cursor-pointer transition-colors"
+            @mousedown.prevent="applySuggestion(s)"
+          >
+            <div class="w-11 h-11 flex-shrink-0 flex items-center justify-center overflow-hidden bg-white/5" :class="s.type === 'artist' ? 'rounded-full' : 'rounded-md'">
+              <img v-if="s.imageUrl" :src="formatImageUrl(s.imageUrl)" :alt="s.text" class="w-full h-full object-cover" @error="handleSuggestionImageError(s)" />
+              <template v-else>
+                <svg v-if="s.type === 'artist'" class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                <svg v-else-if="s.type === 'album'" class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="12" r="3" /></svg>
+                <svg v-else-if="s.type === 'playlist'" class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                <svg v-else class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+              </template>
+            </div>
+            <div class="flex flex-col min-w-0 justify-center">
+              <span class="text-sm font-medium text-white truncate">{{ s.text }}</span>
+              <span class="text-xs text-gray-400 truncate">{{ s.subtitle || (s.type === 'artist' ? 'Nghệ sĩ' : s.type === 'album' ? 'Album' : s.type === 'playlist' ? 'Playlist' : 'Bài hát') }}</span>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ═══ SEARCH RESULTS ═══ -->
-    <section v-if="hasSearched && !isSearching" class="results-section">
+    <section v-if="hasSearched && !isSearching" class="space-y-10 min-w-0 search-reveal search-reveal-delay-1">
       <!-- No results -->
-      <div v-if="totalResults === 0" class="no-results">
-        <svg viewBox="0 0 80 80"><circle cx="35" cy="35" r="22" /><path d="m62 62-12-12" /></svg>
-        <h3>Không tìm thấy kết quả cho "{{ lastQuery }}"</h3>
-        <p>Hãy thử tìm kiếm bằng từ khóa khác, kiểm tra chính tả hoặc bỏ dấu tiếng Việt.</p>
+      <div v-if="totalResults === 0" class="flex flex-col items-center justify-center py-20 text-center">
+        <div class="w-16 h-16 mb-4 rounded-full bg-white/5 flex items-center justify-center">
+          <svg class="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-2">Không tìm thấy kết quả phù hợp cho "{{ lastQuery }}"</h3>
+        <p class="text-sm text-gray-400">Hãy thử tìm kiếm bằng từ khóa khác hoặc kiểm tra chính tả.</p>
       </div>
 
       <template v-else>
-        <!-- ── Artist Cards ── -->
-        <div v-if="artistResults.length > 0" class="result-group user-panel-soft">
-          <h2>Nghệ sĩ</h2>
-          <div class="artist-cards">
-            <ArtistCard
-              v-for="artist in artistResults"
-              :key="artist.id || artist.artist_id"
-              :artist="artist"
-            />
-          </div>
-        </div>
-
-        <!-- ── Top Result + Songs ── -->
-        <div class="results-grid" :class="{ 'no-top': artistResults.length > 0 }">
-          <!-- Top Result Card (show only if no artist match or first song is very relevant) -->
-          <div v-if="songResults.length > 0 && artistResults.length === 0" class="top-result-section user-panel-soft">
-            <h2>Kết quả hàng đầu</h2>
-            <div class="top-result-card" @click="$router.push(`/song/${songResults[0].id}`)">
-              <div class="top-cover" :style="getCoverStyle(songResults[0])"></div>
-              <h3 class="top-title">{{ songResults[0].title }}</h3>
-              <p class="top-meta">
-                <span class="top-artist" @click.stop="goToArtist(songResults[0])">{{ songResults[0].artist_name || songResults[0].artist }}</span>
-                <span class="top-badge">Bài hát</span>
-              </p>
-              <button class="play-fab" @click.stop="playSong(songResults[0])">
-                <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+        <!-- Top Result + Songs -->
+        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[400px_1fr] gap-6" :class="{ '!grid-cols-1': artistResults.length > 0 }">
+          
+          <!-- Top Result Card -->
+          <div v-if="songResults.length > 0 && artistResults.length === 0" class="flex flex-col gap-4 search-reveal search-reveal-delay-1">
+            <h2 class="text-xl font-bold text-white tracking-tight">Kết quả hàng đầu</h2>
+            <div 
+              class="relative flex flex-col p-6 rounded-xl bg-[#181818] hover:bg-[#252525] transition-colors cursor-pointer group border border-transparent hover:border-white/5"
+              @click="$router.push(`/song/${songResults[0].id}`)"
+            >
+              <div class="w-24 h-24 rounded-md shadow-lg mb-5 flex-shrink-0 bg-cover bg-center" :style="getCoverStyle(songResults[0])"></div>
+              <h3 class="text-3xl font-black text-white mb-2 truncate">{{ songResults[0].title }}</h3>
+              <div class="flex items-center gap-2 text-sm mt-auto">
+                <span class="text-gray-400 hover:text-white transition-colors truncate font-medium" @click.stop="goToArtist(songResults[0])">{{ songResults[0].artist_name || songResults[0].artist }}</span>
+                <span class="px-2.5 py-1 rounded-full bg-[#121212] text-white text-[11px] font-bold uppercase tracking-widest">Bài hát</span>
+              </div>
+              <button 
+                class="absolute bottom-6 right-6 w-12 h-12 rounded-full bg-[#1ed760] flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 hover:scale-105 shadow-[0_8px_16px_rgba(0,0,0,0.3)]"
+                @click.stop="playSong(songResults[0])"
+              >
+                <svg class="w-5 h-5 text-black ml-1" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
               </button>
             </div>
           </div>
 
           <!-- Songs List -->
-          <div v-if="songResults.length > 0" class="songs-list-section user-panel-soft">
-            <h2>Bài hát</h2>
-            <div class="songs-list">
+          <div v-if="songResults.length > 0" class="flex flex-col gap-4 min-w-0 search-reveal search-reveal-delay-1">
+            <h2 class="text-xl font-bold text-white tracking-tight">Bài hát</h2>
+            <TransitionGroup name="search-result" tag="div" class="flex flex-col min-w-0">
               <SongRow
-                v-for="(song, idx) in songResults.slice(0, 8)"
+                v-for="(song, idx) in songResults.slice(0, 5)"
                 :key="song.id || idx"
                 :song="song"
                 :index="idx + 1"
@@ -100,96 +125,163 @@
                 @play="playSong"
                 @open-menu="handleOpenMenu"
                 @toggle-like="toggleLike"
+                class="hover:bg-[#252525] rounded-md transition-colors"
               />
-            </div>
+            </TransitionGroup>
           </div>
         </div>
 
+        <!-- ── Artist Cards ── -->
+        <div v-if="artistResults.length > 0" class="space-y-4 search-reveal search-reveal-delay-2">
+          <h2 class="text-xl font-bold text-white tracking-tight">Nghệ sĩ</h2>
+          <TransitionGroup name="search-result" tag="div" class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-5">
+            <ArtistCard
+              v-for="artist in artistResults"
+              :key="artist.id || artist.artist_id"
+              :artist="artist"
+            />
+          </TransitionGroup>
+        </div>
+
         <!-- ── Albums ── -->
-        <div v-if="albumResults.length > 0" class="result-group user-panel-soft">
-          <h2>Album</h2>
-          <div class="album-cards">
+        <div v-if="albumResults.length > 0" class="space-y-4 search-reveal search-reveal-delay-3">
+          <h2 class="text-xl font-bold text-white tracking-tight">Album</h2>
+          <TransitionGroup name="search-result" tag="div" class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-5">
             <MediaCard
               v-for="album in albumResults"
               :key="album.id"
               :item="album"
               :type="album.album_type || album.type || 'album'"
             />
-          </div>
+          </TransitionGroup>
         </div>
 
-        <!-- ── Genres ── -->
-        <div v-if="genreResults.length > 0" class="result-group user-panel-soft">
-          <h2>Thể loại</h2>
-          <div class="genre-chips-result">
+        <!-- ── Genres (when not exactly matched) ── -->
+        <div v-if="genreResults.length > 0 && !selectedGenre" class="space-y-4 search-reveal search-reveal-delay-4">
+          <h2 class="text-xl font-bold text-white tracking-tight">Thể loại</h2>
+          <TransitionGroup name="search-result" tag="div" class="flex flex-wrap gap-3">
             <button
               v-for="genre in genreResults"
               :key="genre.id"
-              class="genre-chip-result"
-              @click="query = genre.name; executeSearch()"
+              class="flex items-center gap-2 px-4 py-2 rounded-full bg-[#181818] border border-white/10 hover:bg-[#252525] hover:border-white/20 transition-all text-sm font-medium text-white"
+              @click="selectGenre(genre)"
             >
-              <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
               <span>{{ genre.name }}</span>
-              <small>{{ genre.song_count }} bài hát</small>
             </button>
+          </TransitionGroup>
+        </div>
+
+        <!-- ── Derived Genre Artists (when exactly matched) ── -->
+        <div v-if="selectedGenre" class="space-y-4 search-reveal search-reveal-delay-2">
+          <h2 class="text-xl font-bold text-white tracking-tight">Nghệ sĩ nổi bật trong {{ selectedGenre }}</h2>
+          <TransitionGroup v-if="genreArtists.length > 0" name="search-result" tag="div" class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-5">
+            <ArtistCard
+              v-for="artist in genreArtists"
+              :key="artist.id || artist.name"
+              :artist="artist"
+            />
+          </TransitionGroup>
+          <div v-else class="p-6 rounded-xl bg-[#181818] border border-white/5 text-center">
+            <p class="text-sm text-gray-400">Chưa có nghệ sĩ nổi bật trong thể loại này.</p>
           </div>
         </div>
       </template>
     </section>
 
     <!-- Loading State -->
-    <section v-if="isSearching" class="loading-section">
-      <div class="loading-spinner"></div>
-      <p>Đang tìm kiếm...</p>
+    <section v-if="isSearching" class="flex flex-col items-center justify-center py-20 space-y-4">
+      <div class="w-8 h-8 border-2 border-white/10 border-t-[#1ed760] rounded-full animate-spin"></div>
+      <p class="text-sm text-gray-400 font-medium">Đang tìm kiếm...</p>
     </section>
 
     <!-- ═══ BROWSE SECTION (no search) ═══ -->
-    <section v-if="!hasSearched && !isSearching" class="browse-section">
-      <!-- Recent Searches -->
-      <div v-if="recentSearches.length > 0" class="recent-section user-panel-soft">
-        <div class="section-header">
-          <h2>Tìm kiếm gần đây</h2>
-          <button class="clear-history-btn" @click="clearHistory">Xóa tất cả</button>
-        </div>
-        <div class="recent-chips">
-          <button v-for="(term, i) in recentSearches" :key="i" class="recent-chip" @click="query = term; executeSearch()">
-            <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            {{ term }}
-            <span class="chip-remove" @click.stop="removeRecent(i)">×</span>
-          </button>
-        </div>
-      </div>
-
+    <section v-if="!hasSearched && !isSearching" class="space-y-10 search-reveal search-reveal-delay-1">
+      
       <!-- Popular Artists -->
-      <div v-if="trendingSuggestions.length > 0" class="trending-section user-panel-soft">
-        <h2>Nghệ sĩ phổ biến</h2>
-        <div class="trending-chips">
-          <button v-for="(s, i) in trendingSuggestions" :key="i" class="trending-chip" @click="query = s.text; executeSearch()">
-            <svg viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            {{ s.text }}
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white tracking-tight">Nghệ sĩ phổ biến</h2>
+        </div>
+        <div class="relative group min-h-[210px] sm:min-h-[240px]">
+          <Transition name="fade" mode="out-in">
+            <!-- Loading Skeleton -->
+            <div v-if="isLoadingPopular" class="flex overflow-hidden gap-5 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div v-for="i in 6" :key="i" class="min-w-[150px] w-[150px] sm:min-w-[180px] sm:w-[180px] flex-shrink-0 flex flex-col">
+                <div class="w-full aspect-square rounded-full bg-white/5 animate-pulse mb-3"></div>
+                <div class="h-4 bg-white/5 rounded-md w-3/4 animate-pulse mx-auto"></div>
+              </div>
+            </div>
+
+            <!-- Actual Content -->
+            <div v-else-if="popularArtists.length > 0" class="relative">
+              <button 
+                @click="scrollPopularArtists('left')"
+            :disabled="arrivedState.left"
+            class="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
+            :class="[
+              !arrivedState.left 
+                ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer' 
+                : 'bg-black/40 text-gray-500 opacity-0 group-hover:opacity-50 cursor-not-allowed'
+            ]"
+            aria-label="Cuộn sang trái"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
+
+          <div 
+            ref="popularArtistsContainer"
+            class="flex overflow-x-auto gap-5 pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 scroll-smooth"
+          >
+            <ArtistCard
+              v-for="artist in popularArtists"
+              :key="artist.id"
+              :artist="artist"
+              class="min-w-[150px] w-[150px] sm:min-w-[180px] sm:w-[180px] flex-shrink-0"
+            />
+          </div>
+
+              <button 
+                @click="scrollPopularArtists('right')"
+                :disabled="arrivedState.right"
+                class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
+                :class="[
+                  !arrivedState.right 
+                    ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer' 
+                    : 'bg-black/40 text-gray-500 opacity-0 group-hover:opacity-50 cursor-not-allowed'
+                ]"
+                aria-label="Cuộn sang phải"
+              >
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="flex items-center justify-center text-sm text-gray-500 h-[150px]">
+              Chưa có dữ liệu nghệ sĩ phổ biến.
+            </div>
+          </Transition>
         </div>
       </div>
 
       <!-- Genre Browse -->
-      <div class="genres-section user-panel-soft">
-        <h2>Thể loại bạn hay nghe</h2>
-        <div class="genre-grid">
+      <div class="space-y-4 search-reveal search-reveal-delay-2">
+        <h2 class="text-xl font-bold text-white tracking-tight">Duyệt tìm tất cả</h2>
+        <TransitionGroup name="search-result" tag="div" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div
             v-for="genre in displayBrowseGenres"
             :key="genre.key"
-            class="genre-card"
-            @click="query = genre.name; executeSearch()"
+            class="relative h-[110px] sm:h-[140px] rounded-xl overflow-hidden cursor-pointer group bg-[#181818] border border-white/5"
+            @click="selectGenre(genre)"
           >
             <img
               :src="formatImageUrl(genre.cover_url)"
               :alt="genre.name"
-              class="genre-card__image"
+              class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
               @error="handleGenreImageError"
             />
           </div>
-        </div>
+        </TransitionGroup>
       </div>
     </section>
 
@@ -213,10 +305,12 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useScroll } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 import { songApi } from '@/api/song'
+import { artistApi } from '@/api/artist'
 import api from '@/api/axios'
 import { formatImageUrl } from '@/utils/formatters'
 import SongRow from '@/components/common/SongRow.vue'
@@ -229,6 +323,7 @@ const player = usePlayerStore()
 const library = useLibraryStore()
 
 const query = ref('')
+const committedQuery = ref('')
 const isInputFocused = ref(false)
 const searchInput = ref(null)
 
@@ -237,15 +332,17 @@ const artistResults = ref([])
 const albumResults = ref([])
 const genreResults = ref([])
 const suggestions = ref([])
-const trendingSuggestions = ref([])
-const hasSearched = ref(false)
+const popularArtists = ref([])
+const isLoadingPopular = ref(true)
+const popularArtistsContainer = ref(null)
+const { arrivedState } = useScroll(popularArtistsContainer)
+const hasSearched = computed(() => committedQuery.value.length > 0)
 const isSearching = ref(false)
 const lastQuery = ref('')
 const recentSearches = ref([])
 const userTopGenres = ref([])
 
 let suggestionTimer = null
-let searchTimer = null
 
 const totalResults = computed(() => {
   return songResults.value.length + artistResults.value.length + albumResults.value.length + genreResults.value.length
@@ -253,6 +350,61 @@ const totalResults = computed(() => {
 
 const showSuggestions = computed(() => {
   return isInputFocused.value && query.value.length >= 1 && !hasSearched.value
+})
+
+const isGenreMode = ref(false)
+const explicitGenreName = ref(null)
+
+function selectGenre(genre) {
+  const genreName = genre.name || genre.displayName || ''
+  explicitGenreName.value = genreName
+  isGenreMode.value = true
+  query.value = genreName
+  executeSearch()
+}
+
+function normalizeForMatch(str) {
+  if (!str) return ''
+  return str.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+const selectedGenre = computed(() => {
+  if (isGenreMode.value && explicitGenreName.value) {
+    const match = genreResults.value?.find(g => normalizeForMatch(g.name) === normalizeForMatch(explicitGenreName.value))
+    return match ? match.name : explicitGenreName.value
+  }
+
+  if (!query.value || !genreResults.value || genreResults.value.length === 0) return null
+  const q = normalizeForMatch(query.value)
+  const match = genreResults.value.find(g => normalizeForMatch(g.name) === q)
+  return match ? match.name : null
+})
+
+const genreArtists = computed(() => {
+  if (!selectedGenre.value) return []
+  
+  const map = new Map()
+  for (const song of songResults.value || []) {
+    const artistId = song.artist_id || song.artist?.id
+    const artistName = song.artist_name || song.artist?.name || song.artist
+    if (!artistName) continue
+    
+    const key = artistId || artistName
+    if (!map.has(key)) {
+      map.set(key, {
+        id: artistId,
+        artist_id: artistId,
+        name: artistName,
+        avatar_url: song.artist_avatar || song.artist?.avatar || song.artist_image || null,
+        songCount: 0
+      })
+    }
+    map.get(key).songCount += 1
+  }
+  
+  return Array.from(map.values())
+    .sort((a, b) => b.songCount - a.songCount)
+    .slice(0, 12)
 })
 
 const fullGenreCovers = [
@@ -348,9 +500,14 @@ onMounted(async () => {
     if (saved) recentSearches.value = JSON.parse(saved)
   } catch {}
   try {
-    const res = await songApi.getSuggestions('')
-    if (res.data?.success) trendingSuggestions.value = res.data.data
-  } catch {}
+    isLoadingPopular.value = true
+    const res = await artistApi.getPopular({ period: '7d', limit: 12 })
+    if (res.data?.success) popularArtists.value = res.data.data
+  } catch (err) {
+    console.warn('Failed to load popular artists', err)
+  } finally {
+    isLoadingPopular.value = false
+  }
   try {
     const res = await api.get('/users/me/profile')
     if (res.data?.success && res.data.data?.top_genres) {
@@ -361,40 +518,55 @@ onMounted(async () => {
 
 // ── Real-time search as user types ──
 watch(query, (val) => {
+  if (explicitGenreName.value && val !== explicitGenreName.value) {
+    isGenreMode.value = false
+    explicitGenreName.value = null
+  }
+
   clearTimeout(suggestionTimer)
-  clearTimeout(searchTimer)
   const q = val.trim()
 
   if (q.length < 1) {
     suggestions.value = []
-    if (!q) { hasSearched.value = false; songResults.value = []; artistResults.value = []; albumResults.value = []; genreResults.value = [] }
     return
   }
 
-  // Suggestions dropdown (fast, 200ms)
+  // Suggestions dropdown (debounce 250ms)
   suggestionTimer = setTimeout(async () => {
     try {
       const res = await songApi.getSuggestions(q)
-      if (res.data?.success) suggestions.value = res.data.data
+      if (res.data?.success) {
+        const all = (res.data.data || []).map(normalizeSuggestionItem)
+        const songs = all.filter(s => s.type === 'song').slice(0, 3)
+        const artists = all.filter(s => s.type === 'artist').slice(0, 3)
+        const albums = all.filter(s => s.type === 'album').slice(0, 2)
+        const playlists = all.filter(s => s.type === 'playlist').slice(0, 2)
+        const others = all.filter(s => !['song', 'artist', 'album', 'playlist'].includes(s.type))
+        suggestions.value = [...songs, ...artists, ...albums, ...playlists, ...others]
+      }
     } catch {}
-  }, 200)
-
-  // Real-time search (slightly slower, 400ms)
-  searchTimer = setTimeout(() => {
-    executeSearch(true)
-  }, 400)
+  }, 250)
 })
 
-async function executeSearch(isRealtime = false) {
+function normalizeSuggestionItem(item) {
+  return {
+    ...item,
+    imageUrl: item.imageUrl || item.image_url || item.cover_url || item.coverUrl || item.avatar_url || item.avatarUrl || item.album_cover || item.thumbnail || item.album?.cover_url || item.artist?.avatar_url || null
+  }
+}
+
+function handleSuggestionImageError(s) {
+  s.imageUrl = null
+}
+
+async function submitSearch() {
   const q = query.value.trim()
   if (!q) return
 
-  if (!isRealtime) {
-    // Only save to recent on explicit Enter press
-    saveRecent(q)
-  }
+  committedQuery.value = q
+  isInputFocused.value = false
+  saveRecent(q)
 
-  hasSearched.value = true
   isSearching.value = true
   lastQuery.value = q
   suggestions.value = []
@@ -403,7 +575,7 @@ async function executeSearch(isRealtime = false) {
     const res = await songApi.search(q, 15)
     if (res.data?.success) {
       const data = res.data.data
-      songResults.value = (data.songs || []).map(normalizeSong)
+      songResults.value = library.applyLikedStateToSongs((data.songs || []).map(normalizeSong))
       artistResults.value = data.artists || []
       albumResults.value = data.albums || []
       genreResults.value = data.genres || []
@@ -420,12 +592,37 @@ async function executeSearch(isRealtime = false) {
 }
 
 function applySuggestion(s) {
-  if (s.type === 'artist' && s.artist_id) {
-    router.push(`/artist/${s.artist_id}`)
-    return
+  const term = s.text || s.title || s.name
+  saveRecent(term)
+  
+  if (s.type === 'song' && s.id) {
+    router.push(`/song/${s.id}`)
+  } else if (s.type === 'artist' && s.id) {
+    router.push(`/artist/${s.id}`)
+  } else if (s.type === 'album' && s.id) {
+    router.push(`/album/${s.id}`)
+  } else if (s.type === 'playlist' && s.id) {
+    router.push(`/playlist/${s.id}`)
+  } else if (s.type === 'genre') {
+    query.value = term
+    submitSearch()
+  } else {
+    query.value = term
+    submitSearch()
   }
-  query.value = s.text
-  executeSearch()
+  isInputFocused.value = false
+}
+
+function applyRecentSearch(term) {
+  query.value = term
+  submitSearch()
+}
+
+function scrollPopularArtists(direction) {
+  if (popularArtistsContainer.value) {
+    const scrollAmount = direction === 'left' ? -300 : 300
+    popularArtistsContainer.value.scrollBy({ left: scrollAmount, behavior: 'smooth' })
+  }
 }
 
 function goToArtist(song) {
@@ -433,18 +630,23 @@ function goToArtist(song) {
 }
 
 function clearSearch() {
-  query.value = ''
-  hasSearched.value = false
-  songResults.value = []; artistResults.value = []; albumResults.value = []; genreResults.value = []
-  suggestions.value = []
-  searchInput.value?.focus()
+  if (query.value.length > 0) {
+    query.value = ''
+    searchInput.value?.focus()
+  } else if (committedQuery.value.length > 0) {
+    committedQuery.value = ''
+    songResults.value = []; artistResults.value = []; albumResults.value = []; genreResults.value = []
+    suggestions.value = []
+  }
 }
 
 function handleBlur() { setTimeout(() => { isInputFocused.value = false }, 200) }
 
 function saveRecent(term) {
-  const filtered = recentSearches.value.filter(t => t.toLowerCase() !== term.toLowerCase())
-  recentSearches.value = [term, ...filtered].slice(0, 8)
+  const t = term.trim()
+  if (!t) return
+  const filtered = recentSearches.value.filter(item => item.toLowerCase() !== t.toLowerCase())
+  recentSearches.value = [t, ...filtered].slice(0, 10)
   localStorage.setItem('musicflow_recent_searches', JSON.stringify(recentSearches.value))
 }
 
@@ -526,253 +728,174 @@ function handleShare(song) {
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap');
-* { box-sizing: border-box; }
 
 .search-page {
-  min-height: 100%;
-  padding: 28px 36px 150px;
-  color: #fff;
   font-family: 'Be Vietnam Pro', sans-serif;
 }
 
-/* ─── Search Bar ─── */
-.search-bar-section { position: relative; max-width: 680px; margin: 0 auto 40px; }
-
-.search-bar {
-  display: flex; align-items: center; height: 52px; padding: 0 20px;
-  border-radius: 28px; background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s ease;
+/* ── ANIMATIONS ── */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-.search-bar.focused {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(147, 112, 219, 0.5);
-  box-shadow: 0 0 0 4px rgba(147, 112, 219, 0.12);
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
-.search-icon { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: #9ca3af; stroke-width: 2.5; stroke-linecap: round; margin-right: 14px; transition: stroke 0.2s; }
-.search-bar.focused .search-icon { stroke: #fff; }
-
-.search-bar input { flex: 1; height: 100%; border: 0; outline: none; background: transparent; color: #fff; font: 500 15px 'Be Vietnam Pro', sans-serif; }
-.search-bar input::placeholder { color: #9ca3af; }
-
-.clear-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(255,255,255,0.08); color: #9ca3af; cursor: pointer; transition: all 0.15s; flex-shrink: 0; margin-left: 8px; }
-.clear-btn:hover { color: #fff; background: rgba(255,255,255,0.15); transform: scale(1.05); }
-.clear-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
-
-/* ─── Suggestions ─── */
-.suggestions-dropdown { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: rgba(2,6,23,0.96); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: 0 18px 50px rgba(0,0,0,0.45); overflow: hidden; z-index: 100; animation: dropIn 0.15s ease; backdrop-filter: blur(18px); }
-@keyframes dropIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-
-.suggestion-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background 0.12s; }
-.suggestion-item:hover { background: rgba(255,255,255,0.1); }
-.suggestion-icon-wrap { width: 32px; height: 32px; border-radius: 4px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.suggestion-icon-wrap svg { width: 16px; height: 16px; fill: none; stroke: #9ca3af; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.suggestion-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.suggestion-main { font-size: 14px; font-weight: 500; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.suggestion-sub { font-size: 12px; color: #6b7280; }
-
-/* ─── Results Section ─── */
-.results-section { animation: fadeUp 0.3s ease; }
-@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-
-.result-group { margin-bottom: 28px; }
-.result-group:last-child { margin-bottom: 0; }
-.result-group h2, .results-grid h2, .browse-section > div > h2, .browse-section h2 { font-size: 20px; font-weight: 700; margin: 0 0 16px; color: #fff; letter-spacing: -0.01em; }
-
-/* No Results */
-.no-results { text-align: center; padding: 60px 20px; }
-.no-results svg { width: 56px; height: 56px; fill: none; stroke: #4b5563; stroke-width: 2; stroke-linecap: round; margin-bottom: 20px; }
-.no-results h3 { font-size: 18px; font-weight: 600; margin: 0 0 8px; color: #e5e7eb; }
-.no-results p { color: #6b7280; font-size: 14px; margin: 0; }
-
-/* ─── Artist Cards ─── */
-.artist-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 166px));
-  gap: 20px;
-  padding-bottom: 8px;
-}
-/* ─── Results Grid ─── */
-.results-grid { display: grid; grid-template-columns: 380px 1fr; gap: 24px; margin-bottom: 40px; }
-.results-grid.no-top { grid-template-columns: 1fr; }
-@media (max-width: 900px) { .results-grid { grid-template-columns: 1fr; } }
-
-/* ─── Top Result Card ─── */
-.top-result-card {
-  position: relative; padding: 24px; border-radius: 12px;
-  background: rgba(255,255,255,0.055); cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.1);
-  transition: background 0.3s; overflow: hidden;
-}
-.top-result-card:hover { background: rgba(255,255,255,0.1); }
-
-.top-cover { width: 92px; height: 92px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); background-size: cover; background-position: center; }
-.top-title { font-size: 32px; font-weight: 900; margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.top-meta { display: flex; align-items: center; gap: 12px; margin: 0; }
-.top-artist { font-size: 15px; color: #b3b3b3; font-weight: 500; cursor: pointer; transition: color 0.15s; }
-.top-artist:hover { color: #fff; text-decoration: underline; }
-.top-badge { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 500px; background: rgba(255,255,255,0.08); color: #fff; text-transform: uppercase; letter-spacing: 0.04em; }
-
-.play-fab {
-  position: absolute; right: 24px; bottom: 24px; width: 48px; height: 48px;
-  border: 0; border-radius: 50%; background: #8b5cf6;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-  opacity: 0; transform: translateY(8px); transition: all 0.25s ease;
-}
-.top-result-card:hover .play-fab { opacity: 1; transform: translateY(0); }
-.play-fab:hover { transform: scale(1.06) !important; background: #a78bfa; }
-.play-fab svg { width: 20px; height: 20px; fill: #000; stroke: none; margin-left: 2px; }
-
-/* ─── Songs List ─── */
-.songs-list { display: flex; flex-direction: column; }
-
-.song-row {
-  display: flex; align-items: center; gap: 14px; padding: 8px 12px;
-  border-radius: 6px; cursor: pointer; transition: background 0.15s;
-}
-.song-row:hover { background: rgba(255,255,255,0.08); }
-
-.song-cover { width: 44px; height: 44px; border-radius: 4px; flex-shrink: 0; background-size: cover; background-position: center; background-color: rgba(255,255,255,0.05); }
-.song-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.song-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
-.song-row:hover .song-title { color: #1DB954; }
-.song-artist { font-size: 13px; color: #b3b3b3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 0.15s; }
-.song-artist:hover { color: #fff; text-decoration: underline; }
-
-.song-duration { color: #b3b3b3; font-size: 13px; flex-shrink: 0; width: 45px; text-align: right; font-variant-numeric: tabular-nums; }
-.song-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
-.song-row:hover .song-actions { opacity: 1; }
-
-.action-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: #b3b3b3; cursor: pointer; padding: 0; transition: all 0.15s; }
-.action-btn:hover { color: #fff; transform: scale(1.1); }
-.action-btn svg { width: 16px; height: 16px; }
-.action-btn.liked { color: #1DB954; opacity: 1; }
-
-/* ─── Album Cards ─── */
-.album-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
-
-.album-card {
-  display: flex; flex-direction: column; gap: 10px; padding: 16px;
-  border-radius: 8px; background: rgba(255,255,255,0.04);
-  transition: background 0.2s; cursor: pointer;
-}
-.album-card:hover { background: rgba(255,255,255,0.08); }
-
-.album-cover {
-  position: relative; width: 100%; aspect-ratio: 1; border-radius: 6px;
-  overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-}
-.album-play-btn {
-  position: absolute; right: 8px; bottom: 8px; width: 44px; height: 44px;
-  border: 0; border-radius: 50%; background: #1DB954;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0; transform: translateY(8px);
-  transition: all 0.2s ease; box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-}
-.album-card:hover .album-play-btn { opacity: 1; transform: translateY(0); }
-.album-play-btn:hover { transform: scale(1.06) !important; background: #1ed760; }
-.album-play-btn svg { width: 18px; height: 18px; fill: #000; margin-left: 2px; }
-
-.album-card-title { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.album-card-meta { font-size: 13px; color: #b3b3b3; }
-
-/* ─── Genre Chips in Results ─── */
-.genre-chips-result { display: flex; flex-wrap: wrap; gap: 12px; }
-
-.genre-chip-result {
-  display: flex; align-items: center; gap: 10px; padding: 14px 22px;
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
-  background: rgba(255,255,255,0.04); color: #fff; cursor: pointer;
-  font: 600 14px 'Be Vietnam Pro', sans-serif; transition: all 0.2s;
-}
-.genre-chip-result:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); transform: translateY(-2px); }
-.genre-chip-result svg { width: 18px; height: 18px; fill: none; stroke: #1DB954; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.genre-chip-result small { color: #b3b3b3; font-weight: 500; margin-left: auto; }
-
-/* ─── Loading ─── */
-.loading-section { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 80px 0; }
-.loading-spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #9370db; border-radius: 50%; animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.loading-section p { color: #6b7280; font-size: 14px; }
-
-/* ─── Browse Section ─── */
-.browse-section { animation: fadeUp 0.3s ease; }
-
-.recent-section { margin-bottom: 24px; }
-.trending-section { margin-bottom: 24px; }
-
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.section-header h2 { font-size: 20px; font-weight: 700; margin: 0; color: #fff; letter-spacing: -0.01em; }
-
-.clear-history-btn {
-  border: 0; background: transparent; color: #6b7280; font-size: 13px; font-weight: 600;
-  cursor: pointer; padding: 6px 14px; border-radius: 500px; transition: all 0.15s;
-}
-.clear-history-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-
-.recent-chips, .trending-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.recent-chip {
-  display: flex; align-items: center; gap: 6px; padding: 8px 14px;
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 500px; background: rgba(255,255,255,0.06);
-  color: #d1d5db; font: 500 13px 'Be Vietnam Pro', sans-serif; cursor: pointer; transition: all 0.18s;
-}
-.recent-chip:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); color: #fff; }
-.recent-chip svg { width: 14px; height: 14px; fill: none; stroke: #9ca3af; stroke-width: 2; stroke-linecap: round; }
-.chip-remove { margin-left: 2px; font-size: 16px; line-height: 1; opacity: 0; transition: opacity 0.15s; color: #9ca3af; }
-.recent-chip:hover .chip-remove { opacity: 1; }
-.recent-chip:hover .chip-remove:hover { color: #fff; }
-
-.trending-chip {
-  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 500px; background: rgba(255,255,255,0.04);
-  color: #9ca3af; font: 500 13px 'Be Vietnam Pro', sans-serif; cursor: pointer; transition: all 0.18s;
-}
-.trending-chip:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); color: #fff; }
-.trending-chip svg { width: 12px; height: 12px; fill: none; stroke: #fbbf24; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-
-/* ─── Genre Browse Cards ─── */
-.genres-section { margin-top: 16px; }
-
-.genre-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+.search-page-enter {
+  animation: searchPageSlideUp 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.genre-card {
+.search-reveal {
+  opacity: 0;
+  animation: searchSectionReveal 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.search-reveal-delay-1 { animation-delay: 70ms; }
+.search-reveal-delay-2 { animation-delay: 140ms; }
+.search-reveal-delay-3 { animation-delay: 210ms; }
+.search-reveal-delay-4 { animation-delay: 280ms; }
+
+@keyframes searchPageSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes searchSectionReveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-result-move,
+.search-result-enter-active,
+.search-result-leave-active {
+  transition:
+    opacity 260ms ease,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.search-result-enter-from,
+.search-result-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.search-result-leave-active {
+  position: absolute;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-page-enter,
+  .search-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .search-result-move,
+  .search-result-enter-active,
+  .search-result-leave-active {
+    transition: none !important;
+  }
+}
+
+/* Base resets or specific scoped fixes */
+input::placeholder {
+  color: #9ca3af;
+}
+
+/* ── SEARCH V6 ANIMATED BORDER ── */
+.search-v6-wrapper {
   position: relative;
-  height: 140px;
-  border-radius: 12px;
+  padding: 1.5px;
+  border-radius: 999px;
   overflow: hidden;
-  cursor: pointer;
-  background: rgba(255,255,255,0.055);
-  border: 1px solid rgba(255,255,255,0.1);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.genre-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(255,255,255,0.15);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-}
-
-.genre-card__image {
+  background: rgba(255, 255, 255, 0.1);
+  transition: box-shadow 0.3s ease;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.3s ease;
-}
-.genre-card:hover .genre-card__image {
-  transform: scale(1.03);
 }
 
-@media (max-width: 1100px) { .genre-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 768px) {
-  .genre-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .search-page { padding: 20px 16px 130px; }
-  .genre-card { height: 110px; }
-  .genre-section h2, .section-header h2 { font-size: 18px; }
+.search-v6-wrapper.is-focused {
+  box-shadow: 0 0 20px rgba(30, 215, 96, 0.15);
+}
+
+.search-v6-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(from 0deg, transparent 0%, #8B5CF6 20%, #1ED760 40%, #8B5CF6 60%, transparent 80%);
+  animation: rotate 4s linear infinite;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.search-v6-wrapper.is-focused::before {
+  opacity: 1;
+}
+
+.search-v6 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 22px;
+  background: rgba(10, 10, 15, 0.94);
+  border-radius: 999px;
+}
+
+.search-v6 input {
+  flex: 1;
+  background: transparent;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #f0f0f5;
+  font-size: 15px;
+  min-width: 0;
+}
+
+.sparkle {
+  color: #1ED760;
+  animation: sparkle 2s ease-in-out infinite;
+  font-size: 18px;
+  line-height: 1;
+  user-select: none;
+}
+
+@keyframes rotate {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-v6-wrapper::before {
+    animation: none;
+  }
+  .sparkle {
+    animation: none;
+  }
 }
 </style>

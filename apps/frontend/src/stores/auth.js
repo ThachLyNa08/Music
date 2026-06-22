@@ -13,8 +13,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!accessToken.value)
   const isAdmin    = computed(() => user.value?.role === 'admin')
   const isPremium  = computed(() => {
-    if (!user.value?.premium_expired_at) return false
-    return new Date(user.value.premium_expired_at) > new Date()
+    const expiresAt = user.value?.premium_expires_at || user.value?.premium_expired_at
+    if (!expiresAt) return false
+    return new Date(expiresAt) > new Date()
   })
 
   async function login(email, password) {

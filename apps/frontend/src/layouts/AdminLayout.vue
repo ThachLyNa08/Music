@@ -1,98 +1,188 @@
 <template>
   <div class="admin-shell">
-    <!-- ADMIN SIDEBAR -->
-    <aside class="admin-sidebar">
+    <aside class="admin-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
       <div class="brand">
-        <span class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-          </svg>
-        </span>
-        <div class="brand-text">
-          <div class="brand-name">MusicFlow</div>
-          <div class="brand-sub">Admin Panel</div>
+        <div class="brand-left" v-if="!isSidebarCollapsed">
+          <span class="brand-icon">
+            <MfIcon name="album" filled size="28" />
+          </span>
+          <div class="brand-text">
+            <div class="brand-name">MusicFlow</div>
+            <div class="brand-sub">Admin Panel</div>
+          </div>
         </div>
+        <div class="brand-left collapsed" v-else>
+          <span class="brand-icon">
+            <MfIcon name="album" filled size="28" />
+          </span>
+        </div>
+        
+        <!-- Toggle button is now absolute -->
+        <button class="sidebar-toggle" @click="toggleSidebar" :title="isSidebarCollapsed ? 'Mở rộng' : 'Thu nhỏ'">
+          <MfIcon :name="isSidebarCollapsed ? 'chevron_right' : 'chevron_left'" size="20" />
+        </button>
       </div>
 
-      <nav class="nav-menu">
-        <RouterLink to="/admin" class="nav-item" :class="{ active: $route.path === '/admin' }">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          Dashboard
-        </RouterLink>
-        <router-link to="/admin/songs" class="nav-item group" active-class="nav-item-active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 group-hover:scale-110 transition-transform"><path stroke-linecap="round" stroke-linejoin="round" d="m9 14.25 6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0c1.1.128 1.907 1.077 1.907 2.185ZM9.75 9h.008v.008H9.75V9Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 4.5h.008v.008h-.008V13.5Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
-          <span class="font-semibold">Quản lý Bài hát</span>
-        </router-link>
+      <nav class="nav-menu" aria-label="Admin navigation">
+        <section v-for="group in visibleMenu" :key="group.key" class="nav-group">
+          <button
+            type="button"
+            class="nav-group-button"
+            :class="{ active: isGroupActive(group), open: isGroupOpen(group.key) }"
+            @click="toggleGroup(group.key)"
+            :title="isSidebarCollapsed ? group.label : ''"
+          >
+            <span class="nav-group-title">
+              <MfIcon :name="group.icon" size="20" />
+              <span class="text-label" v-show="!isSidebarCollapsed">{{ group.label }}</span>
+            </span>
+            <span v-if="groupBadge(group) > 0 && !isSidebarCollapsed" class="nav-badge">{{ groupBadge(group) }}</span>
+            <MfIcon v-show="!isSidebarCollapsed" name="expand_more" size="20" className="chevron" />
+          </button>
 
-        <router-link to="/admin/artists" class="nav-item group" active-class="nav-item-active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 group-hover:scale-110 transition-transform"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-          <span class="font-semibold">Quản lý Nghệ sĩ</span>
-        </router-link>
-
-        <RouterLink to="/admin/users" class="nav-item" :class="{ active: $route.path === '/admin/users' }">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.35v1.35m0 0a2.25 2.25 0 011.66 1.66m0 0H15.75M12 4.35a2.25 2.25 0 00-1.66 1.66m0 0H8.25m0 0v1.35m0 0A2.25 2.25 0 009.91 9.91m0 0H12m0 0a2.25 2.25 0 011.66 1.66M12 12v3.75m0 0a2.25 2.25 0 01-1.66 1.66m0 0H8.25m0 0v1.35m0 0a2.25 2.25 0 001.66 1.66m0 0H12m0 0a2.25 2.25 0 011.66-1.66M12 19.5v-3.75m0 0a2.25 2.25 0 00-1.66-1.66m0 0H8.25" /></svg>
-          Quản lý Thành viên
-        </RouterLink>
-        <RouterLink to="/admin/transactions" class="nav-item" :class="{ active: $route.path === '/admin/transactions' }">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16v1M3 12h18" /></svg>
-          Lịch sử Giao dịch
-        </RouterLink>
+          <div v-show="isGroupOpen(group.key)" class="nav-children">
+            <RouterLink
+              v-for="item in group.children"
+              :key="item.key"
+              :to="item.route"
+              class="nav-item"
+              :class="{ active: isItemActive(item) }"
+              :title="isSidebarCollapsed ? item.label : ''"
+            >
+              <MfIcon v-show="isSidebarCollapsed" :name="item.icon" size="18" />
+              <span class="text-label" v-show="!isSidebarCollapsed">{{ item.label }}</span>
+              <span v-if="itemBadge(item) > 0 && !isSidebarCollapsed" class="nav-badge small">{{ itemBadge(item) }}</span>
+            </RouterLink>
+          </div>
+        </section>
       </nav>
 
       <div class="spacer"></div>
     </aside>
 
-    <!-- ADMIN MAIN -->
     <main class="admin-main">
-      <!-- TOPBAR -->
       <header class="admin-topbar">
         <div class="page-title">{{ routeName }}</div>
-        
+
         <div class="user-menu" ref="userMenuRef">
           <div class="admin-badge">Admin</div>
-          <button class="user-avatar" @click.stop="toggleDropdown">
+          <button class="user-avatar" type="button" @click.stop="toggleDropdown">
             {{ userInitial }}
           </button>
-          
+
           <div v-if="isDropdownOpen" class="user-dropdown">
-            <button class="dropdown-item logout" @click="handleLogout">Đăng xuất</button>
+            <button class="dropdown-item logout" type="button" @click="handleLogout">Đăng xuất</button>
           </div>
         </div>
       </header>
 
-      <!-- CONTENT AREA -->
       <div class="content-scroll">
-        <RouterView />
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <transition name="page-slide" mode="out-in">
+            <component :is="Component" :key="currentRoute.path" />
+          </transition>
+        </router-view>
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { adminMenu, findAdminMenuItemByRouteName } from '@/config/adminMenu'
+
+const STORAGE_KEY = 'musicflow.admin.openGroups'
+const SIDEBAR_STORAGE_KEY = 'musicflow_admin_sidebar_collapsed'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
 const router = useRouter()
 const route = useRoute()
 
+const isSidebarCollapsed = ref(false)
 const isDropdownOpen = ref(false)
 const userMenuRef = ref(null)
+const openGroups = ref(new Set())
+const badges = ref({})
 
+function readSidebarState() {
+  const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY)
+  if (stored !== null) {
+    isSidebarCollapsed.value = stored === 'true'
+  }
+}
+
+function toggleSidebar() {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+  localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed.value))
+}
+
+const visibleMenu = computed(() => adminMenu.filter(group => group.key !== 'data-quality' && (!group.role || group.role === 'admin')))
 const userInitial = computed(() => auth.user?.display_name?.charAt(0).toUpperCase() || 'A')
-
 const routeName = computed(() => {
-  if (route.path === '/admin') return 'Thống kê Tổng quan'
-  if (route.path === '/admin/songs') return 'Quản lý Bài hát'
-  if (route.path === '/admin/upload') return 'Thêm Bài hát mới'
-  if (route.path === '/admin/artists') return 'Quản lý Nghệ sĩ'
-  if (route.path === '/admin/users') return 'Quản lý Thành viên'
-  if (route.path === '/admin/transactions') return 'Quản lý Giao dịch'
-  return 'Quản trị hệ thống'
+  const found = findAdminMenuItemByRouteName(route.name)
+  return found?.item?.label || found?.group?.label || 'Quản trị hệ thống'
 })
+
+function readOpenGroups() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    openGroups.value = new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    openGroups.value = new Set()
+  }
+}
+
+function persistOpenGroups() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...openGroups.value]))
+}
+
+function isGroupOpen(key) {
+  return openGroups.value.has(key)
+}
+
+function toggleGroup(key) {
+  const next = new Set(openGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  openGroups.value = next
+  persistOpenGroups()
+}
+
+function routeTarget(item) {
+  return router.resolve(item.route)
+}
+
+function isItemActive(item) {
+  const resolved = routeTarget(item)
+  return route.name === item.route?.name || route.path === resolved.path || route.path.startsWith(`${resolved.path}/`)
+}
+
+function isGroupActive(group) {
+  return group.children?.some(isItemActive)
+}
+
+function openActiveGroup() {
+  const activeGroup = visibleMenu.value.find(group => isGroupActive(group))
+  if (!activeGroup || openGroups.value.has(activeGroup.key)) return
+  const next = new Set(openGroups.value)
+  next.add(activeGroup.key)
+  openGroups.value = next
+  persistOpenGroups()
+}
+
+function itemBadge(item) {
+  return Number(badges.value[item.badgeKey] || 0)
+}
+
+function groupBadge(group) {
+  if (group.badgeKey && badges.value[group.badgeKey]) return Number(badges.value[group.badgeKey])
+  return (group.children || []).reduce((sum, item) => sum + itemBadge(item), 0)
+}
 
 function toggleDropdown() {
   isDropdownOpen.value = !isDropdownOpen.value
@@ -109,7 +199,12 @@ function closeDropdown(e) {
   }
 }
 
+watch(() => route.fullPath, openActiveGroup, { immediate: true })
+
 onMounted(() => {
+  readSidebarState()
+  readOpenGroups()
+  openActiveGroup()
   document.documentElement.classList.remove('dark')
   document.body.classList.remove('dark')
   document.addEventListener('click', closeDropdown)
@@ -117,7 +212,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
-  theme.applyTheme() // Restore dark mode when leaving admin
+  theme.applyTheme()
 })
 </script>
 
@@ -130,49 +225,210 @@ onUnmounted(() => {
   display: flex;
   height: 100vh;
   width: 100vw;
-  background: #f0f2f5;
+  background: #f8fafc;
   font-family: 'Be Vietnam Pro', sans-serif;
   overflow: hidden;
 }
 
-/* SIDEBAR */
 .admin-sidebar {
-  width: 230px;
+  width: 260px;
   background: #ffffff;
-  border-right: 1px solid #e4e6eb;
+  border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   z-index: 10;
+  transition: width 0.3s ease-in-out;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.admin-sidebar.collapsed {
+  width: 76px;
 }
 
 .brand {
-  padding: 24px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid #eef2f7;
+  height: 70px;
+  transition: padding 0.3s ease-in-out;
 }
-.brand-icon { color: #a29bfe; display: flex; }
-.brand-name { font-size: 20px; font-weight: 800; color: #2d3436; line-height: 1.1; }
-.brand-sub { font-size: 12px; color: #636e72; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
-.nav-menu { padding: 24px 16px; display: flex; flex-direction: column; gap: 8px; }
-.nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px; border-radius: 12px;
-  font-size: 14px; font-weight: 600; color: #636e72;
-  text-decoration: none; border: none; background: transparent; cursor: pointer;
-  transition: all 0.2s; text-align: left;
+.admin-sidebar.collapsed .brand {
+  padding: 0;
+  justify-content: center;
 }
-.nav-item:hover { background: #f4f7f6; color: #2d3436; }
-.nav-item.active,
-.nav-item-active { background: rgba(162,155,254,0.1); color: #6c5ce7; }
+
+.brand-left { display: flex; align-items: center; gap: 10px; width: 100%; }
+.admin-sidebar.collapsed .brand-left { justify-content: center; }
+
+.sidebar-toggle {
+  position: absolute;
+  right: -14px;
+  top: 21px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  z-index: 20;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+.sidebar-toggle:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  transform: scale(1.05);
+}
+
+.brand-icon { color: #7c3aed; display: flex; }
+.brand-name { font-size: 20px; font-weight: 900; color: #111827; line-height: 1.1; }
+.brand-sub { margin-top: 3px; font-size: 11px; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+
+.nav-menu {
+  padding: 14px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-group-button,
+.nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.nav-group-button {
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 900;
+  transition: padding 0.3s ease;
+}
+
+.admin-sidebar.collapsed .nav-group-button {
+  justify-content: center;
+  padding: 0;
+}
+
+.nav-group-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.admin-sidebar.collapsed .nav-group-title {
+  justify-content: center;
+  gap: 0;
+}
+
+.text-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-group-button:hover,
+.nav-group-button.active {
+  background: #f1f5f9;
+  color: #111827;
+}
+
+.chevron {
+  transition: transform 0.18s ease;
+}
+
+.nav-group-button.open .chevron {
+  transform: rotate(180deg);
+}
+
+.nav-children {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 10px;
+  transition: padding 0.3s ease;
+}
+
+.admin-sidebar.collapsed .nav-children {
+  padding-left: 0;
+}
+
+.nav-item {
+  gap: 9px;
+  min-height: 36px;
+  padding: 0 10px 0 40px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  transition: padding 0.3s ease;
+}
+
+.admin-sidebar.collapsed .nav-item {
+  padding: 0;
+  justify-content: center;
+}
+
+.nav-item:hover {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.nav-item.active {
+  background: rgba(124, 58, 237, 0.1);
+  color: #6d28d9;
+}
+
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.nav-badge.small {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
 
 .spacer { flex: 1; }
-.return-btn { color: #b2bec3; }
-.return-btn:hover { background: #ffeaa7; color: #d63031; }
 
-/* MAIN AREA */
 .admin-main {
   flex: 1;
   display: flex;
@@ -181,48 +437,85 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-/* TOPBAR */
 .admin-topbar {
   height: 60px;
   background: #ffffff;
-  border-bottom: 1px solid #e4e6eb;
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
+  padding: 0 28px;
   z-index: 5;
 }
 
 .page-title {
   font-size: 18px;
-  font-weight: 700;
-  color: #2d3436;
+  font-weight: 800;
+  color: #111827;
 }
 
-.user-menu { display: flex; align-items: center; gap: 12px; position: relative; }
-.admin-badge { background: #fd79a8; color: white; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.admin-badge {
+  background: #7c3aed;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
 .user-avatar {
-  width: 40px; height: 40px; border-radius: 50%;
-  background: linear-gradient(135deg, #a29bfe, #74b9ff);
-  display: flex; align-items: center; justify-content: center;
-  color: white; font-weight: 700; border: none; cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
 }
 
 .user-dropdown {
-  position: absolute; top: 100%; right: 0; margin-top: 8px;
-  width: 180px; background: white; border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-  padding: 8px; border: 1px solid #f0f2f5;
-  display: flex; flex-direction: column;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 180px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+  padding: 8px;
+  border: 1px solid #eef2f7;
+  display: flex;
+  flex-direction: column;
 }
-.dropdown-item {
-  padding: 10px 14px; border-radius: 8px; font-family: inherit; font-size: 14px; font-weight: 600;
-  background: none; border: none; text-align: left; cursor: pointer;
-}
-.dropdown-item.logout { color: #d63031; }
-.dropdown-item.logout:hover { background: rgba(214,48,49,0.1); }
 
-/* CONTENT */
+.dropdown-item {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown-item.logout { color: #dc2626; }
+.dropdown-item.logout:hover { background: #fef2f2; }
+
 .content-scroll {
   flex: 1;
   overflow-y: auto;
@@ -231,51 +524,32 @@ onUnmounted(() => {
   max-width: 100%;
 }
 
-:global(.dark) .admin-shell {
-  background: #0b0f19;
+.page-slide-enter-active,
+.page-slide-leave-active {
+  transition: all 0.2s ease-out;
 }
 
-:global(.dark) .admin-sidebar,
-:global(.dark) .admin-topbar {
-  background: rgba(17, 24, 39, 0.94);
-  border-color: rgba(148, 163, 184, 0.14);
+.page-slide-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
 }
 
-:global(.dark) .brand {
-  border-color: rgba(148, 163, 184, 0.14);
+.page-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
 }
 
-:global(.dark) .brand-name,
-:global(.dark) .page-title {
-  color: #f8fafc;
-}
+@media (max-width: 900px) {
+  .admin-sidebar {
+    width: 240px;
+  }
 
-:global(.dark) .brand-sub {
-  color: #94a3b8;
-}
+  .admin-topbar {
+    padding: 0 18px;
+  }
 
-:global(.dark) .nav-item {
-  color: #cbd5e1;
-}
-
-:global(.dark) .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
-}
-
-:global(.dark) .nav-item.active,
-:global(.dark) .nav-item-active {
-  background: rgba(124, 58, 237, 0.18);
-  color: #ffffff;
-}
-
-:global(.dark) .user-dropdown {
-  background: #111827;
-  border-color: rgba(148, 163, 184, 0.14);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
-}
-
-:global(.dark) .dropdown-item.logout:hover {
-  background: rgba(239, 68, 68, 0.14);
+  .content-scroll {
+    padding: 18px;
+  }
 }
 </style>

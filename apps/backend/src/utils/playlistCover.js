@@ -13,6 +13,8 @@ const COVER_BASENAME_MAP = {
   moodmix: 'moodmix',
   favorite_songs: 'Favorite_Songs',
   morning_vibes: 'Morning_Vibes',
+  afternoon_vibes: 'afternoon_vibes',
+  evening_vibes: 'evening_vibes',
   night_vibes: 'Night_Vibes',
   trending_now: 'Trending_Now',
   recently_played: 'Recently_Played'

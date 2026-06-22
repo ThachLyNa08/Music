@@ -55,19 +55,29 @@
               <p class="song-artist">{{ player.currentSong?.artist_name || 'Nghệ sĩ' }}</p>
             </div>
             <div class="actions">
-              <button class="action-btn" @click="library.toggleLike(player.currentSong)" :class="{ 'text-pink-400': library.isLiked(player.currentSong) }">
-                <svg v-if="!library.isLiked(player.currentSong)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                <svg v-else viewBox="0 0 24 24" fill="currentColor" width="24" height="24" style="color:#fd79a8"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-              </button>
+              <LikeButton
+                v-if="player.currentSong"
+                :song="player.currentSong"
+                baseClass="action-btn"
+                activeClass="text-pink-400"
+                inactiveClass=""
+                :size="24"
+              >
+                <template #icon="{ isLiked }">
+                  <svg viewBox="0 0 24 24" :fill="isLiked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" width="24" height="24" :style="isLiked ? 'color:#fd79a8' : ''">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                  </svg>
+                </template>
+              </LikeButton>
             </div>
           </div>
 
           <!-- Progress -->
           <div class="progress-section">
-            <span class="time">{{ formatTime(player.currentTime) }}</span>
-            <div class="progress-bar" @click="seek">
-              <div class="progress-fill" :style="{ width: pct + '%' }"></div>
-              <div class="progress-thumb" :style="{ left: pct + '%' }"></div>
+            <span class="time">{{ formatTime(displayCurrentTime) }}</span>
+            <div ref="progressBarRef" class="progress-bar" @pointerdown="startSeekDrag">
+              <div class="progress-fill" :style="{ width: displayPct + '%' }"></div>
+              <div class="progress-thumb" :style="{ left: displayPct + '%' }"></div>
             </div>
             <span class="time">{{ formatTime(player.duration) }}</span>
           </div>
@@ -108,10 +118,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { useLibraryStore } from '@/stores/library'
 import LyricsPanel from '@/components/player/LyricsPanel.vue'
+import LikeButton from '@/components/common/LikeButton.vue'
 
 const props = defineProps({
   isOpen: Boolean
@@ -120,9 +130,16 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const player = usePlayerStore()
-const library = useLibraryStore()
+const progressBarRef = ref(null)
+const isSeeking = ref(false)
+const seekPreviewTime = ref(0)
 
 const pct = computed(() => player.duration ? (player.currentTime / player.duration) * 100 : 0)
+const displayCurrentTime = computed(() => isSeeking.value ? seekPreviewTime.value : player.currentTime)
+const displayPct = computed(() => {
+  if (!player.duration) return 0
+  return isSeeking.value ? (seekPreviewTime.value / player.duration) * 100 : pct.value
+})
 
 const coverUrl = computed(() => {
   if (player.currentSong?.cover) {
@@ -138,10 +155,35 @@ function formatTime(s) {
   return `${m}:${sec}`
 }
 
-function seek(e) {
-  const rect = e.currentTarget.getBoundingClientRect()
-  player.seek(((e.clientX - rect.left) / rect.width) * player.duration)
+function seekFromClientX(clientX) {
+  const el = progressBarRef.value
+  if (!el || !player.duration) return
+  const rect = el.getBoundingClientRect()
+  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  seekPreviewTime.value = ratio * player.duration
+  player.seek(seekPreviewTime.value)
 }
+
+function startSeekDrag(e) {
+  if (!player.duration) return
+  e.preventDefault()
+  isSeeking.value = true
+  seekFromClientX(e.clientX)
+  window.addEventListener('pointermove', handleSeekDrag)
+  window.addEventListener('pointerup', stopSeekDrag, { once: true })
+  window.addEventListener('pointercancel', stopSeekDrag, { once: true })
+}
+
+function handleSeekDrag(e) {
+  seekFromClientX(e.clientX)
+}
+
+function stopSeekDrag() {
+  isSeeking.value = false
+  window.removeEventListener('pointermove', handleSeekDrag)
+}
+
+onBeforeUnmount(stopSeekDrag)
 </script>
 
 <style scoped>
@@ -364,6 +406,8 @@ function seek(e) {
   border-radius: 3px;
   position: relative;
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
 .progress-fill {
   height: 100%;
@@ -406,17 +450,17 @@ function seek(e) {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: #a29bfe;
-  color: white;
+  background: #1ED760;
+  color: #000000;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.2s;
-  box-shadow: 0 0 20px rgba(162, 155, 254, 0.4);
+  transition: transform 0.2s, background 0.2s;
+  box-shadow: 0 0 20px rgba(30, 215, 96, 0.4);
 }
-.play-btn:hover { transform: scale(1.05); }
+.play-btn:hover { transform: scale(1.05); background: #1FDF64; }
 
 .extra-controls {
   display: flex;

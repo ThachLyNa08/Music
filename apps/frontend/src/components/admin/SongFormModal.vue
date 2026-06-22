@@ -62,6 +62,19 @@
                   :allowCreate="false"
                   :required="true"
                 />
+
+                <div class="rounded-xl border border-gray-100 dark:border-bg-border p-4 bg-gray-50 dark:bg-bg-surface">
+                  <label class="block text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
+                    Trạng thái phát hành
+                  </label>
+                  <select v-model="form.release_status" class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                    <option value="draft">Nháp</option>
+                    <option value="published">Phát hành ngay</option>
+                    <option value="scheduled">Lên lịch phát hành</option>
+                    <option value="hidden">Ẩn</option>
+                  </select>
+                  <input v-if="form.release_status === 'scheduled'" v-model="form.release_at" type="datetime-local" required class="mt-3 w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                </div>
               </div>
 
               <!-- Right Column: Uploads -->
@@ -176,7 +189,9 @@ const form = reactive({
   albumSelection: -1,
   genreSelection: null,
   audio: null,
-  cover: null
+  cover: null,
+  release_status: 'published',
+  release_at: ''
 });
 
 const coverPreview = ref(null);
@@ -210,6 +225,8 @@ watch(() => props.isOpen, (newVal) => {
       form.artistSelection = props.songData.artist_id || '';
       form.albumSelection = props.songData.album_id || -1;
       form.genreSelection = props.songData.genre_id || '';
+      form.release_status = props.songData.release_status || 'published';
+      form.release_at = toDateTimeLocal(props.songData.release_at);
       coverPreview.value = props.songData.cover_url ? formatImageUrl(props.songData.cover_url) : null;
     } else {
       resetForm();
@@ -237,6 +254,8 @@ function resetForm() {
   form.genreSelection = null;
   form.audio = null;
   form.cover = null;
+  form.release_status = 'published';
+  form.release_at = '';
   coverPreview.value = null;
   if (audioInput.value) audioInput.value.value = '';
   if (coverInput.value) coverInput.value.value = '';
@@ -276,40 +295,74 @@ function handleSubmit() {
     alert("Vui lòng chọn file âm thanh (MP3/WAV) cho bài hát mới!");
     return;
   }
+  if (form.release_status === 'scheduled' && !form.release_at) {
+    alert("Vui lòng chọn thời điểm phát hành.");
+    return;
+  }
 
   const formData = new FormData();
   formData.append('title', form.title.trim());
 
   // Artist logic
-  if (typeof form.artistSelection === 'object' && form.artistSelection.isNew) {
-    formData.append('artist_name', form.artistSelection.label);
+  if (typeof form.artistSelection === 'object') {
+    const artistName = form.artistSelection.label || form.artistSelection.name;
+    if (artistName) formData.append('artist_name', artistName);
+    
+    if (!form.artistSelection.isNew) {
+      const artistId = form.artistSelection.value || form.artistSelection.id;
+      if (artistId) formData.append('artist_id', artistId);
+    }
   } else {
-    const artistId = typeof form.artistSelection === 'object' ? form.artistSelection.value : form.artistSelection;
+    const artistId = form.artistSelection;
+    const artistObj = props.metadata.artists.find(a => a.id === artistId || a.value === artistId);
+    if (artistObj) formData.append('artist_name', artistObj.name || artistObj.label);
     if (artistId) formData.append('artist_id', artistId);
   }
 
   // Album logic
   if (form.albumSelection && form.albumSelection !== -1) {
-    if (typeof form.albumSelection === 'object' && form.albumSelection.isNew) {
-      if (!isArtistSelected.value) {
-        alert("Vui lòng chọn hoặc tạo nghệ sĩ trước khi tạo album.");
-        return;
+    if (typeof form.albumSelection === 'object') {
+      if (form.albumSelection.isNew) {
+        if (!isArtistSelected.value) {
+          alert("Vui lòng chọn hoặc tạo nghệ sĩ trước khi tạo album.");
+          return;
+        }
+        formData.append('album_title', form.albumSelection.label || form.albumSelection.title);
+      } else {
+        const albumId = form.albumSelection.value || form.albumSelection.id;
+        if (albumId && albumId !== -1) formData.append('album_id', albumId);
       }
-      formData.append('album_title', form.albumSelection.label);
     } else {
-      const albumId = typeof form.albumSelection === 'object' ? form.albumSelection.value : form.albumSelection;
+      const albumId = form.albumSelection;
       if (albumId && albumId !== -1) formData.append('album_id', albumId);
     }
   }
 
   // Genre logic
-  const genreId = typeof form.genreSelection === 'object' ? form.genreSelection.value : form.genreSelection;
+  const genreId = typeof form.genreSelection === 'object' ? (form.genreSelection.value || form.genreSelection.id) : form.genreSelection;
   if (genreId) formData.append('genre_id', genreId);
 
   // Files
   if (form.audio) formData.append('audio', form.audio);
   if (form.cover) formData.append('cover', form.cover);
+  formData.append('release_status', form.release_status || 'published');
+  formData.append('release_at', form.release_status === 'scheduled' ? form.release_at : '');
+
+  // Log kiểm tra FormData trước khi gửi
+  console.log("=== FORMDATA UPLOAD SONG ===");
+  for (const [key, value] of formData.entries()) {
+    console.log(key, value instanceof File ? `File: ${value.name}` : value);
+  }
+  console.log("============================");
 
   emit('submit', formData);
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 </script>

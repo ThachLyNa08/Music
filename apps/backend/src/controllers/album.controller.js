@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
-const { normalizeCoverUrl } = require('../utils/imageUrl.util');
+const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.util');
+const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
 
 exports.getAlbumDetails = async (req, res, next) => {
   try {
@@ -15,7 +16,7 @@ exports.getAlbumDetails = async (req, res, next) => {
           (
             SELECT COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, ''))
             FROM songs s
-            WHERE s.album_id = al.id AND s.is_active = TRUE
+            WHERE s.album_id = al.id AND ${publicSongCondition('s')}
             AND COALESCE(NULLIF(s.cover_url, ''), NULLIF(s.audio_url, '')) IS NOT NULL
             ORDER BY s.id ASC
             LIMIT 1
@@ -32,9 +33,10 @@ exports.getAlbumDetails = async (req, res, next) => {
         COALESCE(SUM(s.play_count), 0) AS total_plays
       FROM albums al
       LEFT JOIN artists a ON al.artist_id = a.id
-      LEFT JOIN songs s ON s.album_id = al.id AND s.is_active = TRUE
-      WHERE al.id = ?
+      LEFT JOIN songs s ON s.album_id = al.id AND ${publicSongCondition('s')}
+      WHERE al.id = ? AND ${publicAlbumCondition('al')}
       GROUP BY al.id
+      HAVING COUNT(s.id) > 0
     `, [albumId]);
 
     if (albumRows.length === 0) {
@@ -43,6 +45,7 @@ exports.getAlbumDetails = async (req, res, next) => {
 
     const album = albumRows[0];
     album.cover_url = normalizeCoverUrl(album.cover_url, req);
+    album.artist_avatar_url = resolveArtistAvatar({ id: album.artist_id, name: album.artist_name, avatar_url: album.artist_avatar_url }, req);
 
     // Check if user has saved this album
     if (req.user && req.user.id) {
@@ -75,7 +78,7 @@ exports.getAlbumDetails = async (req, res, next) => {
       LEFT JOIN artists a ON s.artist_id = a.id
       LEFT JOIN genres g ON s.genre_id = g.id
       LEFT JOIN song_likes sl ON sl.song_id = s.id AND sl.user_id = ?
-      WHERE s.album_id = ? AND s.is_active = TRUE
+      WHERE s.album_id = ? AND ${publicSongCondition('s')}
       ORDER BY s.created_at ASC
     `, [userId, albumId]);
 
@@ -104,7 +107,16 @@ exports.addToLibrary = async (req, res, next) => {
     }
 
     // Check if album exists
-    const [albums] = await pool.query('SELECT id FROM albums WHERE id = ?', [albumId]);
+    const [albums] = await pool.query(`
+      SELECT al.id
+      FROM albums al
+      WHERE al.id = ?
+        AND ${publicAlbumCondition('al')}
+        AND EXISTS (
+          SELECT 1 FROM songs s
+          WHERE s.album_id = al.id AND ${publicSongCondition('s')}
+        )
+    `, [albumId]);
     if (albums.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy album' });
     }

@@ -1,21 +1,34 @@
 const { pool } = require('../config/database');
 const { getIo } = require('./socket.service');
 
-// type: 'new_song', 'system', 'playlist', 'premium'
-exports.createNotification = async ({ userId, title, message, type = 'system', link = null }) => {
+async function insertNotification({ userId, title, message, type, link, data }) {
   try {
+    const [result] = await pool.query(
+      `INSERT INTO notifications (user_id, title, message, type, link, data) VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, title, message, type, link, data ? JSON.stringify(data) : null]
+    );
+    return result.insertId;
+  } catch (err) {
+    if (err?.code !== 'ER_BAD_FIELD_ERROR') throw err;
     const [result] = await pool.query(
       `INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, ?, ?, ?, ?)`,
       [userId, title, message, type, link]
     );
+    return result.insertId;
+  }
+}
 
-    const notificationId = result.insertId;
+// type: 'new_song', 'system', 'playlist', 'premium', 'karaoke_ready', 'karaoke_failed'
+exports.createNotification = async ({ userId, title, message, type = 'system', link = null, data = null }) => {
+  try {
+    const notificationId = await insertNotification({ userId, title, message, type, link, data });
 
     const [rows] = await pool.query('SELECT * FROM notifications WHERE id = ?', [notificationId]);
     const newNotification = rows[0];
 
     const io = getIo();
     if (io) {
+      io.to(`user:${userId}`).emit('notification:new', newNotification);
       io.to(`user:${userId}`).emit('new_notification', newNotification);
     }
 
@@ -26,22 +39,21 @@ exports.createNotification = async ({ userId, title, message, type = 'system', l
   }
 };
 
-exports.createGlobalNotification = async ({ title, message, type = 'system', link = null }) => {
+exports.createGlobalNotification = async ({ title, message, type = 'system', link = null, data = null }) => {
   try {
     const [users] = await pool.query('SELECT id FROM users WHERE status = "active"');
     
     if (users.length === 0) return;
 
-    const values = users.map(u => [u.id, title, message, type, link]);
-
-    await pool.query(
-      `INSERT INTO notifications (user_id, title, message, type, link) VALUES ?`,
-      [values]
-    );
+    for (const user of users) {
+      await insertNotification({ userId: user.id, title, message, type, link, data });
+    }
 
     const io = getIo();
     if (io) {
-      io.emit('new_notification', { title, message, type, link, is_read: 0, created_at: new Date() });
+      const payload = { title, message, type, link, data, is_read: 0, created_at: new Date() };
+      io.emit('notification:new', payload);
+      io.emit('new_notification', payload);
     }
     
   } catch (error) {

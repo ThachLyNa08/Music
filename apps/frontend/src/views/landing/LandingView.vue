@@ -1,1263 +1,788 @@
 <template>
-  <div class="landing-page">
-    <nav class="landing-nav">
-      <RouterLink class="brand" to="/landing">MusicFlow AI</RouterLink>
-
-      <div class="nav-links" aria-label="Landing navigation">
-        <a href="#features">Features</a>
-        <a href="#premium">Premium</a>
-        <RouterLink to="/login">Login</RouterLink>
+  <div ref="landingRef" class="musicflow-landing min-h-screen bg-[#090B14] text-[#B8C1D1] font-sans selection:bg-[#1ED760] selection:text-black overflow-x-hidden">
+    <!-- Navbar -->
+    <nav class="mf-navbar fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-[#090B14]/70 backdrop-blur-xl border-b border-white/5 transition-all">
+      <div class="flex items-center gap-8">
+        <RouterLink to="/landing" class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <MfIcon name="music" size="24" class="text-[#1ED760]" />
+          MusicFlow
+        </RouterLink>
+        <div class="hidden md:flex items-center gap-6 text-sm font-semibold text-[#8B93A7]">
+          <a href="#features" class="hover:text-white transition-colors">Tính năng</a>
+          <a href="#premium" class="hover:text-white transition-colors">Premium</a>
+        </div>
       </div>
-
-      <RouterLink class="pill-btn pill-btn--small" to="/login">Get Started</RouterLink>
+      <div class="flex items-center gap-5 text-sm font-semibold">
+        <RouterLink to="/login" class="text-[#8B93A7] hover:text-white transition-colors hidden sm:block">Đăng nhập</RouterLink>
+        <RouterLink to="/login" class="bg-white text-black px-6 py-2.5 rounded-full hover:scale-105 transition-transform font-bold shadow-lg">Bắt đầu miễn phí</RouterLink>
+      </div>
     </nav>
 
-    <main class="landing-main">
-      <section class="hero-section">
-        <div class="hero-depth" aria-hidden="true">
-          <div class="hero-disc hero-disc--back" />
-          <div class="hero-disc hero-disc--front" />
-          <div class="hero-bars">
-            <span />
-            <span />
-            <span />
-            <span />
+    <!-- Hero Section -->
+    <section class="hero-section relative w-full h-[100vh] min-h-[850px] flex items-center justify-center overflow-hidden bg-[#090B14]">
+      <!-- Wave glow background layers (CSS only) -->
+      <div class="wave-glow-container" aria-hidden="true">
+        <div class="wave-glow-bg green"></div>
+        <div class="wave-glow-bg blue"></div>
+        <div class="wave-glow-bg green-2"></div>
+      </div>
+
+      <!-- Video Background -->
+      <video
+        autoplay muted loop playsinline
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-80"
+        :poster="apiMediaUrl('/uploads/playlist_cover/downloaded-file.gif')"
+      >
+        <source :src="apiMediaUrl('/uploads/playlist_cover/9d878016056576ec2059ecb2cbdc677b.mp4')" type="video/mp4" />
+      </video>
+      
+      <!-- Overlay Layers -->
+      <div class="absolute inset-0 bg-black/50 z-10"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/40 to-transparent z-10"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-[#090B14]/90 via-[#090B14]/50 to-transparent z-10"></div>
+      
+      <!-- Content Area -->
+      <div class="hero-content relative z-20 max-w-7xl mx-auto px-6 w-full h-full flex flex-col lg:flex-row items-center justify-between gap-12 pt-20">
+
+        <!-- Left Content -->
+        <div class="flex-1 text-left mt-10 lg:mt-0">
+          <div class="hero-badge reveal-up inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-white text-xs font-bold uppercase tracking-widest mb-8 shadow-xl shadow-black/20">
+            <span class="badge-dot"></span>
+            MusicFlow AI
+          </div>
+          <h1 class="hero-headline reveal-up text-5xl lg:text-7xl xl:text-8xl font-extrabold text-white leading-[1.05] tracking-tight mb-8 drop-shadow-2xl">
+            Âm nhạc hiểu bạn <br/><span class="accent-text text-transparent bg-clip-text bg-gradient-to-r from-white to-[#B8C1D1]">hơn mỗi ngày.</span>
+          </h1>
+          <p class="hero-subtitle reveal-up text-lg lg:text-xl text-[#B8C1D1] max-w-xl mb-12 leading-relaxed drop-shadow-md font-medium">
+            Nghe nhạc, khám phá nghệ sĩ và tạo playlist cá nhân hóa dựa trên hành vi nghe thực tế của bạn.
+          </p>
+          <div class="hero-cta-group reveal-up flex flex-wrap items-center gap-5">
+            <RouterLink to="/login" class="btn-primary bg-[#1ED760] text-black px-9 py-4 rounded-full font-bold text-lg hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.25)]">
+              Bắt đầu miễn phí
+            </RouterLink>
+            <a href="#features" class="btn-secondary px-9 py-4 rounded-full font-bold text-white text-lg border border-white/20 hover:border-white hover:bg-white/10 backdrop-blur-md transition-all">
+              Xem Demo
+            </a>
           </div>
         </div>
-        <h1>MusicFlow - Nền tảng phát nhạc AI thế hệ mới</h1>
-        <p>
-          Experience music through the lens of artificial intelligence. Personalized,
-          immersive, and limitless. Let the algorithm craft your perfect sonic journey.
-        </p>
 
-        <div class="hero-actions">
-          <RouterLink class="pill-btn" to="/login">Get Started</RouterLink>
-          <button class="pill-btn pill-btn--ghost" type="button" @click="scrollToDemo">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-            Watch Demo
-          </button>
+        <!-- Right Content: Floating Stage Card -->
+        <div class="reveal-right float-animation relative w-full max-w-lg xl:max-w-xl mx-auto lg:ml-auto mt-12 lg:mt-0 perspective-1000">
+          <!-- Stage Arc Glow behind the card -->
+          <div class="absolute -top-32 -inset-x-20 h-80 bg-gradient-to-b from-[#1ED760]/20 via-[#8B5CF6]/10 to-transparent blur-[80px] rounded-[100%] pointer-events-none transform rotate-12"></div>
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[#111827]/50 blur-[100px] rounded-full pointer-events-none"></div>
+
+          <!-- Stage Card -->
+          <div class="hero-card relative bg-[#151A28]/80 backdrop-blur-3xl rounded-3xl border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden transform-gpu hover:-translate-y-2 transition-transform duration-500">
+            <div class="p-8">
+              <div class="flex items-center justify-between mb-8">
+                <span class="text-xs font-bold uppercase tracking-widest text-[#1ED760] flex items-center gap-2">
+                  <span class="w-1.5 h-1.5 bg-[#1ED760] rounded-full animate-pulse"></span>
+                  Now Playing
+                </span>
+                <MfIcon name="more_horiz" size="24" class="text-white/50 cursor-pointer hover:text-white transition-colors" />
+              </div>
+              
+              <div class="flex items-end justify-between mb-8">
+                <div>
+                  <h3 class="text-3xl font-extrabold text-white mb-2 drop-shadow-md">Daily Mix #01</h3>
+                  <p class="text-base text-[#B8C1D1] font-medium">Dựa trên gu nghe nhạc của bạn</p>
+                </div>
+                <button class="w-16 h-16 bg-[#1ED760] text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-105 hover:bg-[#1fdf64] transition-all shrink-0 group">
+                  <MfIcon name="play" size="32" filled class="ml-1 group-hover:scale-110 transition-transform" />
+                </button>
+              </div>
+
+              <!-- Song List -->
+              <div class="space-y-4">
+                <div v-for="(song, index) in landingDemoData.songs" :key="index" class="flex items-center gap-4 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-white/5 transition-colors">
+                  <div class="w-14 h-14 rounded-lg bg-[#111827] border border-white/5 flex items-center justify-center shrink-0 shadow-md relative overflow-hidden">
+                     <img v-if="song.cover" :src="apiMediaUrl(song.cover)" class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                     <!-- CSS Mini Equalizer overlay on hover -->
+                     <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-0.5 backdrop-blur-sm">
+                       <span class="w-1 bg-[#1ED760] rounded-full h-3 animate-[equalizer_1s_ease-in-out_infinite]"></span>
+                       <span class="w-1 bg-[#1ED760] rounded-full h-5 animate-[equalizer_1.2s_ease-in-out_infinite_0.1s]"></span>
+                       <span class="w-1 bg-[#1ED760] rounded-full h-2 animate-[equalizer_0.9s_ease-in-out_infinite_0.2s]"></span>
+                     </div>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-white font-bold text-base truncate group-hover:text-[#1ED760] transition-colors">{{ song.title }}</p>
+                    <p class="text-[#8B93A7] text-sm font-medium truncate mt-0.5">{{ song.artist }}</p>
+                  </div>
+                  <div class="text-sm font-medium text-[#8B93A7] group-hover:text-white transition-colors">{{ song.duration }}</div>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <div class="mt-8 pt-6 border-t border-white/10">
+                <div class="h-1.5 bg-white/10 rounded-full overflow-hidden cursor-pointer group/progress relative">
+                  <div class="absolute inset-0 bg-white/5"></div>
+                  <div class="h-full bg-[#1ED760] w-[45%] rounded-full relative group-hover/progress:bg-[#1fdf64]">
+                    <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg scale-0 group-hover/progress:scale-100 transition-transform"></div>
+                  </div>
+                </div>
+                <div class="flex justify-between mt-3 text-xs text-[#8B93A7] font-bold tracking-wider">
+                  <span>1:42</span>
+                  <span>-2:03</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section id="demo" class="demo-panel" aria-label="MusicFlow AI demo">
-        <div class="wave-scene" aria-hidden="true">
-          <div class="wave wave--one" />
-          <div class="wave wave--two" />
-          <div class="wave wave--three" />
-          <div class="sound-stage">
-            <div class="record-3d" />
-            <div class="equalizer-3d">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
-            <div class="prism prism--one" />
-            <div class="prism prism--two" />
-          </div>
+      </div>
+    </section>
+
+    <main class="pb-24">
+      <!-- Personalization Grid -->
+      <section id="features" class="personalization-section section-line max-w-7xl mx-auto px-6 py-28">
+        <div class="mb-20 reveal-up">
+          <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Mọi thứ được cá nhân hóa</h2>
+          <p class="text-[#8B93A7] text-xl font-medium max-w-2xl">Hệ thống phân tích hành vi và tạo ra một không gian âm nhạc dành riêng cho bạn.</p>
         </div>
 
-        <button class="demo-play" type="button" aria-label="Play demo">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
-
-        <div class="live-badge">
-          <span />
-          Live AI Generation
-        </div>
-      </section>
-
-      <section id="features" class="feature-grid" aria-label="MusicFlow AI features">
-        <article class="feature-card feature-card--large">
-          <div class="card-glow" />
-          <div class="feature-copy">
-            <svg class="feature-icon feature-icon--green" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 15.5v-7h2v7H5Zm4 3v-13h2v13H9Zm4-5v-3h2v3h-2Zm4 3.5V7h2v10h-2Z" />
-            </svg>
-            <h2>Your Personal AI DJ</h2>
-            <p>
-              Our neural engine analyzes thousands of acoustic traits in real-time,
-              learning your distinct taste to seamlessly mix tracks with perfect
-              harmonic and rhythmic transitions.
-            </p>
-          </div>
-
-          <div class="mini-player">
-            <div class="album-art" aria-hidden="true" />
-            <div class="track-meta">
-              <strong>Midnight City Flow</strong>
-              <span>AI DJ Transitioning...</span>
-            </div>
-            <svg class="waves-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 8c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2 2 2 4 2v2c-2 0-2-2-4-2s-2 2-4 2-2-2-4-2-2 2-4 2-2-2-4-2V8Zm0 6c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2 2 2 4 2v2c-2 0-2-2-4-2s-2 2-4 2-2-2-4-2-2 2-4 2-2-2-4-2v-2Z" />
-            </svg>
-            <div class="progress">
-              <span />
-            </div>
-          </div>
-        </article>
-
-        <article class="feature-card feature-card--small">
-          <div class="feature-copy">
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
-            </svg>
-            <h2>Sing with AI Stems</h2>
-            <p>
-              Instantly isolate vocals, drums, or bass from any track with studio-grade
-              precision for the ultimate karaoke experience.
-            </p>
-          </div>
-
-          <div class="chip-row">
-            <span>Vocals</span>
-            <span class="chip--active">Instrumental</span>
-          </div>
-        </article>
-
-        <article class="feature-card feature-card--medium">
-          <div class="feature-copy">
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 5h16v11H7.2L4 19.2V5Zm2 2v7.38L6.38 14H18V7H6Z" />
-            </svg>
-            <h2>Prompt Your Playlist</h2>
-            <p>
-              Describe a mood, a scenario, or a feeling, and let our LLM generate a
-              curated hour of uninterrupted audio magic.
-            </p>
-          </div>
-
-          <form class="prompt-form" @submit.prevent>
-            <input aria-label="Playlist prompt" placeholder="e.g. 'Lofi for a rainy night coding session'" />
-            <button type="submit">Generate</button>
-          </form>
-        </article>
-
-        <article id="premium" class="feature-card feature-card--premium feature-card--medium">
-          <div class="premium-overlay" />
-          <div class="feature-copy">
-            <div class="premium-label">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m12 2 2.6 5.55 6.05.73-4.46 4.16 1.17 5.98L12 15.42l-5.36 3 1.17-5.98-4.46-4.16 6.05-.73L12 2Z" />
-              </svg>
-              Premium Plus
-            </div>
-            <h2>Lossless Audio &amp; Priority AI</h2>
-            <p>
-              Experience uncompromising 24-bit/192kHz high-resolution audio streaming
-              with dedicated server processing for instant AI responses.
-            </p>
-          </div>
-
-          <div class="checkout-row">
-            <span>Secure checkout via</span>
+        <div class="stagger-children grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Card 1: Dành cho bạn -->
+          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between group cursor-pointer shadow-xl hover:shadow-2xl">
             <div>
-              <b>VNPay</b>
-              <b class="momo">MoMo</b>
+              <h3 class="text-3xl font-bold text-white mb-3">Dành cho bạn</h3>
+              <p class="text-[#8B93A7] text-base font-medium">Playlist được cập nhật mỗi tuần dựa trên gu nhạc của bạn.</p>
+            </div>
+            <div class="mt-10 flex items-center gap-6">
+              <div class="w-32 h-32 rounded-xl bg-[#1B2235] shadow-2xl flex-shrink-0 relative overflow-hidden border border-white/10">
+                <img :src="apiMediaUrl('/uploads/playlist_cover/weeklymix.png')" alt="Weekly Mix" class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                   <div class="w-12 h-12 bg-[#1ED760] rounded-full flex items-center justify-center shadow-lg transform scale-50 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300">
+                     <MfIcon name="play" size="24" filled class="text-black ml-1" />
+                   </div>
+                </div>
+              </div>
+              <div>
+                <p class="text-white font-bold text-2xl drop-shadow-sm mb-1">Weekly Mix</p>
+                <p class="text-sm font-medium text-[#8B93A7] mb-4">20 bài hát • 1 giờ 24 phút</p>
+                <span class="bg-white/10 text-white text-xs font-bold px-4 py-2 rounded-full uppercase tracking-wider group-hover:bg-white group-hover:text-black transition-colors">Khám phá</span>
+              </div>
             </div>
           </div>
-        </article>
+
+          <!-- Card 2: Khám phá nghệ sĩ -->
+          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between cursor-pointer group shadow-xl hover:shadow-2xl">
+            <div>
+              <h3 class="text-3xl font-bold text-white mb-3">Khám phá nghệ sĩ</h3>
+              <p class="text-[#8B93A7] text-base font-medium">Kết nối với những giọng ca đồng điệu.</p>
+            </div>
+            <div class="mt-10 flex items-center gap-6">
+              <div class="w-28 h-28 rounded-full bg-[#1B2235] p-1 relative overflow-hidden shadow-2xl border border-white/10">
+                <img :src="apiMediaUrl('/uploads/playlist_cover/top_artists.png')" class="absolute inset-0 w-full h-full object-cover rounded-full group-hover:scale-110 transition-transform duration-700" />
+              </div>
+              <div class="flex-1">
+                <p class="text-white font-extrabold text-2xl mb-1">Top Artists</p>
+                <p class="text-sm font-medium text-[#8B93A7] mb-4">Nghệ sĩ bạn yêu thích nhất</p>
+                <span class="border border-white/20 text-white group-hover:border-white group-hover:bg-white group-hover:text-black px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors">
+                  Xem thêm
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: AI Playlist -->
+          <div class="ai-playlist-card reveal-up bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all md:col-span-2 shadow-xl">
+            <div class="flex flex-col lg:flex-row gap-10 items-center">
+              <div class="ai-input-block reveal-left flex-1 w-full">
+                <h3 class="text-3xl font-bold text-white mb-3">AI Playlist</h3>
+                <p class="text-[#8B93A7] text-base font-medium mb-8">Mô tả tâm trạng bằng ngôn ngữ tự nhiên, hệ thống sẽ tạo một playlist hoàn hảo cho riêng bạn.</p>
+                <div class="relative">
+                  <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <MfIcon name="search" size="20" class="text-[#1ED760]" />
+                  </div>
+                  <input type="text" disabled class="block w-full pl-12 pr-4 py-4 bg-[#1B2235] border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1ED760] text-sm font-medium" placeholder="Nhạc acoustic chill để code đêm khuya..." />
+                  <div class="absolute inset-y-0 right-2 flex items-center">
+                     <button disabled class="bg-[#1ED760] text-black px-4 py-2 rounded-lg font-bold text-sm">Tạo</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ai-result-block reveal-right flex-1 w-full bg-[#090B14] rounded-2xl p-6 border border-white/5 shadow-inner">
+                <p class="text-xs font-bold text-[#8B93A7] uppercase tracking-wider mb-4">Kết quả gợi ý</p>
+                <div class="space-y-4">
+                  <div class="ai-playlist-item reveal-up flex items-center gap-4" v-for="(song, i) in landingDemoData.aiSongs" :key="i">
+                    <div class="w-10 h-10 rounded bg-[#1B2235] overflow-hidden shrink-0">
+                      <img :src="apiMediaUrl(song.cover)" class="w-full h-full object-cover opacity-80" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-white text-sm font-bold truncate">{{ song.title }}</p>
+                      <p class="text-[#8B93A7] text-xs font-medium truncate">{{ song.artist }}</p>
+                    </div>
+                    <MfIcon name="check_circle" size="18" class="text-[#1ED760]" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Smart Workflow Timeline -->
+      <section class="workflow-section section-line max-w-7xl mx-auto px-6 py-28 border-t border-white/5 bg-gradient-to-b from-[#090B14] to-[#111827]/30">
+        <div class="workflow-grid-bg" aria-hidden="true"></div>
+        <div class="relative">
+          <div class="text-center mb-20 reveal-up">
+            <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Luồng hoạt động thông minh</h2>
+            <p class="text-[#8B93A7] text-xl font-medium">Quy trình cá nhân hóa diễn ra âm thầm phía sau mỗi lượt nghe.</p>
+          </div>
+
+          <div class="workflow-steps flex flex-col lg:flex-row items-center justify-between gap-8 max-w-5xl mx-auto relative">
+            <!-- Desktop connecting line + progress fill -->
+            <div class="hidden lg:block absolute top-12 left-16 right-16 h-1 bg-white/10 rounded-full z-0 overflow-hidden" aria-hidden="true">
+              <div class="workflow-progress-fill h-full w-0 bg-gradient-to-r from-[#1ED760] to-[#3b82f6] rounded-full"></div>
+            </div>
+
+            <!-- Steps -->
+            <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
+              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-white/10 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
+                <MfIcon name="headphones" size="40" class="text-white" />
+              </div>
+              <h4 class="text-white font-bold text-xl mb-2">1. Nghe nhạc</h4>
+              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Ghi nhận lịch sử và thói quen nghe nhạc của bạn.</p>
+            </div>
+
+            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-white/20 my-2" />
+
+            <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
+              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-white/10 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
+                <MfIcon name="analytics" size="40" class="text-white" />
+              </div>
+              <h4 class="text-white font-bold text-xl mb-2">2. Phân tích hành vi</h4>
+              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Xử lý dữ liệu tương tác, bỏ qua, lặp lại.</p>
+            </div>
+
+            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-white/20 my-2" />
+
+            <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
+              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-[#1ED760]/20 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-[#1ED760]/50 transition-all duration-300">
+                <MfIcon name="auto_awesome" size="40" class="text-[#1ED760]" />
+              </div>
+              <h4 class="text-white font-bold text-xl mb-2">3. Gợi ý bài hát</h4>
+              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Đối chiếu và tìm ra các bài hát có đặc điểm tương đồng.</p>
+            </div>
+
+            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-[#1ED760]/50 my-2" />
+
+            <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
+              <div class="step-number w-24 h-24 rounded-2xl bg-[#1ED760] flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(30,215,96,0.3)] group-hover:scale-110 group-hover:shadow-[0_0_40px_rgba(30,215,96,0.5)] transition-all duration-300">
+                <MfIcon name="playlist_play" size="48" class="text-black" />
+              </div>
+              <h4 class="text-white font-bold text-xl mb-2">4. Playlist cá nhân hóa</h4>
+              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Đề xuất âm nhạc khớp hoàn toàn với gu của bạn.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Premium Comparison -->
+      <section id="premium" class="pricing-section section-line max-w-5xl mx-auto px-6 py-28 border-t border-white/5">
+        <div class="text-center mb-20 reveal-up">
+          <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Trải nghiệm âm nhạc nâng cao</h2>
+          <p class="text-[#8B93A7] text-xl font-medium">Nâng cấp để mở khóa toàn bộ tính năng cao cấp của hệ thống.</p>
+        </div>
+
+        <div class="stagger-children pricing-grid grid grid-cols-1 md:grid-cols-2 gap-10">
+          <!-- Free Tier -->
+          <div class="pricing-card glass-card reveal-up rounded-[2.5rem] p-12 border border-white/5 shadow-xl">
+            <h3 class="text-2xl font-extrabold text-white mb-2">Miễn phí</h3>
+            <p class="text-5xl font-black text-white mb-10 tracking-tight">0đ <span class="text-lg font-bold text-[#8B93A7]">/tháng</span></p>
+            <ul class="space-y-6 mb-12">
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-white/40 shrink-0" />
+                <span class="text-[#B8C1D1] font-semibold text-lg">Phát nhạc tiêu chuẩn</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-white/40 shrink-0" />
+                <span class="text-[#B8C1D1] font-semibold text-lg">Khám phá nghệ sĩ & thể loại</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-lg line-through">Trải nghiệm không quảng cáo</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-lg line-through">Tạo AI Playlist không giới hạn</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-lg line-through">Chất lượng âm thanh nâng cao</span>
+              </li>
+            </ul>
+            <RouterLink to="/login" class="block w-full py-4 text-center rounded-full font-bold text-white text-lg border-2 border-white/10 hover:border-white/30 hover:bg-white/5 transition-all">
+              Đăng ký miễn phí
+            </RouterLink>
+          </div>
+
+          <!-- Premium Tier -->
+          <div class="pricing-card glass-card premium reveal-up rounded-[2.5rem] p-12 border border-[#1ED760]/30 relative shadow-[0_30px_60px_rgba(30,215,96,0.1)] transform md:-translate-y-4">
+            <div class="absolute -top-5 left-1/2 -translate-x-1/2 bg-[#1ED760] text-black text-sm font-black uppercase tracking-widest py-2 px-6 rounded-full shadow-lg shadow-[#1ED760]/30 border border-[#1fdf64]">Khuyên dùng</div>
+            <div class="flex items-center gap-3 mb-2">
+              <MfIcon name="workspace_premium" size="32" class="text-[#1ED760]" />
+              <h3 class="text-2xl font-extrabold text-white">Premium</h3>
+            </div>
+            <p class="text-5xl font-black text-white mb-10 tracking-tight">59.000đ <span class="text-lg font-bold text-[#8B93A7]">/tháng</span></p>
+            <ul class="space-y-6 mb-12">
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-lg">Chất lượng âm thanh nâng cao</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-lg">Trải nghiệm không quảng cáo</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-lg">Tạo AI Playlist không giới hạn</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-lg">Hỗ trợ tính năng Karaoke AI</span>
+              </li>
+              <li class="flex items-center gap-4">
+                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-lg">Tải nhạc & nghe offline</span>
+              </li>
+            </ul>
+            <RouterLink to="/login" class="block w-full py-4 text-center rounded-full font-bold bg-[#1ED760] text-black text-lg hover:bg-[#1fdf64] hover:scale-105 transition-all shadow-[0_0_30px_rgba(30,215,96,0.2)]">
+              Dùng thử Premium
+            </RouterLink>
+          </div>
+        </div>
       </section>
     </main>
 
-    <footer class="landing-footer">
-      <div>
-        <strong>MusicFlow AI</strong>
-        <span>© 2024 MusicFlow AI. For the audiophiles.</span>
-      </div>
-      <div class="footer-links">
-        <a href="#features">About</a>
-        <a href="#premium">Privacy</a>
-        <a href="#premium">Terms</a>
-        <RouterLink to="/login">Support</RouterLink>
+    <!-- Footer -->
+    <footer class="musicflow-footer reveal border-t border-white/5 bg-[#090B14] py-16">
+      <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8">
+        <div class="flex items-center gap-3 text-white font-extrabold text-2xl tracking-tight">
+          <MfIcon name="music" size="32" class="text-[#1ED760]" />
+          MusicFlow
+        </div>
+        <div class="flex flex-wrap justify-center gap-8 text-base text-[#8B93A7] font-semibold">
+          <a href="#features" class="hover:text-white transition-colors">Tính năng</a>
+          <a href="#premium" class="hover:text-white transition-colors">Premium</a>
+          <RouterLink to="/login" class="hover:text-white transition-colors">AI Playlist</RouterLink>
+          <RouterLink to="/login" class="hover:text-white transition-colors">Karaoke AI</RouterLink>
+          <a href="#" class="hover:text-white transition-colors">Hỗ trợ</a>
+        </div>
+        <p class="text-sm font-medium text-[#8B93A7]">
+          &copy; {{ new Date().getFullYear() }} MusicFlow.
+        </p>
       </div>
     </footer>
   </div>
 </template>
 
 <script setup>
-function scrollToDemo() {
-  document.querySelector('#demo')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+import { ref } from 'vue'
+import MfIcon from '@/components/common/MfIcon.vue'
+import { useScrollReveal } from '@/composables/useScrollReveal'
+
+const landingRef = ref(null)
+useScrollReveal(landingRef)
+
+const apiMediaUrl = (url) => {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'
+  return `${baseUrl.replace(/\/api\/?$/, '')}${url}`
+}
+
+// Local mock data purely for landing page visual rendering
+const landingDemoData = {
+  songs: [
+    { title: 'Chúng Ta Của Tương Lai', artist: 'Sơn Tùng M-TP', duration: '3:45', cover: '/uploads/playlist_cover/dailymix_01.png' },
+    { title: 'Pink Venom', artist: 'BLACKPINK', duration: '3:06', cover: '/uploads/playlist_cover/dailymix_02.png' },
+    { title: 'Cruel Summer', artist: 'Taylor Swift', duration: '2:58', cover: '/uploads/playlist_cover/dailymix_03.png' },
+    { title: 'Super Shy', artist: 'NewJeans', duration: '2:34', cover: '/uploads/playlist_cover/dailymix_04.png' }
+  ],
+  aiSongs: [
+    { title: 'Midnight City', artist: 'M83', cover: '/uploads/playlist_cover/Night_Vibes.png' },
+    { title: 'Sunset Lover', artist: 'Petit Biscuit', cover: '/uploads/playlist_cover/Morning_Vibes.png' },
+    { title: 'Lofi Study', artist: 'Chillhop', cover: '/uploads/playlist_cover/moodmix.png' }
+  ]
 }
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap');
+/* === Smooth scroll toàn trang === */
+html {
+  scroll-behavior: smooth;
+}
 
-* {
+/* === CSS Variables (scope dưới .musicflow-landing) === */
+.musicflow-landing {
+  --accent: #1ED760;
+  --accent-dim: rgba(30, 215, 96, 0.15);
+  --accent-glow: rgba(30, 215, 96, 0.35);
+  --bg-glass: rgba(255, 255, 255, 0.03);
+  --bg-glass-hover: rgba(255, 255, 255, 0.06);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-hover: rgba(30, 215, 96, 0.25);
+  --line-section: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow-green: 0 0 40px rgba(30, 215, 96, 0.12);
+  --transition-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --reveal-duration: 0.8s;
+  --reveal-delay: 0s;
+}
+
+.musicflow-landing,
+.musicflow-landing * {
   box-sizing: border-box;
 }
 
-.landing-page {
-  position: relative;
-  min-height: 100vh;
-  background: #0B0F19;
-  color: #ffffff;
-  font-family: 'Be Vietnam Pro', sans-serif;
-  overflow-x: hidden;
-}
-
-.landing-page::before {
-  position: fixed;
-  inset: 70px 0 0;
-  z-index: 0;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 80% 60%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 88px),
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 88px);
-  content: "";
-  pointer-events: none;
-}
-
-.landing-page::after {
-  position: fixed;
-  inset: auto 0 0;
-  z-index: 0;
-  height: 42vh;
-  background: linear-gradient(0deg, #0B0F19, transparent);
-  content: "";
-  pointer-events: none;
-}
-
-.landing-nav {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 70px;
-  padding: 0 32px;
-  background: rgba(11, 15, 25, 0.75);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(20px);
-}
-
-.brand {
-  color: #ffffff;
-  font-size: 20px;
-  font-weight: 900;
-  text-decoration: none;
-  background: linear-gradient(135deg, #7C3AED, #3B82F6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 8px rgba(124, 58, 237, 0.3));
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 42px;
-}
-
-.nav-links a {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color .2s ease, transform .2s ease;
-}
-
-.nav-links a:hover {
-  color: #7C3AED;
-  transform: translateY(-1px);
-}
-
-.pill-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 0 34px;
-  border: 0;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #7C3AED, #3B82F6);
-  color: #ffffff;
-  box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
-  cursor: pointer;
-  font: 800 14px/1 'Be Vietnam Pro', sans-serif;
-  text-decoration: none;
-  transition: transform .2s ease, box-shadow .2s ease;
-}
-
-.pill-btn:hover {
-  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.5);
-  transform: translateY(-2px) scale(1.02);
-}
-
-.pill-btn--small {
-  min-height: 38px;
-  padding: 0 28px;
-  font-size: 13px;
-}
-
-.pill-btn--ghost {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-  backdrop-filter: blur(12px);
-}
-
-.pill-btn--ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.pill-btn svg,
-.demo-play svg,
-.feature-icon,
-.waves-icon,
-.premium-label svg {
-  width: 22px;
-  height: 22px;
-  fill: currentColor;
-}
-
-.landing-main {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 1280px);
-  margin: 0 auto;
-  padding: 62px 24px 132px;
-}
-
-.hero-section {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  margin-bottom: 62px;
-}
-
-.hero-depth {
-  position: absolute;
-  inset: -70px 0 -48px;
-  z-index: 0;
-  overflow: hidden;
-  perspective: 900px;
-  pointer-events: none;
-}
-
-.hero-depth::before {
-  position: absolute;
-  inset: 8% 16%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.05) 0%, transparent 60%),
-    linear-gradient(140deg, rgba(124, 58, 237, 0.05), rgba(59, 130, 246, 0.03), rgba(6, 182, 212, 0.04));
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 42px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.4);
-  content: "";
-  transform: rotateX(60deg) rotateZ(-9deg) translateY(34px);
-  transform-style: preserve-3d;
-}
-
-.hero-disc {
-  position: absolute;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at center, #0B0F19 0 13%, #7C3AED 14% 18%, #3B82F6 19% 24%, #1E1B4B 25% 34%, #EC4899 35% 36%, rgba(124, 58, 237, 0.2) 37% 100%);
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.1),
-    inset 0 0 40px rgba(255, 255, 255, 0.05),
-    0 28px 64px rgba(0, 0, 0, 0.5);
-  transform-style: preserve-3d;
-}
-
-.hero-disc::after {
-  position: absolute;
-  inset: 12%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: inherit;
-  content: "";
-}
-
-.hero-disc--back {
-  right: 9%;
-  top: 5%;
-  width: 180px;
-  height: 180px;
-  opacity: .5;
-  transform: rotateX(62deg) rotateZ(-28deg);
-}
-
-.hero-disc--front {
-  left: 10%;
-  bottom: 8%;
-  width: 140px;
-  height: 140px;
-  opacity: .4;
-  transform: rotateX(58deg) rotateZ(18deg);
-}
-
-.hero-bars {
-  position: absolute;
-  right: 22%;
-  bottom: 15%;
-  display: flex;
-  align-items: end;
-  gap: 10px;
-  height: 92px;
-  transform: rotateX(58deg) rotateZ(-10deg);
-  transform-style: preserve-3d;
-}
-
-.hero-bars span {
-  display: block;
-  width: 18px;
-  border-radius: 7px 7px 3px 3px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(124, 58, 237, 0.6));
-  box-shadow: 0 16px 32px rgba(124, 58, 237, 0.15);
-}
-
-.hero-bars span:nth-child(1) { height: 42px; }
-.hero-bars span:nth-child(2) { height: 80px; }
-.hero-bars span:nth-child(3) { height: 58px; }
-.hero-bars span:nth-child(4) { height: 70px; }
-
-.hero-section h1,
-.hero-section p,
-.hero-actions {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-section h1 {
-  width: min(850px, 100%);
-  margin: 0 0 24px;
-  color: #ffffff;
-  font-size: clamp(40px, 5vw, 64px);
-  font-weight: 900;
-  line-height: 1.14;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-  background: linear-gradient(to right, #ffffff 40%, rgba(255, 255, 255, 0.7));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hero-section p {
-  width: min(760px, 100%);
-  margin: 0 0 44px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 17px;
-  line-height: 1.65;
-}
-
-.hero-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.demo-panel {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: clamp(360px, 43vw, 500px);
-  margin-bottom: 126px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 44px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005)),
-    rgba(17, 24, 39, 0.6);
-  box-shadow: 
-    0 28px 70px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  perspective: 1100px;
-  transform-style: preserve-3d;
-  backdrop-filter: blur(20px);
-}
-
-.wave-scene {
-  position: absolute;
-  inset: 0;
-  opacity: .5;
-  filter: saturate(1.4);
-  perspective: 1000px;
-  transform-style: preserve-3d;
-}
-
-.wave {
-  position: absolute;
-  width: 78%;
-  height: 44%;
-  left: 13%;
-  top: 18%;
-  border: 5px solid rgba(124, 58, 237, 0.3);
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 52% 48% 50% 50% / 38% 42% 58% 62%;
-  filter: blur(.5px) drop-shadow(0 0 16px rgba(124, 58, 237, 0.2));
-  transform: rotate(-8deg);
-}
-
-.wave--two {
-  top: 25%;
-  left: 7%;
-  width: 88%;
-  height: 52%;
-  border-width: 4px;
-  opacity: .55;
-  border-color: rgba(59, 130, 246, 0.3);
-  transform: rotate(10deg);
-}
-
-.wave--three {
-  top: 3%;
-  left: 34%;
-  width: 42%;
-  height: 90%;
-  border-width: 4px;
-  opacity: .42;
-  border-color: rgba(236, 72, 153, 0.3);
-  transform: rotate(27deg);
-}
-
-.sound-stage {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-}
-
-.record-3d {
-  position: absolute;
-  top: 13%;
-  left: 50%;
-  width: min(42vw, 420px);
-  height: min(42vw, 420px);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, #ffffff 0 8%, #7C3AED 9% 13%, transparent 14%),
-    repeating-radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0 2px, transparent 2px 18px),
-    radial-gradient(circle at 42% 34%, rgba(255, 255, 255, 0.3), transparent 22%),
-    linear-gradient(145deg, #1E1B4B, #0F172A 42%, #311042);
-  box-shadow:
-    inset 0 0 0 4px rgba(255, 255, 255, 0.08),
-    inset 0 -36px 60px rgba(0, 0, 0, 0.5),
-    0 54px 90px rgba(0, 0, 0, 0.6);
-  transform: translateX(-50%) rotateX(66deg) rotateZ(-18deg) translateZ(-55px);
-  transform-style: preserve-3d;
-  animation: recordFloat 8s ease-in-out infinite;
-}
-
-.record-3d::before {
-  position: absolute;
-  inset: -10px;
-  border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(124, 58, 237, 0.05));
-  content: "";
-  transform: translateZ(-16px);
-}
-
-.equalizer-3d {
-  position: absolute;
-  right: 13%;
-  bottom: 17%;
-  display: flex;
-  align-items: end;
-  gap: 14px;
-  height: 150px;
-  transform: rotateX(62deg) rotateZ(-16deg) translateZ(20px);
-  transform-style: preserve-3d;
-}
-
-.equalizer-3d span {
-  display: block;
-  width: 34px;
-  border-radius: 10px 10px 4px 4px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), #3B82F6 48%, #7C3AED);
-  box-shadow:
-    inset -8px 0 16px rgba(255, 255, 255, 0.2),
-    0 20px 32px rgba(124, 58, 237, 0.2);
-  transform-style: preserve-3d;
-  animation: equalizerPulse 1.7s ease-in-out infinite;
-}
-
-.equalizer-3d span:nth-child(1) { height: 66px; animation-delay: -.15s; }
-.equalizer-3d span:nth-child(2) { height: 112px; animation-delay: -.45s; }
-.equalizer-3d span:nth-child(3) { height: 86px; animation-delay: -.25s; }
-.equalizer-3d span:nth-child(4) { height: 136px; animation-delay: -.7s; }
-.equalizer-3d span:nth-child(5) { height: 74px; animation-delay: -.35s; }
-
-.prism {
-  position: absolute;
-  width: 132px;
-  height: 132px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(124, 58, 237, 0.1)),
-    linear-gradient(225deg, rgba(59, 130, 246, 0.1), transparent);
-  box-shadow:
-    inset 0 0 28px rgba(255, 255, 255, 0.05),
-    0 30px 50px rgba(0, 0, 0, 0.4);
-  transform-style: preserve-3d;
-}
-
-.prism::after {
-  position: absolute;
-  inset: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  content: "";
-}
-
-.prism--one {
-  top: 11%;
-  left: 16%;
-  transform: rotateX(58deg) rotateZ(32deg) translateZ(22px);
-  animation: prismFloat 7s ease-in-out infinite;
-}
-
-.prism--two {
-  right: 16%;
-  top: 14%;
-  width: 92px;
-  height: 92px;
-  border-radius: 20px;
-  transform: rotateX(62deg) rotateZ(-21deg) translateZ(16px);
-  animation: prismFloat 8.5s ease-in-out infinite reverse;
-}
-
-.demo-play {
-  position: relative;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  width: 98px;
-  height: 98px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
-  box-shadow: 0 0 38px rgba(124, 58, 237, 0.3);
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  transition: transform .2s ease, box-shadow .2s ease, background .2s;
-}
-
-.demo-play:hover {
-  box-shadow: 0 0 46px rgba(124, 58, 237, 0.5);
-  transform: scale(1.06);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.demo-play svg {
-  width: 46px;
-  height: 46px;
-}
-
-.live-badge {
-  position: absolute;
-  z-index: 3;
-  top: calc(50% + 78px);
-  left: 50%;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  height: 26px;
-  padding: 0 16px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-}
-
-.live-badge span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #EC4899;
-  box-shadow: 0 0 12px rgba(236, 72, 153, 0.8);
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 18px;
-  perspective: 1200px;
-}
-
-.feature-card {
-  position: relative;
-  display: flex;
-  min-height: 290px;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
-  padding: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 42px;
-  background: rgba(255, 255, 255, 0.02);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(24px);
-  transform-style: preserve-3d;
-  transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease, background-color .28s;
-}
-
-.feature-card:hover {
-  border-color: rgba(124, 58, 237, 0.3);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 30px 68px rgba(124, 58, 237, 0.15);
-  transform: translateY(-8px) rotateX(2deg) rotateY(-2deg);
-}
-
-.feature-card--large {
-  grid-column: span 8;
-  min-height: 350px;
-}
-
-.feature-card--small {
-  grid-column: span 4;
-  min-height: 350px;
-}
-
-.feature-card--medium {
-  grid-column: span 6;
-}
-
-.card-glow {
-  position: absolute;
-  top: -90px;
-  right: -80px;
-  width: 270px;
-  height: 270px;
-  border-radius: 48px;
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(59, 130, 246, 0.1));
-  filter: blur(72px);
-  transform: rotate(18deg);
-}
-
-.feature-copy {
-  position: relative;
-  z-index: 1;
-  transform: translateZ(24px);
-}
-
-.feature-icon {
-  display: block;
-  margin-bottom: 22px;
-  color: #7C3AED;
-}
-
-.feature-icon--green {
-  color: #3B82F6;
-}
-
-.feature-card h2 {
-  margin: 0 0 12px;
-  color: #ffffff;
-  font-size: 31px;
-  font-weight: 900;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
-.feature-card--small h2 {
-  font-size: 22px;
-}
-
-.feature-card p {
-  width: min(610px, 100%);
-  margin: 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.mini-player {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: 46px 1fr auto;
-  gap: 14px;
-  align-items: center;
-  min-height: 70px;
-  margin-top: 28px;
-  padding: 12px 16px 18px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.02);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
-  transform: translateZ(36px);
-}
-
-.album-art {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 45% 45%, #7C3AED, transparent 36%),
-    radial-gradient(circle at 30% 35%, rgba(59, 130, 246, .65), transparent 34%),
-    linear-gradient(135deg, #1E1B4B, #3B82F6);
-}
-
-.track-meta {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.track-meta strong {
-  overflow: hidden;
-  color: #ffffff;
-  font-size: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.track-meta span {
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.waves-icon {
-  color: #3B82F6;
-}
-
-.progress {
-  position: absolute;
-  right: 16px;
-  bottom: 8px;
-  left: 16px;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.progress span {
-  display: block;
-  width: 65%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #7C3AED, #3B82F6);
-}
-
-.chip-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 28px;
-}
-
-.chip-row span,
-.checkout-row b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 14px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.chip-row .chip--active {
-  background: rgba(124, 58, 237, 0.15);
-  border-color: rgba(124, 58, 237, 0.3);
-  color: #ffffff;
-}
-
-.prompt-form {
-  position: relative;
-  margin-top: 30px;
-}
-
-.prompt-form input {
-  width: 100%;
-  height: 48px;
-  padding: 0 112px 0 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9999px;
-  outline: none;
-  background: rgba(255, 255, 255, 0.03);
-  color: #ffffff;
-  font: 500 13px/1 'Be Vietnam Pro', sans-serif;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s;
-}
-
-.prompt-form input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.prompt-form input:focus {
-  border-color: #7C3AED;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
-}
-
-.prompt-form button {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  height: 38px;
-  padding: 0 22px;
-  border: 0;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #7C3AED, #3B82F6);
-  color: #ffffff;
-  cursor: pointer;
-  font: 800 12px/1 'Be Vietnam Pro', sans-serif;
-  transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
-}
-.prompt-form button:hover { 
-  transform: scale(1.05); 
-  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4);
-}
-
-.feature-card--premium {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.premium-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(236, 72, 153, 0.05));
-}
-
-.premium-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  color: #EC4899;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.premium-label svg {
-  width: 26px;
-  height: 26px;
-}
-
-.checkout-row {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-top: 30px;
-  padding-top: 22px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.checkout-row > span {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-}
-
-.checkout-row > div {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.checkout-row .momo {
-  color: #ff4aaa;
-}
-
-.landing-footer {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, .45fr);
-  gap: 60px;
-  align-items: start;
-  min-height: 200px;
-  padding: 54px 32px;
-  background: #0B0F19;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.landing-footer > div:first-child,
-.footer-links {
-  width: min(100%, 1280px);
-}
-
-.landing-footer strong {
-  display: block;
-  margin-bottom: 24px;
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: 900;
-  background: linear-gradient(135deg, #7C3AED, #3B82F6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.landing-footer span,
-.landing-footer a {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.footer-links {
-  display: grid;
-  gap: 14px;
-}
-
-.footer-links a:hover {
-  color: #7C3AED;
-}
-
-@keyframes recordFloat {
-  0%,
-  100% {
-    transform: translateX(-50%) rotateX(66deg) rotateZ(-18deg) translateZ(-55px) translateY(0);
-  }
-  50% {
-    transform: translateX(-50%) rotateX(66deg) rotateZ(-10deg) translateZ(-40px) translateY(-10px);
-  }
-}
-
-@keyframes equalizerPulse {
-  0%,
-  100% {
-    transform: translateZ(0) scaleY(.82);
-  }
-  50% {
-    transform: translateZ(24px) scaleY(1.08);
-  }
-}
-
-@keyframes prismFloat {
-  0%,
-  100% {
-    translate: 0 0;
-  }
-  50% {
-    translate: 0 -14px;
-  }
-}
-
+/* === Reveal system === */
+.musicflow-landing .reveal,
+.musicflow-landing .reveal-up,
+.musicflow-landing .reveal-left,
+.musicflow-landing .reveal-right,
+.musicflow-landing .reveal-scale,
+.musicflow-landing .reveal-blur {
+  opacity: 0;
+  transition: opacity var(--reveal-duration) var(--transition-smooth),
+              transform var(--reveal-duration) var(--transition-smooth),
+              filter var(--reveal-duration) var(--transition-smooth);
+  transition-delay: var(--reveal-delay, 0s);
+  will-change: opacity, transform, filter;
+}
+.musicflow-landing .reveal.is-visible,
+.musicflow-landing .reveal-up.is-visible,
+.musicflow-landing .reveal-left.is-visible,
+.musicflow-landing .reveal-right.is-visible,
+.musicflow-landing .reveal-scale.is-visible,
+.musicflow-landing .reveal-blur.is-visible {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.musicflow-landing .reveal { transform: none; }
+.musicflow-landing .reveal-up { transform: translateY(40px); }
+.musicflow-landing .reveal-left { transform: translateX(-60px); }
+.musicflow-landing .reveal-right { transform: translateX(60px); }
+.musicflow-landing .reveal-scale { transform: scale(0.92); }
+.musicflow-landing .reveal-blur { filter: blur(12px); transform: translateY(20px); }
+.musicflow-landing .reveal-blur.is-visible { filter: blur(0); transform: none; }
+
+/* === Stagger children === */
+.musicflow-landing .stagger-children > .reveal-up:nth-child(1) { --reveal-delay: 0s; }
+.musicflow-landing .stagger-children > .reveal-up:nth-child(2) { --reveal-delay: 0.12s; }
+.musicflow-landing .stagger-children > .reveal-up:nth-child(3) { --reveal-delay: 0.24s; }
+.musicflow-landing .stagger-children > .reveal-up:nth-child(4) { --reveal-delay: 0.36s; }
+.musicflow-landing .stagger-children > .reveal-up:nth-child(5) { --reveal-delay: 0.48s; }
+.musicflow-landing .stagger-children > .reveal-up:nth-child(6) { --reveal-delay: 0.60s; }
+.musicflow-landing .stagger-children > .reveal-scale:nth-child(1) { --reveal-delay: 0s; }
+.musicflow-landing .stagger-children > .reveal-scale:nth-child(2) { --reveal-delay: 0.15s; }
+.musicflow-landing .stagger-children > .reveal-scale:nth-child(3) { --reveal-delay: 0.30s; }
+
+/* === Reduced motion === */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
+  .musicflow-landing .reveal,
+  .musicflow-landing .reveal-up,
+  .musicflow-landing .reveal-left,
+  .musicflow-landing .reveal-right,
+  .musicflow-landing .reveal-scale,
+  .musicflow-landing .reveal-blur {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+  .musicflow-landing .wave-glow-bg,
+  .musicflow-landing .float-animation,
+  .musicflow-landing .workflow-progress-fill {
+    animation: none !important;
+    transition: none !important;
   }
 }
 
-@media (max-width: 900px) {
-  .landing-nav {
-    height: auto;
-    min-height: 70px;
-    gap: 16px;
-    padding: 18px 20px;
-    flex-wrap: wrap;
-  }
+/* === Section line divider === */
+.musicflow-landing .section-line {
+  position: relative;
+}
+.musicflow-landing .section-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80%, 1200px);
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--line-section) 20%,
+    var(--line-section) 80%,
+    transparent 100%);
+}
 
-  .brand {
-    flex: 1;
-  }
+/* === Wave glow background === */
+.musicflow-landing .wave-glow-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.musicflow-landing .wave-glow-bg {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  animation: wavePulse 8s ease-in-out infinite;
+}
+.musicflow-landing .wave-glow-bg.green {
+  background: radial-gradient(circle, rgba(30, 215, 96, 0.5) 0%, transparent 70%);
+  width: 600px; height: 600px;
+  top: 10%; left: 20%;
+}
+.musicflow-landing .wave-glow-bg.blue {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%);
+  width: 500px; height: 500px;
+  top: 30%; right: 10%;
+  animation-delay: -3s;
+}
+.musicflow-landing .wave-glow-bg.green-2 {
+  background: radial-gradient(circle, rgba(30, 215, 96, 0.3) 0%, transparent 70%);
+  width: 400px; height: 400px;
+  bottom: 10%; left: 50%;
+  animation-delay: -5s;
+}
+@keyframes wavePulse {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.35; }
+  33% { transform: translate(30px, -20px) scale(1.1); opacity: 0.45; }
+  66% { transform: translate(-20px, 15px) scale(0.95); opacity: 0.3; }
+}
 
-  .nav-links {
-    order: 3;
-    width: 100%;
+/* === Floating animation === */
+.musicflow-landing .float-animation {
+  animation: floatY 6s ease-in-out infinite;
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+/* === Hero delay variables === */
+.musicflow-landing .hero-badge { --reveal-delay: 0s; }
+.musicflow-landing .hero-headline { --reveal-delay: 0.1s; }
+.musicflow-landing .hero-subtitle { --reveal-delay: 0.2s; }
+.musicflow-landing .hero-cta-group { --reveal-delay: 0.3s; }
+.musicflow-landing .hero-badge .badge-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+  animation: pulseDot 2s ease-in-out infinite;
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* === Glass card === */
+.musicflow-landing .glass-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.4s var(--transition-smooth),
+              border-color 0.4s var(--transition-smooth),
+              box-shadow 0.4s var(--transition-smooth);
+}
+.musicflow-landing .glass-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--border-glass-hover);
+  box-shadow: var(--shadow-card), var(--shadow-glow-green);
+}
+.musicflow-landing .glass-card.premium {
+  background: linear-gradient(180deg, rgba(30, 215, 96, 0.05), var(--bg-glass));
+  border-color: rgba(30, 215, 96, 0.2);
+  box-shadow: var(--shadow-card), 0 0 60px rgba(30, 215, 96, 0.08);
+}
+.musicflow-landing .glass-card.premium:hover {
+  border-color: rgba(30, 215, 96, 0.45);
+  box-shadow: var(--shadow-card), 0 0 80px rgba(30, 215, 96, 0.18);
+}
+
+/* === Personalization hover subtle === */
+.musicflow-landing .personalization-card {
+  transition: transform 0.4s var(--transition-smooth),
+              border-color 0.4s var(--transition-smooth),
+              box-shadow 0.4s var(--transition-smooth);
+}
+.musicflow-landing .personalization-card:hover {
+  border-color: var(--border-glass-hover);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(30, 215, 96, 0.08);
+}
+
+/* === AI playlist stagger === */
+.musicflow-landing .ai-playlist-item {
+  --reveal-delay: calc(var(--item-index, 0) * 0.08s);
+}
+
+/* === Workflow grid + progress === */
+.musicflow-landing .workflow-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--line-section) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-section) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+.musicflow-landing .workflow-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), #3b82f6);
+  transition: width 1.5s var(--transition-smooth);
+  box-shadow: 0 0 10px rgba(30, 215, 96, 0.3);
+}
+.musicflow-landing .workflow-progress-fill.is-visible {
+  width: 100%;
+}
+.musicflow-landing .workflow-step {
+  --reveal-delay: calc(var(--step-index, 0) * 0.2s);
+}
+.musicflow-landing .workflow-step .step-number {
+  transition: all 0.5s var(--transition-smooth);
+}
+.musicflow-landing .workflow-step.is-visible .step-number {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 20px rgba(30, 215, 96, 0.15);
+}
+
+/* === Pricing card === */
+.musicflow-landing .pricing-card {
+  padding: 40px 32px;
+  border-radius: 24px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  transition: all 0.4s var(--transition-smooth);
+  display: flex;
+  flex-direction: column;
+}
+.musicflow-landing .pricing-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--border-glass-hover);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(30, 215, 96, 0.06);
+}
+.musicflow-landing .pricing-card.premium {
+  background: linear-gradient(180deg, rgba(30, 215, 96, 0.05), var(--bg-glass));
+  border-color: rgba(30, 215, 96, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+.musicflow-landing .pricing-card.premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+.musicflow-landing .pricing-card.premium:hover {
+  border-color: rgba(30, 215, 96, 0.4);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 50px rgba(30, 215, 96, 0.12);
+}
+
+/* === Footer top divider mảnh === */
+.musicflow-landing .musicflow-footer {
+  position: relative;
+}
+.musicflow-landing .musicflow-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80%, 1200px);
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--line-section) 20%,
+    var(--line-section) 80%,
+    transparent 100%);
+}
+
+/* === Equalizer keyframes (giữ nguyên cho mini equalizer hero card) === */
+@keyframes equalizer {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+/* === Responsive 390px (mobile) === */
+@media (max-width: 1024px) {
+  .musicflow-landing .hero-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .musicflow-landing .hero-subtitle {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .musicflow-landing .hero-cta-group {
     justify-content: center;
-    gap: 24px;
   }
-
-  .landing-main {
-    padding-top: 44px;
-  }
-
-  .hero-section h1 {
-    font-size: 40px;
-  }
-
-  .feature-card--large,
-  .feature-card--small,
-  .feature-card--medium {
-    grid-column: span 12;
-  }
-
-  .demo-panel {
-    margin-bottom: 72px;
-    border-radius: 30px;
-  }
-
-  .record-3d {
-    width: 360px;
-    height: 360px;
-  }
-
-  .equalizer-3d {
-    right: 7%;
-    gap: 10px;
-  }
-
-  .equalizer-3d span {
-    width: 26px;
-  }
-
-  .feature-grid {
-    gap: 16px;
+  .musicflow-landing .hero-card {
+    margin: 0 auto;
   }
 }
-
-@media (max-width: 560px) {
-  .landing-main {
-    padding-inline: 16px;
-    padding-bottom: 80px;
+@media (max-width: 768px) {
+  .musicflow-landing .hero-section {
+    padding: 100px 20px 60px;
   }
-
-  .landing-nav {
-    align-items: center;
+  .musicflow-landing .personalization-card,
+  .musicflow-landing .ai-playlist-card {
+    padding: 24px;
   }
-
-  .nav-links {
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
+  .musicflow-landing .pricing-card {
+    padding: 28px 24px;
   }
-
-  .pill-btn--small {
-    padding: 0 20px;
-  }
-
-  .hero-section {
-    margin-bottom: 44px;
-  }
-
-  .hero-section h1 {
-    font-size: 32px;
-  }
-
-  .hero-section p {
-    font-size: 15px;
-  }
-
-  .hero-actions {
-    align-items: stretch;
-    width: 100%;
-  }
-
-  .hero-actions .pill-btn {
-    width: 100%;
-  }
-
-  .demo-panel {
-    height: 360px;
-  }
-
-  .hero-depth {
-    opacity: .52;
-  }
-
-  .hero-disc--back,
-  .hero-disc--front {
-    display: none;
-  }
-
-  .record-3d {
-    left: 48%;
-    top: 18%;
-    width: 280px;
-    height: 280px;
-  }
-
-  .equalizer-3d {
-    right: 4%;
-    bottom: 12%;
-    height: 110px;
-  }
-
-  .equalizer-3d span {
-    width: 18px;
-  }
-
-  .prism {
-    width: 80px;
-    height: 80px;
-  }
-
-  .feature-card {
-    min-height: auto;
-    padding: 26px;
-    border-radius: 28px;
-  }
-
-  .feature-card h2 {
-    font-size: 25px;
-  }
-
-  .feature-card--small h2 {
-    font-size: 22px;
-  }
-
-  .mini-player {
-    grid-template-columns: 42px 1fr;
-  }
-
-  .waves-icon {
-    display: none;
-  }
-
-  .prompt-form input {
-    height: auto;
-    min-height: 50px;
-    padding: 15px 18px 62px;
-    border-radius: 24px;
-  }
-
-  .prompt-form button {
-    top: auto;
-    right: 6px;
-    bottom: 6px;
-    left: 6px;
-  }
-
-  .checkout-row,
-  .landing-footer {
+  .musicflow-landing .pricing-grid {
     grid-template-columns: 1fr;
   }
-
-  .checkout-row {
+  .musicflow-landing .workflow-steps {
+    flex-direction: column;
+    gap: 40px;
+  }
+  /* Mobile workflow: ẩn progress line, dùng layout dọc ngang step */
+  .musicflow-landing .workflow-steps > .hidden.lg\:block {
+    display: none !important;
+  }
+  .musicflow-landing .workflow-step {
+    text-align: left;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
     align-items: flex-start;
   }
-
-  .checkout-row > div {
-    justify-content: flex-start;
+  .musicflow-landing .workflow-step .step-number {
+    margin: 0;
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    font-size: 1.25rem;
+  }
+  .musicflow-landing .mf-navbar .nav-links,
+  .musicflow-landing .mf-navbar > div > div.hidden.md\:flex {
+    display: none;
+  }
+  .musicflow-landing .musicflow-footer > div {
+    flex-direction: column;
+    text-align: center;
   }
 }
 </style>

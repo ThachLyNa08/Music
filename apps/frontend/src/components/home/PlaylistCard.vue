@@ -16,7 +16,7 @@
           class="home-play-btn h-12 w-12 cursor-pointer border-none"
           @click.stop="$emit('play', playlist)"
         >
-          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-white ml-1">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-black ml-1">
             <polygon points="5 3 19 12 5 21 5 3" />
           </svg>
         </button>
@@ -29,6 +29,9 @@
     </h3>
     <p class="mt-1 line-clamp-2 text-xs font-medium text-slate-400 leading-snug">
       {{ playlist.desc || playlist.description || (playlist.total_songs ? `${playlist.total_songs} bài hát` : 'Danh sách phát') }}
+    </p>
+    <p v-if="playlist.updated_at || playlist.updatedAt" class="mt-1 text-[11px] font-medium text-slate-500">
+      Cập nhật: {{ new Date(playlist.updated_at || playlist.updatedAt).toLocaleDateString('vi-VN') }}
     </p>
   </article>
 </template>

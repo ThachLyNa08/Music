@@ -7,11 +7,10 @@
         <p class="page-subtitle">Theo dõi nội dung, người dùng và doanh thu Premium từ dữ liệu thật của hệ thống.</p>
       </div>
 
-      <button class="refresh-button" type="button" :disabled="loading" @click="fetchData">
-        <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <button class="refresh-button" type="button" :disabled="loading" @click="fetchData" title="Làm mới" style="width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+        <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
           <path stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5m-5 4a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5" />
         </svg>
-        Làm mới
       </button>
     </header>
 
@@ -61,17 +60,24 @@
           <p>Top bài hát và lượt nghe theo thời gian từ lịch sử phát nhạc.</p>
         </div>
 
-        <div class="range-tabs" aria-label="Khoảng thời gian">
-          <button
-            v-for="option in trendRangeOptions"
-            :key="option.value"
-            type="button"
-            :class="{ active: trendRange === option.value }"
-            :disabled="trendLoading"
-            @click="setTrendRange(option.value)"
-          >
-            {{ option.label }}
-          </button>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="range-tabs" aria-label="Khoảng thời gian">
+            <button
+              v-for="option in trendRangeOptions"
+              :key="option.value"
+              type="button"
+              :class="{ active: trendRange === option.value }"
+              :disabled="trendLoading"
+              @click="setTrendRange(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <AdminResetButton
+            :disabled="trendLoading || topArtistLoading"
+            :loading="trendLoading || topArtistLoading"
+            @click="resetDashboardRanges"
+          />
         </div>
       </div>
 
@@ -154,26 +160,91 @@
         </div>
       </article>
 
-      <article class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>Thể loại nổi bật</h2>
-            <p>Top thể loại theo lượt nghe.</p>
+      <div class="dashboard-side-stack">
+        <template v-if="loading">
+          <article class="panel">
+            <div class="donut-skeleton"></div>
+          </article>
+        </template>
+        <AdminGenreDonutChart 
+          v-else
+          title="Thể loại nổi bật"
+          description="Top thể loại theo lượt nghe."
+          :data="rawCharts.genres || []"
+          nameKey="name"
+          valueKey="listens"
+          :centerLabel="totalListens ? formatNumber(totalListens) : '0'"
+          centerSubLabel="lượt nghe"
+        />
+      </div>
+    </div>
+
+    <article class="panel top-artists-section">
+      <div class="panel-header trend-header">
+        <div>
+          <h2>Top nghệ sĩ</h2>
+          <p>Theo dõi xu hướng lượt nghe của nghệ sĩ trong 7 ngày qua.</p>
+        </div>
+      </div>
+
+      <div class="trend-compact-grid top-artists-trend-grid">
+        <aside class="top-three-panel top-artists-list-panel">
+          <div class="ranking-title compact">
+            <h3>Top 5 nghệ sĩ</h3>
+            <span>7 ngày qua</span>
+          </div>
+
+          <div v-if="topArtistLoading" class="top-artists-skeleton">
+            <div v-for="row in 5" :key="row" class="top-artists-skeleton-row">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+
+          <div v-else-if="!hasTopArtists" class="empty-state compact-trend-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16 11a4 4 0 1 0-8 0m8 0c2.2.7 4 2.2 4 4.5V19H4v-3.5C4 13.2 5.8 11.7 8 11" />
+            </svg>
+            <p>Chưa có dữ liệu nghệ sĩ.</p>
+          </div>
+
+          <div v-else class="top-artists-list">
+            <div v-for="(artist, index) in topArtists" :key="artist.id || artist.name || index" class="top-artist-row">
+              <span class="artist-rank">#{{ index + 1 }}</span>
+              <img
+                v-if="artistAvatar(artist)"
+                class="artist-avatar"
+                :src="artistAvatar(artist)"
+                :alt="artist.name || 'Nghệ sĩ'"
+              />
+              <span v-else class="artist-avatar fallback">{{ artistInitial(artist) }}</span>
+              <div class="artist-info">
+                <strong>{{ artist.name || 'Nghệ sĩ chưa cập nhật' }}</strong>
+                <span>{{ formatNumber(artist.song_count || 0) }} bài hát</span>
+              </div>
+              <div class="artist-plays">
+                <strong>{{ formatNumber(artistListenValue(artist)) }}</strong>
+                <span>lượt nghe</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="trend-chart-card compact">
+          <div v-if="topArtistLoading" class="line-skeleton compact">
+            <span></span>
+          </div>
+          <div v-else-if="!hasTopArtistTrendData" class="empty-state trend-empty compact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M7 15l4-4 3 3 5-7" />
+            </svg>
+            <p>Chưa có dữ liệu lượt nghe nghệ sĩ trong khoảng thời gian này.</p>
+          </div>
+          <div v-else class="chart-container line-chart compact">
+            <Line :data="topArtistsChartData" :options="artistLineOptions" />
           </div>
         </div>
-
-        <div v-if="loading" class="donut-skeleton"></div>
-        <div v-else-if="!hasGenreData" class="empty-state compact">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M11 3a9 9 0 1 0 9 9h-9V3Zm4-1v6h6a9 9 0 0 0-6-6Z" />
-          </svg>
-          <p>Chưa có dữ liệu lượt nghe theo thể loại.</p>
-        </div>
-        <div v-else class="chart-container donut">
-          <Doughnut :data="genresChartData" :options="doughnutOptions" />
-        </div>
-      </article>
-    </div>
+      </div>
+    </article>
 
     <div class="bottom-grid">
       <article class="panel table-panel">
@@ -286,7 +357,9 @@ import {
   PointElement,
   Filler
 } from 'chart.js'
-import { Bar, Doughnut, Line } from 'vue-chartjs'
+import { Bar, Line } from 'vue-chartjs'
+import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
+import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Filler)
@@ -297,11 +370,15 @@ const auxiliaryWarning = ref('')
 const stats = ref({})
 const rawCharts = ref({ revenue: [], genres: [] })
 const latestUsers = ref([])
+const topArtists = ref([])
 const songGroups = ref([])
 const transactions = ref([])
 const trendLoading = ref(true)
 const trendRange = ref('today')
 const listeningTrend = ref({ series: [], topSongs: [] })
+const topArtistLoading = ref(true)
+const topArtistRange = ref('7d')
+const topArtistTrend = ref({ series: [], topArtists: [] })
 
 const trendRangeOptions = [
   { label: 'Hôm nay', value: 'today' },
@@ -369,11 +446,16 @@ const premiumRate = computed(() => {
 const recentTransactions = computed(() => transactions.value.slice(0, 5))
 const topTrendSongs = computed(() => listeningTrend.value.topSongs || [])
 const topThreeSongs = computed(() => topTrendSongs.value.slice(0, 3))
+const topArtistRangeLabel = computed(() => trendRangeOptions.find(item => item.value === topArtistRange.value)?.label || 'Hôm nay')
 const hasTrendData = computed(() => (listeningTrend.value.series || []).some(item => Number(item.listens || 0) > 0))
 const trendRangeLabel = computed(() => trendRangeOptions.find(item => item.value === trendRange.value)?.label || 'Hôm nay')
 
 const hasRevenueData = computed(() => (rawCharts.value.revenue || []).some(row => Number(row.revenue || 0) > 0))
 const hasGenreData = computed(() => (rawCharts.value.genres || []).some(row => Number(row.listens || 0) > 0))
+const hasTopArtists = computed(() => topArtists.value.length > 0)
+const hasTopArtistTrendData = computed(() => (topArtistTrend.value.series || []).some(row => {
+  return (row.artists || []).some(artist => Number(artist.listens || artist.recent_plays || 0) > 0)
+}))
 
 const revenueChartData = computed(() => ({
   labels: (rawCharts.value.revenue || []).map(row => formatMonth(row.month)),
@@ -395,6 +477,32 @@ const genresChartData = computed(() => ({
     borderColor: 'transparent',
     hoverOffset: 6
   }]
+}))
+
+const artistLineColors = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444']
+
+const topArtistsChartData = computed(() => ({
+  labels: (topArtistTrend.value.series || []).map(row => row.label),
+  datasets: topArtists.value.map((artist, index) => {
+    const color = artistLineColors[index % artistLineColors.length]
+    return {
+      label: artist.name || 'Nghệ sĩ',
+      data: (topArtistTrend.value.series || []).map(row => {
+        const found = (row.artists || []).find(item => Number(item.artist_id) === Number(artist.id))
+        return Number(found?.listens || found?.recent_plays || 0)
+      }),
+      borderColor: color,
+      backgroundColor: color,
+      pointBackgroundColor: color,
+      pointBorderColor: '#FFFFFF',
+      pointBorderWidth: 2,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      borderWidth: 3,
+      tension: 0.35,
+      fill: false
+    }
+  })
 }))
 
 const trendChartData = computed(() => {
@@ -452,6 +560,55 @@ const barOptions = computed(() => ({
     x: {
       grid: { display: false },
       ticks: { color: chartTextColor.value }
+    }
+  }
+}))
+
+const artistLineOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    intersect: false,
+    mode: 'index'
+  },
+  plugins: {
+    legend: {
+      display: true,
+      position: 'bottom',
+      labels: {
+        color: chartTextColor.value,
+        usePointStyle: true,
+        boxWidth: 8,
+        padding: 14
+      }
+    },
+    tooltip: {
+      backgroundColor: '#0F172A',
+      titleColor: '#FFFFFF',
+      bodyColor: '#E5E7EB',
+      padding: 12,
+      cornerRadius: 8,
+      callbacks: {
+        label: context => ` ${context.dataset.label}: ${formatNumber(context.parsed.y)} lượt nghe`
+      }
+    }
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      grid: { color: chartGridColor.value },
+      ticks: {
+        color: chartTextColor.value,
+        precision: 0,
+        callback: value => compactNumber(value)
+      }
+    },
+    x: {
+      grid: { display: false },
+      ticks: {
+        color: chartTextColor.value,
+        maxTicksLimit: 9
+      }
     }
   }
 }))
@@ -531,6 +688,7 @@ async function fetchData() {
   error.value = null
   auxiliaryWarning.value = ''
   trendLoading.value = true
+  topArtistLoading.value = true
 
   try {
     const dashboardRes = await api.get('/admin/dashboard')
@@ -539,10 +697,11 @@ async function fetchData() {
     rawCharts.value = dashboardData.charts || { revenue: [], genres: [] }
     latestUsers.value = dashboardData.latestUsers || []
 
-    const [songSummaryResult, transactionsResult, trendResult] = await Promise.allSettled([
+    const [songSummaryResult, transactionsResult, trendResult, topArtistResult] = await Promise.allSettled([
       api.get('/admin/songs/groups/summary'),
       api.get('/admin/transactions'),
-      api.get('/admin/listening-trends', { params: { range: trendRange.value } })
+      api.get('/admin/listening-trends', { params: { range: trendRange.value } }),
+      api.get('/admin/top-artists-trends', { params: { range: topArtistRange.value } })
     ])
 
     if (songSummaryResult.status === 'fulfilled') {
@@ -557,7 +716,13 @@ async function fetchData() {
       listeningTrend.value = trendResult.value.data?.data || { series: [], topSongs: [] }
     }
 
-    if (songSummaryResult.status === 'rejected' || transactionsResult.status === 'rejected' || trendResult.status === 'rejected') {
+    if (topArtistResult.status === 'fulfilled') {
+      const artistData = topArtistResult.value.data?.data || { series: [], topArtists: [] }
+      topArtistTrend.value = artistData
+      topArtists.value = artistData.topArtists || []
+    }
+
+    if (songSummaryResult.status === 'rejected' || transactionsResult.status === 'rejected' || trendResult.status === 'rejected' || topArtistResult.status === 'rejected') {
       auxiliaryWarning.value = 'Một số dữ liệu phụ chưa tải được. Dashboard vẫn hiển thị các chỉ số chính.'
     }
   } catch (err) {
@@ -565,6 +730,7 @@ async function fetchData() {
   } finally {
     loading.value = false
     trendLoading.value = false
+    topArtistLoading.value = false
   }
 }
 
@@ -582,10 +748,40 @@ async function fetchListeningTrend() {
   }
 }
 
+async function fetchTopArtistTrend() {
+  topArtistLoading.value = true
+  auxiliaryWarning.value = ''
+  try {
+    const res = await api.get('/admin/top-artists-trends', { params: { range: topArtistRange.value } })
+    const artistData = res.data?.data || { series: [], topArtists: [] }
+    topArtistTrend.value = artistData
+    topArtists.value = artistData.topArtists || []
+  } catch (err) {
+    topArtistTrend.value = { series: [], topArtists: [] }
+    topArtists.value = []
+    auxiliaryWarning.value = err.response?.data?.message || 'Không thể tải dữ liệu Top nghệ sĩ.'
+  } finally {
+    topArtistLoading.value = false
+  }
+}
+
 function setTrendRange(range) {
   if (trendRange.value === range) return
   trendRange.value = range
   fetchListeningTrend()
+}
+
+function setTopArtistRange(range) {
+  if (topArtistRange.value === range) return
+  topArtistRange.value = range
+  fetchTopArtistTrend()
+}
+
+function resetDashboardRanges() {
+  trendRange.value = 'today'
+  topArtistRange.value = '7d'
+  fetchListeningTrend()
+  fetchTopArtistTrend()
 }
 
 onMounted(fetchData)
@@ -631,8 +827,21 @@ function maskEmail(email) {
   return `${name.slice(0, 2)}***@${domain}`
 }
 
+
 function songCover(song) {
   return normalizeImageUrl(song?.cover_url)
+}
+
+function artistAvatar(artist) {
+  return normalizeImageUrl(artist?.avatar_url || artist?.image || artist?.cover_url)
+}
+
+function artistListenValue(artist) {
+  return Number(artist?.recent_plays || artist?.total_plays || artist?.listen_count || artist?.total_listens || artist?.listens || 0)
+}
+
+function artistInitial(artist) {
+  return String(artist?.name || '?').trim().charAt(0).toUpperCase() || '?'
 }
 
 function trendDiff(song) {
@@ -836,6 +1045,21 @@ function formatStatus(status) {
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.dashboard-side-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.top-artists-section {
+  margin-bottom: 16px;
+}
+
+.top-artists-trend-grid {
+  grid-template-columns: minmax(320px, 4fr) minmax(0, 8fr);
 }
 
 .trend-panel {
@@ -1173,6 +1397,125 @@ function formatStatus(status) {
   min-height: 230px;
 }
 
+.top-artists-panel {
+  min-height: 282px;
+}
+
+.top-artists-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.top-artist-row {
+  display: grid;
+  grid-template-columns: 40px 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.top-artist-row:hover {
+  background: #f8fafc;
+  border-color: #d8b4fe;
+  transform: translateY(-1px);
+}
+
+.artist-rank {
+  color: #7c3aed;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.artist-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #eef2ff;
+}
+
+.artist-avatar.fallback {
+  display: grid;
+  place-items: center;
+  color: #6d28d9;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.artist-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.artist-info strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-info span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.artist-plays {
+  display: flex;
+  min-width: 76px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.artist-plays strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.artist-plays span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.top-artists-empty {
+  min-height: 220px;
+}
+
+.top-artists-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.top-artists-skeleton-row {
+  display: grid;
+  grid-template-columns: 40px 44px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.top-artists-skeleton-row span {
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #edf2f7 25%, #f8fafc 37%, #edf2f7 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
 .empty-state svg {
   width: 42px;
   height: 42px;
@@ -1454,6 +1797,8 @@ function formatStatus(status) {
 :global(.dark) .admin-dashboard .ranking-title h3,
 :global(.dark) .admin-dashboard .song-meta strong,
 :global(.dark) .admin-dashboard .listen-count strong,
+:global(.dark) .admin-dashboard .artist-info strong,
+:global(.dark) .admin-dashboard .artist-plays strong,
 :global(.dark) .admin-dashboard .stat-value,
 :global(.dark) .admin-dashboard .user-cell strong {
   color: #111827 !important;
@@ -1468,6 +1813,8 @@ function formatStatus(status) {
 :global(.dark) .admin-dashboard .ranking-title span,
 :global(.dark) .admin-dashboard .song-meta span,
 :global(.dark) .admin-dashboard .listen-count span,
+:global(.dark) .admin-dashboard .artist-info span,
+:global(.dark) .admin-dashboard .artist-plays span,
 :global(.dark) .admin-dashboard .empty-state p {
   color: #64748b !important;
 }
@@ -1482,6 +1829,7 @@ function formatStatus(status) {
 
 :global(.dark) .admin-dashboard .top-three-panel,
 :global(.dark) .admin-dashboard .top-three-row,
+:global(.dark) .admin-dashboard .top-artist-row,
 :global(.dark) .admin-dashboard .range-tabs button.active {
   background: #ffffff !important;
   border-color: #e5eaf3 !important;
@@ -1519,7 +1867,8 @@ function formatStatus(status) {
     grid-template-columns: 1fr;
   }
 
-  .trend-compact-grid {
+  .trend-compact-grid,
+  .top-artists-trend-grid {
     grid-template-columns: 1fr;
     min-height: 0;
   }

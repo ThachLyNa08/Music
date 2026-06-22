@@ -1,27 +1,45 @@
 <template>
   <div class="liked-songs-view user-page-bg">
     <!-- Header Hero Section -->
-    <div class="hero-section user-panel">
-      <div class="hero-cover overflow-hidden">
-        <CoverImage :src="getPlaylistCover({ system_key: 'favorite_songs' })" class="w-full h-full object-cover" />
-      </div>
-      <div class="hero-info">
-        <span class="playlist-type">Playlist</span>
-        <h1 class="playlist-title">Bài Hát Đã Thích</h1>
-        <div class="playlist-meta">
-          <span class="user-name">{{ userDisplayName }}</span>
-          <span class="dot">•</span>
-          <span class="song-count">{{ likedSongs.length }} bài hát</span>
+    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl -mx-8 -mt-8 bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img
+        :src="getPlaylistCover({ system_key: 'favorite_songs' })"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-35 scale-[1.15] blur-[30px] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay with Pinkish Tint -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#ec4899]/20 z-0 pointer-events-none"></div>
+
+      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-8 w-full">
+        <!-- Foreground Cover -->
+        <div class="w-[130px] h-[130px] lg:w-[180px] lg:h-[180px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
+          <CoverImage :src="getPlaylistCover({ system_key: 'favorite_songs' })" class="w-full h-full object-cover" />
         </div>
-        <div class="hero-actions">
-          <PlaybackButton v-if="likedSongs.length > 0" :is-playing="isLikedSongsPlaying" @click="toggleLikedSongsPlayback" />
+        
+        <div class="flex flex-col gap-2 min-w-0 flex-1">
+          <span class="text-sm font-bold uppercase tracking-wider text-white/70">Playlist</span>
+          <h1 class="text-5xl lg:text-[72px] font-black leading-[1.1] text-white tracking-tight mb-1 drop-shadow-lg">Bài Hát Đã Thích</h1>
+          <div class="flex items-center gap-2 text-sm text-white/60 font-semibold mb-3">
+            <span class="text-white font-bold">{{ userDisplayName }}</span>
+            <span>•</span>
+            <span>{{ likedSongs.length }} bài hát</span>
+          </div>
+          
+          <div class="flex items-center gap-4 mt-2">
+            <button v-if="likedSongs.length > 0" class="w-14 h-14 rounded-full bg-[#1ED760] text-black flex items-center justify-center hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.3)] shrink-0" @click="toggleLikedSongsPlayback">
+              <svg v-if="!isLikedSongsPlaying" viewBox="0 0 24 24" width="28" height="28" fill="currentColor" class="ml-1"><path d="M8 5v14l11-7z"/></svg>
+              <svg v-else viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Song List -->
     <div class="song-list-container user-panel-soft">
-      <div class="flex items-center gap-4 px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/10 mb-2">
+      <div class="flex items-center gap-4 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider border-b border-white/10 mb-2">
         <div class="w-8 text-center shrink-0">#</div>
         <div class="flex-1 pr-4">Tiêu đề</div>
         <div class="flex-1 hidden md:block pr-4">Album</div>
@@ -35,10 +53,10 @@
       <div v-else-if="likedSongs.length === 0" class="empty-state">Bạn chưa thích bài hát nào.</div>
       <div v-else class="tracks">
         <SongRow
-          v-for="(song, idx) in likedSongs"
+          v-for="(song, idx) in paginatedSongs"
           :key="song.id || song.title"
           :song="song"
-          :index="idx + 1"
+          :index="(currentPage - 1) * itemsPerPage + idx + 1"
           :showIndex="true"
           :showAlbum="true"
           :showDateAdded="true"
@@ -49,6 +67,16 @@
           @toggle-like="toggleLike"
         />
       </div>
+
+      <div class="mt-8 mb-4">
+        <UserPagination 
+          v-if="likedSongs.length > 0"
+          v-model:page="currentPage" 
+          v-model:limit="itemsPerPage"
+          :total="likedSongs.length" 
+          :showPageSize="true"
+        />
+      </div>
     </div>
 
     <!-- Action Menu -->
@@ -56,7 +84,7 @@
       :show="menuState.show"
       :position="menuState.position"
       :song="menuState.song"
-      :isLiked="menuState.song?.is_liked === 1 || menuState.song?.is_liked === true || menuState.song?.liked"
+      :isLiked="library.isLiked(menuState.song)"
       @close="menuState.show = false"
       @add-to-playlist="handleAddToPlaylist"
       @toggle-like="toggleLike"
@@ -80,6 +108,7 @@ import SongRow from '@/components/common/SongRow.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import PlaybackButton from '@/components/common/PlaybackButton.vue'
+import UserPagination from '@/components/common/UserPagination.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
 
 const router = useRouter()
@@ -90,6 +119,26 @@ const library = useLibraryStore()
 const userDisplayName = computed(() => auth.user?.display_name || 'Người dùng')
 
 const likedSongs = computed(() => library.likedSongs)
+
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const totalPages = computed(() => {
+  return Math.max(1, Math.ceil(likedSongs.value.length / itemsPerPage.value))
+})
+
+const paginatedSongs = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return likedSongs.value.slice(start, end)
+})
+
+function goToPage(page) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
 
 function getSongId(song) {
   return song?.id ?? song?.song_id ?? null
@@ -165,87 +214,6 @@ function handleShare(song) {
   padding: 32px;
   max-width: 1400px;
   margin: 0 auto;
-}
-
-.hero-section {
-  display: flex;
-  align-items: flex-end;
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.hero-cover {
-  width: 232px;
-  height: 232px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 15px 35px rgba(124, 58, 237, 0.3);
-  flex-shrink: 0;
-}
-
-.hero-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.playlist-type {
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.playlist-title {
-  font-size: 72px;
-  font-weight: 900;
-  line-height: 1.1;
-  color: #ffffff;
-  letter-spacing: -2px;
-  margin-bottom: 12px;
-}
-
-.playlist-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
-}
-
-.user-name {
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.play-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #10b981;
-  color: #000000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-.play-btn:hover {
-  transform: scale(1.05);
-  background: #34d399;
-  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.45);
 }
 
 /* List Structure */
@@ -368,4 +336,6 @@ function handleShare(song) {
 .glass-row:hover .add-to-playlist-btn { opacity: 1; transform: translateX(0); }
 .add-to-playlist-btn:hover { background: rgba(124, 58, 237, 0.15); transform: scale(1.1); }
 .add-to-playlist-btn svg { width: 18px; height: 18px; }
+
+
 </style>

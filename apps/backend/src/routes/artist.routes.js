@@ -5,6 +5,8 @@ const artistController = require('../controllers/artist.controller');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth.middleware');
 
 router.get('/', artistController.getAllArtists);
+router.get('/onboarding', artistController.getOnboardingArtists);
+router.get('/popular', artistController.getPopularArtistsGlobally);
 router.get('/:id', optionalAuthenticate, artistController.getArtistById);
 
 // Các route cần auth

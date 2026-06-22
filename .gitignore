@@ -99,3 +99,8 @@ apps/ai-service/cache/
 
 # OS
 Thumbs.db
+
+*.sql
+!database/migrations/*.sql
+!database/schema/*.sql
+!database/seeds/*.sql

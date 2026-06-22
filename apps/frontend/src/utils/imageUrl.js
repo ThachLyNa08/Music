@@ -88,6 +88,8 @@ export function getPlaylistCover(playlist) {
     moodmix: '/uploads/playlist_cover/moodmix.png',
     favorite_songs: '/uploads/playlist_cover/Favorite_Songs.png',
     morning_vibes: '/uploads/playlist_cover/Morning_Vibes.png',
+    afternoon_vibes: '/uploads/playlist_cover/afternoon_vibes.png',
+    evening_vibes: '/uploads/playlist_cover/evening_vibes.png',
     night_vibes: '/uploads/playlist_cover/Night_Vibes.png',
     trending_now: '/uploads/playlist_cover/Trending_Now.png',
     recently_played: '/uploads/playlist_cover/Recently_Played.png'

@@ -1,49 +1,68 @@
 <template>
   <div class="profile-page user-page-bg pb-4 font-inter">
     
-    <!-- Profile Hero -->
-    <header 
-      class="profile-hero relative m-6 user-panel flex flex-col md:flex-row items-center md:items-end gap-6"
-    >
-      <!-- Avatar -->
-      <div 
-        class="avatar-wrap relative w-40 h-40 md:w-56 md:h-56 shrink-0 rounded-full shadow-[0_4px_60px_rgba(0,0,0,0.5)] overflow-hidden bg-white/10 flex items-center justify-center group cursor-pointer"
-        @click="showEditModal = true"
-      >
-        <img 
-          v-if="user?.avatar_url" 
-          :src="localFormatImageUrl(user.avatar_url)" 
-          class="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40" 
-          @error="e => { e.target.onerror = null; e.target.src = '/default-avatar.png' }"
-        />
-        <span v-else class="text-6xl font-bold text-white group-hover:opacity-40">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
-        
-        <!-- Hover Overlay -->
-        <div class="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-          <svg class="w-8 h-8 text-white mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-          <span class="text-sm font-medium text-white shadow-sm">Chọn ảnh</span>
-        </div>
-      </div>
+    <!-- Profile Hero Section -->
+    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Avatar -->
+      <img
+        v-if="user?.avatar_url"
+        :src="localFormatImageUrl(user.avatar_url)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.32] scale-[1.18] blur-[32px] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#8b5cf6]/10 z-0 pointer-events-none"></div>
 
-      <!-- Info -->
-      <div class="profile-info flex-1 flex flex-col items-center md:items-start z-10 text-center md:text-left">
-        <span class="text-sm font-bold uppercase tracking-wider text-white/90 mb-1">Hồ sơ</span>
-        <h1 class="text-5xl md:text-7xl lg:text-[96px] font-black tracking-tighter mb-4 md:mb-6 line-clamp-1">{{ user?.name }}</h1>
-        <div class="flex items-center gap-3 text-sm font-medium text-white/80 flex-wrap justify-center md:justify-start">
-          <span v-if="user?.is_premium" class="px-2.5 py-0.5 bg-[#1ed760] text-black text-xs font-bold uppercase tracking-wide rounded-sm">Premium</span>
-          <span>12.3K Người theo dõi</span>
-          <span class="w-1 h-1 bg-white/50 rounded-full"></span>
-          <button 
-            class="hover:text-[#1ed760] transition-colors cursor-pointer hover:underline"
-            @click="$router.push('/me/followed-artists')"
-          >
-            {{ followedArtistCount }} Đang theo dõi
-          </button>
+      <div class="relative z-10 flex flex-col sm:flex-row items-center sm:items-center gap-6 sm:gap-8 w-full">
+        <!-- Foreground Avatar -->
+        <div 
+          class="relative w-[140px] h-[140px] lg:w-[200px] lg:h-[200px] rounded-full shadow-[0_15px_40px_rgba(0,0,0,0.6)] border-2 border-white/10 flex-shrink-0 overflow-hidden bg-white/5 flex items-center justify-center group cursor-pointer"
+          @click="showEditModal = true"
+        >
+          <img 
+            v-if="user?.avatar_url" 
+            :src="localFormatImageUrl(user.avatar_url)" 
+            class="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40" 
+            @error="e => { e.target.onerror = null; e.target.src = '/default-avatar.png' }"
+          />
+          <span v-else class="text-6xl font-bold text-white group-hover:opacity-40">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
+          
+          <!-- Hover Overlay -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+            <svg class="w-8 h-8 text-white mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            <span class="text-sm font-medium text-white shadow-sm">Chọn ảnh</span>
+          </div>
+        </div>
+        
+        <div class="flex flex-col gap-2 min-w-0 flex-1 text-center sm:text-left">
+          <span class="hidden sm:block text-sm font-bold uppercase tracking-wider text-white/70 mb-1">Hồ sơ</span>
+          <h1 class="text-5xl lg:text-[84px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-2">{{ user?.name }}</h1>
+          
+          <div class="flex items-center justify-center sm:justify-start gap-3 mt-1">
+            <span v-if="user?.is_premium" class="px-2.5 py-0.5 bg-[#1ed760] text-black text-xs font-bold uppercase tracking-wide rounded-sm shadow-lg">Premium</span>
+            <span class="text-white font-bold text-sm">12.3K <span class="text-white/60 font-medium">Người theo dõi</span></span>
+            <span class="w-1 h-1 bg-white/30 rounded-full"></span>
+            <button class="text-white font-bold text-sm hover:text-[#1ed760] transition cursor-pointer" @click="$router.push('/me/followed-artists')">
+              {{ followedArtistCount }} <span class="text-white/60 font-medium">Đang theo dõi</span>
+            </button>
+            <span class="w-1 h-1 bg-white/30 rounded-full mx-1"></span>
+            <button
+              type="button"
+              title="Chỉnh sửa hồ sơ"
+              class="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg ml-1"
+              @click="showEditModal = true"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
-    </header>
+    </section>
 
     <div class="content-wrapper px-6 md:px-8 py-8 relative z-10">
       
@@ -60,16 +79,6 @@
 
       <div v-else class="flex flex-col gap-12">
         
-        <!-- Action Row -->
-        <div class="flex flex-wrap items-center gap-4 mb-4">
-          <button 
-            @click="showEditModal = true" 
-            class="user-secondary-btn"
-          >
-            Chỉnh sửa hồ sơ
-          </button>
-        </div>
-
         <!-- Top Tracks This Month -->
         <section v-if="topTracks.length > 0">
           <div class="flex items-end justify-between mb-4">
@@ -331,8 +340,8 @@ async function loadProfile() {
       stats.value = data.stats || stats.value
       topGenres.value = data.top_genres || []
       topArtists.value = data.top_artists_month || []
-      topTracks.value = data.top_tracks_month || []
-      recentlyPlayed.value = data.recently_played || []
+      topTracks.value = library.applyLikedStateToSongs(data.top_tracks_month || [])
+      recentlyPlayed.value = library.applyLikedStateToSongs(data.recently_played || [])
       publicPlaylists.value = data.public_playlists || []
       followingArtists.value = data.following_artists || []
       followedArtistCount.value = data.followed_artist_count || data.following_artists?.length || 0

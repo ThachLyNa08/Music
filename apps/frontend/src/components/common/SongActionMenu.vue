@@ -12,6 +12,7 @@
     </button>
     
     <button @click="handle('add-to-queue')" class="w-full text-left px-4 py-2.5 rounded-xl hover:bg-white/10 hover:text-white transition">Thêm vào hàng đợi</button>
+    <button v-if="playlistId && canRemove" @click="handle('remove-from-playlist')" class="w-full text-left px-4 py-2.5 rounded-xl hover:bg-white/10 hover:text-red-400 transition">Xóa khỏi danh sách phát</button>
     
     <div class="border-t border-white/10 my-1"></div>
     <button @click="handle('go-to-song')" class="w-full text-left px-4 py-2.5 rounded-xl hover:bg-white/10 hover:text-white transition">Đi tới bài hát</button>
@@ -30,10 +31,12 @@ const props = defineProps({
   show: Boolean,
   position: Object, // { x, y }
   song: Object,
-  isLiked: Boolean
+  isLiked: Boolean,
+  playlistId: [String, Number],
+  canRemove: Boolean
 })
 
-const emit = defineEmits(['close', 'add-to-playlist', 'toggle-like', 'add-to-queue', 'go-to-song', 'go-to-artist', 'go-to-album', 'share'])
+const emit = defineEmits(['close', 'add-to-playlist', 'toggle-like', 'add-to-queue', 'go-to-song', 'go-to-artist', 'go-to-album', 'share', 'remove-from-playlist'])
 const menuRef = ref(null)
 const adjustedPosition = ref({ x: 0, y: 0 })
 const isHovering = ref(false)

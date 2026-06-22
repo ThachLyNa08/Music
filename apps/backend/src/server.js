@@ -4,7 +4,7 @@ const http   = require('http');
 const { Server } = require('socket.io');
 
 const app                    = require('./app');
-const { testConnection }     = require('./config/database');
+const { testConnection, pool }     = require('./config/database');
 const { connectRedis }       = require('./config/redis');
 const { registerSocketEvents } = require('./services/socket.service');
 
@@ -15,6 +15,8 @@ async function bootstrap() {
   await testConnection();
 
   await connectRedis();
+
+  // DB should be initialized
 
   // 2. Tạo HTTP server
   const server = http.createServer(app);
@@ -32,6 +34,10 @@ async function bootstrap() {
 
   // 4. Khởi chạy scheduled jobs (cron)
   require('./services/scheduler.service');
+
+  // Khởi chạy pending poller cho SePay
+  const { startSepayPendingPoller } = require('./services/sepayPoller.service');
+  startSepayPendingPoller(io);
 
   // 5. Lắng nghe
   server.listen(PORT, () => {

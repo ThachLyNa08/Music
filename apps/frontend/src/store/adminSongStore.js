@@ -17,6 +17,7 @@ export const useAdminSongStore = defineStore('adminSong', {
       search: '',
       genreId: '',
       status: '',
+      releaseStatus: '',
       sortBy: 'created_at',
       sortOrder: 'DESC'
     },
@@ -42,12 +43,12 @@ export const useAdminSongStore = defineStore('adminSong', {
     async fetchSongs() {
       this.loading.songs = true;
       try {
-        const { search, genreId, status, sortBy, sortOrder } = this.filters;
+        const { search, genreId, status, releaseStatus, sortBy, sortOrder } = this.filters;
         const params = {
           group: this.selectedGroup,
           page: this.pagination.page,
           limit: this.pagination.limit,
-          search, genreId, status, sortBy, sortOrder
+          search, genreId, status, releaseStatus, sortBy, sortOrder
         };
         const res = await api.get('/admin/songs', { params });
         this.songs = res.data.data || [];
@@ -98,6 +99,7 @@ export const useAdminSongStore = defineStore('adminSong', {
         search: '',
         genreId: '',
         status: '',
+        releaseStatus: '',
         sortBy: 'created_at',
         sortOrder: 'DESC'
       };

@@ -5,6 +5,8 @@ import router from './router'
 import './style.css'
 
 const app = createApp(App)
+import MfIcon from '@/components/common/MfIcon.vue'
+app.component('MfIcon', MfIcon)
 import { formatImageUrl } from './utils/formatters'
 app.config.globalProperties.$formatImageUrl = formatImageUrl
 

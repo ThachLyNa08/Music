@@ -20,7 +20,7 @@ async function getFallbackSongs(userId, limit = 20) {
     const remaining = limit - songs.length;
     const [popularSongs] = await pool.query(`
       SELECT id as song_id FROM songs 
-      ORDER BY listen_count DESC LIMIT ?
+      ORDER BY play_count DESC LIMIT ?
     `, [remaining]);
     
     popularSongs.forEach(s => {
@@ -37,7 +37,7 @@ async function getHistoryBasedSongs(userId, limit = 20, dayOfWeek = null) {
   // If dayOfWeek is provided, we could filter listening history by DAYOFWEEK(listened_at)
   // For simplicity and assuming listening_history table exists with song_id and listened_at
   let query = `
-    SELECT song_id, COUNT(*) as play_count 
+    SELECT song_id, COUNT(*) as history_plays
     FROM listening_history 
     WHERE user_id = ?
   `;
@@ -49,7 +49,7 @@ async function getHistoryBasedSongs(userId, limit = 20, dayOfWeek = null) {
     queryParams.push(dayOfWeek);
   }
 
-  query += ` GROUP BY song_id ORDER BY play_count DESC, MAX(listened_at) DESC LIMIT ?`;
+  query += ` GROUP BY song_id ORDER BY history_plays DESC, MAX(listened_at) DESC LIMIT ?`;
   queryParams.push(limit);
 
   try {

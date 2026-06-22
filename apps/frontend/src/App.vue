@@ -9,26 +9,33 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useNotificationStore } from '@/stores/notification'
 import { usePlayerStore } from '@/stores/player'
+import { useLibraryStore } from '@/stores/library'
 import GlobalToast from '@/components/common/GlobalToast.vue'
 
 const auth  = useAuthStore()
 const theme = useThemeStore()
 const notification = useNotificationStore()
 const player = usePlayerStore()
+const library = useLibraryStore()
 
 watch(() => auth.user, (newUser) => {
   if (newUser) {
     notification.fetchNotifications()
     notification.initSocket(newUser.id)
+    library.fetchLikedSongs(true)
   } else {
     notification.disconnectSocket()
+    library.clearLikedState()
   }
-})
+}, { immediate: true })
 
 onMounted(async () => {
   theme.applyTheme()
-  if (auth.isLoggedIn) {
+  if (auth.isLoggedIn && !auth.user) {
     await auth.fetchMe()
+  }
+  if (auth.isLoggedIn) {
+    await library.fetchLikedSongs()
   }
   player.restorePlayerSession(auth.user?.id)
 })

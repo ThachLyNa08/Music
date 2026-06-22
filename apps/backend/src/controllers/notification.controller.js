@@ -10,7 +10,7 @@ exports.getNotifications = async (req, res) => {
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('getNotifications error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -24,7 +24,7 @@ exports.getUnreadCount = async (req, res) => {
     res.json({ success: true, count: rows[0].count });
   } catch (error) {
     console.error('getUnreadCount error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -47,6 +47,20 @@ exports.markAsRead = async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('markAsRead error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server' });
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await pool.query(
+      'UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE',
+      [userId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('markAllAsRead error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

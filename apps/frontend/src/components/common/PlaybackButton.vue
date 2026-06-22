@@ -52,10 +52,10 @@ const sizeClass = computed(() => {
   flex-shrink: 0;
   border: 0;
   border-radius: 9999px;
-  background: #10b981;
+  background: #1ED760;
   color: #000000;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 20px rgba(30, 215, 96, 0.3);
   transition:
     background-color 160ms ease,
     box-shadow 160ms ease,
@@ -64,8 +64,8 @@ const sizeClass = computed(() => {
 }
 
 .playback-button:hover:not(:disabled) {
-  background: #34d399;
-  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.45);
+  background: #1FDF64;
+  box-shadow: 0 10px 25px rgba(30, 215, 96, 0.45);
   transform: scale(1.05);
 }
 
@@ -85,7 +85,7 @@ const sizeClass = computed(() => {
 }
 
 .playback-button--subtle {
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.24);
+  box-shadow: 0 6px 16px rgba(30, 215, 96, 0.24);
 }
 
 .playback-button--disabled {

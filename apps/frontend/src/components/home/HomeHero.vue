@@ -1,7 +1,16 @@
 <template>
   <section class="home-hero">
-    <div class="hero-glow hero-glow-1"></div>
-    <div class="hero-glow hero-glow-2"></div>
+    <img
+      class="home-hero-bg-img"
+      :src="normalizeAssetUrl('/uploads/playlist_cover/home.png')"
+      alt="Home Background"
+      loading="eager"
+      decoding="async"
+      fetchpriority="high"
+    />
+
+    <div class="home-hero-video-overlay"></div>
+    <div class="home-hero-dark-vignette"></div>
 
     <div class="hero-content">
       <div class="hero-text-side">
@@ -23,11 +32,6 @@
             <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><polygon points="5 3 19 12 5 21 5 3" /></svg>
             <span>Phát ngay</span>
           </button>
-
-          <button class="btn-secondary home-secondary-btn" @click="$emit('explore')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            <span>Khám phá</span>
-          </button>
         </div>
       </div>
       
@@ -37,6 +41,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { normalizeAssetUrl } from '@/utils/imageUrl'
 
 const props = defineProps({
   displayName: {
@@ -76,51 +81,59 @@ const greetingSubtitle = computed(() => {
 .home-hero {
   position: relative;
   width: 100%;
-  min-height: 280px;
-  max-height: 320px;
-  border-radius: 28px;
-  padding: 34px 52px;
+  min-height: 380px;
+  padding: 40px 52px;
   overflow: hidden;
   isolation: isolate;
   display: flex;
   align-items: center;
-  background:
-    radial-gradient(circle at 82% 20%, rgba(168, 85, 247, 0.28), transparent 32%),
-    radial-gradient(circle at 12% 85%, rgba(59, 130, 246, 0.12), transparent 28%),
-    linear-gradient(135deg, rgba(76,29,149,0.48), rgba(30,27,75,0.56), rgba(15,23,42,0.9));
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    0 24px 80px rgba(0,0,0,0.20);
+  background: #0b0b0f;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.30);
 }
 
-.hero-glow {
+.home-hero-bg-img {
   position: absolute;
-  border-radius: 999px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   pointer-events: none;
-  filter: blur(36px);
+  z-index: 0;
+}
+
+.home-hero-video-overlay {
+  position: absolute;
+  inset: 0;
   z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 8, 18, 0.92) 0%,
+      rgba(15, 12, 36, 0.82) 28%,
+      rgba(20, 16, 50, 0.48) 58%,
+      rgba(10, 10, 20, 0.18) 100%
+    );
 }
 
-.hero-glow-1 {
-  width: 240px;
-  height: 240px;
-  right: 10%;
-  top: -80px;
-  background: rgba(168, 85, 247, 0.32);
-}
-
-.hero-glow-2 {
-  width: 180px;
-  height: 180px;
-  left: 8%;
-  bottom: -90px;
-  background: rgba(30, 215, 96, 0.12);
+.home-hero-dark-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(5, 5, 12, 0.28) 0%,
+      rgba(5, 5, 12, 0.08) 45%,
+      rgba(5, 5, 12, 0.42) 100%
+    );
 }
 
 .hero-content {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   width: 100%;
   max-width: 860px;
 }
@@ -200,8 +213,7 @@ const greetingSubtitle = computed(() => {
 
 @media (max-height: 780px) {
   .home-hero {
-    min-height: 250px;
-    max-height: 290px;
+    min-height: 320px;
     padding: 30px 48px;
   }
 
@@ -223,10 +235,18 @@ const greetingSubtitle = computed(() => {
 
 @media (max-width: 768px) {
   .home-hero {
-    min-height: 260px;
-    max-height: none;
+    min-height: 420px;
     padding: 28px;
-    border-radius: 22px;
+  }
+
+  .home-hero-video-overlay {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(8, 8, 18, 0.95) 0%,
+        rgba(15, 12, 36, 0.82) 55%,
+        rgba(10, 10, 20, 0.35) 100%
+      );
   }
 
   .hero-title {

@@ -6,13 +6,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node scripts/migrate.js",
+    "migrate": "node scripts/migrations/migrate.js",
     "sync": "node test_db.js",
-    "migrate-region": "node scripts/migrate_artist_region.js",
-    "migrate-premium": "node scripts/migrate.js",
+    "migrate-region": "node scripts/migrations/migrate_artist_region.js",
+    "migrate-premium": "node scripts/migrations/migrate.js",
     "migrate-market": "node migrations/add_market_to_songs.js"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "axios": "^1.16.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

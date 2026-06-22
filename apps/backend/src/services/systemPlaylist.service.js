@@ -45,19 +45,31 @@ const PERSONALIZED_SYSTEM_PLAYLISTS = [
     system_key: 'morning_vibes',
     name: 'Morning Vibes',
     coverBaseName: 'Morning_Vibes',
-    description: 'Nang luong nhe nhang cho buoi sang'
+    description: 'Những gợi ý phù hợp để khởi động ngày mới.'
+  },
+  {
+    system_key: 'afternoon_vibes',
+    name: 'Afternoon Vibes',
+    coverBaseName: 'afternoon_vibes',
+    description: 'Những bài hát có năng lượng phù hợp cho buổi chiều.'
+  },
+  {
+    system_key: 'evening_vibes',
+    name: 'Evening Vibes',
+    coverBaseName: 'evening_vibes',
+    description: 'Những gợi ý nhẹ nhàng cho khoảng thời gian cuối ngày.'
   },
   {
     system_key: 'night_vibes',
     name: 'Night Vibes',
     coverBaseName: 'Night_Vibes',
-    description: 'Thu gian cung am nhac buoi toi'
+    description: 'Những bài hát phù hợp để thư giãn về đêm.'
   },
   {
     system_key: 'moodmix',
     name: 'Mood Mix',
     coverBaseName: 'moodmix',
-    description: 'Am nhac phu hop voi tam trang cua ban'
+    description: 'Âm nhạc phù hợp với tâm trạng của bạn'
   },
   {
     system_key: 'favorite_songs',
@@ -70,6 +82,12 @@ const PERSONALIZED_SYSTEM_PLAYLISTS = [
     name: 'Recently Played',
     coverBaseName: 'Recently_Played',
     description: 'Tiep tuc nghe nhung gi ban vua phat'
+  },
+  {
+    system_key: 'top_tracks',
+    name: 'Top Tracks',
+    coverBaseName: 'top_tracks',
+    description: 'Nhung bai hat ban nghe nhieu nhat'
   }
 ];
 
@@ -92,6 +110,7 @@ const GLOBAL_SYSTEM_PLAYLISTS = [
 ];
 
 const MADE_FOR_YOU_ORDER = [
+  'weekly_mix',
   'dailymix_01',
   'dailymix_02',
   'dailymix_03',
@@ -103,11 +122,14 @@ const MADE_FOR_YOU_ORDER = [
 
 const RECOMMENDED_TODAY_ORDER = [
   'morning_vibes',
+  'afternoon_vibes',
+  'evening_vibes',
   'night_vibes',
   'moodmix',
   'favorite_songs',
+  'trending_now',
   'recently_played',
-  'trending_now'
+  'top_tracks'
 ];
 
 const ALL_SYSTEM_PLAYLISTS = [

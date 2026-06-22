@@ -55,7 +55,40 @@ async function ensureArtistAvatar(artistId) {
       return artist.avatar_url;
     }
 
-    console.log(`[ArtistImage] Bắt đầu tìm ảnh đại diện cho nghệ sĩ "${artist.name}" (ID: ${artist.id})...`);
+    // 1.5 Tìm ảnh có sẵn trong hệ thống trước (hỗ trợ nhiều định dạng)
+    const uploadDir = path.join(process.cwd(), 'uploads', 'img', 'artists');
+    if (fs.existsSync(uploadDir)) {
+      const artistSlug = slugify(artist.name) || 'artist';
+      const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif'];
+      let localFileFound = null;
+
+      // Các mẫu tên file có thể tồn tại trong thư mục
+      const possibleNames = [];
+      for (const ext of extensions) {
+        possibleNames.push(`${artistSlug}-${artist.id}${ext}`);
+        possibleNames.push(`${artistSlug}${ext}`);
+        possibleNames.push(`${artist.id}${ext}`);
+      }
+
+      for (const pName of possibleNames) {
+        if (fs.existsSync(path.join(uploadDir, pName))) {
+          localFileFound = pName;
+          break;
+        }
+      }
+
+      if (localFileFound) {
+        const dbAvatarPath = `/uploads/img/artists/${localFileFound}`;
+        await pool.query(
+          `UPDATE artists SET avatar_url = ?, avatar_source = 'local' WHERE id = ?`,
+          [dbAvatarPath, artist.id]
+        );
+        console.log(`[ArtistImage] Đã dò thấy ảnh cục bộ có sẵn cho "${artist.name}": ${dbAvatarPath}`);
+        return dbAvatarPath;
+      }
+    }
+
+    console.log(`[ArtistImage] Bắt đầu tìm ảnh đại diện trên Spotify cho nghệ sĩ "${artist.name}" (ID: ${artist.id})...`);
 
     // 2. Lấy Access Token từ Spotify
     const token = await spotifyService.getAccessToken();
@@ -113,7 +146,6 @@ async function ensureArtistAvatar(artistId) {
     }
 
     // 5. Tải ảnh thật về thư mục uploads/img/artists/
-    const uploadDir = path.join(process.cwd(), 'uploads', 'img', 'artists');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }

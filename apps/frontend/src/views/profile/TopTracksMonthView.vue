@@ -1,17 +1,52 @@
 <template>
   <div class="top-tracks-page user-page-bg">
-    <header class="top-tracks-hero user-panel">
-      <div class="hero-cover overflow-hidden">
-        <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.topTracks)" alt="Top Tracks" class="w-full h-full object-cover" />
-      </div>
-      <div class="hero-info">
-        <p class="hero-label">Hồ sơ</p>
-        <h1>Bản nhạc hàng đầu</h1>
-        <p class="hero-subtitle">Dựa trên lịch sử nghe nhạc của bạn từ đầu tháng đến nay</p>
-      </div>
-    </header>
+    <!-- Header Hero Section -->
+    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img 
+        :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.topTracks)"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.38] scale-[1.18] blur-[34px] saturate-[1.15] pointer-events-none"
+      />
+      <!-- Dark Overlay -->
+      <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,11,20,0.88),rgba(9,11,20,0.68),rgba(9,11,20,0.95))] z-0 pointer-events-none"></div>
+      <!-- Tint Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-transparent to-indigo-500/10 z-0 pointer-events-none"></div>
 
-    <main class="top-tracks-content user-panel-soft">
+      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+        <!-- Foreground Cover -->
+        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden bg-white/5">
+          <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.topTracks)" alt="Top Tracks" class="w-full h-full object-cover" />
+        </div>
+
+        <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
+          <div class="hidden lg:flex items-center gap-2 mb-0.5 w-max text-xs font-bold uppercase tracking-wider text-white/70">
+            <span class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-md font-black uppercase tracking-widest border border-indigo-500/30">HỒ SƠ</span>
+          </div>
+
+          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">Bản nhạc hàng đầu</h1>
+          
+          <p class="text-gray-300 font-medium text-sm lg:text-base mt-1 line-clamp-2 max-w-3xl">
+            Dựa trên lịch sử nghe nhạc của bạn
+          </p>
+
+          <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4 mt-4">
+            <span class="text-sm md:text-base font-semibold text-gray-300 flex items-center">
+              {{ tracks.length }} bài hát 
+              <span class="w-1 h-1 bg-white/30 rounded-full mx-2"></span>
+              Cập nhật theo lượt nghe gần đây
+            </span>
+            <select v-model="timeRange" @change="handleTimeRangeChange" class="bg-indigo-500/10 backdrop-blur-md border border-indigo-500/30 text-indigo-300 font-bold px-4 py-2 rounded-full hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-105 transition-all shadow-lg cursor-pointer appearance-none outline-none w-max text-sm">
+              <option value="this_month" class="bg-zinc-800 text-white">Tháng này</option>
+              <option value="last_30_days" class="bg-zinc-800 text-white">30 ngày qua</option>
+              <option value="all_time" class="bg-zinc-800 text-white">Tất cả thời gian</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="top-tracks-content user-panel-soft px-6 md:px-10 mt-8">
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
       </div>
@@ -30,7 +65,7 @@
           <div class="track-index-header">#</div>
           <div>Tiêu đề</div>
           <div class="album-header">Album</div>
-          <div class="listens-header">Lượt nghe</div>
+          <div class="listens-header">Lượt nghe của bạn</div>
           <div class="duration-header">
             <!-- Removed duration clock icon -->
           </div>
@@ -83,28 +118,29 @@
             </div>
 
             <div class="track-listens">
-              {{ formatNumber(song.listen_count || song.play_count || song.plays || 0) }}
+              {{ formatNumber(song.user_plays ?? song.listen_count ?? song.listens ?? 0) }}
             </div>
 
             <div class="track-actions">
-              <button
-                type="button"
-                class="like-button"
-                :class="{ liked: isLiked(song) }"
-                aria-label="Toggle liked"
-                @click.stop="toggleLike(song)"
+              <LikeButton
+                :song="song"
+                baseClass="like-button"
+                activeClass="liked"
+                inactiveClass=""
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  :fill="isLiked(song) ? 'currentColor' : 'none'"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-                </svg>
-              </button>
+                <template #icon="{ isLiked }">
+                  <svg
+                    viewBox="0 0 24 24"
+                    :fill="isLiked ? 'currentColor' : 'none'"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+                  </svg>
+                </template>
+              </LikeButton>
               <span class="duration">{{ formatDuration(song.duration_sec ?? song.duration_seconds ?? song.duration_ms ?? song.duration) }}</span>
               <button
                 type="button"
@@ -138,22 +174,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 import api from '@/api/axios'
 import CoverImage from '@/components/common/CoverImage.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
+import LikeButton from '@/components/common/LikeButton.vue'
 import { DEFAULT_SPECIAL_COVERS, normalizeAssetUrl, getItemCover } from '@/utils/imageUrl'
 
 const router = useRouter()
+const route = useRoute()
 const playerStore = usePlayerStore()
 const library = useLibraryStore()
 
 const loading = ref(true)
 const error = ref('')
 const tracks = ref([])
+const timeRange = ref(route.query.time_range || 'this_month')
+
+function handleTimeRangeChange() {
+  router.replace({ query: { ...route.query, time_range: timeRange.value } })
+  loadData()
+}
 
 function getSongId(song) {
   return song?.song_id || song?.id
@@ -201,9 +245,9 @@ async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const res = await api.get('/users/me/profile')
+    const res = await api.get(`/users/me/profile?time_range=${timeRange.value}`)
     if (res.data.success) {
-      tracks.value = res.data.data.top_tracks_month || []
+      tracks.value = library.applyLikedStateToSongs(res.data.data.top_tracks_month || [])
     } else {
       error.value = res.data.message || 'Lỗi khi tải dữ liệu'
     }
@@ -267,61 +311,10 @@ function handleShare(song) {
   width: 100%;
   min-width: 0;
   min-height: 100vh;
-  padding: 64px 32px 140px;
+  padding-bottom: 140px;
   overflow-x: hidden;
   color: #ffffff;
-}
-
-.top-tracks-hero {
-  display: flex;
-  align-items: flex-end;
-  gap: 24px;
-  margin-bottom: 40px;
-}
-
-.hero-cover {
-  width: 192px;
-  height: 192px;
-  border-radius: 8px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #6366f1, #581c87);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
-}
-
-.hero-icon {
-  width: 96px;
-  height: 96px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.hero-info {
-  min-width: 0;
-}
-
-.hero-label {
-  margin: 0 0 8px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.hero-info h1 {
-  margin: 0 0 16px;
-  color: #ffffff;
-  font-size: clamp(44px, 6vw, 76px);
-  font-weight: 900;
-  line-height: 1;
-}
-
-.hero-subtitle {
-  margin: 0;
-  color: #b3b3b3;
-  font-size: 14px;
-  font-weight: 500;
+  font-family: 'Inter', sans-serif;
 }
 
 .top-tracks-content,
@@ -332,7 +325,7 @@ function handleShare(song) {
 
 .top-tracks-table-row {
   display: grid;
-  grid-template-columns: 48px minmax(280px, 1.8fr) minmax(220px, 1fr) 120px 96px;
+  grid-template-columns: 48px minmax(280px, 1.8fr) minmax(220px, 1fr) 160px 96px;
   align-items: center;
   column-gap: 16px;
 }
@@ -341,10 +334,14 @@ function handleShare(song) {
   height: 40px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #b3b3b3;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.listens-header {
+  white-space: nowrap;
 }
 
 .duration-header {
@@ -589,28 +586,14 @@ function handleShare(song) {
 
 @media (max-width: 1100px) {
   .top-tracks-table-row {
-    grid-template-columns: 44px minmax(240px, 1.7fr) minmax(180px, 1fr) 100px 84px;
+    grid-template-columns: 44px minmax(240px, 1.7fr) minmax(180px, 1fr) 140px 84px;
     column-gap: 12px;
   }
 }
 
 @media (max-width: 900px) {
   .top-tracks-page {
-    padding: 48px 20px 140px;
-  }
-
-  .top-tracks-hero {
-    align-items: center;
-  }
-
-  .hero-cover {
-    width: 132px;
-    height: 132px;
-  }
-
-  .hero-icon {
-    width: 64px;
-    height: 64px;
+    padding-bottom: 140px;
   }
 
   .top-tracks-table-row {
@@ -627,17 +610,7 @@ function handleShare(song) {
 
 @media (max-width: 640px) {
   .top-tracks-page {
-    padding: 32px 14px 140px;
-  }
-
-  .top-tracks-hero {
-    flex-direction: column;
-    align-items: flex-start;
-    margin-bottom: 28px;
-  }
-
-  .hero-info h1 {
-    font-size: 42px;
+    padding-bottom: 140px;
   }
 
   .top-tracks-table-header,

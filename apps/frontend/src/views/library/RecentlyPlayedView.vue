@@ -1,18 +1,46 @@
 <template>
   <div class="recently-played-page user-page-bg pb-4">
     <!-- Header Hero Section -->
-    <div class="hero-section user-panel mx-6 mt-6 flex items-end gap-6 mb-8">
-      <div class="w-56 h-56 rounded-[20px] overflow-hidden flex items-center justify-center shadow-[0_15px_35px_rgba(124,58,237,0.3)] shrink-0">
-        <CoverImage :src="getPlaylistCover({ system_key: 'recently_played' })" class="w-full h-full object-cover" />
-      </div>
-      <div class="flex flex-col gap-2">
-        <span class="text-sm font-bold uppercase tracking-wider text-white/70">Playlist</span>
-        <h1 class="text-6xl md:text-7xl font-black text-white m-0 tracking-tighter leading-none mb-3">Nghe Gần Đây</h1>
-        <div class="flex items-center gap-2 text-sm text-white/50 font-medium">
-          <span class="font-bold text-white">{{ auth.user?.display_name || 'Người dùng' }}</span>
+    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <!-- Blurred Background Cover -->
+      <img
+        :src="getPlaylistCover({ system_key: 'recently_played' })"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover z-0 opacity-35 scale-[1.15] blur-[30px] pointer-events-none"
+        @error="event => event.target.style.display = 'none'"
+      />
+      <!-- Dark Overlay with Blueish Tint -->
+      <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#3b82f6]/20 z-0 pointer-events-none"></div>
+
+      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-8 w-full">
+        <!-- Foreground Cover -->
+        <div class="w-[130px] h-[130px] lg:w-[180px] lg:h-[180px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
+          <CoverImage :src="getPlaylistCover({ system_key: 'recently_played' })" class="w-full h-full object-cover" />
+        </div>
+        
+        <div class="flex flex-col gap-2 min-w-0 flex-1">
+          <span class="text-sm font-bold uppercase tracking-wider text-white/70">Playlist</span>
+          <h1 class="text-5xl lg:text-[72px] font-black leading-[1.1] text-white tracking-tight mb-1 drop-shadow-lg">Nghe Gần Đây</h1>
+          <div class="flex items-center gap-2 text-sm text-white/60 font-semibold mb-3">
+            <span class="text-white font-bold">{{ auth.user?.display_name || 'Người dùng' }}</span>
+          </div>
+          
+          <div class="flex items-center gap-3 mt-2">
+            <span class="text-sm font-semibold text-white/70 uppercase tracking-wide">Thời gian:</span>
+            <div class="relative group">
+              <select v-model="timeRange" @change="fetchRecentlyPlayed" class="bg-white/10 backdrop-blur-lg text-white text-sm font-bold py-2 pl-5 pr-10 rounded-full border border-white/10 outline-none group-hover:bg-white/20 group-hover:border-white/30 transition-all cursor-pointer appearance-none shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+                <option value="all_time" class="bg-[#1e293b]">Tất cả thời gian</option>
+                <option value="last_30_days" class="bg-[#1e293b]">30 ngày qua</option>
+                <option value="this_month" class="bg-[#1e293b]">Tháng này</option>
+              </select>
+              <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/60 group-hover:text-white transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
     <div class="content user-panel-soft mx-6">
       <!-- Loading Skeleton -->
@@ -77,7 +105,7 @@
           <!-- Song List for Group -->
           <div v-show="group.expanded" class="mt-4">
             <!-- Table Header -->
-            <div class="flex items-center gap-4 px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/10 mb-2 mt-4">
+            <div class="flex items-center gap-4 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider border-b border-white/10 mb-2 mt-4">
               <div class="w-8 text-center shrink-0">#</div>
               <div class="flex-1 pr-4">Tiêu đề</div>
               <div class="flex-1 hidden md:block pr-4">Album</div>
@@ -144,6 +172,7 @@ const auth = useAuthStore()
 const rawHistory = ref([])
 const loading = ref(true)
 const error = ref('')
+const timeRange = ref('all_time')
 
 const localFormatImageUrl = (url) => {
   if (!url) return '/default-cover.png'
@@ -215,9 +244,10 @@ async function fetchRecentlyPlayed() {
   loading.value = true
   error.value = ''
   try {
-    const res = await api.get('/users/me/recently-played?limit=100')
+    // Gọi API kèm theo time_range
+    const res = await api.get(`/users/me/recently-played?limit=500&time_range=${timeRange.value}`)
     if (res.data.success) {
-      rawHistory.value = res.data.data
+      rawHistory.value = library.applyLikedStateToSongs(res.data.data || [])
     } else {
       error.value = res.data.message || 'Có lỗi xảy ra'
     }

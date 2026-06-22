@@ -55,9 +55,18 @@
       </span>
     </div>
     
-    <!-- Date Added -->
+    <!-- Date Added / Playlist detail system album column -->
     <div v-if="showDateAdded && !compact" class="flex-1 text-sm text-gray-400 truncate hidden md:block pr-4">
-      {{ formatDate(normalizedSong.dateAdded) }}
+      <span
+        v-if="dateColumnMode === 'album'"
+        class="block truncate hover:text-white hover:underline transition"
+        @click.stop="normalizedSong.album_id && $router.push(`/album/${normalizedSong.album_id}`)"
+      >
+        {{ normalizedSong.playlistAlbum }}
+      </span>
+      <template v-else>
+        {{ formatDate(normalizedSong.dateAdded) }}
+      </template>
     </div>
 
     <!-- Time Ago -->
@@ -78,7 +87,6 @@
         baseClass="song-like-button"
         activeClass="song-like-button--active"
         inactiveClass="text-gray-400 hover:text-white"
-        @toggle-like="$emit('toggle-like', $event)"
       />
 
       <!-- Action Menu Button -->
@@ -103,6 +111,7 @@ const props = defineProps({
   showCover: { type: Boolean, default: true },
   showAlbum: { type: Boolean, default: false },
   showDateAdded: { type: Boolean, default: false },
+  dateColumnMode: { type: String, default: 'date' },
   showTimeAgo: { type: Boolean, default: false },
   showPlays: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
@@ -124,11 +133,12 @@ const normalizedSong = computed(() => {
     artist_id: s.artist_id,
     cover: s.cover_url || s.image_url || s.thumbnail || s.cover,
     duration: s.duration_sec || s.duration || 0,
-    album: s.album_title || s.album || 'Single',
+    album: s.album_title || s.album || s.album_name || s.albumTitle || 'Single',
+    playlistAlbum: s.album_title || s.album || s.album_name || s.albumTitle || '—',
     album_id: s.album_id,
     dateAdded: s.dateAdded || s.created_at || s.added_at,
     timeAgo: s.timeAgo || '',
-    is_liked: isSongLiked(s),
+    is_liked: library.isSongLiked(s) ? 1 : 0,
     plays: s.play_count || s.listen_count || s.plays || 0
   }
 })
@@ -167,26 +177,6 @@ function openMenu(event) {
   })
 }
 
-function isSongLiked(song) {
-  const id = song?.id ?? song?.song_id ?? song?.songId ?? null
-  return Boolean(
-    song?.is_liked === true ||
-    song?.is_liked === 1 ||
-    song?.isLiked === true ||
-    song?.isLiked === 1 ||
-    song?.liked === true ||
-    song?.liked === 1 ||
-    song?.is_favorite === true ||
-    song?.is_favorite === 1 ||
-    song?.isFavorite === true ||
-    song?.isFavorite === 1 ||
-    (id !== null && id !== undefined && library.likedSongIds?.has?.(String(id)))
-  )
-}
-
-function toggleSongLike() {
-  emit('toggle-like', props.song)
-}
 </script>
 
 <style scoped>

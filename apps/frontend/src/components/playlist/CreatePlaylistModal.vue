@@ -1,78 +1,101 @@
 <template>
-  <div class="modal-backdrop" @click.self="$emit('close')">
-    <div class="modal-glass">
-      <h2>Danh sách phát mới</h2>
-      <form @submit.prevent="handleCreate">
-        
-        <div class="input-line">
-          <input 
-            v-model="form.name" 
-            type="text" 
-            required 
-            placeholder="Tiêu đề" 
-            class="line-input title-input" 
-          />
-        </div>
-        
-        <div class="input-line">
-          <input 
-            v-model="form.description" 
-            type="text" 
-            placeholder="Thông tin mô tả" 
-            class="line-input desc-input" 
-          />
-        </div>
-
-        <div class="privacy-section">
-          <label>Quyền riêng tư</label>
-          <div class="privacy-dropdown-container">
-            <svg class="globe-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+  <Teleport to="body">
+    <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md px-4" @click.self="$emit('close')">
+      <div class="w-full max-w-[720px] rounded-3xl border border-white/10 bg-[#181818] p-6 shadow-2xl flex flex-col">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-white m-0">Danh sách phát mới</h2>
+          <button @click="$emit('close')" class="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="Đóng">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <select v-model="form.is_public" class="privacy-select">
-              <option :value="true">Công khai</option>
-              <option :value="false">Riêng tư</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="toggle-section">
-          <label>Cộng tác</label>
-          <label class="switch">
-            <input type="checkbox" v-model="form.is_collaborative">
-            <span class="slider round"></span>
-          </label>
-        </div>
-
-        <div class="cover-section" @click="$refs.coverInput.click()">
-          <input type="file" ref="coverInput" accept="image/*" @change="handleFile" hidden />
-          <div class="cover-box" :class="{ 'has-file': form.coverFile }">
-            <span v-if="!form.coverFile">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" style="margin-right: 8px; vertical-align: middle;">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-              </svg>
-              Thêm ảnh bìa (Tùy chọn)
-            </span>
-            <span v-else class="file-selected">🖼️ {{ form.coverFile.name }}</span>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" @click="$emit('close')">Hủy</button>
-          <button type="submit" class="btn-submit" :disabled="creating">
-            {{ creating ? 'Đang tạo...' : 'Tạo' }}
           </button>
         </div>
-      </form>
+
+        <form @submit.prevent="handleCreate" class="flex flex-col gap-6">
+          <!-- Body -->
+          <div class="flex flex-col md:flex-row gap-6">
+            <!-- Cover -->
+            <div 
+              class="w-full md:w-[240px] h-[240px] shrink-0 bg-[#282828] rounded-xl flex items-center justify-center cursor-pointer group relative overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-transparent hover:border-white/20 transition-all"
+              @click="$refs.coverInput.click()"
+            >
+              <input type="file" ref="coverInput" accept="image/*" @change="handleFile" hidden />
+              
+              <!-- Preview -->
+              <img v-if="previewUrl" :src="previewUrl" class="w-full h-full object-cover absolute inset-0 z-0" />
+              
+              <!-- Empty state -->
+              <div v-if="!previewUrl" class="flex flex-col items-center gap-4 text-gray-400 group-hover:text-white z-10 transition-colors">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="w-16 h-16 opacity-50 group-hover:opacity-100 transition-opacity">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+                <span class="font-medium text-sm">Thêm ảnh bìa</span>
+              </div>
+              
+              <!-- Hover Overlay for preview -->
+              <div v-if="previewUrl" class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white z-10">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-10 h-10 mb-2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span class="font-medium text-sm">Đổi ảnh</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div class="flex-1 flex flex-col gap-4">
+              <input 
+                ref="nameInput"
+                v-model="form.name" 
+                type="text" 
+                required 
+                placeholder="Tên danh sách phát" 
+                class="w-full bg-[#2a2a2a] text-white text-sm font-semibold px-4 py-3 rounded-md outline-none focus:border-white/30 border border-transparent placeholder-gray-400 transition-colors"
+              />
+              <textarea 
+                v-model="form.description" 
+                placeholder="Thêm mô tả tùy chọn" 
+                class="w-full bg-[#2a2a2a] text-white text-sm px-4 py-3 rounded-md outline-none focus:border-white/30 border border-transparent placeholder-gray-400 resize-none flex-1 min-h-[120px] transition-colors"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Footer Options -->
+          <div class="flex flex-col md:flex-row items-center justify-between gap-4 pt-4 border-t border-white/10">
+            <div class="flex items-center gap-4 w-full md:w-auto">
+              <!-- Privacy Pill -->
+              <button type="button" @click="form.is_public = !form.is_public" class="flex items-center justify-center gap-2 px-3 py-1.5 w-[115px] rounded-full bg-[#2a2a2a] hover:bg-[#333] border border-white/10 text-xs font-semibold text-white transition-colors" :title="form.is_public ? 'Chuyển sang riêng tư' : 'Chuyển sang công khai'">
+                <svg v-if="form.is_public" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 shrink-0">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 shrink-0">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0110 0v4"></path>
+                </svg>
+                <span class="whitespace-nowrap">{{ form.is_public ? 'Công khai' : 'Riêng tư' }}</span>
+              </button>
+
+
+            </div>
+
+            <!-- Note & Submit -->
+            <div class="flex items-center gap-4 ml-auto w-full md:w-auto justify-end">
+              <span v-if="form.coverFile" class="text-[11px] text-gray-500 hidden md:inline">Hãy đảm bảo bạn có quyền sử dụng ảnh.</span>
+              <button type="button" class="text-sm font-bold text-gray-400 hover:text-white hover:scale-105 transition-transform px-4 py-2" @click="$emit('close')">Hủy</button>
+              <button type="submit" class="text-sm font-bold bg-[#1ed760] text-black px-6 py-2 rounded-full hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100" :disabled="creating || !form.name.trim()">
+                {{ creating ? 'Đang tạo...' : 'Tạo' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   creating: Boolean
@@ -81,6 +104,8 @@ const props = defineProps({
 const emit = defineEmits(['close', 'create'])
 
 const coverInput = ref(null)
+const nameInput = ref(null)
+const previewUrl = ref(null)
 
 const form = reactive({
   name: '',
@@ -92,226 +117,41 @@ const form = reactive({
 
 function handleFile(e) {
   if (e.target.files && e.target.files.length > 0) {
-    form.coverFile = e.target.files[0]
+    const file = e.target.files[0]
+    form.coverFile = file
+    previewUrl.value = URL.createObjectURL(file)
   }
 }
 
 function handleCreate() {
-  if (!form.name) return
+  if (!form.name.trim()) return
   emit('create', form)
 }
+
+onMounted(() => {
+  document.body.style.overflow = 'hidden'
+  window.addEventListener('keydown', handleEsc)
+  form.name = 'Danh sách phát của tôi'
+  
+  setTimeout(() => {
+    if (nameInput.value) {
+      nameInput.value.focus()
+      nameInput.value.select()
+    }
+  }, 100)
+})
+
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', handleEsc)
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+})
+
+function handleEsc(e) {
+  if (e.key === 'Escape') {
+    emit('close')
+  }
+}
 </script>
-
-<style scoped>
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000;
-}
-
-.modal-glass {
-  background:
-    linear-gradient(135deg, rgba(76,29,149,0.18), rgba(15,23,42,0.96));
-  border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(20px);
-  padding: 32px;
-  border-radius: 8px;
-  width: 100%; max-width: 450px;
-  color: #ffffff;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-}
-
-.modal-glass h2 { 
-  margin: 0 0 40px; 
-  font-weight: 700; 
-  font-size: 22px;
-  color: #ffffff; 
-}
-
-/* Line Inputs */
-.input-line {
-  margin-bottom: 32px;
-}
-
-.line-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  font-size: 15px;
-  padding: 8px 0;
-  outline: none;
-  transition: border-color 0.2s;
-}
-.line-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-.line-input.title-input:focus {
-  border-bottom: 1px solid #3B82F6;
-}
-.line-input.desc-input:focus {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-}
-
-/* Privacy Dropdown */
-.privacy-section {
-  margin-bottom: 24px;
-}
-.privacy-section label {
-  display: block;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
-}
-.privacy-dropdown-container {
-  display: inline-flex;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  padding-bottom: 4px;
-  position: relative;
-}
-.globe-icon {
-  color: #ffffff;
-  margin-right: 8px;
-}
-.privacy-select {
-  background: transparent;
-  color: #ffffff;
-  border: none;
-  font-size: 15px;
-  font-weight: 600;
-  outline: none;
-  appearance: none;
-  padding-right: 20px;
-  cursor: pointer;
-}
-.privacy-select option {
-  background: #020617;
-  color: #ffffff;
-}
-.privacy-dropdown-container::after {
-  content: "⌄";
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-70%);
-  color: rgba(255, 255, 255, 0.6);
-  pointer-events: none;
-}
-
-/* Toggle switch */
-.toggle-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-}
-.toggle-section label:first-child {
-  font-size: 15px;
-  color: #ffffff;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-.switch input { 
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #555;
-  transition: .4s;
-}
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-}
-input:checked + .slider {
-  background-color: #ffffff;
-}
-input:checked + .slider:before {
-  transform: translateX(20px);
-  background-color: #020617;
-}
-.slider.round {
-  border-radius: 24px;
-}
-.slider.round:before {
-  border-radius: 50%;
-}
-
-/* Cover Image */
-.cover-section {
-  margin-bottom: 32px;
-}
-.cover-box {
-  padding: 16px; 
-  border: 1px dashed rgba(255, 255, 255, 0.3); 
-  border-radius: 8px;
-  text-align: center; 
-  cursor: pointer; 
-  color: rgba(255, 255, 255, 0.6); 
-  font-weight: 500;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-.cover-box:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #ffffff;
-}
-.cover-box.has-file {
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.05);
-}
-.file-selected { color: #ffffff; }
-
-/* Actions */
-.modal-actions { 
-  display: flex; 
-  justify-content: flex-end;
-  gap: 16px; 
-}
-.modal-actions button {
-  padding: 10px 24px; 
-  border-radius: 24px; 
-  font-weight: 700; 
-  font-size: 15px;
-  border: none; 
-  cursor: pointer; 
-  transition: all 0.2s;
-}
-.btn-cancel { 
-  background: transparent; 
-  color: #ffffff; 
-}
-.btn-cancel:hover { 
-  opacity: 0.8; 
-}
-.btn-submit { 
-  background: #ffffff; 
-  color: #000000; 
-}
-.btn-submit:hover:not(:disabled) { 
-  transform: scale(1.05); 
-}
-.btn-submit:disabled { 
-  opacity: 0.5; 
-  cursor: not-allowed; 
-}
-</style>

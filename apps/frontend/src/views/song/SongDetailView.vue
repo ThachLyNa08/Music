@@ -18,77 +18,70 @@
     </div>
 
     <!-- Song Detail Content -->
-    <div v-else-if="song" class="space-y-8 px-4 md:px-8 py-6 max-w-[1400px] mx-auto">
+    <div v-else-if="song" class="w-full">
       
-      <!-- 1. HERO / SONG HEADER -->
-      <section class="song-detail-hero overflow-hidden relative">
-        <div class="grid gap-6 lg:grid-cols-[220px_1fr] xl:grid-cols-[240px_1fr] relative z-10 p-6 md:p-8">
-          <!-- Cover Art -->
-          <div class="aspect-square w-full max-w-[240px] mx-auto lg:mx-0 rounded-[24px] overflow-hidden shadow-2xl bg-white/5 flex-shrink-0">
-            <img 
-              :src="coverImage" 
-              :alt="song.title"
-              class="w-full h-full object-cover"
-              @error="handleImageError"
-            />
-          </div>
+      <!-- HERO BANNER -->
+      <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+        <!-- Blurred Background Cover -->
+        <img 
+          :src="coverImage"
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover z-0 opacity-[0.36] scale-[1.18] blur-[34px] pointer-events-none"
+          @error="handleImageError"
+        />
+        <!-- Dark Overlay -->
+        <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#1e3a8a]/20 z-0 pointer-events-none"></div>
+
+        <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+          <!-- Foreground Cover -->
+          <img 
+            :src="coverImage" 
+            :alt="song.title"
+            class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] object-cover rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0"
+            @error="handleImageError"
+          />
 
           <!-- Song Info -->
-          <div class="flex flex-col justify-center gap-3 text-center lg:text-left mt-4 lg:mt-0">
-            <div>
-              <div class="text-xs font-extrabold uppercase tracking-[0.22em] text-cyan-300">Bài hát</div>
-              <h1 class="text-3xl md:text-5xl font-black tracking-tight text-white line-clamp-2 mt-1">{{ song.title }}</h1>
+          <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
+            <span class="hidden lg:inline-block text-xs font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">BÀI HÁT</span>
+            <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ song.title }}</h1>
+            
+            <div class="text-base md:text-lg font-bold text-white/90 mt-1 truncate">
+              <template v-for="(artist, idx) in song.artists" :key="artist.id">
+                <RouterLink :to="`/artist/${artist.id}`" class="hover:text-white hover:underline transition">{{ artist.name }}</RouterLink>
+                <span v-if="idx < song.artists.length - 1" class="mx-1.5 opacity-70">•</span>
+              </template>
+              
+              <span v-if="song.album_id">
+                <span class="mx-1.5 opacity-70">•</span>
+                <RouterLink :to="`/album/${song.album_id}`" class="hover:text-white hover:underline transition">{{ song.album_title || 'Unknown Album' }}</RouterLink>
+              </span>
             </div>
             
-            <!-- Artist Links & Album -->
-            <div class="flex flex-wrap items-center justify-center lg:justify-start gap-x-2 text-sm text-slate-300">
-              <template v-for="(artist, idx) in song.artists" :key="artist.id">
-                <RouterLink 
-                  :to="`/artist/${artist.id}`"
-                  class="hover:text-white hover:underline font-bold transition"
-                >
-                  {{ artist.name }}
-                </RouterLink>
-                <span v-if="idx < song.artists.length - 1" class="text-slate-500">•</span>
-              </template>
-
-              <!-- Album Link -->
-              <span v-if="song.album_id" class="flex items-center gap-2">
-                <span class="text-slate-500">•</span>
-                <RouterLink 
-                  :to="`/album/${song.album_id}`"
-                  class="hover:text-white hover:underline transition"
-                >
-                  {{ song.album_title || 'Unknown Album' }}
-                </RouterLink>
-              </span>
-            </div>
-
-            <!-- Stats -->
-            <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4 text-sm text-slate-400">
-              <span class="flex items-center gap-1" v-if="song.like_count !== undefined">
+            <div class="flex items-center justify-center lg:justify-start gap-3 text-sm font-medium text-white/70 mt-2 flex-wrap">
+              <span v-if="song.like_count !== undefined" class="inline-flex items-center gap-1 font-bold text-white">
                 <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                {{ formatCount(displayLikeCount) }}
+                {{ formatCount(displayLikeCount) }} <span class="text-white/60 font-medium hidden sm:inline">lượt thích</span>
               </span>
-              <span class="flex items-center gap-1" v-if="song.play_count !== undefined">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" class="text-slate-500">
-                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                </svg>
-                {{ formatCount(song.play_count) }} lượt nghe
+              <span v-if="song.like_count !== undefined" class="w-1 h-1 bg-white/30 rounded-full hidden lg:block"></span>
+              <span v-if="song.play_count !== undefined" class="inline-flex items-center gap-1 font-bold text-white">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" class="opacity-70"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                {{ formatCount(song.play_count) }} <span class="text-white/60 font-medium hidden sm:inline">lượt nghe</span>
               </span>
-              <span v-if="song.duration_sec">• {{ formatDuration(song.duration_sec) }}</span>
-              <span v-if="song.release_date">• {{ formatReleaseDate(song.release_date) }}</span>
+              <span v-if="song.duration_sec" class="w-1 h-1 bg-white/30 rounded-full hidden lg:block"></span>
+              <span v-if="song.duration_sec" class="font-bold text-white">{{ formatDuration(song.duration_sec) }}</span>
+              <span v-if="song.release_date" class="w-1 h-1 bg-white/30 rounded-full hidden lg:block"></span>
+              <span v-if="song.release_date" class="font-bold text-white">{{ formatReleaseYear(song.release_date) }}</span>
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex items-center justify-center lg:justify-start gap-3 mt-4">
-              <!-- Play Button -->
+            <div class="song-actions mt-4 flex items-center justify-center lg:justify-start gap-4">
               <PlaybackButton class="mr-2" :is-playing="isThisSongPlaying" @click="togglePlay" />
 
               <LikeButton 
                 :song="song"
-                baseClass="h-12 w-12 rounded-full border border-white/10 bg-white/[0.06] flex items-center justify-center transition-all hover:bg-white/[0.10] hover:scale-105"
-                activeClass="text-primary"
+                baseClass="h-12 w-12 rounded-full border border-white/10 bg-white/10 flex items-center justify-center transition-all hover:bg-white/20 hover:scale-105 shadow-lg backdrop-blur-md"
+                activeClass="text-[#1ed760]"
                 inactiveClass="text-white"
               >
                 <template #icon="{ isLiked }">
@@ -98,24 +91,23 @@
                 </template>
               </LikeButton>
 
-              <!-- Add to Playlist -->
               <button 
                 @click="openAddToPlaylist"
-                class="h-12 w-12 rounded-full border border-white/10 bg-white/[0.06] text-white flex items-center justify-center transition-all hover:bg-white/[0.10] hover:scale-105"
+                class="h-12 w-12 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center transition-all hover:bg-white/20 hover:scale-105 shadow-lg backdrop-blur-md"
                 title="Thêm vào playlist"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                 </svg>
               </button>
-
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 2. LYRICS & ARTISTS (2 cols) -->
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div class="space-y-8 px-4 md:px-8 py-4 max-w-[1400px] mx-auto">
+        <!-- 2. LYRICS & ARTISTS (2 cols) -->
+        <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         
         <!-- Lyrics Panel -->
         <section class="song-detail-card h-fit">
@@ -294,6 +286,7 @@
         </div>
       </section>
 
+      </div>
     </div>
 
     <!-- Action Menu -->
@@ -472,7 +465,7 @@ async function fetchSongDetail() {
   try {
     const res = await songApi.getSongDetail(route.params.id)
     if (res.data?.success) {
-      song.value = res.data.data
+      song.value = library.applyLikedStateToSong(res.data.data)
       initialIsLiked.value = song.value.is_liked === 1 || song.value.is_liked === true || song.value.isLiked === true || song.value.liked === true
       document.title = `${song.value.title} - ${song.value.artist_name} | MusicFlow`
       fetchSongLyrics(song.value.id || route.params.id)
@@ -525,12 +518,12 @@ async function fetchRelatedData(artistId) {
     ])
     
     if (relatedRes.data?.success) {
-      relatedSongs.value = relatedRes.data.data || []
+      relatedSongs.value = library.applyLikedStateToSongs(relatedRes.data.data || [])
     }
     
     if (artistRes.data?.success) {
       const artistData = artistRes.data.data
-      popularSongs.value = artistData.popular_songs?.slice(0, 6) || []
+      popularSongs.value = library.applyLikedStateToSongs(artistData.popular_songs?.slice(0, 6) || [])
       artistAlbums.value = [...(artistData.albums || []), ...(artistData.singles || [])].slice(0, 5)
       
       // Update artist following status
@@ -601,10 +594,9 @@ function addToQueue() {
 async function handleToggleLike(songItem) {
   if (!songItem) return
   await library.toggleLike(songItem)
-  const liked = library.isLiked(songItem)
-  songItem.is_liked = liked ? 1 : 0
-  songItem.isLiked = liked
-  songItem.liked = liked
+  if (song.value && String(song.value.id) === String(songItem.id || songItem.song_id)) {
+    initialIsLiked.value = library.isLiked(song.value)
+  }
 }
 
 function goToArtist() {
@@ -673,14 +665,7 @@ watch(() => route.params.id, (newId) => {
 </script>
 
 <style scoped>
-.song-detail-hero {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025)),
-    #111827;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24);
-}
+
 
 .song-detail-card {
   border: 1px solid rgba(255, 255, 255, 0.08);

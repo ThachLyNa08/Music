@@ -1,0 +1,31 @@
+import axios from './axios'
+
+export const aiPlaylistApi = {
+  preview(data) {
+    return axios.post('/ai-playlists/preview', data)
+  },
+
+  previewAiPlaylist(payload) {
+    return axios.post('/ai-playlists/preview', payload)
+  },
+
+  previewAiPlaylistIntent(payload) {
+    return axios.post('/ai-playlists/intent/preview', payload)
+  },
+
+  refineAiPlaylist(payload) {
+    return axios.post('/ai-playlists/refine', payload)
+  },
+  
+  save(data) {
+    return axios.post('/ai-playlists/save', data)
+  },
+
+  saveAiPlaylist(payload) {
+    return axios.post('/ai-playlists/save', payload)
+  },
+
+  getSuggestions() {
+    return axios.get('/ai-playlists/suggestions')
+  }
+}

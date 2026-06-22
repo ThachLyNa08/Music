@@ -47,9 +47,37 @@ npm run dev
 
 ```powershell
 cd apps/ai-service
+.\.venv\Scripts\Activate.ps1    
 uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## Git Notes
 
 Do not commit `.env`, `node_modules`, `dist`, runtime uploads, `storage`, generated logs, or music/audio files. Runtime media is currently kept under `apps/backend/uploads/` so existing app and database paths continue to work.
+
+
+## Crash
+
+netstat -ano | findstr :3000
+taskkill /PID [PID] /F
+
+## Bật scheduler thật
+
+Trong .env backend:
+
+ENABLE_RECOMMENDATION_SCHEDULER=true
+RECOMMENDATION_SCHEDULER_TEST_MODE=false
+
+Hoặc bỏ hẳn dòng test mode.
+
+Test nhanh scheduler
+
+Chỉ dùng khi test:
+
+ENABLE_RECOMMENDATION_SCHEDULER=true
+RECOMMENDATION_SCHEDULER_TEST_MODE=true
+
+Test xong phải tắt lại:
+
+RECOMMENDATION_SCHEDULER_TEST_MODE=false

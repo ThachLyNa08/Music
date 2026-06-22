@@ -11,9 +11,7 @@
     <div class="stats-overview">
       <div class="summary-card">
         <div class="card-icon revenue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879-.659c1.546-1.16 2.898-1.74 3.738-1.74s2.192.58 3.738 1.74l.879.66M8.25 10.5h11.5" />
-          </svg>
+          <MfIcon name="payments" size="24" />
         </div>
         <div class="card-info">
           <span class="card-label">Tổng Doanh thu</span>
@@ -23,9 +21,7 @@
 
       <div class="summary-card">
         <div class="card-icon count">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-          </svg>
+          <MfIcon name="receipt_long" size="24" />
         </div>
         <div class="card-info">
           <span class="card-label">Số Giao dịch</span>
@@ -35,9 +31,7 @@
 
       <div class="summary-card">
         <div class="card-icon rate">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
-          </svg>
+          <MfIcon name="verified" size="24" />
         </div>
         <div class="card-info">
           <span class="card-label">Tỷ lệ Thành công</span>
@@ -49,10 +43,7 @@
     <!-- Filters & Search -->
     <div class="filter-bar">
       <div class="search-input-wrapper">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" class="search-icon">
-          <circle cx="11" cy="11" r="8" />
-          <path stroke-linecap="round" d="m21 21-4.35-4.35" />
-        </svg>
+        <MfIcon name="search" size="18" className="search-icon" />
         <input v-model="searchQuery" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="search-field" />
       </div>
       <div class="filter-select-wrapper">
@@ -71,6 +62,7 @@
           <option value="refunded">Đã hoàn tiền</option>
         </select>
       </div>
+      <AdminResetButton :disabled="loading" @click="resetFilters" />
     </div>
 
     <!-- Main Content -->
@@ -79,10 +71,15 @@
       <p>Đang tải danh sách hóa đơn giao dịch...</p>
     </div>
 
+    <div v-else-if="error" class="empty-state">
+      <MfIcon name="error_outline" size="64" style="color: #ff7675" />
+      <h3 style="color: #d63031">Đã có lỗi xảy ra</h3>
+      <p>{{ error }}</p>
+      <button @click="fetchTransactions" class="retry-btn">Thử lại</button>
+    </div>
+
     <div v-else-if="filteredTransactions.length === 0" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
-      </svg>
+      <MfIcon name="credit_card_off" size="64" />
       <h3>Không tìm thấy giao dịch nào</h3>
       <p>Thử đổi bộ lọc hoặc từ khóa tìm kiếm.</p>
     </div>
@@ -101,7 +98,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="t in filteredTransactions" :key="t.id" class="txn-row">
+          <tr v-for="t in paginatedTransactions" :key="t.id" class="txn-row">
             <td>
               <span class="order-code">#{{ t.order_code }}</span>
             </td>
@@ -134,14 +131,22 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" class="flex justify-end mt-4 px-2">
+      <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/api/axios'
+import AdminPagination from '@/components/admin/AdminPagination.vue'
+import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 
 const loading = ref(true)
+const error = ref(null)
 const transactions = ref([])
 const searchQuery = ref('')
 const filterProvider = ref('')
@@ -149,41 +154,72 @@ const filterStatus = ref('')
 
 async function fetchTransactions() {
   loading.value = true
+  error.value = null
   try {
     const res = await api.get('/admin/transactions')
-    transactions.value = res.data.data
+    transactions.value = res.data?.data || []
   } catch (err) {
     console.error('Lỗi khi tải lịch sử giao dịch:', err)
+    error.value = 'Không thể tải danh sách giao dịch. Vui lòng thử lại sau.'
   } finally {
     loading.value = false
   }
 }
 
 const totalRevenue = computed(() => {
+  if (!transactions.value || !Array.isArray(transactions.value)) return 0
   return transactions.value
     .filter(t => t.status === 'success')
     .reduce((sum, t) => sum + Number(t.amount), 0)
 })
 
 const successRate = computed(() => {
-  if (transactions.value.length === 0) return 0
+  if (!transactions.value || !Array.isArray(transactions.value) || transactions.value.length === 0) return 0
   const successCount = transactions.value.filter(t => t.status === 'success').length
   return Math.round((successCount / transactions.value.length) * 100)
 })
 
 const filteredTransactions = computed(() => {
+  if (!transactions.value || !Array.isArray(transactions.value)) return []
   return transactions.value.filter(t => {
     const query = searchQuery.value.toLowerCase()
     const matchSearch = 
-      t.order_code.toLowerCase().includes(query) ||
-      t.user_name.toLowerCase().includes(query) ||
-      t.user_email.toLowerCase().includes(query)
+      (t.order_code || '').toLowerCase().includes(query) ||
+      (t.user_name || '').toLowerCase().includes(query) ||
+      (t.user_email || '').toLowerCase().includes(query)
 
     const matchProvider = !filterProvider.value || t.provider === filterProvider.value
     const matchStatus = !filterStatus.value || t.status === filterStatus.value
 
     return matchSearch && matchProvider && matchStatus
   })
+})
+
+const currentPage = ref(1)
+const pageSize = ref(20)
+
+watch([searchQuery, filterProvider, filterStatus], () => {
+  currentPage.value = 1
+})
+
+function resetFilters() {
+  searchQuery.value = ''
+  filterProvider.value = ''
+  filterStatus.value = ''
+  currentPage.value = 1
+}
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredTransactions.value.length / pageSize.value)))
+
+watch(totalPages, (newTotal) => {
+  if (currentPage.value > newTotal && newTotal > 0) {
+    currentPage.value = newTotal
+  }
+})
+
+const paginatedTransactions = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredTransactions.value.slice(start, start + pageSize.value)
 })
 
 function formatCurrency(val) {
@@ -498,5 +534,18 @@ onMounted(() => {
 .empty-state p {
   margin: 0;
   font-size: 14px;
+}
+.retry-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #a29bfe;
+  color: white;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+.retry-btn:hover {
+  background: #6c5ce7;
 }
 </style>

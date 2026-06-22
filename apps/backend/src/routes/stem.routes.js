@@ -1,15 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const stemController = require('../controllers/stem.controller');
+const { authenticate } = require('../middleware/auth.middleware');
 
-function featureNotReady(_req, res) {
-  res.status(501).json({
-    success: false,
-    code: 'FEATURE_NOT_READY',
-    message: 'Tinh nang tach beat/karaoke AI hien dang duoc phat trien.',
-  });
-}
-
-router.all('/', featureNotReady);
-router.all('*', featureNotReady);
+router.post('/songs/:songId/separate', authenticate, stemController.separateSong);
+router.get('/songs/:songId/latest', authenticate, stemController.getLatestForSong);
+router.get('/jobs/:jobId', authenticate, stemController.getJob);
+router.get('/jobs/:jobId/download/instrumental', authenticate, stemController.downloadInstrumental);
+router.patch('/internal/jobs/:jobId', stemController.updateJobFromAiService);
 
 module.exports = router;

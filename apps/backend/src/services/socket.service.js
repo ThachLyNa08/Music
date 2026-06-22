@@ -1,27 +1,40 @@
-// src/services/socket.service.js
+const jwt = require('jsonwebtoken');
 
 let ioInstance;
 
+function joinUserRoom(socket, userId) {
+  if (!userId) return;
+  socket.join(`user:${userId}`);
+  socket.data.userId = userId;
+  console.log(`Socket ${socket.id} joined user:${userId}`);
+}
+
 function registerSocketEvents(io) {
   ioInstance = io;
-  io.on('connection', (socket) => {
-    console.log(`🔌 Socket connected: ${socket.id}`);
 
-    // Client tự đăng ký vào room theo user_id (sau khi đăng nhập)
-    socket.on('join', ({ userId }) => {
-      if (userId) {
-        socket.join(`user:${userId}`);
-        console.log(`   → User ${userId} joined room user:${userId}`);
+  io.on('connection', (socket) => {
+    console.log(`Socket connected: ${socket.id}`);
+
+    const token = socket.handshake.auth?.token;
+    if (token) {
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        joinUserRoom(socket, payload.id);
+      } catch (err) {
+        console.warn(`Socket auth failed: ${err.message}`);
       }
+    }
+
+    socket.on('join', ({ userId }) => {
+      joinUserRoom(socket, userId);
     });
 
     socket.on('disconnect', () => {
-      console.log(`🔌 Socket disconnected: ${socket.id}`);
+      console.log(`Socket disconnected: ${socket.id}`);
     });
   });
 }
 
-// Gửi thông báo tới một user cụ thể
 function notifyUser(io, userId, event, data) {
   io.to(`user:${userId}`).emit(event, data);
 }

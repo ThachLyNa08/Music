@@ -1,6 +1,14 @@
 const { pool } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const spotifyService = require('../services/spotify.service');
+const { resolveArtistAvatar } = require('../utils/imageUrl.util');
+const {
+  publicSongCondition,
+  publicAlbumCondition,
+  normalizeReleasePayload,
+  pushReleaseFields,
+  buildInsertParts,
+} = require('../utils/public.utils');
 
 // Helper: optional authenticate - attaches user if token is valid, allows guest otherwise
 function getUserId(req) {
@@ -62,26 +70,48 @@ function getGenreKeyFromQuery(q) {
 
 // Helper: format song from row
 function formatSongRow(row, userId = null) {
+  const syncedLyrics = row.syncedLyrics ?? row.synced_lyrics ?? null
+  const lyricsSyncType = row.lyricsSyncType ?? row.lyrics_sync_type ?? null
+  const lyricsProvider = row.lyricsProvider ?? row.lyrics_provider ?? null
+  const lyricsProviderId = row.lyricsProviderId ?? row.lyrics_provider_id ?? null
+  const hasSyncedLyrics = Boolean(typeof syncedLyrics === 'string' && syncedLyrics.includes('[00:'))
+
+  // Ensure play_count is at least like_count for display consistency when historical data is missing or unbalanced
+  const rawPlayCount = Number(row.play_count) || 0;
+  const rawLikeCount = Number(row.like_count) || 0;
+  const displayPlayCount = Math.max(rawPlayCount, rawLikeCount);
+
   return {
     id: row.id,
     title: row.title,
     duration_sec: row.duration_sec,
     audio_url: row.audio_url,
     cover_url: row.cover_url,
-    play_count: row.play_count || 0,
+    play_count: displayPlayCount,
+    listen_count: displayPlayCount,
     lyrics: row.lyrics,
+    syncedLyrics,
+    synced_lyrics: syncedLyrics,
+    lyricsSyncType,
+    lyrics_sync_type: lyricsSyncType,
+    lyricsProvider,
+    lyrics_provider: lyricsProvider,
+    lyricsProviderId,
+    lyrics_provider_id: lyricsProviderId,
+    hasSyncedLyrics,
+    lyrics_updated_at: row.lyrics_updated_at || null,
     album_id: row.album_id,
     album_title: row.album_title,
     album_cover_url: row.album_cover_url,
     album_release_year: row.album_release_year,
     artist_id: row.artist_id,
     artist_name: row.artist_name,
-    artist_avatar_url: row.artist_avatar_url,
+    artist_avatar_url: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.artist_avatar_url }, null),
     artist_followers: row.artist_followers || 0,
     genre_id: row.genre_id,
     genre_name: row.genre_name,
     is_liked: Boolean(row.is_liked),
-    like_count: row.like_count || 0,
+    like_count: rawLikeCount,
   };
 }
 
@@ -118,9 +148,19 @@ exports.uploadSong = async (req, res, next) => {
   try {
     await conn.beginTransaction();
     const { title, artist_name, album_title, genre_id, duration_sec } = req.body;
+    const releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
     
-    if (!title || !artist_name || !genre_id) {
-      return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (title, artist_name, genre_id)' });
+    const missing = [];
+    if (!title) missing.push('title');
+    if (!artist_name) missing.push('artist_name');
+    if (!genre_id) missing.push('genre_id');
+
+    if (missing.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        missing,
+        message: 'Thiếu thông tin bắt buộc' 
+      });
     }
 
     if (!req.files || !req.files.audio) {
@@ -158,10 +198,14 @@ exports.uploadSong = async (req, res, next) => {
     }
 
     // 3. Tạo Song
-    const [songRes] = await conn.query(`
-      INSERT INTO songs (title, artist_id, album_id, genre_id, duration_sec, audio_url, cover_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [title, artistId, albumId, genre_id, duration_sec || 0, audioUrl, coverUrl]);
+    const fields = ['title', 'artist_id', 'album_id', 'genre_id', 'duration_sec', 'audio_url', 'cover_url'];
+    const values = [title, artistId, albumId, genre_id, duration_sec || 0, audioUrl, coverUrl];
+    pushReleaseFields(fields, values, releasePayload, null);
+    const insertParts = buildInsertParts(fields, values);
+    const [songRes] = await conn.query(
+      `INSERT INTO songs (${insertParts.columnSql}) VALUES (${insertParts.placeholderSql})`,
+      insertParts.params
+    );
 
     await conn.commit();
 
@@ -220,16 +264,17 @@ exports.uploadSong = async (req, res, next) => {
 exports.getTrendingSongs = async (req, res, next) => {
   try {
     const userId = getUserId(req);
-    let [trending] = await pool.query('SELECT * FROM v_trending_songs_weekly ORDER BY listen_count_week DESC LIMIT 10');
+    let [trending] = await pool.query('SELECT v.*, v.listen_count_week AS weekly_plays FROM v_trending_songs_weekly v ORDER BY v.listen_count_week DESC LIMIT 10');
     
     if (trending.length < 10) {
       const [popular] = await pool.query(`
         SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url,
+               s.play_count, 0 AS weekly_plays,
                a.name as artist, a.name as artist_name, g.name as genre
         FROM songs s
         JOIN artists a ON s.artist_id = a.id
         LEFT JOIN genres g ON s.genre_id = g.id
-        WHERE s.is_active = TRUE
+        WHERE ${publicSongCondition('s')}
         ORDER BY s.play_count DESC, s.created_at DESC
         LIMIT 10
       `);
@@ -264,7 +309,7 @@ exports.getRecommendedSongs = async (req, res, next) => {
         FROM songs s
         JOIN artists a ON s.artist_id = a.id
         LEFT JOIN genres g ON s.genre_id = g.id
-        WHERE s.is_active = TRUE
+        WHERE ${publicSongCondition('s')}
         ORDER BY match_score DESC, s.play_count DESC, RAND()
         LIMIT 30
       `, [followedArtistIds, genreIds]);
@@ -279,7 +324,7 @@ exports.getRecommendedSongs = async (req, res, next) => {
         FROM songs s
         JOIN artists a ON s.artist_id = a.id
         LEFT JOIN genres g ON s.genre_id = g.id
-        WHERE s.is_active = TRUE
+        WHERE ${publicSongCondition('s')}
         ORDER BY s.play_count DESC, RAND()
         LIMIT 30
       `);
@@ -316,7 +361,7 @@ exports.searchSongs = async (req, res, next) => {
 
     // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu + genre aliases) ──
     let songWhere = `
-      s.is_active = TRUE
+      ${publicSongCondition('s')}
       AND (
         s.title LIKE ? OR a.name LIKE ? OR al.title LIKE ?
         OR s.title LIKE ? OR a.name LIKE ?
@@ -334,7 +379,7 @@ exports.searchSongs = async (req, res, next) => {
     const [songs] = await pool.query(`
       SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count,
              al.title as album, al.id as album_id,
-             a.name as artist, a.name as artist_name, g.name as genre
+             a.name as artist, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre
       FROM songs s
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
@@ -361,10 +406,10 @@ exports.searchSongs = async (req, res, next) => {
       SELECT a.id, a.name, a.avatar_url, a.bio,
              COUNT(s.id) as song_count,
              COALESCE(SUM(s.play_count), 0) as total_plays,
-             (SELECT s2.cover_url FROM songs s2 WHERE s2.artist_id = a.id AND s2.is_active = TRUE
+             (SELECT s2.cover_url FROM songs s2 WHERE s2.artist_id = a.id AND ${publicSongCondition('s2')}
               ORDER BY s2.play_count DESC LIMIT 1) as sample_cover
       FROM artists a
-      LEFT JOIN songs s ON s.artist_id = a.id AND s.is_active = TRUE
+      LEFT JOIN songs s ON s.artist_id = a.id AND ${publicSongCondition('s')}
       WHERE a.name LIKE ? OR a.name LIKE ?
       GROUP BY a.id
       ORDER BY
@@ -382,7 +427,7 @@ exports.searchSongs = async (req, res, next) => {
       albumWhere = `( ${albumWhere} ) OR EXISTS (
         SELECT 1 FROM songs s2
         JOIN genres g2 ON s2.genre_id = g2.id
-        WHERE s2.album_id = al.id AND s2.is_active = TRUE
+        WHERE s2.album_id = al.id AND ${publicSongCondition('s2')}
         AND (g2.slug = ? OR g2.slug LIKE ?)
       )`;
       albumParams.push(matchedGenreKey, `%${matchedGenreKey}%`);
@@ -397,7 +442,7 @@ exports.searchSongs = async (req, res, next) => {
           (
             SELECT NULLIF(s2.cover_url, '')
             FROM songs s2
-            WHERE s2.album_id = al.id AND s2.is_active = TRUE
+            WHERE s2.album_id = al.id AND ${publicSongCondition('s2')}
             AND NULLIF(s2.cover_url, '') IS NOT NULL
             ORDER BY s2.id ASC
             LIMIT 1
@@ -409,9 +454,10 @@ exports.searchSongs = async (req, res, next) => {
         COUNT(s.id) as track_count
       FROM albums al
       JOIN artists a ON al.artist_id = a.id
-      LEFT JOIN songs s ON s.album_id = al.id AND s.is_active = TRUE
-      WHERE ${albumWhere}
+      LEFT JOIN songs s ON s.album_id = al.id AND ${publicSongCondition('s')}
+      WHERE (${albumWhere}) AND ${publicAlbumCondition('al')}
       GROUP BY al.id, al.title, al.cover_url, al.release_date, a.id, a.name
+      HAVING track_count > 0
       ORDER BY
         CASE WHEN al.title LIKE ? OR al.title LIKE ? THEN 0 ELSE 1 END,
         track_count DESC
@@ -431,7 +477,7 @@ exports.searchSongs = async (req, res, next) => {
       SELECT g.id, g.name, g.slug,
              COUNT(s.id) as song_count
       FROM genres g
-      LEFT JOIN songs s ON s.genre_id = g.id AND s.is_active = TRUE
+      LEFT JOIN songs s ON s.genre_id = g.id AND ${publicSongCondition('s')}
       WHERE ${genreWhere}
       GROUP BY g.id
       ORDER BY song_count DESC
@@ -453,15 +499,22 @@ exports.getSuggestions = async (req, res, next) => {
     if (!q || q.length < 1) {
       // Return popular/trending suggestions when no query
       const [popular] = await pool.query(`
-        SELECT a.name as text, 'artist' as type, a.id as artist_id
+        SELECT a.id, a.name as text, 'artist' as type, a.avatar_url
         FROM artists a
         JOIN songs s ON s.artist_id = a.id
-        WHERE s.is_active = TRUE
-        GROUP BY a.id, a.name
+        WHERE ${publicSongCondition('s')}
+        GROUP BY a.id, a.name, a.avatar_url
         ORDER BY MAX(s.play_count) DESC
         LIMIT 8
       `);
-      return res.json({ success: true, data: popular });
+      const normalizedPopular = popular.map(item => ({
+        id: item.id,
+        type: item.type,
+        text: item.text,
+        subtitle: null,
+        imageUrl: item.avatar_url || null
+      }));
+      return res.json({ success: true, data: normalizedPopular });
     }
 
     const normalizedQ = normalizeSearchText(q);
@@ -475,7 +528,7 @@ exports.getSuggestions = async (req, res, next) => {
     const matchedGenreKey = getGenreKeyFromQuery(q);
 
     // Get song title suggestions (hỗ trợ genre)
-    let songWhere = `s.is_active = TRUE AND (s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ?`;
+    let songWhere = `${publicSongCondition('s')} AND (s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ?`;
     let songParams = [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent];
 
     if (matchedGenreKey) {
@@ -485,10 +538,11 @@ exports.getSuggestions = async (req, res, next) => {
     songWhere += `)`;
 
     const [titleSuggestions] = await pool.query(`
-      SELECT s.title as text, 'song' as type, a.name as subtitle, s.artist_id, s.id as song_id
+      SELECT s.id, s.title as text, 'song' as type, a.name as subtitle, s.cover_url, al.cover_url as album_cover
       FROM songs s
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN genres g ON s.genre_id = g.id
+      LEFT JOIN albums al ON s.album_id = al.id
       WHERE ${songWhere}
       ORDER BY
         CASE WHEN s.title LIKE ? OR s.title LIKE ? THEN 0 ELSE 1 END,
@@ -498,11 +552,11 @@ exports.getSuggestions = async (req, res, next) => {
 
     // Get artist suggestions
     const [artistSuggestions] = await pool.query(`
-      SELECT a.name as text, 'artist' as type, NULL as subtitle, a.id as artist_id
+      SELECT a.id, a.name as text, 'artist' as type, NULL as subtitle, a.avatar_url
       FROM artists a
       JOIN songs s ON s.artist_id = a.id
-      WHERE s.is_active = TRUE AND (a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ?)
-      GROUP BY a.id, a.name
+      WHERE ${publicSongCondition('s')} AND (a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ?)
+      GROUP BY a.id, a.name, a.avatar_url
       ORDER BY
         CASE WHEN a.name LIKE ? OR a.name LIKE ? THEN 0 ELSE 1 END
       LIMIT 3
@@ -510,16 +564,63 @@ exports.getSuggestions = async (req, res, next) => {
 
     // Get album suggestions
     const [albumSuggestions] = await pool.query(`
-      SELECT al.title as text, 'album' as type, a.name as subtitle, a.id as artist_id, al.id as album_id
+      SELECT al.id, al.title as text, 'album' as type, a.name as subtitle, al.cover_url
       FROM albums al
       JOIN artists a ON al.artist_id = a.id
-      WHERE al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ?
+      WHERE ${publicAlbumCondition('al')}
+        AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = al.id AND ${publicSongCondition('s')})
+        AND (al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ?)
       ORDER BY
         CASE WHEN al.title LIKE ? OR al.title LIKE ? THEN 0 ELSE 1 END
       LIMIT 2
     `, [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent, searchTerm, searchTermNoAccent]);
 
-    const suggestions = [...artistSuggestions, ...titleSuggestions, ...albumSuggestions].slice(0, 8);
+    // Get playlist suggestions (Optional, wrapped in try/catch to prevent breaking main suggestions)
+    let playlistSuggestions = [];
+    try {
+      const reqUserId = req.user?.id || null;
+      const plWhere = reqUserId 
+          ? `(p.is_public = 1 OR p.is_system = 1 OR p.user_id = ${pool.escape(reqUserId)})` 
+          : `(p.is_public = 1 OR p.is_system = 1)`;
+
+      const [pResult] = await pool.query(`
+        SELECT p.id, p.name as text, 'playlist' as type, 'Playlist' as subtitle, p.cover_url
+        FROM playlists p
+        WHERE ${plWhere} AND (p.name LIKE ? OR p.name LIKE ? OR p.name LIKE ? OR p.name LIKE ?)
+        ORDER BY
+          CASE WHEN p.name LIKE ? OR p.name LIKE ? THEN 0 ELSE 1 END
+        LIMIT 2
+      `, [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent, searchTerm, searchTermNoAccent]);
+      
+      playlistSuggestions = pResult;
+    } catch (plErr) {
+      console.warn('Playlist suggestion warning:', plErr);
+    }
+
+    const rawSuggestions = [...artistSuggestions, ...titleSuggestions, ...albumSuggestions, ...playlistSuggestions];
+    
+    const suggestions = rawSuggestions.map(item => {
+      let imageUrl = null;
+      if (item.type === 'song') {
+        imageUrl = item.cover_url || item.album_cover || null;
+      } else if (item.type === 'artist') {
+        imageUrl = item.avatar_url || item.image_url || null;
+      } else if (item.type === 'album') {
+        imageUrl = item.cover_url || item.image_url || null;
+      } else if (item.type === 'playlist') {
+        imageUrl = item.cover_url || item.image_url || null;
+      }
+
+      return {
+        id: item.id,
+        type: item.type,
+        text: item.text,
+        subtitle: item.subtitle || null,
+        imageUrl: imageUrl,
+        targetUrl: `/${item.type}/${item.id}`
+      };
+    });
+
     res.json({ success: true, data: suggestions });
   } catch (err) {
     next(err);
@@ -545,7 +646,7 @@ exports.getAllSongs = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      WHERE s.is_active = TRUE
+      WHERE ${publicSongCondition('s')}
       ORDER BY s.created_at DESC
     `);
     await hydrateLikedState(songs, userId);
@@ -567,18 +668,24 @@ exports.getLikedSongs = async (req, res, next) => {
       JOIN songs s ON sl.song_id = s.id
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
-      WHERE sl.user_id = ? AND s.is_active = TRUE
+      WHERE sl.user_id = ? AND ${publicSongCondition('s')}
       ORDER BY sl.liked_at DESC
     `, [userId]);
 
     await hydrateLikedState(songs, userId);
-    res.json({ success: true, data: songs.map(song => ({
+    const items = songs.map(song => ({
       ...song,
       is_liked: 1,
       isLiked: true,
       liked: true,
       is_favorite: true,
-    })) });
+    }));
+    res.json({
+      success: true,
+      data: items,
+      items,
+      ids: items.map(song => song.id)
+    });
   } catch (err) {
     next(err);
   }
@@ -600,7 +707,7 @@ exports.likeSong = async (req, res, next) => {
     }
 
     const [songs] = await pool.query(
-      'SELECT id FROM songs WHERE id = ? AND is_active = TRUE',
+      `SELECT id FROM songs WHERE id = ? AND ${publicSongCondition('songs')}`,
       [songId]
     );
     if (songs.length === 0) {
@@ -612,7 +719,20 @@ exports.likeSong = async (req, res, next) => {
       [userId, songId]
     );
 
-    res.json({ success: true, message: 'Đã thêm bài hát vào yêu thích' });
+    const [[likeCountRow]] = await pool.query(
+      'SELECT COUNT(*) AS likeCount FROM song_likes WHERE song_id = ?',
+      [songId]
+    );
+
+    const likeCount = Number(likeCountRow?.likeCount || 0);
+    res.json({
+      success: true,
+      message: 'Đã thêm bài hát vào yêu thích',
+      songId,
+      liked: true,
+      likeCount,
+      data: { songId, liked: true, likeCount }
+    });
   } catch (err) {
     next(err);
   }
@@ -633,12 +753,33 @@ exports.unlikeSong = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
 
+    const [songs] = await pool.query(
+      `SELECT id FROM songs WHERE id = ? AND ${publicSongCondition('songs')}`,
+      [songId]
+    );
+    if (songs.length === 0) {
+      return res.status(404).json({ success: false, message: 'Bài hát không tồn tại' });
+    }
+
     await pool.query(
       'DELETE FROM song_likes WHERE user_id = ? AND song_id = ?',
       [userId, songId]
     );
 
-    res.json({ success: true, message: 'Đã xóa bài hát khỏi yêu thích' });
+    const [[likeCountRow]] = await pool.query(
+      'SELECT COUNT(*) AS likeCount FROM song_likes WHERE song_id = ?',
+      [songId]
+    );
+
+    const likeCount = Number(likeCountRow?.likeCount || 0);
+    res.json({
+      success: true,
+      message: 'Đã xóa bài hát khỏi yêu thích',
+      songId,
+      liked: false,
+      likeCount,
+      data: { songId, liked: false, likeCount }
+    });
   } catch (err) {
     next(err);
   }
@@ -661,7 +802,7 @@ exports.recordListen = async (req, res, next) => {
     }
 
     const [songs] = await pool.query(
-      'SELECT id FROM songs WHERE id = ? AND is_active = TRUE',
+      `SELECT id FROM songs WHERE id = ? AND ${publicSongCondition('songs')}`,
       [songId]
     );
     if (songs.length === 0) {
@@ -707,8 +848,20 @@ exports.recordListen = async (req, res, next) => {
     if (liked) implicit_rating = Math.min(5.0, implicit_rating + 1.0);
 
     let finalHistoryId = history_id;
+    let shouldIncrementPlayCount = false;
 
     if (history_id) {
+      // Lấy lịch sử cũ để kiểm tra xem đã qua ngưỡng chưa
+      const [oldHistory] = await pool.query('SELECT listen_duration, completion_rate FROM listening_history WHERE id = ? AND user_id = ?', [history_id, userId]);
+      if (oldHistory.length > 0) {
+        const oldDur = oldHistory[0].listen_duration || 0;
+        const oldComp = oldHistory[0].completion_rate || 0;
+        // Nếu lúc trước CHƯA qua ngưỡng, nhưng bây giờ ĐÃ qua ngưỡng
+        if ((oldDur < 30 && oldComp < 0.5) && (listen_duration >= 30 || completion_rate >= 0.5)) {
+          shouldIncrementPlayCount = true;
+        }
+      }
+
       await pool.query(`
         UPDATE listening_history 
         SET listen_duration = ?, completion_rate = ?, is_completed = ?, is_skipped = ?, implicit_rating = ?
@@ -733,10 +886,14 @@ exports.recordListen = async (req, res, next) => {
         implicit_rating
       ]);
       finalHistoryId = insertRes.insertId;
+
+      if (listen_duration >= 30 || completion_rate >= 0.5) {
+        shouldIncrementPlayCount = true;
+      }
     }
 
-    // Cập nhật play_count bài hát nếu nghe đủ lâu (chỉ cập nhật 1 lần nếu là insert mới hoặc vượt mốc)
-    if ((listen_duration >= 30 || completion_rate >= 0.5) && !history_id) {
+    // Cập nhật play_count bài hát nếu vượt mốc hợp lệ
+    if (shouldIncrementPlayCount) {
       await pool.query('UPDATE songs SET play_count = COALESCE(play_count, 0) + 1 WHERE id = ?', [songId]);
     }
 
@@ -776,6 +933,11 @@ exports.getSongDetail = async (req, res, next) => {
         s.cover_url,
         s.play_count,
         s.lyrics,
+        s.synced_lyrics,
+        s.lyrics_sync_type,
+        s.lyrics_provider,
+        s.lyrics_provider_id,
+        s.lyrics_updated_at,
         s.artist_id,
         a.name AS artist_name,
         a.avatar_url AS artist_avatar_url,
@@ -792,7 +954,7 @@ exports.getSongDetail = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      WHERE s.id = ? AND s.is_active = TRUE
+      WHERE s.id = ? AND ${publicSongCondition('s')}
     `, userId ? [userId, songId] : [songId]);
 
     if (songs.length === 0) {
@@ -893,7 +1055,7 @@ exports.getRelatedSongs = async (req, res, next) => {
     const [[currentSong]] = await pool.query(`
       SELECT id, genre_id, artist_id, album_id
       FROM songs
-      WHERE id = ? AND is_active = TRUE
+      WHERE id = ? AND ${publicSongCondition('songs')}
     `, [songId]);
 
     if (!currentSong) {
@@ -947,7 +1109,7 @@ exports.getRelatedSongs = async (req, res, next) => {
 
     const [primaryRows] = await pool.query(`
       ${baseSelect}
-      WHERE s.is_active = TRUE
+      WHERE ${publicSongCondition('s')}
         AND s.id != ?
         AND (
           (? IS NOT NULL AND s.genre_id = ?)
@@ -980,7 +1142,7 @@ exports.getRelatedSongs = async (req, res, next) => {
 
       const [fallbackRows] = await pool.query(`
         ${baseSelect}
-        WHERE s.is_active = TRUE
+        WHERE ${publicSongCondition('s')}
           AND s.id != ?
         ORDER BY s.play_count DESC, s.created_at DESC
         LIMIT ?
@@ -1007,7 +1169,7 @@ exports.getRelatedSongs = async (req, res, next) => {
         play_count: row.play_count || 0,
         artist_id: row.artist_id,
         artist_name: row.artist_name,
-        artist_avatar_url: row.artist_avatar_url,
+        artist_avatar_url: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.artist_avatar_url }, req),
         album_id: row.album_id,
         album_title: row.album_title,
         album_name: row.album_name || row.album_title,
@@ -1049,7 +1211,7 @@ exports.getAutoContinueSongs = async (req, res, next) => {
     const [[currentSong]] = await pool.query(`
       SELECT id, genre_id, artist_id, album_id
       FROM songs
-      WHERE id = ? AND is_active = TRUE
+      WHERE id = ? AND ${publicSongCondition('songs')}
     `, [songId]);
 
     if (!currentSong) {
@@ -1096,49 +1258,55 @@ exports.getAutoContinueSongs = async (req, res, next) => {
 
     const selectedRows = [];
     const selectedIds = new Set(excludeIds);
+    const artistCounts = {};
 
-    async function fetchCandidates(extraWhere, extraParams, needed) {
-      if (needed <= 0) return [];
+    async function fetchCandidates(extraWhere, extraParams, fetchLimit) {
+      if (fetchLimit <= 0) return [];
 
       const blockedIds = [...selectedIds].map(Number).filter((id) => Number.isInteger(id) && id > 0);
       const notInSql = blockedIds.length
         ? `AND s.id NOT IN (${blockedIds.map(() => '?').join(',')})`
         : '';
       const params = userId ? [userId] : [];
-      params.push(...extraParams, ...blockedIds, needed);
+      params.push(...extraParams, ...blockedIds, fetchLimit);
 
       const [rows] = await pool.query(`
         ${baseSelect}
-        WHERE s.is_active = TRUE
+        WHERE ${publicSongCondition('s')}
           ${extraWhere}
           ${notInSql}
-        ORDER BY s.play_count DESC, s.created_at DESC, RAND()
+        ORDER BY RAND()
         LIMIT ?
       `, params);
 
       return rows;
     }
 
-    async function addRows(rows) {
+    function addRows(rows) {
       for (const row of rows) {
+        if (selectedRows.length >= limit) break;
         const key = String(row.id);
+        const aId = String(row.artist_id);
+        
         if (selectedIds.has(key)) continue;
+        
+        const count = artistCounts[aId] || 0;
+        if (count >= 2) continue; // Bắt buộc: đa dạng nghệ sĩ (tối đa 2 bài / 1 nghệ sĩ)
+
         selectedIds.add(key);
         selectedRows.push(row);
-        if (selectedRows.length >= limit) break;
+        artistCounts[aId] = count + 1;
       }
     }
 
-    if (artistId) {
-      await addRows(await fetchCandidates('AND s.artist_id = ?', [artistId], limit - selectedRows.length));
+    // 1. Ưu tiên cùng thể loại (lấy dư dả để lọc artist)
+    if (genreId) {
+      addRows(await fetchCandidates('AND s.genre_id = ?', [genreId], limit * 4));
     }
 
-    if (genreId && selectedRows.length < limit) {
-      await addRows(await fetchCandidates('AND s.genre_id = ?', [genreId], limit - selectedRows.length));
-    }
-
+    // 2. Nếu thiếu, fallback lấy ngẫu nhiên các bài khác
     if (selectedRows.length < limit) {
-      await addRows(await fetchCandidates('', [], limit - selectedRows.length));
+      addRows(await fetchCandidates('', [], limit * 2));
     }
 
     const songs = selectedRows.slice(0, limit).map(row => ({
@@ -1151,7 +1319,7 @@ exports.getAutoContinueSongs = async (req, res, next) => {
       play_count: row.play_count || 0,
       artist_id: row.artist_id,
       artist_name: row.artist_name,
-      artist_avatar_url: row.artist_avatar_url,
+      artist_avatar_url: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.artist_avatar_url }, req),
       album_id: row.album_id,
       album_title: row.album_title,
       album_name: row.album_name || row.album_title,

@@ -4,6 +4,8 @@ const recommendationController = require('../controllers/recommendation.controll
 const { authenticate } = require('../middleware/auth.middleware');
 
 router.get('/home', authenticate, recommendationController.getHomeRecommendations);
+router.get('/home-songs', authenticate, recommendationController.getHomeSongRecommendations);
+router.get('/contextual-mood', authenticate, recommendationController.getContextualMoodRecommendations);
 router.post('/retrain', (_req, res) => {
   res.status(501).json({
     success: false,
