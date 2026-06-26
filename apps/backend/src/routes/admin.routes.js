@@ -93,9 +93,14 @@ router.delete('/artists/:id', adminController.deleteArtist);
 router.post('/sync-music', adminController.syncMusic);
 
 // Quản lý thể loại (Genres)
+router.get('/genres/summary', adminGenreController.getGenresSummary);
+router.get('/genres/insights', adminGenreController.getGenresInsights);
+router.patch('/genres/bulk-action', adminGenreController.bulkActionGenres);
 router.post('/genres/merge', adminGenreController.mergeGenres);
 router.post('/genres/bulk-assign', adminGenreController.bulkAssignGenre);
 router.get('/genres/:id/songs', adminGenreController.getGenreSongs);
+router.get('/genres/:id/detail', adminGenreController.getGenreDetailFull);
+router.patch('/genres/:id/taxonomy-flags', adminGenreController.updateTaxonomyFlags);
 router.get('/genres/:id', adminGenreController.getGenreDetail);
 router.put('/genres/:id', upload.single('genre_cover'), adminGenreController.updateGenre);
 router.delete('/genres/:id', adminGenreController.deleteGenre);

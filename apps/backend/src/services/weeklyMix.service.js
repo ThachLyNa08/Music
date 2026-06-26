@@ -121,6 +121,13 @@ async function replacePlaylistSongs(conn, playlistId, songIds) {
     `INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES ?`,
     [values]
   );
+  await conn.query(
+    `UPDATE playlists 
+     SET last_refreshed_at = NOW(), 
+         next_refresh_at = DATE_ADD(NOW(), INTERVAL 7 DAY) 
+     WHERE id = ?`, 
+    [playlistId]
+  );
   return songIds.length;
 }
 

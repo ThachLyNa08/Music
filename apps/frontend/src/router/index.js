@@ -39,6 +39,14 @@ const routes = [
     ]
   },
 
+  // Admin Login
+  {
+    path: '/admin/login',
+    name: 'AdminLogin',
+    component: () => import('@/views/admin/AdminLoginView.vue'),
+    meta: { guestAdmin: true }
+  },
+
   // Admin Panel
   {
     path: '/admin',
@@ -49,6 +57,7 @@ const routes = [
       { path: 'dashboard', name: 'AdminDashboard', component: () => import('@/views/admin/AdminDashboard.vue') },
       { path: 'upload', name: 'AdminUpload', component: () => import('@/views/admin/UploadSongView.vue') },
       { path: 'songs', name: 'AdminSongs', component: () => import('@/views/admin/ManageSongs.vue') },
+      { path: 'songs/:id', name: 'AdminSongDetail', component: () => import('@/views/admin/AdminSongDetailView.vue') },
       { path: 'users', name: 'AdminUsers', component: () => import('@/views/admin/ManageUsers.vue') },
       {
         path: 'artists',
@@ -60,6 +69,7 @@ const routes = [
       { path: 'albums', name: 'AdminAlbums', component: () => import('@/views/admin/AdminAlbumsView.vue') },
       { path: 'albums/:id/detail', name: 'AdminAlbumDetail', component: () => import('@/views/admin/AdminAlbumsView.vue') },
       { path: 'genres', name: 'AdminGenres', component: () => import('@/views/admin/ManageGenres.vue'), meta: { title: 'Thể loại', icon: 'category' } },
+      { path: 'genres/:id', name: 'AdminGenreDetail', component: () => import('@/views/admin/GenreDetailPage.vue') },
       { path: 'playlists', name: 'AdminPlaylists', component: () => import('@/views/admin/AdminPlaylistsView.vue') },
       { path: 'system-playlists', name: 'AdminSystemPlaylists', component: () => import('@/views/admin/AdminSystemPlaylistsView.vue') },
       { path: 'analytics', name: 'AdminListeningAnalytics', component: () => import('@/views/admin/AdminListeningAnalyticsView.vue') },
@@ -82,7 +92,6 @@ const routes = [
       { path: 'audit-log', name: 'AdminAuditLog', component: () => import('@/views/admin/AdminPlaceholderView.vue'), meta: { title: 'Audit log', icon: 'policy' } },
       { path: 'system-logs', name: 'AdminSystemLogs', component: () => import('@/views/admin/AdminPlaceholderView.vue'), meta: { title: 'System logs', icon: 'terminal' } },
       { path: 'users/:id', name: 'admin-user-detail', component: () => import('@/views/admin/AdminUserDetailView.vue') },
-      { path: 'songs/:id', name: 'admin-song-detail', component: () => import('@/views/admin/AdminSongDetailView.vue') },
     ]
   },
 
@@ -98,7 +107,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  if (auth.isLoggedIn && !auth.user) {
+  if (auth.isAuthenticated && !auth.user) {
     await auth.fetchMe()
   }
 
@@ -107,18 +116,32 @@ router.beforeEach(async (to) => {
     return // Allow access without auth
   }
 
-  if (to.meta.requiresAuth && !auth.isLoggedIn) return '/login'
+  const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const isGuestAdmin = to.matched.some(record => record.meta.guestAdmin)
+  const isGuest = to.matched.some(record => record.meta.guest)
 
-  // Nếu đã đăng nhập và là admin, cưỡng chế chuyển hướng vào admin panel
-  if (auth.isLoggedIn && auth.isAdmin) {
-    // Cho phép logout/callback đi qua, các route khác chuyển về /admin
-    if (to.path !== '/login' && !to.meta.requiresAdmin && to.name !== 'SpotifyCallback') {
-      return '/admin'
-    }
+  // 1. Xử lý Admin Routes
+  if (requiresAdmin) {
+    if (!auth.isAuthenticated) return '/admin/login'
+    if (auth.userRole !== 'admin') return '/admin/login'
   }
 
-  if (to.meta.guest && auth.isLoggedIn) return '/'
-  if (to.meta.requiresAdmin && !auth.isAdmin) return '/'
+  // 2. Xử lý trang Admin Login
+  if (isGuestAdmin) {
+    if (auth.isAuthenticated && auth.userRole === 'admin') return '/admin/dashboard'
+  }
+
+  // 3. Xử lý User Routes (yêu cầu login)
+  if (requiresAuth && !requiresAdmin) {
+    if (!auth.isAuthenticated) return '/login'
+  }
+
+  // 4. Xử lý trang Login/Register của User
+  if (isGuest && auth.isAuthenticated) {
+    if (auth.userRole === 'admin') return '/admin/dashboard'
+    return '/'
+  }
 })
 
 export default router

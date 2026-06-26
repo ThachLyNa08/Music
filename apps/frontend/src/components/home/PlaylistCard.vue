@@ -30,7 +30,10 @@
     <p class="mt-1 line-clamp-2 text-xs font-medium text-slate-400 leading-snug">
       {{ playlist.desc || playlist.description || (playlist.total_songs ? `${playlist.total_songs} bài hát` : 'Danh sách phát') }}
     </p>
-    <p v-if="playlist.updated_at || playlist.updatedAt" class="mt-1 text-[11px] font-medium text-slate-500">
+    <p v-if="customBottomLabel" class="mt-1 text-[11px] font-medium text-slate-500">
+      {{ customBottomLabel }}
+    </p>
+    <p v-else-if="playlist.updated_at || playlist.updatedAt" class="mt-1 text-[11px] font-medium text-slate-500">
       Cập nhật: {{ new Date(playlist.updated_at || playlist.updatedAt).toLocaleDateString('vi-VN') }}
     </p>
   </article>
@@ -47,6 +50,10 @@ const props = defineProps({
   playlist: {
     type: Object,
     required: true
+  },
+  customBottomLabel: {
+    type: String,
+    default: ''
   }
 })
 

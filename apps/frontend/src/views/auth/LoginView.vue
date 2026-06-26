@@ -13,6 +13,9 @@
       <!-- Error Banner -->
       <div v-if="errorMsg" class="mb-8 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
         {{ errorMsg }}
+        <div v-if="redirectTo" class="mt-2">
+          <RouterLink :to="redirectTo" class="text-[#1ed760] hover:text-[#25e96a] underline font-bold transition-colors">Đến trang đăng nhập Admin</RouterLink>
+        </div>
       </div>
       
       <!-- Form -->
@@ -69,13 +72,17 @@ const auth = useAuthStore()
 const form = reactive({ email: '', password: '' })
 const loading  = ref(false)
 const errorMsg = ref('')
+const redirectTo = ref('')
 
 async function handleLogin() {
   if (!form.email || !form.password) return
-  errorMsg.value = ''; loading.value = true
-  const res = await auth.login(form.email, form.password)
+  errorMsg.value = ''; redirectTo.value = ''; loading.value = true
+  const res = await auth.login(form.email, form.password, 'user')
   loading.value = false
-  if (!res.success) errorMsg.value = res.message
+  if (!res.success) {
+    errorMsg.value = res.message
+    if (res.redirectTo) redirectTo.value = res.redirectTo
+  }
 }
 </script>
 

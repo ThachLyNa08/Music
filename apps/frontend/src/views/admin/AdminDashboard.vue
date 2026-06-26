@@ -53,6 +53,100 @@
       {{ auxiliaryWarning }}
     </div>
 
+    <!-- Section: Vận hành nhanh -->
+    <article class="panel quick-ops-panel mb-8 border border-slate-100 rounded-2xl p-6 bg-white shadow-sm mt-6" v-if="!loading">
+      <div class="panel-header mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Vận hành nhanh</h2>
+          <p class="text-sm text-slate-500 mt-1">Theo dõi trạng thái gợi ý, playlist tự động, nội dung và thanh toán.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 1. AI Recommendation Status -->
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-between mb-4 gap-2">
+            <h3 class="font-bold text-slate-700 flex items-center gap-1.5 text-sm xl:text-[15px] whitespace-nowrap tracking-tight min-w-0">
+              <MfIcon name="ai" size="18" class="text-cyan-500 shrink-0"/> 
+              <span class="truncate">AI Recommendation</span>
+            </h3>
+            <span class="px-1.5 py-0.5 rounded text-[9px] xl:text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiStatus?.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
+              {{ quickOperations?.aiStatus?.status || 'Đang tải...' }}
+            </span>
+          </div>
+          <div v-if="quickOperations?.aiStatus?.status === 'RUNNING'" class="flex-1 text-sm text-slate-600 space-y-2">
+            <p>Model: <strong>{{ quickOperations.aiStatus.version }}</strong></p>
+            <p v-if="quickOperations.aiStatus.lastTrained">Trained: {{ new Date(quickOperations.aiStatus.lastTrained).toLocaleDateString('vi-VN') }}</p>
+            <p v-if="quickOperations.aiStatus.metric">Metric: <strong>{{ quickOperations.aiStatus.metric.name }} ({{ (quickOperations.aiStatus.metric.value * 100).toFixed(1) }}%)</strong></p>
+          </div>
+          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
+            Chưa có dữ liệu mô hình
+          </div>
+        </div>
+
+        <!-- 2. Playlist tự động -->
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <MfIcon name="playlist" size="18" class="text-violet-500"/>
+            <h3 class="font-bold text-slate-700">Playlist tự động</h3>
+          </div>
+          <div v-if="quickOperations?.systemPlaylists?.length" class="flex-1 flex flex-col gap-2 text-sm">
+            <div v-for="type in ['dailymix_01', 'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes']" :key="type" class="flex items-center justify-between">
+              <span class="text-slate-600 truncate max-w-[120px]" :title="type">{{ formatSystemKeyName(type) }}</span>
+              <span class="text-xs font-mono" :class="isPlaylistStale(type) ? 'text-amber-500 font-bold' : 'text-slate-500'">
+                {{ formatPlaylistDate(type) }}
+              </span>
+            </div>
+          </div>
+          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
+            Chưa có dữ liệu
+          </div>
+        </div>
+
+        <!-- 3. Cảnh báo nội dung -->
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <MfIcon name="warning" size="18" class="text-amber-500"/>
+            <h3 class="font-bold text-slate-700">Cảnh báo nội dung</h3>
+          </div>
+          <div v-if="quickOperations?.contentAlerts?.length" class="flex-1 flex flex-col gap-2">
+            <div v-for="alert in quickOperations.contentAlerts.slice(0, 3)" :key="alert.id" class="flex items-center gap-2 text-sm bg-white p-2 rounded border border-slate-100">
+              <MfIcon :name="alert.icon" size="16" :class="alert.type === 'error' ? 'text-rose-500' : 'text-amber-500'" />
+              <span class="flex-1 truncate text-slate-700" :title="alert.title">{{ alert.title }}</span>
+              <span class="font-bold text-slate-800">{{ formatNumber(alert.count) }}</span>
+            </div>
+          </div>
+          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
+            Không có cảnh báo nội dung
+          </div>
+        </div>
+
+        <!-- 4. Thanh toán cần chú ý -->
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-2 mb-4">
+            <MfIcon name="transaction" size="18" class="text-rose-500"/>
+            <h3 class="font-bold text-slate-700">Thanh toán cần chú ý</h3>
+          </div>
+          <div v-if="quickOperations?.paymentAttention" class="flex-1 text-sm">
+            <div class="grid grid-cols-3 gap-2 text-center mb-3">
+              <div class="bg-rose-100 text-rose-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.failed24h) }}</div><div class="text-[10px]">Thất bại</div></div>
+              <div class="bg-amber-100 text-amber-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.pending) }}</div><div class="text-[10px]">Đang chờ</div></div>
+              <div class="bg-emerald-100 text-emerald-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.successToday) }}</div><div class="text-[10px]">T.công</div></div>
+            </div>
+            <div class="space-y-1">
+              <div v-for="issue in quickOperations.paymentAttention.recentIssues" :key="issue.id" class="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-100">
+                <span class="truncate w-24" :title="issue.email">{{ issue.display_name || issue.email?.split('@')[0] }}</span>
+                <span :class="issue.status === 'failed' ? 'text-rose-500' : 'text-amber-500'">{{ formatCurrency(issue.amount) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
+            Chưa có dữ liệu
+          </div>
+        </div>
+      </div>
+    </article>
+
     <article class="panel trend-panel">
       <div class="panel-header trend-header">
         <div>
@@ -370,6 +464,7 @@ const auxiliaryWarning = ref('')
 const stats = ref({})
 const rawCharts = ref({ revenue: [], genres: [] })
 const latestUsers = ref([])
+const quickOperations = ref(null)
 const topArtists = ref([])
 const songGroups = ref([])
 const transactions = ref([])
@@ -696,6 +791,7 @@ async function fetchData() {
     stats.value = dashboardData.stats || {}
     rawCharts.value = dashboardData.charts || { revenue: [], genres: [] }
     latestUsers.value = dashboardData.latestUsers || []
+    quickOperations.value = dashboardData.quickOperations || null
 
     const [songSummaryResult, transactionsResult, trendResult, topArtistResult] = await Promise.allSettled([
       api.get('/admin/songs/groups/summary'),
@@ -800,6 +896,38 @@ function formatCurrency(value) {
     currency: 'VND',
     maximumFractionDigits: 0
   }).format(Number(value || 0))
+}
+
+const systemPlaylistsMap = {
+  dailymix_01: 'Daily Mix 1', dailymix_02: 'Daily Mix 2', dailymix_03: 'Daily Mix 3',
+  dailymix_04: 'Daily Mix 4', dailymix_05: 'Daily Mix 5', dailymix_06: 'Daily Mix 6',
+  weekly_mix: 'Weekly Mix', moodmix: 'Mood Mix', trending_now: 'Trending Now',
+  morning_vibes: 'Morning Vibes', afternoon_vibes: 'Afternoon Vibes',
+  evening_vibes: 'Evening Vibes', night_vibes: 'Night Vibes'
+}
+
+function formatSystemKeyName(key) {
+  return systemPlaylistsMap[key] || key
+}
+
+function formatPlaylistDate(key) {
+  if (!quickOperations.value?.systemPlaylists) return '--'
+  const pl = quickOperations.value.systemPlaylists.find(p => p.system_key === key)
+  if (!pl || !pl.updated_at) return '--'
+  return new Date(pl.updated_at).toLocaleDateString('vi-VN')
+}
+
+function isPlaylistStale(key) {
+  if (!quickOperations.value?.systemPlaylists) return false
+  const pl = quickOperations.value.systemPlaylists.find(p => p.system_key === key)
+  if (!pl || !pl.updated_at) return true
+  const diffHours = (new Date() - new Date(pl.updated_at)) / (1000 * 60 * 60)
+  if (key === 'weekly_mix' && diffHours > 24 * 7 + 12) return true
+  if (key.startsWith('dailymix') && diffHours > 24 * 7 + 12) return true
+  if (key === 'trending_now' && diffHours > 25) return true
+  if (key === 'moodmix' && diffHours > 25) return true
+  if (key.endsWith('_vibes') && diffHours > 25) return true
+  return false
 }
 
 function formatDateTime(value) {

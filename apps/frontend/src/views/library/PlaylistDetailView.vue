@@ -39,15 +39,19 @@
             <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
             <span class="hidden lg:block">{{ songs.length }} bài hát</span>
             
-            <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
-            <span class="hidden lg:block">Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+            <template v-if="!isSystemPlaylist && playlist.updated_at">
+              <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
+              <span class="hidden lg:block">Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+            </template>
           </div>
 
           <!-- Mobile only metadata -->
           <div class="flex lg:hidden items-center justify-center gap-2 text-xs font-semibold text-white/60 mt-1">
             <span>{{ songs.length }} bài hát</span>
-            <span class="w-1 h-1 bg-white/30 rounded-full mx-1"></span>
-            <span>Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+            <template v-if="!isSystemPlaylist && playlist.updated_at">
+              <span class="w-1 h-1 bg-white/30 rounded-full mx-1"></span>
+              <span>Cập nhật: {{ new Date(playlist.updated_at).toLocaleDateString('vi-VN') }}</span>
+            </template>
           </div>
           
           <!-- Action Buttons -->

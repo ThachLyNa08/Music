@@ -21,8 +21,8 @@ const RECOMMENDATION_ENABLED = process.env.ENABLE_RECOMMENDATION_SCHEDULER === '
 const RECOMMENDATION_TEST_MODE = process.env.RECOMMENDATION_SCHEDULER_TEST_MODE === 'true';
 
 if (RECOMMENDATION_ENABLED) {
-  console.log('[CRON] Recommendation scheduler ENABLED (ENABLE_RECOMMENDATION_SCHEDULER=true)');
-  console.log('[CRON] Registered jobs:');
+  console.log('[RecommendationScheduler] ENABLE_RECOMMENDATION_SCHEDULER=true');
+  console.log('[RecommendationScheduler] Daily Mix stagger jobs registered');
   console.log('  - Daily Mix (Tue-Sat 00:10, Mon 00:10)');
   console.log('  - Weekly Mix (Sun 07:00)');
   console.log('  - Mood Mix (Daily 01:00)');
@@ -157,35 +157,35 @@ if (RECOMMENDATION_ENABLED) {
       const t = new Date();
       const mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(mon);
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Wed -> dailymix_02 (analyze Tue)
     cron.schedule('10 0 * * 3', () => {
       const t = new Date();
       const tue = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(tue);
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Thu -> dailymix_03 (analyze Wed)
     cron.schedule('10 0 * * 4', () => {
       const t = new Date();
       const wed = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(wed);
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Fri -> dailymix_04 (analyze Thu)
     cron.schedule('10 0 * * 5', () => {
       const t = new Date();
       const thu = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(thu);
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Sat -> dailymix_05 (analyze Fri)
     cron.schedule('10 0 * * 6', () => {
       const t = new Date();
       const fri = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(fri);
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Mon -> dailymix_06 (analyze weekend Sat+Sun)
     cron.schedule('10 0 * * 1', () => {
       runDailyMixForAllUsers(lastSunday());
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
     // 00:10 Sun -> KHÔNG có job Daily Mix.
   }
 
@@ -214,7 +214,7 @@ if (RECOMMENDATION_ENABLED) {
       } catch (e) {
         console.error('[CRON] Weekly Mix failed:', e.message);
       }
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
   }
 
   // ---- Mood Mix cron job --------------------------------------------------
@@ -239,7 +239,7 @@ if (RECOMMENDATION_ENABLED) {
       } catch (e) {
         console.error('[CRON] Mood Mix failed:', e.message);
       }
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
   }
 
   // ---- Contextual Mood cron job ---------------------------------------------

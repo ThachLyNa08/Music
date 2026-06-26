@@ -89,6 +89,39 @@
               </div>
             </div>
 
+            <!-- Taxonomy Extra Info -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Thị trường (Market)
+                </label>
+                <select 
+                  v-model="form.market"
+                  class="w-full px-4 py-2.5 bg-white dark:bg-bg-card border border-slate-200 dark:border-bg-border rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm appearance-none cursor-pointer"
+                >
+                  <option value="">Không có</option>
+                  <option value="VPOP">VPOP</option>
+                  <option value="KPOP">KPOP</option>
+                  <option value="USUK">USUK</option>
+                  <option value="OTHER">Khác</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Thể loại cha (Subgenre)
+                </label>
+                <select 
+                  v-model="form.parent_id"
+                  class="w-full px-4 py-2.5 bg-white dark:bg-bg-card border border-slate-200 dark:border-bg-border rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm appearance-none cursor-pointer"
+                >
+                  <option value="">Không có (Root)</option>
+                  <option v-for="g in parentGenres" :key="g.id" :value="g.id">
+                    {{ g.name }}
+                  </option>
+                </select>
+              </div>
+            </div>
+
             <!-- Upload Cover -->
             <div>
               <label class="block text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
@@ -120,7 +153,7 @@
             </div>
 
             <!-- Toggles -->
-            <div class="flex gap-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 dark:border-bg-border pt-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" v-model="form.is_active" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
                 <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Đang hoạt động</span>
@@ -128,7 +161,22 @@
 
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" v-model="form.is_featured" class="w-4 h-4 text-amber-500 border-gray-300 rounded focus:ring-amber-500 dark:focus:ring-amber-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
-                <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Hiển thị nổi bật (Featured)</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Hiển thị nổi bật</span>
+              </label>
+
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="form.use_in_recommendation" class="w-4 h-4 text-indigo-500 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:bg-gray-700 dark:border-gray-600">
+                <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Dùng gợi ý (Recommend)</span>
+              </label>
+
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="form.use_in_cold_start" class="w-4 h-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:bg-gray-700 dark:border-gray-600">
+                <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Dùng Cold Start</span>
+              </label>
+
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="form.use_in_ai_playlist" class="w-4 h-4 text-amber-500 border-gray-300 rounded focus:ring-amber-500 dark:focus:ring-amber-600 dark:bg-gray-700 dark:border-gray-600">
+                <span class="text-sm font-medium text-gray-900 dark:text-gray-300">Dùng AI Playlist</span>
               </label>
             </div>
           </form>
@@ -158,6 +206,10 @@ const props = defineProps({
   genre: {
     type: Object,
     default: null
+  },
+  genres: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -166,6 +218,7 @@ const emit = defineEmits(['close', 'success']);
 const toast = useToastStore();
 
 const isEditing = computed(() => !!props.genre);
+const parentGenres = computed(() => props.genres.filter(g => g.id !== props.genre?.id && !g.parent_id));
 const loading = ref(false);
 const coverInput = ref(null);
 const coverPreview = ref(null);
@@ -177,8 +230,13 @@ const form = reactive({
   color: '',
   icon: '',
   sort_order: 0,
+  market: '',
+  parent_id: '',
   is_active: true,
   is_featured: false,
+  use_in_recommendation: true,
+  use_in_cold_start: true,
+  use_in_ai_playlist: true,
   cover: null
 });
 
@@ -190,8 +248,13 @@ onMounted(() => {
     form.color = props.genre.color || '';
     form.icon = props.genre.icon || '';
     form.sort_order = props.genre.sort_order || 0;
+    form.market = props.genre.market || '';
+    form.parent_id = props.genre.parent_id || '';
     form.is_active = props.genre.status === 'active';
     form.is_featured = !!props.genre.is_featured;
+    form.use_in_recommendation = props.genre.use_in_recommendation !== undefined ? Boolean(props.genre.use_in_recommendation) : true;
+    form.use_in_cold_start = props.genre.use_in_cold_start !== undefined ? Boolean(props.genre.use_in_cold_start) : true;
+    form.use_in_ai_playlist = props.genre.use_in_ai_playlist !== undefined ? Boolean(props.genre.use_in_ai_playlist) : true;
     if (props.genre.cover_url) {
       coverPreview.value = props.genre.cover_url;
     }
@@ -237,8 +300,13 @@ const handleSubmit = async () => {
     if (form.color) formData.append('color', form.color);
     if (form.icon) formData.append('icon', form.icon);
     formData.append('sort_order', form.sort_order);
+    if (form.market) formData.append('market', form.market);
+    if (form.parent_id) formData.append('parent_id', form.parent_id);
     formData.append('status', form.is_active ? 'active' : 'hidden');
     formData.append('is_featured', form.is_featured ? 1 : 0);
+    formData.append('use_in_recommendation', form.use_in_recommendation ? 1 : 0);
+    formData.append('use_in_cold_start', form.use_in_cold_start ? 1 : 0);
+    formData.append('use_in_ai_playlist', form.use_in_ai_playlist ? 1 : 0);
     
     if (form.cover) {
       formData.append('cover', form.cover);

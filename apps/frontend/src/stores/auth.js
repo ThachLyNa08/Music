@@ -11,32 +11,69 @@ export const useAuthStore = defineStore('auth', () => {
   const loading      = ref(false)
 
   const isLoggedIn = computed(() => !!accessToken.value)
+  const isAuthenticated = computed(() => !!accessToken.value)
   const isAdmin    = computed(() => user.value?.role === 'admin')
+  const userRole   = computed(() => user.value?.role || 'guest')
   const isPremium  = computed(() => {
     const expiresAt = user.value?.premium_expires_at || user.value?.premium_expired_at
     if (!expiresAt) return false
     return new Date(expiresAt) > new Date()
   })
 
-  async function login(email, password) {
+  async function login(email, password, loginContext = 'user') {
     loading.value = true
     try {
       console.log('[AUTH] Gửi request đăng nhập:', email)
       const { data } = await authApi.login({ email, password })
       console.log('[AUTH] Đăng nhập thành công, nhận token:', !!data.data.accessToken)
-      setAuth(data.data)
-      await fetchMe()
       
-      // Restore player session for this user
-      const player = usePlayerStore()
-      player.restorePlayerSession(user.value?.id)
+      // Tạm lưu token vào localStorage để axios interceptor có thể gọi getMe()
+      // KHÔNG gọi setAuth() hay gán user.value ngay để tránh trigger watchers (App.vue, v.v.)
+      localStorage.setItem('accessToken', data.data.accessToken)
+      localStorage.setItem('refreshToken', data.data.refreshToken)
       
-      console.log('[AUTH] Bắt đầu chuyển hướng (isAdmin:', isAdmin.value, ')')
-      if (isAdmin.value) {
-        await router.push('/admin')
-      } else {
+      let fetchedUser = null
+      try {
+        const meRes = await authApi.getMe()
+        fetchedUser = meRes.data.data
+      } catch (err) {
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        throw err
+      }
+      
+      // Kiểm tra luồng Admin
+      if (loginContext === 'admin') {
+        if (fetchedUser?.role !== 'admin') {
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          return { success: false, message: 'Tài khoản không có quyền quản trị.' }
+        }
+        
+        // Hợp lệ -> Cập nhật Pinia state chính thức
+        setAuth(data.data)
+        user.value = fetchedUser
+        await router.push('/admin/dashboard')
+      } 
+      // Kiểm tra luồng User
+      else {
+        if (fetchedUser?.role === 'admin') {
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          return { success: false, message: 'Đây là tài khoản quản trị. Vui lòng đăng nhập tại trang Admin.', redirectTo: '/admin/login' }
+        }
+        
+        // Hợp lệ -> Cập nhật Pinia state chính thức
+        setAuth(data.data)
+        user.value = fetchedUser
+        
+        // Restore player session cho user
+        const player = usePlayerStore()
+        player.restorePlayerSession(user.value?.id)
+        
         await router.push('/')
       }
+      
       console.log('[AUTH] Đã chuyển hướng xong')
       return { success: true }
     } catch (err) {
@@ -45,6 +82,14 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  function logoutSilently() {
+    user.value = null
+    accessToken.value = null
+    refreshToken.value = null
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
   }
 
   async function register(payload) {
@@ -79,6 +124,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    const currentRoute = router.currentRoute.value.path
+    const wasAdminPath = currentRoute.startsWith('/admin')
+
     try { await authApi.logout() } catch {}
     user.value = null
     accessToken.value = null
@@ -91,7 +139,11 @@ export const useAuthStore = defineStore('auth', () => {
     player.stopPlayback()
     player.clearRuntimePlayer()
     
-    router.push('/login')
+    if (wasAdminPath) {
+      router.push('/admin/login')
+    } else {
+      router.push('/login')
+    }
   }
 
   function setAuth({ accessToken: at, refreshToken: rt }) {
@@ -108,6 +160,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, isAdmin, isPremium, loading,
+  return { user, accessToken, isLoggedIn, isAuthenticated, isAdmin, userRole, isPremium, loading,
            login, register, logout, fetchMe, upgradeToPremium }
 })

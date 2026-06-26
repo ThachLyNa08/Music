@@ -356,7 +356,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
     // 3. Fetch full playlist details to return to the frontend
     const [playlists] = await conn.query(`
-      SELECT p.id, p.name, p.description as \`desc\`, p.type, p.cover_url, p.system_key, p.is_system, p.updated_at,
+      SELECT p.id, p.name, p.description as \`desc\`, p.type, p.cover_url, p.system_key, p.is_system, COALESCE(p.last_refreshed_at, p.updated_at) AS updated_at, p.next_refresh_at,
              IF(usp.id IS NULL, 0, 1) AS is_saved,
              COALESCE(
                NULLIF(p.cover_url, ''),
@@ -384,8 +384,26 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
     // Format output
     const listMap = {};
+    
+    // Deduplicate Weekly Mixes
+    const weeklyMixes = playlists.filter(pl => pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix'));
+    let selectedWeeklyMixId = null;
+    if (weeklyMixes.length > 0) {
+      const best = weeklyMixes.sort((a, b) => {
+        if (a.next_refresh_at && !b.next_refresh_at) return -1;
+        if (!a.next_refresh_at && b.next_refresh_at) return 1;
+        if (a.name === 'Weekly Mix của bạn' && b.name !== 'Weekly Mix của bạn') return -1;
+        if (a.name !== 'Weekly Mix của bạn' && b.name === 'Weekly Mix của bạn') return 1;
+        return b.id - a.id;
+      })[0];
+      selectedWeeklyMixId = best.id;
+    }
+
     const madeForYouPlaylists = [];
     playlists.forEach(pl => {
+      const isWeekly = pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix');
+      if (isWeekly && pl.id !== selectedWeeklyMixId) return; // filter out duplicate Weekly Mix
+
       pl.cover_url = normalizeCoverUrl(pl.cover_url, req);
       pl.effective_cover_url = normalizeCoverUrl(pl.effective_cover_url, req);
       pl.creator_name = 'MusicFlow';

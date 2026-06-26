@@ -67,6 +67,7 @@
             v-for="item in displayMadeForYou"
             :key="`mfy-${item.id || item.name}`"
             :playlist="item"
+            :customBottomLabel="getSystemMixBasisLabel(item)"
             class="user-horizontal-card user-playlist-card-size"
             @click="goToPlaylist(item)"
             @play="playPlaylist(item)"
@@ -139,6 +140,7 @@
             v-for="item in displayRecommendedToday"
             :key="`rec-${item.id || item.name}`"
             :playlist="item"
+            :customBottomLabel="getSystemMixBasisLabel(item)"
             class="user-horizontal-card user-playlist-card-size"
             @click="goToPlaylist(item)"
             @play="playPlaylist(item)"
@@ -288,6 +290,28 @@ import SongRow from '@/components/common/SongRow.vue'
 import WeeklyChartSection from '@/components/home/WeeklyChartSection.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
+
+function getSystemMixBasisLabel(playlist) {
+  const name = String(playlist?.name || '').toLowerCase()
+
+  if (name.includes('daily mix 01')) return 'Dựa trên gu nghe Thứ Hai'
+  if (name.includes('daily mix 02')) return 'Dựa trên gu nghe Thứ Ba'
+  if (name.includes('daily mix 03')) return 'Dựa trên gu nghe Thứ Tư'
+  if (name.includes('daily mix 04')) return 'Dựa trên gu nghe Thứ Năm'
+  if (name.includes('daily mix 05')) return 'Dựa trên gu nghe Thứ Sáu'
+  if (name.includes('daily mix 06')) return 'Dựa trên gu nghe cuối tuần'
+
+  if (name.includes('weekly mix')) return 'Tổng hợp gu nghe trong tuần'
+  if (name.includes('morning')) return 'Dành cho buổi sáng của bạn'
+  if (name.includes('afternoon')) return 'Dành cho buổi chiều thư giãn'
+  if (name.includes('evening')) return 'Dành cho buổi tối nhẹ nhàng'
+  if (name.includes('night')) return 'Dành cho đêm nghe nhạc'
+  if (name.includes('mood')) return 'Dựa trên mood nghe gần đây'
+  if (name.includes('favorite')) return 'Những bài hát bạn đã yêu thích'
+  if (name.includes('trending')) return 'Những bài hát đang thịnh hành'
+
+  return 'Cá nhân hóa theo gu nghe của bạn'
+}
 
 const router = useRouter()
 const auth = useAuthStore()

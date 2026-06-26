@@ -7,7 +7,6 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "migrate": "node scripts/migrations/migrate.js",
-    "sync": "node test_db.js",
     "migrate-region": "node scripts/migrations/migrate_artist_region.js",
     "migrate-premium": "node scripts/migrations/migrate.js",
     "migrate-market": "node migrations/add_market_to_songs.js"

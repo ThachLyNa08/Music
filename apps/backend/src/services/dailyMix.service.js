@@ -105,7 +105,7 @@ async function ensurePlaylist(conn, userId, systemKey, name, description) {
   return { playlistId: result.insertId, created: true };
 }
 
-async function replacePlaylistSongs(conn, playlistId, songIds) {
+async function replacePlaylistSongs(conn, playlistId, songIds, nextRefreshAt = null) {
   await conn.query(`DELETE FROM playlist_songs WHERE playlist_id = ?`, [playlistId]);
   if (!songIds.length) return 0;
   const values = songIds.map((songId, idx) => [playlistId, songId, idx]);
@@ -113,7 +113,49 @@ async function replacePlaylistSongs(conn, playlistId, songIds) {
     `INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES ?`,
     [values]
   );
+  if (nextRefreshAt) {
+    await conn.query(
+      `UPDATE playlists 
+       SET last_refreshed_at = NOW(), 
+           next_refresh_at = ? 
+       WHERE id = ?`, 
+      [nextRefreshAt, playlistId]
+    );
+  } else {
+    await conn.query(
+      `UPDATE playlists 
+       SET last_refreshed_at = NOW(), 
+           next_refresh_at = DATE_ADD(NOW(), INTERVAL 7 DAY) 
+       WHERE id = ?`, 
+      [playlistId]
+    );
+  }
   return songIds.length;
+}
+
+function getNextRefreshDateForDailyMix(systemKey) {
+  const now = new Date();
+  const day = now.getDay(); 
+  const targetDayMap = {
+    'dailymix_01': 2,
+    'dailymix_02': 3,
+    'dailymix_03': 4,
+    'dailymix_04': 5,
+    'dailymix_05': 6,
+    'dailymix_06': 1
+  };
+  const targetDay = targetDayMap[systemKey];
+  if (targetDay === undefined) {
+    const nextWeek = new Date(now);
+    nextWeek.setDate(now.getDate() + 7);
+    return nextWeek;
+  }
+  
+  let daysUntil = targetDay - day;
+  if (daysUntil <= 0) {
+    daysUntil += 7;
+  }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntil, 0, 10, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -748,7 +790,8 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       await conn.beginTransaction();
       try {
         const { playlistId, created } = await ensurePlaylist(conn, uid, systemKey, name, description);
-        const inserted = await replacePlaylistSongs(conn, playlistId, finalIds);
+        const nextRefresh = getNextRefreshDateForDailyMix(systemKey);
+        const inserted = await replacePlaylistSongs(conn, playlistId, finalIds, nextRefresh);
         await conn.commit();
         summary.playlistId = playlistId;
         summary.created = created;

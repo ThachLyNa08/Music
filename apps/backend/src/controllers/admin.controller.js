@@ -8,7 +8,7 @@ const {
   syncMissingArtistBio,
   getArtistMetadataIssues: getArtistMetadataIssueRows,
 } = require('../services/artistMetadata.service');
-const { getDashboardSummary } = require('../services/adminDashboard.service');
+const { getDashboardSummary, getQuickOperations } = require('../services/adminDashboard.service');
 const {
   getDataQualitySummary: getAdminDataQualitySummary,
   getDataQualityIssues: getAdminDataQualityIssues,
@@ -341,7 +341,8 @@ exports.getDashboardStats = async (req, res) => {
           systemAlerts
         },
         topArtists,
-        latestUsers: secureUsers
+        latestUsers: secureUsers,
+        quickOperations: await getQuickOperations()
       }
     });
 

@@ -25,8 +25,14 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
   return acc;
 }, {});
 
-const SAMPLE_MODE = !args.full;
-const SAMPLE_USERS = SAMPLE_MODE ? (parseInt(args['sample-users'] || '50', 10) || 50) : null;
+const sampleUsersArg = args['sample-users'] ?? args.sampleUsers;
+const sampleUsersParsed = sampleUsersArg != null ? Number(sampleUsersArg) : null;
+const SAMPLE_MODE = Number.isFinite(sampleUsersParsed) && sampleUsersParsed > 0;
+const SAMPLE_USERS = SAMPLE_MODE ? sampleUsersParsed : null;
+const INCLUDE_SEMANTIC = !!args['include-semantic'];
+const IS_FINAL = !!args['final'];
+const SAVE_BPR_MODEL = !!args['save-bpr-model'] || !!args['overwrite-serving-model'];
+const OUTPUT_SUFFIX = args['output-suffix'] ? `_${args['output-suffix']}` : '';
 
 // ─── DB setup ───────────────────────────────────────────────────────────────
 const BACKEND_ROOT = path.resolve(__dirname, '../../apps/backend');
@@ -58,6 +64,14 @@ const CB_WEIGHTS = {
   bpm: 0.05, energy_score: 0.05, danceability: 0.10,
   acoustic_score: 0.05, brightness: 0.05,
   mood: 0.10, vibe: 0.10,
+};
+
+const CB_SEMANTIC_WEIGHTS = {
+  market: 0.10, genre: 0.10, artist: 0.05,
+  bpm: 0.05, energy_score: 0.05, danceability: 0.05,
+  acoustic_score: 0.05, brightness: 0.05,
+  mood: 0.05, vibe: 0.05,
+  semantic_theme: 0.15, semantic_mood: 0.15, semantic_situation: 0.10,
 };
 
 // Weights for Hybrid (D) — sum to 1.0
@@ -287,44 +301,42 @@ function writeLineChart(filePath, title, xLabel, yLabel, rows, valueKey, color =
   writePng(filePath, width, height, ctx.data);
 }
 
-function writeGroupedBarChart(filePath, title, metricsByAlg, series, options = {}) {
-  const width = 1200, height = 680;
+function writeGroupedBarChart(outPath, title, metricsByAlg, metricKeys, options = {}) {
+  const width = 800;
+  const height = 450;
   const ctx = createCanvas(width, height);
-  const bounds = { left: 90, right: width - 50, top: 90, bottom: height - 130 };
+  const bounds = { left: 80, right: width - 20, top: 70, bottom: height - 80 };
   drawChartFrame(ctx, title, 'ALGORITHM', options.yLabel || 'VALUE', bounds);
-  const algs = options.algs || ['most_popular', 'content_based', 'bpr_mf', 'hybrid'];
+  const algs = options.algs || (typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC ? ['most_popular', 'content_based_semantic', 'bpr_mf', 'hybrid_semantic'] : ['most_popular', 'content_based', 'bpr_mf', 'hybrid']);
   const labels = options.labels || {
     most_popular: 'MOST POP',
     content_based: 'CONTENT',
+    content_based_semantic: 'CB+SEM',
     bpr_mf: 'BPR MF',
     hybrid: 'HYBRID',
+    hybrid_semantic: 'HYBRID+SEM',
   };
-  const colors = [CHART_COLORS.navy, CHART_COLORS.teal, CHART_COLORS.amber, CHART_COLORS.rose, CHART_COLORS.violet];
-  const rawValues = algs.flatMap((alg) => series.map((s) => Number(metricsByAlg[alg]?.[s.key]) || 0));
-  const maxVal = options.maxValue || Math.max(...rawValues, 1);
+  const colors = [CHART_COLORS.navy, CHART_COLORS.teal, CHART_COLORS.amber, CHART_COLORS.rose, CHART_COLORS.violet, CHART_COLORS.green];
+  const maxVal = options.maxValue || 1.0;
   const groupW = (bounds.right - bounds.left) / algs.length;
-  const barGap = 6;
-  const barW = Math.max(12, (groupW - 38) / series.length - barGap);
-  series.forEach((s, idx) => {
-    const lx = bounds.left + idx * 210;
-    ctx.fillRect(lx, height - 38, 18, 18, colors[idx]);
-    ctx.drawText(s.label, lx + 26, height - 39, CHART_COLORS.black, 1);
+  const barW = Math.max(8, (groupW * 0.8) / metricKeys.length);
+  
+  metricKeys.forEach((s, idx) => {
+    const lx = bounds.left + 20 + idx * 100;
+    ctx.fillRect(lx, height - 30, 12, 12, colors[idx]);
+    ctx.drawText(s.label, lx + 16, height - 31, CHART_COLORS.black, 1);
   });
-  ctx.drawText(String(round(maxVal, 4)), 12, bounds.top - 5, CHART_COLORS.gray, 1);
-  ctx.drawText('0', 32, bounds.bottom - 6, CHART_COLORS.gray, 1);
+  
   algs.forEach((alg, aIdx) => {
-    const baseX = bounds.left + aIdx * groupW + 22;
-    series.forEach((s, sIdx) => {
-      const raw = Number(metricsByAlg[alg]?.[s.key]) || 0;
-      const value = options.normalizeBySeries ? raw / (s.max || 1) : raw;
-      const scaledMax = options.normalizeBySeries ? 1 : maxVal;
-      const h = (bounds.bottom - bounds.top) * value / (scaledMax || 1);
-      const x = baseX + sIdx * (barW + barGap);
-      ctx.fillRect(x, bounds.bottom - h, barW, h, colors[sIdx]);
+    const baseX = bounds.left + aIdx * groupW + 10;
+    metricKeys.forEach((s, sIdx) => {
+      const val = Number(metricsByAlg[alg]?.[s.key]) || 0;
+      const h = (bounds.bottom - bounds.top) * (val / maxVal);
+      ctx.fillRect(baseX + sIdx * (barW + 2), bounds.bottom - h, barW, h, colors[sIdx]);
     });
-    ctx.drawText(labels[alg], baseX - 2, bounds.bottom + 15, CHART_COLORS.black, 1);
+    ctx.drawText(labels[alg] || alg, baseX, bounds.bottom + 10, CHART_COLORS.black, 1);
   });
-  writePng(filePath, width, height, ctx.data);
+  writePng(outPath, width, height, ctx.data);
 }
 
 // ─── DB helpers ─────────────────────────────────────────────────────────────
@@ -555,10 +567,21 @@ async function loadSongCatalog() {
   ];
   const audioJoin = hasAudio ? 'LEFT JOIN song_audio_features saf ON saf.song_id = s.id' : '';
 
+  const hasSemantic = INCLUDE_SEMANTIC && await tableExists('song_semantic_profiles');
+  const semanticSelect = hasSemantic ? [
+    'ssp.main_theme', 'ssp.mood_tags', 'ssp.situation_tags', 'ssp.meaning_confidence',
+    'ssp.evidence_level', 'ssp.review_status'
+  ] : [
+    'NULL AS main_theme', 'NULL AS mood_tags', 'NULL AS situation_tags', 'NULL AS meaning_confidence',
+    'NULL AS evidence_level', 'NULL AS review_status'
+  ];
+  const semanticJoin = hasSemantic ? 'LEFT JOIN song_semantic_profiles ssp ON ssp.song_id = s.id' : '';
+
   const rows = await sql(`
-    SELECT ${[...songSelect, ...audioSelect].join(', ')}
+    SELECT ${[...songSelect, ...audioSelect, ...semanticSelect].join(', ')}
     FROM songs s
     ${audioJoin}
+    ${semanticJoin}
     WHERE (s.is_active = 1 OR s.is_active IS NULL)
       AND s.audio_url IS NOT NULL AND s.audio_url <> ''
       AND (s.release_status IS NULL OR s.release_status = 'published'
@@ -581,6 +604,12 @@ async function loadSongCatalog() {
       brightness: row.brightness === null || row.brightness === undefined ? null : Number(row.brightness),
       mood: row.mood || null,
       vibe: row.vibe || null,
+      main_theme: row.main_theme || null,
+      mood_tags: row.mood_tags ? (typeof row.mood_tags === 'string' ? JSON.parse(row.mood_tags) : row.mood_tags) : [],
+      situation_tags: row.situation_tags ? (typeof row.situation_tags === 'string' ? JSON.parse(row.situation_tags) : row.situation_tags) : [],
+      meaning_confidence: row.meaning_confidence !== null && row.meaning_confidence !== undefined ? Number(row.meaning_confidence) : 0,
+      evidence_level: row.evidence_level || 'unknown',
+      review_status: row.review_status || 'unknown',
     });
   }
   console.log(`[SongCatalog] ${byId.size} available songs`);
@@ -601,6 +630,9 @@ function buildContentProfile(trainPositiveData, songById) {
   const artistCounts = new Map();
   const moodCounts = new Map();
   const vibeCounts = new Map();
+  const themeCounts = new Map();
+  const semanticMoodCounts = new Map();
+  const situationCounts = new Map();
   const audioVals = { bpm: [], energy_score: [], danceability: [], acoustic_score: [], brightness: [] };
 
   for (const [, songData] of trainPositiveData) {
@@ -611,6 +643,9 @@ function buildContentProfile(trainPositiveData, songById) {
     if (song.artist_id !== null && song.artist_id !== undefined) artistCounts.set(Number(song.artist_id), (artistCounts.get(Number(song.artist_id)) || 0) + 1);
     if (song.mood) moodCounts.set(song.mood, (moodCounts.get(song.mood) || 0) + 1);
     if (song.vibe) vibeCounts.set(song.vibe, (vibeCounts.get(song.vibe) || 0) + 1);
+    if (song.main_theme) themeCounts.set(song.main_theme, (themeCounts.get(song.main_theme) || 0) + 1);
+    if (Array.isArray(song.mood_tags)) song.mood_tags.forEach(t => semanticMoodCounts.set(t, (semanticMoodCounts.get(t) || 0) + 1));
+    if (Array.isArray(song.situation_tags)) song.situation_tags.forEach(t => situationCounts.set(t, (situationCounts.get(t) || 0) + 1));
     if (song.bpm !== null && Number.isFinite(Number(song.bpm))) audioVals.bpm.push(Number(song.bpm));
     if (song.energy_score !== null && Number.isFinite(Number(song.energy_score))) audioVals.energy_score.push(Number(song.energy_score));
     if (song.danceability !== null && Number.isFinite(Number(song.danceability))) audioVals.danceability.push(Number(song.danceability));
@@ -626,6 +661,9 @@ function buildContentProfile(trainPositiveData, songById) {
     artist_counts: Object.fromEntries(artistCounts.entries()),
     mood_counts: Object.fromEntries(moodCounts.entries()),
     vibe_counts: Object.fromEntries(vibeCounts.entries()),
+    theme_counts: Object.fromEntries(themeCounts.entries()),
+    semantic_mood_counts: Object.fromEntries(semanticMoodCounts.entries()),
+    situation_counts: Object.fromEntries(situationCounts.entries()),
     bpm_mean: avg(audioVals.bpm),
     energy_score_mean: avg(audioVals.energy_score),
     danceability_mean: avg(audioVals.danceability),
@@ -639,7 +677,8 @@ function buildContentProfile(trainPositiveData, songById) {
 }
 
 // ─── Score song against content profile ─────────────────────────────────────
-function scoreContentBased(song, profile) {
+function scoreContentBased(song, profile, useSemantic = false) {
+  const WEIGHTS = useSemantic ? CB_SEMANTIC_WEIGHTS : CB_WEIGHTS;
   const components = {};
   let totalWeight = 0;
 
@@ -648,7 +687,7 @@ function scoreContentBased(song, profile) {
     const match = profile.market_counts[song.market] || 0;
     if (total > 0) {
       components.market = match / total;
-      totalWeight += CB_WEIGHTS.market;
+      totalWeight += WEIGHTS.market;
     }
   }
 
@@ -657,7 +696,7 @@ function scoreContentBased(song, profile) {
     const match = profile.genre_counts[Number(song.genre_id)] || 0;
     if (total > 0) {
       components.genre = match / total;
-      totalWeight += CB_WEIGHTS.genre;
+      totalWeight += WEIGHTS.genre;
     }
   }
 
@@ -666,36 +705,36 @@ function scoreContentBased(song, profile) {
     const match = profile.artist_counts[Number(song.artist_id)] || 0;
     if (total > 0) {
       components.artist = match / total;
-      totalWeight += CB_WEIGHTS.artist;
+      totalWeight += WEIGHTS.artist;
     }
   }
 
   if (profile.bpm_mean !== null && song.bpm !== null && Number.isFinite(Number(song.bpm))) {
     components.bpm = Math.max(0, 1 - Math.abs(Number(song.bpm) - profile.bpm_mean) / 60);
-    totalWeight += CB_WEIGHTS.bpm;
+    totalWeight += WEIGHTS.bpm;
   }
   if (profile.energy_score_mean !== null && song.energy_score !== null && Number.isFinite(Number(song.energy_score))) {
     components.energy_score = Math.max(0, 1 - Math.abs(Number(song.energy_score) - profile.energy_score_mean));
-    totalWeight += CB_WEIGHTS.energy_score;
+    totalWeight += WEIGHTS.energy_score;
   }
   if (profile.danceability_mean !== null && song.danceability !== null && Number.isFinite(Number(song.danceability))) {
     components.danceability = Math.max(0, 1 - Math.abs(Number(song.danceability) - profile.danceability_mean));
-    totalWeight += CB_WEIGHTS.danceability;
+    totalWeight += WEIGHTS.danceability;
   }
   if (profile.acoustic_score_mean !== null && song.acoustic_score !== null && Number.isFinite(Number(song.acoustic_score))) {
     components.acoustic_score = Math.max(0, 1 - Math.abs(Number(song.acoustic_score) - profile.acoustic_score_mean));
-    totalWeight += CB_WEIGHTS.acoustic_score;
+    totalWeight += WEIGHTS.acoustic_score;
   }
   if (profile.brightness_mean !== null && song.brightness !== null && Number.isFinite(Number(song.brightness))) {
     components.brightness = Math.max(0, 1 - Math.abs(Number(song.brightness) - profile.brightness_mean));
-    totalWeight += CB_WEIGHTS.brightness;
+    totalWeight += WEIGHTS.brightness;
   }
   if (profile.mood_counts && song.mood) {
     const total = Object.values(profile.mood_counts).reduce((s, v) => s + v, 0);
     const match = profile.mood_counts[song.mood] || 0;
     if (total > 0) {
       components.mood = match / total;
-      totalWeight += CB_WEIGHTS.mood;
+      totalWeight += WEIGHTS.mood;
     }
   }
   if (profile.vibe_counts && song.vibe) {
@@ -703,14 +742,43 @@ function scoreContentBased(song, profile) {
     const match = profile.vibe_counts[song.vibe] || 0;
     if (total > 0) {
       components.vibe = match / total;
-      totalWeight += CB_WEIGHTS.vibe;
+      totalWeight += WEIGHTS.vibe;
+    }
+  }
+
+  if (useSemantic) {
+    if (profile.theme_counts && song.main_theme) {
+      const total = Object.values(profile.theme_counts).reduce((s, v) => s + v, 0);
+      const match = profile.theme_counts[song.main_theme] || 0;
+      if (total > 0) {
+        components.semantic_theme = match / total;
+        totalWeight += WEIGHTS.semantic_theme || 0;
+      }
+    }
+    if (profile.semantic_mood_counts && Array.isArray(song.mood_tags) && song.mood_tags.length > 0) {
+      const total = Object.values(profile.semantic_mood_counts).reduce((s, v) => s + v, 0);
+      let match = 0;
+      for (const t of song.mood_tags) match += profile.semantic_mood_counts[t] || 0;
+      if (total > 0) {
+        components.semantic_mood = match / total;
+        totalWeight += WEIGHTS.semantic_mood || 0;
+      }
+    }
+    if (profile.situation_counts && Array.isArray(song.situation_tags) && song.situation_tags.length > 0) {
+      const total = Object.values(profile.situation_counts).reduce((s, v) => s + v, 0);
+      let match = 0;
+      for (const t of song.situation_tags) match += profile.situation_counts[t] || 0;
+      if (total > 0) {
+        components.semantic_situation = match / total;
+        totalWeight += WEIGHTS.semantic_situation || 0;
+      }
     }
   }
 
   if (totalWeight === 0) return { total: 0, components };
   let weightedSum = 0;
   for (const [key, val] of Object.entries(components)) {
-    weightedSum += (CB_WEIGHTS[key] || 0) * val;
+    weightedSum += (WEIGHTS[key] || 0) * val;
   }
   return { total: weightedSum / totalWeight, components };
 }
@@ -985,8 +1053,15 @@ function objectFromMap(map) {
 }
 
 function writeBprModelArtifact(bprData, generatedAt) {
-  fs.mkdirSync(MODEL_DIR, { recursive: true });
-  const modelPath = path.join(MODEL_DIR, 'bpr_mf_latest.json');
+  let modelPath;
+  if (typeof SAVE_BPR_MODEL !== 'undefined' && SAVE_BPR_MODEL) {
+    fs.mkdirSync(MODEL_DIR, { recursive: true });
+    modelPath = path.join(MODEL_DIR, 'bpr_mf_latest.json');
+  } else if (typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX) {
+    modelPath = path.join(OUTPUT_DIR, `recommendation_bpr_model${OUTPUT_SUFFIX}.json`);
+  } else {
+    return null; // Skip saving if no explicitly requested and no suffix
+  }
   const artifact = {
     generated_at: generatedAt,
     algorithm: 'BPR-MF',
@@ -1027,8 +1102,9 @@ function writeBprModelArtifact(bprData, generatedAt) {
 function writeBprTrainingHistory(bprData, generatedAt) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const history = bprData.trainingHistory || [];
-  const jsonPath = path.join(OUTPUT_DIR, 'recommendation_bpr_training_history.json');
-  const csvPath = path.join(OUTPUT_DIR, 'recommendation_bpr_training_history.csv');
+  const S = typeof OUTPUT_SUFFIX !== 'undefined' ? OUTPUT_SUFFIX : '';
+  const jsonPath = path.join(OUTPUT_DIR, `recommendation_bpr_training_history${S}.json`);
+  const csvPath = path.join(OUTPUT_DIR, `recommendation_bpr_training_history${S}.csv`);
   const payload = {
     generated_at: generatedAt,
     algorithm: 'BPR-MF',
@@ -1057,18 +1133,20 @@ function writeBprTrainingHistory(bprData, generatedAt) {
 function writeRecommendationCharts(metricsByAlg, bprData) {
   fs.mkdirSync(CHART_DIR, { recursive: true });
   const history = bprData.trainingHistory || [];
+  const S = typeof OUTPUT_SUFFIX !== 'undefined' ? OUTPUT_SUFFIX : '';
   const chartPaths = [];
+
   if (history.length) {
-    const lossPath = path.join(CHART_DIR, 'bpr_training_loss.png');
+    const lossPath = path.join(CHART_DIR, `bpr_training_loss${S}.png`);
     writeLineChart(lossPath, 'BPR TRAINING LOSS', 'EPOCH', 'AVG LOSS', history, 'avg_pairwise_loss', CHART_COLORS.navy);
     chartPaths.push(lossPath);
 
-    const accPath = path.join(CHART_DIR, 'bpr_pairwise_accuracy.png');
+    const accPath = path.join(CHART_DIR, `bpr_pairwise_accuracy${S}.png`);
     writeLineChart(accPath, 'BPR PAIRWISE ACCURACY PROXY', 'EPOCH', 'ACCURACY', history, 'pairwise_accuracy_proxy', CHART_COLORS.green);
     chartPaths.push(accPath);
   }
 
-  const metricsPath = path.join(CHART_DIR, 'recommendation_metrics_comparison.png');
+  const metricsPath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_top10_metrics.png` : 'recommendation_metrics_comparison.png');
   writeGroupedBarChart(metricsPath, 'TOP 10 RELEVANCE METRICS', metricsByAlg, [
     { key: 'precision_at_10', label: 'PRECISION@10' },
     { key: 'ndcg_at_10', label: 'NDCG@10' },
@@ -1076,7 +1154,7 @@ function writeRecommendationCharts(metricsByAlg, bprData) {
   ], { maxValue: 0.6 });
   chartPaths.push(metricsPath);
 
-  const coveragePath = path.join(CHART_DIR, 'recommendation_coverage_diversity.png');
+  const coveragePath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_coverage_diversity.png` : 'recommendation_coverage_diversity.png');
   const coverageSeries = [
     { key: 'global_catalog_coverage_at_20', label: 'COVERAGE@20' },
     { key: 'avg_unique_artists_at_20', label: 'ARTISTS@20' },
@@ -1091,13 +1169,38 @@ function writeRecommendationCharts(metricsByAlg, bprData) {
   });
   chartPaths.push(coveragePath);
 
-  const globalCoveragePath = path.join(CHART_DIR, 'recommendation_global_coverage.png');
+  if (typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC) {
+      const semanticQualityPath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_semantic_quality_distribution.png` : 'semantic_quality_distribution.png');
+      writeGroupedBarChart(semanticQualityPath, 'SEMANTIC QUALITY METRICS', metricsByAlg, [
+          { key: 'semantic_attached_rate', label: 'ATTACHED' },
+          { key: 'lyrics_based_rate', label: 'LYRICS BASED' },
+          { key: 'metadata_only_rate', label: 'META ONLY' },
+          { key: 'needs_review_rate', label: 'NEEDS REVIEW' },
+          { key: 'avg_semantic_confidence', label: 'AVG CONF' },
+      ], { maxValue: 1.0 });
+      chartPaths.push(semanticQualityPath);
+
+      const moodMatchPath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_contextual_mood_match.png` : 'contextual_mood_match.png');
+      writeGroupedBarChart(moodMatchPath, 'CONTEXTUAL MOOD MATCH RATE', metricsByAlg, [
+          { key: 'mood_match_rate', label: 'MOOD MATCH' },
+      ], { maxValue: 1.0 });
+      chartPaths.push(moodMatchPath);
+      
+      const pndcgPath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_precision_ndcg.png` : 'precision_ndcg_at_10.png');
+      writeGroupedBarChart(pndcgPath, 'PRECISION AND NDCG AT 10', metricsByAlg, [
+          { key: 'precision_at_10', label: 'PRECISION@10' },
+          { key: 'ndcg_at_10', label: 'NDCG@10' },
+      ], { maxValue: 0.6 });
+      chartPaths.push(pndcgPath);
+  }
+
+  const globalCoveragePath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_global_coverage.png` : 'recommendation_global_coverage.png');
   writeGroupedBarChart(globalCoveragePath, 'GLOBAL CATALOG COVERAGE@20', metricsByAlg, [
     { key: 'global_catalog_coverage_at_20', label: 'GLOBAL COVERAGE@20' },
   ], { maxValue: 0.25, yLabel: 'COVERAGE' });
   chartPaths.push(globalCoveragePath);
 
-  const artistDiversityPath = path.join(CHART_DIR, 'recommendation_artist_diversity.png');
+  const artistDiversityPath = path.join(CHART_DIR, S ? `${S.replace(/^_/, '')}_artist_diversity.png` : 'recommendation_artist_diversity.png');
   writeGroupedBarChart(artistDiversityPath, 'ARTIST DIVERSITY AT 20', metricsByAlg, [
     { key: 'avg_unique_artists_at_20', label: 'UNIQUE ARTISTS@20' },
     { key: 'artist_repeat_rate', label: 'ARTIST REPEAT' },
@@ -1108,7 +1211,7 @@ function writeRecommendationCharts(metricsByAlg, bprData) {
   return chartPaths;
 }
 
-function buildHybrid(bprData, userSplit, contentProfile, songById, popularScores) {
+function buildHybrid(bprData, userSplit, contentProfile, songById, popularScores, useSemantic = false) {
   const HYBRID_SAME_ARTIST_PENALTY = 0.15;
   const HYBRID_RECENT_PENALTY = 0.10;
   const HYBRID_SIMILAR_PENALTY = 0.08;
@@ -1139,7 +1242,7 @@ function buildHybrid(bprData, userSplit, contentProfile, songById, popularScores
     const normBPR = Math.max(0, Math.min(1, bprScore));
 
     // Content-based score
-    const cb = scoreContentBased(song, profile);
+    const cb = scoreContentBased(song, profile, useSemantic);
     const normCB = cb.total;
 
     // User preference score (market + genre match)
@@ -1158,7 +1261,15 @@ function buildHybrid(bprData, userSplit, contentProfile, songById, popularScores
 
     // Context mood score
     let contextScore = 0.5;
-    if (topMood === 'energetic' || topMood === 'party' || topMood === 'happy') {
+    if (useSemantic && Array.isArray(song.mood_tags)) {
+       // Enhance context score if it has a semantic mood tag that matches the intent (topMood)
+       // Or if confidence is high, bump the base contextScore
+       if (song.mood_tags.some(t => String(t).toLowerCase().includes(topMood.toLowerCase()))) {
+           contextScore = 0.9;
+       } else if (song.meaning_confidence > 0.7) {
+           contextScore = Math.max(0.6, contextScore); // Better semantic profile = higher baseline context match
+       }
+    } else if (topMood === 'energetic' || topMood === 'party' || topMood === 'happy') {
       if (song.energy_score !== null && song.energy_score > 0.6) contextScore = 0.9;
       else if (song.energy_score !== null && song.energy_score > 0.3) contextScore = 0.6;
       else contextScore = 0.3;
@@ -1263,10 +1374,11 @@ function getRecommendations(method, userSplit, songById, bprData, contentProfile
     return popSorted.filter(([sid]) => !trainSet.has(sid)).map(([sid, score]) => ({ sid, score, components: {} }));
   }
 
-  if (method === 'content_based') {
+  if (method === 'content_based' || method === 'content_based_semantic') {
+    const useSemantic = method === 'content_based_semantic';
     for (const song of songById.values()) {
       if (trainSet.has(song.id)) continue;
-      const { total, components } = scoreContentBased(song, contentProfile);
+      const { total, components } = scoreContentBased(song, contentProfile, useSemantic);
       if (total > 0) scored.push({ sid: song.id, score: total, components });
     }
     scored.sort((a, b) => b.score - a.score || a.sid - b.sid);
@@ -1295,8 +1407,9 @@ function getRecommendations(method, userSplit, songById, bprData, contentProfile
     return scored;
   }
 
-  if (method === 'hybrid') {
-    const hybridScorer = buildHybrid(bprData, userSplit, contentProfile, songById, popularScores);
+  if (method === 'hybrid' || method === 'hybrid_semantic') {
+    const useSemantic = method === 'hybrid_semantic';
+    const hybridScorer = buildHybrid(bprData, userSplit, contentProfile, songById, popularScores, useSemantic);
     const artistSeen = new Map(); // artistKey -> count in top
     const genreSeen = new Map();  // genreId -> count in top
 
@@ -1355,7 +1468,9 @@ function evaluateUser(userSplit, songById, bprData, contentProfile, popularScore
   // Recent songs for hybrid penalty
   const recentSongs = new Set(userSplit.train.slice(-20).map((i) => i.song_id));
 
-  const algs = ['most_popular', 'content_based', 'bpr_mf', 'hybrid'];
+  const algs = typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC 
+      ? ['most_popular', 'content_based_semantic', 'bpr_mf', 'hybrid_semantic']
+      : ['most_popular', 'content_based', 'bpr_mf', 'hybrid'];
   const results = {};
 
   for (const alg of algs) {
@@ -1390,6 +1505,31 @@ function evaluateUser(userSplit, songById, bprData, contentProfile, popularScore
       }
       // Genre diversity
       if (song && song.genre_id !== null) genreSet.add(Number(song.genre_id));
+    }
+
+    // Semantic Metrics Tracking
+    let semanticAttachedCount = 0;
+    let lyricsBasedCount = 0;
+    let metadataOnlyCount = 0;
+    let needsReviewCount = 0;
+    let semanticConfidenceSum = 0;
+    let moodMatchCount = 0;
+    const topMood = contentProfile.top_mood || 'energetic';
+
+    for (const rec of top20recs) {
+      const song = songById.get(rec.sid);
+      if (song) {
+        if (song.main_theme || song.meaning_confidence > 0) semanticAttachedCount++;
+        if (song.evidence_level === 'lyrics_based' || song.evidence_level === 'hybrid') lyricsBasedCount++;
+        if (song.evidence_level === 'metadata_only') metadataOnlyCount++;
+        if (song.review_status === 'needs_review') needsReviewCount++;
+        semanticConfidenceSum += song.meaning_confidence || 0;
+        if (Array.isArray(song.mood_tags) && song.mood_tags.some(t => String(t).toLowerCase().includes(topMood.toLowerCase()))) {
+            moodMatchCount++;
+        } else if (song.mood && song.mood.toLowerCase().includes(topMood.toLowerCase())) {
+            moodMatchCount++; // fallback to audio mood
+        }
+      }
     }
 
     const ranking = recs.map((r) => r.sid);
@@ -1450,6 +1590,14 @@ function evaluateUser(userSplit, songById, bprData, contentProfile, popularScore
       duplicate_rate: top20recs.length ? round((duplicateSongCount + artistRepeatCount) / top20recs.length / 2, 4) : 0,
       train_leak: top20recs.length ? round(trainLeakHits / top20recs.length, 4) : 0,
       avg_score: top20recs.length ? round(top20recs.reduce((s, r) => s + r.score, 0) / top20recs.length, 4) : 0,
+      
+      // Semantic quality metrics
+      semantic_attached_rate: top20recs.length ? round(semanticAttachedCount / top20recs.length, 4) : 0,
+      lyrics_based_rate: top20recs.length ? round(lyricsBasedCount / top20recs.length, 4) : 0,
+      metadata_only_rate: top20recs.length ? round(metadataOnlyCount / top20recs.length, 4) : 0,
+      needs_review_rate: top20recs.length ? round(needsReviewCount / top20recs.length, 4) : 0,
+      avg_semantic_confidence: top20recs.length ? round(semanticConfidenceSum / top20recs.length, 4) : 0,
+      mood_match_rate: top20recs.length ? round(moodMatchCount / top20recs.length, 4) : 0,
     };
   }
 
@@ -1461,7 +1609,7 @@ async function main() {
   const startTime = Date.now();
   console.log('═'.repeat(70));
   console.log('  MusicFlow Recommendation Algorithm Evaluation Pipeline');
-  console.log(`  Mode: ${SAMPLE_MODE ? `Sample (${SAMPLE_USERS} users)` : 'FULL'}`);
+  console.log(`  Mode: ${SAMPLE_MODE ? `Sample (${SAMPLE_USERS} users)` : 'Full'}`);
   console.log('═'.repeat(70));
 
   // Step 1: Load dataset
@@ -1471,6 +1619,24 @@ async function main() {
 
   // Step 2: Load song catalog
   const songById = await loadSongCatalog();
+
+  if (typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC) {
+    let attached = 0, lyrics = 0, meta = 0, review = 0;
+    for (const song of songById.values()) {
+        if (song.main_theme || song.meaning_confidence > 0) attached++;
+        if (song.evidence_level === 'lyrics_based' || song.evidence_level === 'hybrid') lyrics++;
+        if (song.evidence_level === 'metadata_only') meta++;
+        if (song.review_status === 'needs_review') review++;
+    }
+    console.log(`[Semantic] song_semantic_profiles table: found`);
+    console.log(`[Semantic] profiles attached: ${attached} / ${songById.size}`);
+    console.log(`[Semantic] lyrics_based: ${lyrics}`);
+    console.log(`[Semantic] metadata_only: ${meta}`);
+    console.log(`[Semantic] needs_review: ${review}`);
+    if (attached === 0) {
+      console.warn(`\n[WARNING] No semantic profiles attached! Evaluation might be meaningless.\n`);
+    }
+  }
 
   // Load song titles for output
   const allSongIds = [...songById.keys()];
@@ -1523,8 +1689,17 @@ async function main() {
 
   // Step 6: Aggregate metrics
   console.log('\n[Metrics] Aggregating...');
-  const algs = ['most_popular', 'content_based', 'bpr_mf', 'hybrid'];
-  const algLabels = { most_popular: 'Most Popular', content_based: 'Content-Based Audio', bpr_mf: 'BPR-MF', hybrid: 'Hybrid Context-Aware' };
+  const algs = typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC 
+      ? ['most_popular', 'content_based_semantic', 'bpr_mf', 'hybrid_semantic']
+      : ['most_popular', 'content_based', 'bpr_mf', 'hybrid'];
+  const algLabels = { 
+      most_popular: 'Most Popular', 
+      content_based: 'Content-Based Audio', 
+      content_based_semantic: 'Content-Based + Semantic',
+      bpr_mf: 'BPR-MF', 
+      hybrid: 'Hybrid Context-Aware',
+      hybrid_semantic: 'Hybrid + Semantic'
+  };
 
   const aggregateMetrics = (alg) => {
     const vals = perUserResults.map((r) => r[alg]).filter(Boolean);
@@ -1549,6 +1724,15 @@ async function main() {
     agg.duplicate_rate = round(vals.reduce((s, v) => s + (v.duplicate_rate || 0), 0) / vals.length, 4);
     agg.train_leak_rate = round(vals.reduce((s, v) => s + (v.train_leak || 0), 0) / vals.length, 4);
     agg.avg_score = round(vals.reduce((s, v) => s + (v.avg_score || 0), 0) / vals.length, 4);
+    
+    // Semantic metrics aggregation
+    agg.semantic_attached_rate = round(vals.reduce((s, v) => s + (v.semantic_attached_rate || 0), 0) / vals.length, 4);
+    agg.lyrics_based_rate = round(vals.reduce((s, v) => s + (v.lyrics_based_rate || 0), 0) / vals.length, 4);
+    agg.metadata_only_rate = round(vals.reduce((s, v) => s + (v.metadata_only_rate || 0), 0) / vals.length, 4);
+    agg.needs_review_rate = round(vals.reduce((s, v) => s + (v.needs_review_rate || 0), 0) / vals.length, 4);
+    agg.avg_semantic_confidence = round(vals.reduce((s, v) => s + (v.avg_semantic_confidence || 0), 0) / vals.length, 4);
+    agg.mood_match_rate = round(vals.reduce((s, v) => s + (v.mood_match_rate || 0), 0) / vals.length, 4);
+    
     agg.users_evaluated = vals.length;
     return agg;
   };
@@ -1609,6 +1793,12 @@ async function main() {
       agg.duplicate_rate = round(vals.reduce((s, v) => s + (v.duplicate_rate || 0), 0) / vals.length, 4);
       agg.train_leak_rate = round(vals.reduce((s, v) => s + (v.train_leak || 0), 0) / vals.length, 4);
       agg.avg_score = round(vals.reduce((s, v) => s + (v.avg_score || 0), 0) / vals.length, 4);
+      agg.semantic_attached_rate = round(vals.reduce((s, v) => s + (v.semantic_attached_rate || 0), 0) / vals.length, 4);
+      agg.lyrics_based_rate = round(vals.reduce((s, v) => s + (v.lyrics_based_rate || 0), 0) / vals.length, 4);
+      agg.metadata_only_rate = round(vals.reduce((s, v) => s + (v.metadata_only_rate || 0), 0) / vals.length, 4);
+      agg.needs_review_rate = round(vals.reduce((s, v) => s + (v.needs_review_rate || 0), 0) / vals.length, 4);
+      agg.avg_semantic_confidence = round(vals.reduce((s, v) => s + (v.avg_semantic_confidence || 0), 0) / vals.length, 4);
+      agg.mood_match_rate = round(vals.reduce((s, v) => s + (v.mood_match_rate || 0), 0) / vals.length, 4);
       agg.users_evaluated = vals.length;
       groupAgg[alg] = { label: algLabels[alg], ...agg };
     }
@@ -1755,7 +1945,7 @@ async function main() {
     },
   };
 
-  const jsonPath = path.join(OUTPUT_DIR, 'recommendation_evaluation_results.json');
+  const jsonPath = path.join(OUTPUT_DIR, typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX ? `recommendation${OUTPUT_SUFFIX}_metrics.json` : 'recommendation_evaluation_results.json');
   fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf8');
   console.log(`\n[Wrote] ${jsonPath}`);
 
@@ -1783,7 +1973,7 @@ async function main() {
       data.train_leak_rate, data.avg_score, data.users_evaluated,
     ].join(','));
   }
-  const csvPath = path.join(OUTPUT_DIR, 'recommendation_evaluation_results.csv');
+  const csvPath = path.join(OUTPUT_DIR, typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX ? `recommendation${OUTPUT_SUFFIX}_metrics.csv` : 'recommendation_evaluation_results.csv');
   fs.writeFileSync(csvPath, csvRows.join('\n'), 'utf8');
   console.log(`[Wrote] ${csvPath}`);
 
@@ -1815,14 +2005,29 @@ async function main() {
       ].join(','));
     }
   }
-  const userCsvPath = path.join(OUTPUT_DIR, 'recommendation_evaluation_by_user.csv');
+  const userCsvPath = path.join(OUTPUT_DIR, typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX ? `recommendation_by_user${OUTPUT_SUFFIX}.csv` : 'recommendation_evaluation_by_user.csv');
   fs.writeFileSync(userCsvPath, userCsvRows.join('\n'), 'utf8');
   console.log(`[Wrote] ${userCsvPath}`);
 
   // Sample outputs JSON
-  const samplePath = path.join(OUTPUT_DIR, 'recommendation_sample_outputs.json');
+  const samplePath = path.join(OUTPUT_DIR, typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX ? `recommendation_sample_outputs${OUTPUT_SUFFIX}.json` : 'recommendation_sample_outputs.json');
   fs.writeFileSync(samplePath, JSON.stringify({ generated_at: generatedAt, samples: sampleOutputs }, null, 2), 'utf8');
   console.log(`[Wrote] ${samplePath}`);
+
+  if (typeof OUTPUT_SUFFIX !== 'undefined' && OUTPUT_SUFFIX) {
+      const metadataPath = path.join(OUTPUT_DIR, `recommendation${OUTPUT_SUFFIX}_run_metadata.json`);
+      fs.writeFileSync(metadataPath, JSON.stringify({
+          run_name: OUTPUT_SUFFIX.replace(/^_/, ''),
+          include_semantic: typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC,
+          sample_users: SAMPLE_USERS,
+          top_k: KS,
+          uses_existing_bpr_model: true,
+          retrained_bpr: false,
+          semantic_profiles_enabled: typeof INCLUDE_SEMANTIC !== 'undefined' && INCLUDE_SEMANTIC,
+          notes: "Final evaluation after integrating song_semantic_profiles"
+      }, null, 2), 'utf8');
+      console.log(`[Wrote] ${metadataPath}`);
+  }
 
   // ─── Console summary ─────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(70));
@@ -1834,21 +2039,21 @@ async function main() {
 
   // Primary metrics
   console.log('  [Primary Metrics — Test Holdout Set]');
-  console.log('Metric'.padEnd(22) + 'Most Popular'.padEnd(14) + 'Content-Based'.padEnd(14) + 'BPR-MF'.padEnd(14) + 'Hybrid');
-  console.log('-'.repeat(70));
+  console.log('Metric'.padEnd(22) + algs.map(a => (algLabels[a] || a).substring(0, 24).padEnd(25)).join(''));
+  console.log('-'.repeat(22 + 25 * algs.length));
   const primaryKeys = ['precision_at_10', 'recall_at_10', 'ndcg_at_10', 'map_at_10', 'hitrate_at_10',
     'precision_at_20', 'recall_at_20', 'ndcg_at_20', 'map_at_20', 'hitrate_at_20'];
   for (const key of primaryKeys) {
     const label = key.replace(/_/g, ' ').replace('at ', '@');
     const vals = algs.map((alg) => (metricsByAlg[alg] ? String(metricsByAlg[alg][key] ?? '—') : '—'));
-    console.log(label.padEnd(22) + vals.map((v) => String(v).padEnd(14)).join(''));
+    console.log(label.padEnd(22) + vals.map((v) => String(v).padEnd(25)).join(''));
   }
   console.log('');
 
   // Diversity & coverage metrics
   console.log('  [Diversity & Coverage Metrics]');
-  console.log('Metric'.padEnd(34) + 'Most Popular'.padEnd(14) + 'Content-Based'.padEnd(14) + 'BPR-MF'.padEnd(14) + 'Hybrid');
-  console.log('-'.repeat(90));
+  console.log('Metric'.padEnd(34) + algs.map(a => (algLabels[a] || a).substring(0, 24).padEnd(25)).join(''));
+  console.log('-'.repeat(34 + 25 * algs.length));
   const divKeys = [
     ['per_user_list_coverage_at_20', 'Per-user list coverage@20'],
     ['unique_recommended_songs_global_at_20', 'Unique songs global@20'],
@@ -1863,7 +2068,7 @@ async function main() {
   ];
   for (const [key, label] of divKeys) {
     const vals = algs.map((alg) => (metricsByAlg[alg] ? String(metricsByAlg[alg][key] ?? '—') : '—'));
-    console.log(label.padEnd(34) + vals.map((v) => String(v).padEnd(14)).join(''));
+    console.log(label.padEnd(34) + vals.map((v) => String(v).padEnd(25)).join(''));
   }
   console.log(`  (Catalog size: ${allSongIds.length} | Users evaluated: ${evalUsers.length})`);
   console.log('-'.repeat(70));

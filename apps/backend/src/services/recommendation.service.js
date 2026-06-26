@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const modelService = require('./recommendationModel.service');
+const semanticProfileService = require('./songSemanticProfile.service');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -39,6 +40,10 @@ function safeNorm(arr) {
   }
   const range = max - min || 1;
   return arr.map((v) => (v - min) / range);
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
 }
 
 function asNumber(value) {
@@ -308,7 +313,7 @@ function scoreBpr(model, userIdx, song) {
   return score;
 }
 
-function applyRerank(scored, preferences, recentList) {
+function applyRerank(scored, preferences, recentList, userSemanticPref) {
   const topScores = scored.map((s) => s.bprScore);
   const normBpr = safeNorm(topScores);
 
@@ -345,10 +350,17 @@ function applyRerank(scored, preferences, recentList) {
       const sameDominantMarket = normalizeMarket(s.market) === preferences.tasteProfile?.dominantMarket;
       artistBoost = strongDominantMarket && !sameDominantMarket ? 0.02 : 0.1;
     }
-    const raw = SERVING_WEIGHTS.bpr * normBpr[i]
-      + SERVING_WEIGHTS.content_preference * (contentScore + artistBoost)
-      + SERVING_WEIGHTS.popularity * normPop[i]
-      + SERVING_WEIGHTS.novelty * normNov[i];
+
+    const semanticScore = userSemanticPref ? semanticProfileService.scoreSongBySemanticPreference(s, userSemanticPref) : 0;
+    
+    const rerankContentScore = clamp01(contentScore + artistBoost);
+
+    const raw =
+      0.60 * clamp01(normBpr[i]) +
+      0.12 * rerankContentScore +
+      0.15 * clamp01(semanticScore) +
+      0.08 * clamp01(normPop[i]) +
+      0.05 * clamp01(normNov[i]);
 
     let penalty = 0;
     if (recentSet.has(Number(s.id))) penalty += SERVING_WEIGHTS.recent_artist_penalty;
@@ -358,6 +370,7 @@ function applyRerank(scored, preferences, recentList) {
       ...s,
       bprRaw: s.bprScore,
       bprNorm: normBpr[i],
+      semanticScore,
       finalScore: Math.max(0, raw - penalty),
     };
   });
@@ -468,6 +481,8 @@ async function buildBprRecommendations(userId, model, limit, options = {}) {
   excluded.delete(0);
 
   const preferences = await buildUserPreferenceMap(userId, options);
+  const userSemanticPref = await semanticProfileService.buildUserSemanticPreference(userId, options);
+
   const candidates = await fetchCandidateSongs(excluded, {
     preferredMarket: preferences.tasteProfile?.dominantMarketShare >= DOMINANT_MARKET_MIN_SHARE
       ? preferences.tasteProfile.dominantMarket
@@ -483,7 +498,8 @@ async function buildBprRecommendations(userId, model, limit, options = {}) {
   }
   if (!scored.length) return { strategy: 'bpr_mf', reason: 'no_scored', items: [], tasteProfile: preferences.tasteProfile };
 
-  const reranked = applyRerank(scored, preferences, recentList);
+  await semanticProfileService.attachSemanticProfiles(scored);
+  const reranked = applyRerank(scored, preferences, recentList, userSemanticPref);
   return { strategy: 'bpr_mf_rerank', reason: 'ok', items: reranked.slice(0, limit), tasteProfile: preferences.tasteProfile };
 }
 
@@ -504,6 +520,9 @@ async function buildContentBasedRecommendations(userId, limit, options = {}) {
       : null,
   });
   if (!candidates.length) return { strategy: 'content_based_fallback', reason: 'no_candidates', items: [], tasteProfile: preferences.tasteProfile };
+
+  const userSemanticPref = await semanticProfileService.buildUserSemanticPreference(userId, options);
+  await semanticProfileService.attachSemanticProfiles(candidates);
 
   const scored = candidates.map((song) => {
     let score = 0;
@@ -530,7 +549,15 @@ async function buildContentBasedRecommendations(userId, limit, options = {}) {
         score *= 0.45;
       }
     }
-    return { ...song, finalScore: score };
+
+    const semanticScore = userSemanticPref ? semanticProfileService.scoreSongBySemanticPreference(song, userSemanticPref) : 0;
+
+    return { 
+      ...song, 
+      finalScore: score * 0.65 + semanticScore * 0.35,
+      semanticScore,
+      cbRaw: score
+    };
   });
 
   scored.sort((a, b) => b.finalScore - a.finalScore || Number(a.id) - Number(b.id));

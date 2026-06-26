@@ -307,6 +307,16 @@ CREATE TABLE user_subscriptions (
     id              INT UNSIGNED    NOT NULL AUTO_INCREMENT,
     user_id         INT UNSIGNED    NOT NULL,
     plan_id         INT UNSIGNED    NOT NULL,
+    status          ENUM('active','expired','cancelled') NOT NULL DEFAULT 'active',
+    start_date      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    end_date        DATETIME        NOT NULL,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_us_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_us_plan FOREIGN KEY (plan_id) REFERENCES premium_plans (id) ON DELETE CASCADE,
+    INDEX idx_us_user_status (user_id, status)
+) COMMENT='Lịch sử đăng ký gói Premium của người dùng';
 
 CREATE TABLE ai_playlists (
     id              INT UNSIGNED    NOT NULL AUTO_INCREMENT,

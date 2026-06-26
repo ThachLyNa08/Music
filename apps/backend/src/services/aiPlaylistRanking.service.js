@@ -3,13 +3,15 @@ const { tableExists } = require('../utils/dbIntrospection');
 const { normalizeText } = require('./aiPlaylistIntent.service');
 const modelService = require('./recommendationModel.service');
 const { buildAiPlaylistSongReason } = require('./aiPlaylistReason.service');
+const semanticProfileService = require('./songSemanticProfile.service');
 
 const DEFAULT_WEIGHTS = Object.freeze({
-    intentMatch: 0.35,
-    bpr: 0.25,
+    intentMatch: 0.25,
+    bpr: 0.20,
     audioFeature: 0.15,
     userHistory: 0.10,
     popularity: 0.10,
+    semantic: 0.15,
     diversity: 0.05
 });
 
@@ -368,6 +370,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
 
     const bpr = calculateBprScores(uniqueCandidates, userId);
     const history = await buildHistoryProfile(userId);
+    await semanticProfileService.attachSemanticProfiles(uniqueCandidates);
     const popularityValues = uniqueCandidates.map((song) => Math.log10(Number(song.play_count || 0) + Number(song.like_count || 0) * 5 + 1));
     const normPopularity = safeNorm(popularityValues);
 
@@ -378,6 +381,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         const userHistory = scoreUserHistory(song, history, intent);
         const popularity = scorePopularity(song, normPopularity[index], intent);
         const penalty = scorePenalty(song, intent);
+        const semantic = semanticProfileService.scoreSongByPromptIntent(song, intent);
         const diversity = 0.7;
         const aiScore = clamp01(
             DEFAULT_WEIGHTS.intentMatch * intentMatch
@@ -385,6 +389,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.audioFeature * audioFeature
             + DEFAULT_WEIGHTS.userHistory * userHistory
             + DEFAULT_WEIGHTS.popularity * popularity
+            + DEFAULT_WEIGHTS.semantic * semantic
             + DEFAULT_WEIGHTS.diversity * diversity
             - penalty
         );
@@ -398,6 +403,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
                 audioFeature: Number(audioFeature.toFixed(4)),
                 userHistory: Number(userHistory.toFixed(4)),
                 popularity: Number(popularity.toFixed(4)),
+                semantic: Number(semantic.toFixed(4)),
                 diversity: Number(diversity.toFixed(4)),
                 penalty: Number(penalty.toFixed(4))
             }
@@ -412,6 +418,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.audioFeature * song.scoreBreakdown.audioFeature
             + DEFAULT_WEIGHTS.userHistory * song.scoreBreakdown.userHistory
             + DEFAULT_WEIGHTS.popularity * song.scoreBreakdown.popularity
+            + DEFAULT_WEIGHTS.semantic * song.scoreBreakdown.semantic
             + DEFAULT_WEIGHTS.diversity * song.scoreBreakdown.diversity
             - song.scoreBreakdown.penalty
         );

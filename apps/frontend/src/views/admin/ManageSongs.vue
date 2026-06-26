@@ -119,7 +119,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="song in store.songs" :key="song.id" @click="goToDetail(song.id)" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group cursor-pointer">
+            <tr v-for="song in store.songs" :key="song.id" @click="goToDetail(song.id)" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group cursor-pointer" :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/80 dark:bg-indigo-500/20 z-10 relative': route.query.focus == song.id }">
               <!-- Checkbox -->
               <td class="py-3 px-4 text-center" @click.stop>
                 <input type="checkbox" :value="song.id" v-model="selectedSongIds" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
@@ -257,7 +257,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useAdminSongStore } from '@/store/adminSongStore';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import api from '@/api/axios';
 import SongFormModal from '@/components/admin/SongFormModal.vue';
 import SongGroupCards from '@/components/admin/SongGroupCards.vue';
@@ -271,6 +271,7 @@ import { useToastStore } from '@/stores/toast';
 
 const store = useAdminSongStore();
 const router = useRouter();
+const route = useRoute();
 const toast = useToastStore();
 
 let searchTimeout = null;
@@ -518,6 +519,9 @@ function formatDuration(sec) {
 }
 
 onMounted(() => {
+  if (route.query.search) {
+    store.filters.search = route.query.search;
+  }
   store.fetchGroupsSummary();
   store.fetchSongs();
   store.fetchStatistics();

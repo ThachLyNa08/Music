@@ -68,7 +68,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group">
+            <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group" :class="{ 'ring-2 ring-emerald-500 bg-emerald-50/80 dark:bg-emerald-500/20 z-10 relative': route.query.focus == artist.id }">
               <td class="py-4 px-6">
                 <div class="flex flex-wrap gap-1.5 max-w-[260px]">
                   <span v-for="issue in getArtistMetadataIssues(artist)" :key="issue.key" :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', issue.class]">
@@ -415,6 +415,9 @@ async function syncArtistBio(artist) {
 }
 
 onMounted(async () => {
+  if (route.query.search) {
+    searchQuery.value = route.query.search;
+  }
   await fetchArtists()
   
   if (route.query.edit) {

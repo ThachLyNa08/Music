@@ -318,6 +318,107 @@ async function getDashboardSummary() {
   return data;
 }
 
+async function getQuickOperations() {
+  const result = {
+    aiStatus: { status: 'Chưa có dữ liệu mô hình' },
+    systemPlaylists: [],
+    contentAlerts: [],
+    paymentAttention: { failed24h: 0, pending: 0, successToday: 0, recentIssues: [] }
+  };
+
+  const warnings = [];
+
+  // 1. AI Recommendation Status
+  try {
+    const path = require('path');
+    const modelPath = path.join(__dirname, '../../../../storage/recommendation/models/bpr_mf_latest.json');
+    if (fs.existsSync(modelPath)) {
+      const modelData = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+      result.aiStatus = {
+        status: 'RUNNING',
+        version: modelData.model_version || 'BPR-MF',
+        lastTrained: modelData.training_date,
+        datasetSize: modelData.dataset_size,
+        metric: (() => {
+          if (!modelData.metrics) return null;
+          if (modelData.metrics.hit_rate_10) return { name: 'HitRate@10', value: modelData.metrics.hit_rate_10 };
+          if (modelData.metrics.precision_10) return { name: 'Precision@10', value: modelData.metrics.precision_10 };
+          if (modelData.metrics.ndcg_10) return { name: 'NDCG@10', value: modelData.metrics.ndcg_10 };
+          return null;
+        })()
+      };
+    } else {
+      result.aiStatus.status = 'OFFLINE';
+    }
+  } catch (e) {
+    warnings.push(`AI Status Error: ${e.message}`);
+  }
+
+  // 2. Playlist tự động
+  try {
+    if (await tableExists('playlists')) {
+      const keys = [
+        'dailymix_01', 'dailymix_02', 'dailymix_03', 'dailymix_04', 'dailymix_05', 'dailymix_06', 
+        'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'
+      ];
+      const [rows] = await pool.query('SELECT system_key, updated_at FROM playlists WHERE system_key IN (?)', [keys]);
+      result.systemPlaylists = rows;
+    }
+  } catch (e) {
+    warnings.push(`Playlist Error: ${e.message}`);
+  }
+
+  // 3. Cảnh báo nội dung
+  try {
+    if (await tableExists('songs')) {
+      const [noAudio] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE audio_url IS NULL OR TRIM(audio_url) = ""');
+      if (noAudio[0].c > 0) result.contentAlerts.push({ id: 'no_audio', title: 'Bài hát thiếu audio', count: noAudio[0].c, type: 'error', icon: 'error' });
+      
+      const [noCover] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE cover_url IS NULL OR TRIM(cover_url) = ""');
+      if (noCover[0].c > 0) result.contentAlerts.push({ id: 'no_cover', title: 'Bài hát thiếu cover', count: noCover[0].c, type: 'warning', icon: 'image' });
+      
+      const [noLyrics] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE lyrics IS NULL OR TRIM(lyrics) = ""');
+      if (noLyrics[0].c > 0) result.contentAlerts.push({ id: 'no_lyrics', title: 'Bài hát thiếu lyrics', count: noLyrics[0].c, type: 'info', icon: 'article' });
+    }
+    if (await tableExists('albums')) {
+      const [emptyAlbums] = await pool.query("SELECT COUNT(al.id) as c FROM albums al LEFT JOIN songs s ON s.album_id = al.id WHERE s.id IS NULL AND al.release_status NOT IN ('draft', 'hidden')");
+      if (emptyAlbums[0].c > 0) result.contentAlerts.push({ id: 'empty_album', title: 'Album không có bài', count: emptyAlbums[0].c, type: 'warning', icon: 'album' });
+    }
+  } catch (e) {
+    warnings.push(`Content Alert Error: ${e.message}`);
+  }
+
+  // 4. Thanh toán cần chú ý
+  try {
+    if (await tableExists('payment_transactions')) {
+      const [[{ failed24h }]] = await pool.query("SELECT COUNT(*) as failed24h FROM payment_transactions WHERE status = 'failed' AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+      const [[{ pending }]] = await pool.query("SELECT COUNT(*) as pending FROM payment_transactions WHERE status = 'pending'");
+      const [[{ successToday }]] = await pool.query("SELECT COUNT(*) as successToday FROM payment_transactions WHERE status = 'paid' AND DATE(paid_at) = CURDATE()");
+      
+      const [recentIssues] = await pool.query(`
+        SELECT t.id, t.amount, t.status, t.created_at, u.email, u.display_name
+        FROM payment_transactions t
+        LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.status IN ('failed', 'pending')
+        ORDER BY t.created_at DESC
+        LIMIT 3
+      `);
+
+      result.paymentAttention = {
+        failed24h: failed24h || 0,
+        pending: pending || 0,
+        successToday: successToday || 0,
+        recentIssues: recentIssues || []
+      };
+    }
+  } catch (e) {
+    warnings.push(`Payment Alert Error: ${e.message}`);
+  }
+
+  return { ...result, warnings };
+}
+
 module.exports = {
   getDashboardSummary,
+  getQuickOperations,
 };
