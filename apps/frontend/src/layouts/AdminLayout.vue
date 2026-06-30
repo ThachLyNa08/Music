@@ -120,7 +120,15 @@ function toggleSidebar() {
   localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed.value))
 }
 
-const visibleMenu = computed(() => adminMenu.filter(group => group.key !== 'data-quality' && (!group.role || group.role === 'admin')))
+const visibleMenu = computed(() => {
+  return adminMenu
+    .filter(group => group.key !== 'data-quality' && (!group.role || group.role === 'admin') && !group.hidden)
+    .map(group => ({
+      ...group,
+      children: (group.children || []).filter(child => !child.hidden)
+    }))
+    .filter(group => group.children.length > 0)
+})
 const userInitial = computed(() => auth.user?.display_name?.charAt(0).toUpperCase() || 'A')
 const routeName = computed(() => {
   const found = findAdminMenuItemByRouteName(route.name)

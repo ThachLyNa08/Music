@@ -227,30 +227,15 @@
       @submit="submitForm"
     />
 
-    <!-- Confirm Delete Modal -->
-    <Teleport to="body">
-      <div v-if="deleteModalOpen" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeDeleteModal"></div>
-        <div class="relative w-full max-w-md flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all p-6 text-center">
-          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
-            <MfIcon name="warning" size="32" className="text-rose-600 dark:text-rose-400" />
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3" id="modal-title">Xác nhận xóa bài hát</h3>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
-            Bạn có chắc chắn muốn xóa bài hát "<span class="font-bold text-gray-800 dark:text-gray-200">{{ songToDelete?.title }}</span>" khỏi hệ thống? Dữ liệu không thể khôi phục.
-          </p>
-          <div class="flex flex-col sm:flex-row gap-3 justify-center w-full">
-            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-bg-card text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none transition-colors shadow-sm" @click="closeDeleteModal">
-              Hủy bỏ
-            </button>
-            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center items-center rounded-xl border border-transparent px-4 py-3 bg-rose-600 text-sm font-bold text-white shadow-sm hover:bg-rose-700 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="executeDelete" :disabled="deleting">
-              <div v-if="deleting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-              {{ deleting ? 'Đang xóa...' : 'Xóa bài hát' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
@@ -267,12 +252,38 @@ import MetadataIssuesPanel from '@/components/admin/MetadataIssuesPanel.vue';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import AdminResetButton from '@/components/admin/AdminResetButton.vue';
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 import { useToastStore } from '@/stores/toast';
 
 const store = useAdminSongStore();
 const router = useRouter();
 const route = useRoute();
 const toast = useToastStore();
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+});
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false };
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return;
+  confirmState.value.loading = true;
+  try {
+    await confirmState.value.action();
+  } finally {
+    confirmState.value.open = false;
+    confirmState.value.loading = false;
+  }
+}
 
 let searchTimeout = null;
 const handleSearchInput = () => {
@@ -301,37 +312,59 @@ function toggleSelectAll(e) {
 }
 
 async function handleBulkStatus(status) {
-  if (confirm(`Bạn có chắc muốn ${status === 'active' ? 'hiển thị' : 'ẩn'} ${selectedSongIds.value.length} bài hát?`)) {
-    await store.bulkUpdateStatus(selectedSongIds.value, status);
-    selectedSongIds.value = [];
-  }
+  const isShow = status === 'active';
+  openConfirm({
+    title: isShow ? 'Hiển thị bài hát?' : 'Ẩn bài hát?',
+    message: `Bạn có chắc muốn ${isShow ? 'hiển thị' : 'ẩn'} ${selectedSongIds.value.length} bài hát?`,
+    confirmText: isShow ? 'Hiển thị' : 'Ẩn',
+    type: isShow ? 'default' : 'warning',
+    action: async () => {
+      await store.bulkUpdateStatus(selectedSongIds.value, status);
+      selectedSongIds.value = [];
+      toast.showToast('Cập nhật trạng thái thành công', 'success');
+    }
+  });
 }
 
 async function handleBulkMarket(market) {
-  if (confirm(`Bạn có chắc muốn gán nhóm ${market} cho ${selectedSongIds.value.length} bài hát?`)) {
-    await store.bulkUpdateMarket(selectedSongIds.value, market);
-    selectedSongIds.value = [];
-  }
+  openConfirm({
+    title: 'Gán nhóm khu vực?',
+    message: `Bạn có chắc muốn gán nhóm ${market} cho ${selectedSongIds.value.length} bài hát?`,
+    confirmText: 'Xác nhận',
+    type: 'default',
+    action: async () => {
+      await store.bulkUpdateMarket(selectedSongIds.value, market);
+      selectedSongIds.value = [];
+      toast.showToast('Cập nhật khu vực thành công', 'success');
+    }
+  });
 }
 
 const bulkAssignGenreId = ref('');
 async function handleBulkGenre() {
   if (!bulkAssignGenreId.value) return;
-  if (confirm(`Bạn có chắc muốn gán thể loại này cho ${selectedSongIds.value.length} bài hát?`)) {
-    try {
-      await api.post('/admin/genres/bulk-assign', {
-        songIds: selectedSongIds.value,
-        genreId: bulkAssignGenreId.value,
-        role: 'primary'
-      });
-      toast.showToast('Gán thể loại thành công', 'success');
-      selectedSongIds.value = [];
-      bulkAssignGenreId.value = '';
-      store.fetchSongs();
-    } catch (e) {
-      toast.showToast(e.response?.data?.message || 'Có lỗi khi gán thể loại', 'error');
+  openConfirm({
+    title: 'Gán thể loại?',
+    message: `Bạn có chắc muốn gán thể loại này cho ${selectedSongIds.value.length} bài hát?`,
+    confirmText: 'Xác nhận',
+    type: 'default',
+    action: async () => {
+      try {
+        await api.post('/admin/genres/bulk-assign', {
+          songIds: selectedSongIds.value,
+          genreId: bulkAssignGenreId.value,
+          role: 'primary'
+        });
+        toast.showToast(`Đã gán thể loại thành công`, 'success');
+        store.fetchSongs();
+        store.fetchGroupsSummary();
+        selectedSongIds.value = [];
+      } catch (err) {
+        console.error('Lỗi khi gán thể loại:', err);
+        toast.showToast(err.response?.data?.message || 'Có lỗi xảy ra', 'error');
+      }
     }
-  }
+  });
 }
 
 // Group Navigation
@@ -473,42 +506,29 @@ async function toggleStatus(song) {
     // Update locally or refetch
     store.fetchSongs();
     store.fetchGroupsSummary();
+    toast.showToast('Đã cập nhật trạng thái', 'success');
   } catch (err) {
     console.error('Lỗi khi cập nhật trạng thái:', err);
-    alert('Không thể cập nhật trạng thái bài hát');
+    toast.showToast('Không thể cập nhật trạng thái bài hát', 'error');
   }
 }
-
-// Delete Modal State
-const deleteModalOpen = ref(false);
-const songToDelete = ref(null);
-const deleting = ref(false);
 
 function confirmDelete(song) {
-  songToDelete.value = song;
-  deleteModalOpen.value = true;
-}
-
-function closeDeleteModal() {
-  deleteModalOpen.value = false;
-  songToDelete.value = null;
-}
-
-async function executeDelete() {
-  if (!songToDelete.value) return;
-  deleting.value = true;
-  try {
-    await api.delete(`/admin/songs/${songToDelete.value.id}`);
-    store.fetchSongs();
-    store.fetchGroupsSummary();
-    toast.showToast('Xóa bài hát thành công', 'success');
-    closeDeleteModal();
-  } catch (err) {
-    console.error('Lỗi khi xóa bài hát:', err);
-    toast.showToast(err.response?.data?.message || 'Không thể xóa bài hát này', 'error');
-  } finally {
-    deleting.value = false;
-  }
+  openConfirm({
+    title: 'Xóa bài hát?',
+    message: `Bạn có chắc chắn muốn xóa bài hát "${song.title}" khỏi hệ thống? Dữ liệu không thể khôi phục.`,
+    confirmText: 'Xóa bài hát',
+    type: 'danger',
+    action: async () => {
+      try {
+        await store.deleteSong(song.id);
+        toast.showToast('Xóa bài hát thành công!', 'success');
+      } catch (err) {
+        console.error('Lỗi khi xóa bài hát:', err);
+        toast.showToast(err.response?.data?.message || 'Có lỗi khi xóa bài hát', 'error');
+      }
+    }
+  });
 }
 
 function formatDuration(sec) {

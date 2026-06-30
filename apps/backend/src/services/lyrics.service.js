@@ -123,12 +123,13 @@ async function getLyricsBySongId(songId) {
   const [rows] = await pool.query(
     `SELECT
        s.id AS song_id,
-       s.lyrics,
-       s.synced_lyrics,
-       s.lyrics_sync_type,
-       s.lyrics_provider,
-       s.lyrics_provider_id
+       COALESCE(sl.plain_lyrics, s.lyrics) AS lyrics,
+       COALESCE(sl.synced_lyrics, s.synced_lyrics) AS synced_lyrics,
+       COALESCE(sl.sync_type, s.lyrics_sync_type) AS lyrics_sync_type,
+       COALESCE(sl.provider, s.lyrics_provider) AS lyrics_provider,
+       COALESCE(sl.provider_lyric_id, s.lyrics_provider_id) AS lyrics_provider_id
      FROM songs s
+     LEFT JOIN song_lyrics sl ON s.id = sl.song_id
      WHERE s.id = ?
      LIMIT 1`,
     [numericSongId]
@@ -156,6 +157,15 @@ async function getLyricsBySongId(songId) {
   } else if (syncType === SYNC_TYPES.PLAIN_TEXT) {
     lines = plainLyricsToLines(plainLyrics);
   }
+
+  console.log('[LyricsAPI]', {
+    songId: numericSongId,
+    hasRow: !!lyric,
+    hasPlainLyrics: !!plainLyrics,
+    hasSyncedLyrics: !!syncedLyrics,
+    provider,
+    syncType
+  });
 
   return {
     error: false,

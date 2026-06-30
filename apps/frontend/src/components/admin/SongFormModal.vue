@@ -160,6 +160,9 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import SearchableCombobox from '@/components/common/SearchableCombobox.vue';
+import { useToastStore } from '@/stores/toast';
+
+const toast = useToastStore();
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -280,23 +283,23 @@ function handleClose() {
 function handleSubmit() {
   // Validate Required Fields
   if (!form.title.trim()) {
-    alert("Vui lòng nhập tên bài hát.");
+    toast.showToast("Vui lòng nhập tên bài hát.", "warning");
     return;
   }
   if (!form.artistSelection) {
-    alert("Vui lòng chọn hoặc tạo nghệ sĩ.");
+    toast.showToast("Vui lòng chọn hoặc tạo nghệ sĩ.", "warning");
     return;
   }
   if (!form.genreSelection) {
-    alert("Vui lòng chọn thể loại.");
+    toast.showToast("Vui lòng chọn thể loại.", "warning");
     return;
   }
   if (!props.isEditing && !form.audio) {
-    alert("Vui lòng chọn file âm thanh (MP3/WAV) cho bài hát mới!");
+    toast.showToast("Vui lòng chọn file âm thanh (MP3/WAV) cho bài hát mới!", "warning");
     return;
   }
   if (form.release_status === 'scheduled' && !form.release_at) {
-    alert("Vui lòng chọn thời điểm phát hành.");
+    toast.showToast("Vui lòng chọn thời điểm phát hành.", "warning");
     return;
   }
 
@@ -324,7 +327,7 @@ function handleSubmit() {
     if (typeof form.albumSelection === 'object') {
       if (form.albumSelection.isNew) {
         if (!isArtistSelected.value) {
-          alert("Vui lòng chọn hoặc tạo nghệ sĩ trước khi tạo album.");
+          toast.showToast("Vui lòng chọn hoặc tạo nghệ sĩ trước khi tạo album.", "warning");
           return;
         }
         formData.append('album_title', form.albumSelection.label || form.albumSelection.title);

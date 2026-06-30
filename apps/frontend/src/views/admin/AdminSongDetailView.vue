@@ -373,6 +373,17 @@
       @close="isModalOpen = false"
       @submit="submitForm"
     />
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
@@ -387,12 +398,38 @@ import {
   LineElement, PointElement, BarElement, LinearScale, CategoryScale
 } from 'chart.js';
 import SongFormModal from '@/components/admin/SongFormModal.vue';
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, BarElement, LinearScale, CategoryScale);
 
 const route = useRoute();
 const router = useRouter();
 const toast = useToastStore();
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+});
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false };
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return;
+  confirmState.value.loading = true;
+  try {
+    await confirmState.value.action();
+  } finally {
+    confirmState.value.open = false;
+    confirmState.value.loading = false;
+  }
+}
 
 const loading = ref(true);
 const error = ref(null);
@@ -530,19 +567,25 @@ function formatListeningTime(summaryData) {
 
 function copyText(txt) {
   navigator.clipboard.writeText(txt);
-  alert('Đã copy!');
+  toast.showToast('Đã copy!', 'success');
 }
 
-async function confirmDelete() {
-  if (confirm(`Bạn có chắc chắn muốn xóa/ẩn bài hát "${song.value.title}" khỏi hệ thống?`)) {
-    try {
-      await api.delete(`/admin/songs/${song.value.id}`);
-      toast.showToast('Xóa bài hát thành công', 'success');
-      router.push('/admin/songs');
-    } catch (err) {
-      toast.showToast('Không thể xóa bài hát này', 'error');
+function confirmDelete() {
+  openConfirm({
+    title: 'Xóa bài hát?',
+    message: `Bạn có chắc chắn muốn xóa/ẩn bài hát "${song.value.title}" khỏi hệ thống?`,
+    confirmText: 'Xóa bài hát',
+    type: 'danger',
+    action: async () => {
+      try {
+        await api.delete(`/admin/songs/${song.value.id}`);
+        toast.showToast('Xóa bài hát thành công', 'success');
+        router.push('/admin/songs');
+      } catch (err) {
+        toast.showToast('Không thể xóa bài hát này', 'error');
+      }
     }
-  }
+  });
 }
 
 function openEditModal() {

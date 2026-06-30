@@ -22,6 +22,7 @@ const {
   buildSetClausesFromFields,
   buildInsertParts,
 } = require('../utils/public.utils');
+const recommendationService = require('../services/recommendation.service');
 
 const schemaCache = new Map();
 
@@ -1421,7 +1422,19 @@ exports.reorderAdminAlbumSongs = async (req, res, next) => {
 exports.getAllUsers = async (req, res, next) => {
   try {
     const [users] = await pool.query(`
-      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, u.total_listen_sec, u.created_at,
+      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, 
+             COALESCE((
+               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate)) 
+               FROM listening_history lh 
+               JOIN songs s ON s.id = lh.song_id 
+               WHERE lh.user_id = u.id
+             ), 0) as total_listen_sec, 
+             (
+               SELECT MAX(lh.listened_at)
+               FROM listening_history lh
+               WHERE lh.user_id = u.id
+             ) as last_listened_at,
+             u.created_at,
              COUNT(p.id) as playlistCount
       FROM users u
       LEFT JOIN playlists p ON u.id = p.user_id
@@ -1474,7 +1487,14 @@ exports.updateUser = async (req, res, next) => {
     }
 
     const [[updatedUser]] = await pool.query(`
-      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, u.total_listen_sec, u.created_at,
+      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, 
+             COALESCE((
+               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate)) 
+               FROM listening_history lh 
+               JOIN songs s ON s.id = lh.song_id 
+               WHERE lh.user_id = u.id
+             ), 0) as total_listen_sec, 
+             u.created_at,
              COUNT(p.id) as playlistCount
       FROM users u
       LEFT JOIN playlists p ON u.id = p.user_id
@@ -1679,7 +1699,7 @@ exports.getUserDetail = async (req, res, next) => {
       },
       summary: {
         totalListens: 0,
-        totalListeningMinutes: Math.round((user.total_listen_sec || 0) / 60),
+        totalListeningMinutes: 0,
         likedSongs: 0,
         createdPlaylists: 0,
         followedArtists: 0,
@@ -1719,13 +1739,16 @@ exports.getUserDetail = async (req, res, next) => {
     const lhStats = await safeQuery(`
       SELECT
         SUM(CASE WHEN listen_duration >= 30 OR completion_rate >= 0.5 THEN 1 ELSE 0 END) as valid_count,
+        SUM(listen_duration) as total_duration,
         COUNT(*) as raw_listen_events
       FROM listening_history
       WHERE user_id = ?
-    `, [id], [{ valid_count: 0, raw_listen_events: 0 }]);
+    `, [id], [{ valid_count: 0, total_duration: 0, raw_listen_events: 0 }]);
     const validListenCount = Number(lhStats[0]?.valid_count || 0);
+    const totalListenSec = Number(lhStats[0]?.total_duration || 0);
     const rawListenEvents = Number(lhStats[0]?.raw_listen_events || 0);
     result.summary.totalListens = validListenCount;
+    result.summary.totalListeningMinutes = Math.round(totalListenSec / 60);
     result.summary.rawListenEvents = rawListenEvents;
     result.summary.raw_listen_events = rawListenEvents;
     result.recommendation.listenCount = validListenCount;
@@ -1736,7 +1759,7 @@ exports.getUserDetail = async (req, res, next) => {
     const likedStats = await safeQuery('SELECT COUNT(*) as cnt FROM song_likes WHERE user_id = ?', [id], [{ cnt: 0 }]);
     result.summary.likedSongs = likedStats[0].cnt;
 
-    const plStats = await safeQuery('SELECT COUNT(*) as cnt FROM playlists WHERE user_id = ? AND type = "manual"', [id], [{ cnt: 0 }]);
+    const plStats = await safeQuery('SELECT COUNT(*) as cnt FROM playlists WHERE user_id = ? AND type = "manual" AND (is_system = 0 OR is_system IS NULL) AND system_key IS NULL', [id], [{ cnt: 0 }]);
     result.summary.createdPlaylists = plStats[0].cnt;
 
     const artistFollowStats = await safeQuery('SELECT COUNT(*) as cnt FROM artist_follows WHERE user_id = ?', [id], [{ cnt: 0 }]);
@@ -1758,14 +1781,14 @@ exports.getUserDetail = async (req, res, next) => {
         FROM ${tableName}
         WHERE user_id = ? ${extraWhere}
       `;
-      const [rows] = await safeQuery(q, [id], [{ this_week: 0, last_week: 0 }]);
+      const rows = await safeQuery(q, [id], [{ this_week: 0, last_week: 0 }]);
       return rows[0] || { this_week: 0, last_week: 0 };
     };
 
     const formatTrend = (thisWeek, lastWeek, unit = 'vs tuần trước') => {
       const tw = Number(thisWeek || 0);
       const lw = Number(lastWeek || 0);
-      if (tw === 0 && lw === 0) return { text: 'Không có dữ liệu mới', status: 'neutral' };
+      if (tw === 0 && lw === 0) return null;
       if (tw === lw) return { text: 'Không đổi', status: 'neutral' };
       
       const diff = tw - lw;
@@ -1776,7 +1799,7 @@ exports.getUserDetail = async (req, res, next) => {
     const formatTrendVnd = (thisWeek, lastWeek) => {
       const tw = Number(thisWeek || 0);
       const lw = Number(lastWeek || 0);
-      if (tw === 0 && lw === 0) return { text: 'Chưa có giao dịch tuần này', status: 'neutral' };
+      if (tw === 0 && lw === 0) return null;
       if (tw === lw) return { text: 'Không đổi', status: 'neutral' };
       
       const diff = tw - lw;
@@ -1785,19 +1808,25 @@ exports.getUserDetail = async (req, res, next) => {
       return { text: `↓ ${formattedDiff}đ vs tuần trước`, status: 'down' };
     };
 
+    const formatCountThisWeek = (thisWeek, unit = 'mới tuần này') => {
+      const tw = Number(thisWeek || 0);
+      if (tw === 0) return null;
+      return { text: `+${tw} ${unit}`, status: 'up' };
+    };
+
     const listensTrend = await getTrendStats('listening_history', 'listened_at', 'AND (listen_duration >= 30 OR completion_rate >= 0.5)');
     const minsTrend = await getTrendStats('listening_history', 'listened_at', '', 'listen_duration');
-    const likesTrend = await getTrendStats('song_likes', 'created_at');
-    const playlistsTrend = await getTrendStats('playlists', 'created_at', 'AND type = "manual"');
+    const likesTrend = await getTrendStats('song_likes', 'liked_at');
+    const playlistsTrend = await getTrendStats('playlists', 'created_at', "AND type = 'manual' AND (is_system = 0 OR is_system IS NULL) AND (system_key IS NULL OR system_key = '')");
     const followsTrend = await getTrendStats('artist_follows', 'created_at');
     const spentTrend = await getTrendStats('payment_transactions', 'created_at', 'AND status = "success"', 'amount');
 
     result.summary.trends = {
       totalListens: formatTrend(listensTrend.this_week, listensTrend.last_week),
       totalListeningMinutes: formatTrend(Math.round(minsTrend.this_week / 60), Math.round(minsTrend.last_week / 60)),
-      likedSongs: formatTrend(likesTrend.this_week, likesTrend.last_week, 'mới tuần này'),
-      createdPlaylists: formatTrend(playlistsTrend.this_week, playlistsTrend.last_week, 'mới tuần này'),
-      followedArtists: formatTrend(followsTrend.this_week, followsTrend.last_week, 'mới tuần này'),
+      likedSongs: formatCountThisWeek(likesTrend.this_week, 'mới tuần này'),
+      createdPlaylists: formatCountThisWeek(playlistsTrend.this_week, 'mới tuần này'),
+      followedArtists: formatCountThisWeek(followsTrend.this_week, 'tuần này'),
       totalSpent: formatTrendVnd(spentTrend.this_week, spentTrend.last_week)
     };
 
@@ -3120,11 +3149,17 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
 
     let activeSystemPlaylists = 0;
     let playlistsNeedUpdate = 0;
+    let emptyPlaylists = 0;
+    let missingCoverPlaylists = 0;
     let totalSongsInSystemPlaylists = 0;
 
     statusStats.forEach(p => {
       if (p.status === 'ok') activeSystemPlaylists++;
-      else playlistsNeedUpdate++;
+      else {
+        playlistsNeedUpdate++;
+        if (p.status === 'empty') emptyPlaylists++;
+        else if (p.status === 'missing_cover') missingCoverPlaylists++;
+      }
       totalSongsInSystemPlaylists += Number(p.song_count || 0);
     });
 
@@ -3132,8 +3167,12 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
       success: true, 
       data: {
         totalSystemPlaylists: totalRes.totalSystemPlaylists || 0,
+        total_playlists: totalRes.totalSystemPlaylists || 0,
         activeSystemPlaylists,
+        empty_playlists: emptyPlaylists,
+        missing_cover_playlists: missingCoverPlaylists,
         totalSongsInSystemPlaylists,
+        total_songs: totalSongsInSystemPlaylists,
         lastGeneratedAt: totalRes.lastGeneratedAt,
         playlistsNeedUpdate
       } 
@@ -3144,9 +3183,41 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
   }
 };
 
+exports.getSystemKeys = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT system_key as \`key\`, COUNT(*) AS count
+      FROM playlists
+      WHERE system_key IS NOT NULL AND system_key <> ''
+      GROUP BY system_key
+      ORDER BY system_key ASC
+    `);
+
+    const formatLabel = (key) => {
+      return key
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase())
+        .replace('Dailymix', 'Daily Mix') // special cases
+        .replace('Weeklymix', 'Weekly Mix')
+        .replace('Moodmix', 'Mood Mix');
+    };
+
+    const data = rows.map(r => ({
+      key: r.key,
+      label: formatLabel(r.key),
+      count: r.count
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('getSystemKeys Error:', error);
+    next(error);
+  }
+};
+
 exports.getSystemPlaylists = async (req, res, next) => {
   try {
-    const { q, type, status, page = 1, limit = 20, sortBy = 'updated_at', sortOrder = 'DESC' } = req.query;
+    const { q, type, status, system_key, owner, user, userId, page = 1, limit = 20, sortBy = 'updated_at', sortOrder = 'DESC' } = req.query;
     const offset = (page - 1) * limit;
 
     let whereClause = "WHERE (p.is_system = 1 OR p.type = 'system')";
@@ -3157,10 +3228,21 @@ exports.getSystemPlaylists = async (req, res, next) => {
       params.push(`%${q}%`, `%${q}%`);
     }
 
-    if (type && type !== 'all') {
-      whereClause += " AND p.system_key LIKE ?";
-      if (type.startsWith('dailymix')) params.push('dailymix_%');
-      else params.push(`${type}%`);
+    const actualSystemKey = system_key || type;
+    if (actualSystemKey && actualSystemKey !== 'all') {
+      whereClause += " AND p.system_key = ?";
+      params.push(actualSystemKey);
+    }
+
+    const ownerQuery = owner || user || userId;
+    if (ownerQuery) {
+      if (!isNaN(ownerQuery)) {
+        whereClause += " AND p.user_id = ?";
+        params.push(Number(ownerQuery));
+      } else {
+        whereClause += " AND (u.display_name LIKE ? OR u.email LIKE ?)";
+        params.push(`%${ownerQuery}%`, `%${ownerQuery}%`);
+      }
     }
 
     let havingClause = "";
@@ -3206,6 +3288,7 @@ exports.getSystemPlaylists = async (req, res, next) => {
                END as status
         FROM playlists p
         LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
+        LEFT JOIN users u ON p.user_id = u.id
         ${whereClause}
         GROUP BY p.id
         ${havingClause}
@@ -3213,19 +3296,24 @@ exports.getSystemPlaylists = async (req, res, next) => {
     `;
     const countParams = params.slice(0, params.length - 2);
 
-    const [[countRes], [playlists]] = await Promise.all([
+    const [[countRows], [playlists]] = await Promise.all([
       pool.query(countQuery, countParams),
       pool.query(query, params)
     ]);
+    
+    const total = countRows[0]?.total || 0;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
 
     res.json({ 
       success: true, 
       data: playlists,
       pagination: {
-        total: countRes.total,
+        total,
         page: Number(page),
         limit: Number(limit),
-        totalPages: Math.ceil(countRes.total / limit)
+        totalPages,
+        hasNext: Number(page) < totalPages,
+        hasPrev: Number(page) > 1
       }
     });
   } catch (error) {
@@ -3311,7 +3399,7 @@ exports.getSystemPlaylistDetail = async (req, res, next) => {
 
     const [songs] = await pool.query(`
       SELECT s.id, s.title, s.duration_sec as duration, s.cover_url, s.play_count,
-             a.name as artist, al.title as album, ps.position
+             s.artist_id, a.name as artist_name, a.name as artist, al.title as album, ps.position
       FROM playlist_songs ps
       JOIN songs s ON ps.song_id = s.id
       JOIN artists a ON s.artist_id = a.id
@@ -3942,19 +4030,66 @@ exports.getSongDetail = async (req, res, next) => {
 
 exports.getAllTransactions = async (req, res, next) => {
   try {
+    const { userId } = req.query;
+    let whereClause = '';
+    const params = [];
+    
+    if (userId) {
+      whereClause = 'WHERE t.user_id = ?';
+      params.push(userId);
+    }
+
     const [transactions] = await pool.query(`
       SELECT 
-        t.id, t.order_code, t.amount, t.provider, t.status, t.created_at, t.paid_at,
+        t.id, COALESCE(t.order_code, t.payment_code) as order_code, t.amount, t.provider, t.status, t.created_at, t.paid_at,
         u.display_name as user_name, u.email as user_email,
         pp.name as plan_name
       FROM payment_transactions t
       LEFT JOIN users u ON t.user_id = u.id
       LEFT JOIN premium_plans pp ON t.plan_id = pp.id
+      ${whereClause}
       ORDER BY t.created_at DESC
-    `);
+    `, params);
     res.json({ success: true, data: transactions });
   } catch (error) {
     console.error('getAllTransactions error:', error);
+    next(error);
+  }
+};
+
+exports.getUserRecommendations = async (req, res, next) => {
+  try {
+    const targetUserId = parseInt(req.params.id, 10);
+    if (!targetUserId || isNaN(targetUserId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+
+    const limit = recommendationService.clampLimit(req.query.limit || 20);
+
+    const result = await recommendationService.getRecommendationsForUser(targetUserId, { limit, req });
+
+    const itemsWithReason = result.items.map((item) => ({
+      song_id: item.id || item.song_id,
+      title: item.title,
+      artist_id: item.artist_id,
+      artist_name: item.artist_name || item.artist,
+      cover_url: normalizeCoverUrl(item.cover_url, req),
+      genre: item.genre_name || item.genre,
+      market: item.market,
+      strategy: result.strategy,
+      reason: recommendationService.reasonForStrategy(result.strategy),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        items: itemsWithReason,
+        strategy: result.strategy,
+        userId: targetUserId
+      }
+    });
+  } catch (error) {
+    console.error('getUserRecommendations error:', error);
     next(error);
   }
 };

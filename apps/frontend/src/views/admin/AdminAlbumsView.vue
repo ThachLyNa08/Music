@@ -1,7 +1,8 @@
 <template>
-  <div class="p-4 md:p-6 bg-gray-50 dark:bg-bg-base min-h-screen text-gray-800 dark:text-text-base font-sans">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative overflow-hidden full-bleed h-full font-sans text-gray-800 dark:text-text-base">
     <template v-if="isDetailMode">
-      <div class="flex items-center justify-between gap-4 mb-5">
+      <div class="flex-1 overflow-y-auto p-4 md:p-6">
+        <div class="flex items-center justify-between gap-4 mb-5">
         <button @click="router.push('/admin/albums')" class="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-emerald-600">
           <MfIcon name="arrow_back" size="20" />
           Quản lý Album
@@ -64,50 +65,30 @@
           <AlbumSongsTable :songs="detail.songs" />
         </section>
       </div>
+      </div>
     </template>
 
     <template v-else>
-      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-3">
+      <header class="py-5 bg-white dark:bg-bg-surface border-b border-slate-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 shrink-0">
         <div>
-          <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Quản lý Album</h1>
-          <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý metadata, bài hát và trạng thái phát hành của album.</p>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Album</h1>
+          <p class="text-sm text-gray-500 dark:text-text-secondary mt-1">Quản lý metadata, bài hát và trạng thái phát hành của album.</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 mt-3 md:mt-0">
           <AdminAddButton title="Thêm album" @click="openCreateModal" />
         </div>
-      </div>
+      </header>
 
-      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Tổng album</span>
-          <strong>{{ formatNumber(albumStats.total) }}</strong>
-        </div>
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Nháp</span>
-          <strong>{{ formatNumber(albumStats.draft) }}</strong>
-        </div>
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Lên lịch</span>
-          <strong>{{ formatNumber(albumStats.scheduled) }}</strong>
-        </div>
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Đã phát hành</span>
-          <strong>{{ formatNumber(albumStats.published) }}</strong>
-        </div>
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Đã ẩn</span>
-          <strong>{{ formatNumber(albumStats.hidden) }}</strong>
-        </div>
-        <div class="stat-card relative overflow-hidden">
-          <div v-if="isStatsLoading" class="absolute inset-0 bg-gray-100/80 dark:bg-gray-800/80 animate-pulse z-10"></div>
-          <span>Album rỗng</span>
-          <strong>{{ formatNumber(albumStats.empty) }}</strong>
-        </div>
+      <div class="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col">
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5 shrink-0">
+        <AdminKpiCard
+          v-for="item in kpiCards"
+          :key="item.title"
+          v-bind="item"
+          :show-icon="false"
+          compact
+          :loading="isStatsLoading"
+        />
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_160px_150px_170px_150px_44px] gap-3 mb-5 items-center">
@@ -139,7 +120,7 @@
         <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" />
       </div>
 
-      <div class="panel overflow-hidden relative min-h-[400px]">
+      <div class="panel overflow-hidden relative min-h-[500px] flex-1 flex flex-col">
         <div v-if="isInitialLoading" class="p-12 text-center text-gray-400 absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-bg-surface/80 z-20">
           <div class="w-10 h-10 mx-auto border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
           <p class="text-sm font-semibold">Đang tải danh sách album...</p>
@@ -148,21 +129,21 @@
           <MfIcon name="album" size="64" className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
           <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy album nào</h3>
         </div>
-        <div v-else class="overflow-x-auto relative">
+        <div v-else class="overflow-auto relative flex-1">
           <div v-if="isPageLoading" class="absolute inset-0 bg-white/60 dark:bg-bg-surface/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
             <div class="w-8 h-8 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
           </div>
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="bg-gray-50/70 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold border-b border-gray-100 dark:border-bg-border">
-                <th class="py-3 px-4 min-w-[280px]">Album</th>
-                <th class="py-3 px-4 min-w-[180px]">Nghệ sĩ</th>
-                <th class="py-3 px-4 min-w-[140px] whitespace-nowrap">Thể loại</th>
-                <th v-if="meta.supportsMarketFilter" class="py-3 px-4 min-w-[100px] whitespace-nowrap">Khu vực</th>
-                <th class="py-3 px-4 min-w-[140px] text-center whitespace-nowrap">Phát hành</th>
-                <th class="py-3 px-4 min-w-[100px] text-center whitespace-nowrap">Bài hát</th>
-                <th class="py-3 px-4 min-w-[120px] text-right whitespace-nowrap">Lượt nghe</th>
-                <th class="py-3 px-4 w-[72px] text-center whitespace-nowrap">Hành động</th>
+          <table class="w-full text-left border-collapse table-fixed min-w-[1000px] text-sm">
+            <thead class="bg-gray-50/95 dark:bg-bg-card/95 backdrop-blur sticky top-0 z-20 shadow-[0_1px_0_0_#f3f4f6] dark:shadow-[0_1px_0_0_#273142]">
+              <tr class="text-black dark:text-white text-xs uppercase tracking-wider font-bold">
+                <th class="py-3 px-4 w-[35%]">Album</th>
+                <th class="py-3 px-4 w-[20%]">Nghệ sĩ</th>
+                <th class="py-3 px-4 w-36 whitespace-nowrap">Thể loại</th>
+                <th v-if="meta.supportsMarketFilter" class="py-3 px-4 w-24 whitespace-nowrap">Khu vực</th>
+                <th class="py-3 px-4 w-32 text-center whitespace-nowrap">Phát hành</th>
+                <th class="py-3 px-4 w-24 text-center whitespace-nowrap">Bài hát</th>
+                <th class="py-3 px-4 w-28 text-right whitespace-nowrap">Lượt nghe</th>
+                <th class="py-3 px-4 w-24 text-center whitespace-nowrap">Hành động</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
@@ -210,6 +191,7 @@
           <span class="hidden md:inline text-sm font-medium text-gray-500">Hiển thị {{ pageStart }} - {{ pageEnd }} trong {{ pagination.total }} album</span>
           <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" :disabled="isInitialLoading || isPageLoading" @update:currentPage="setPage" />
         </div>
+      </div>
       </div>
     </template>
 
@@ -415,6 +397,7 @@ import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminActionDropdown from '@/components/admin/AdminActionDropdown.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import { useToastStore } from '@/stores/toast'
 
 const AlbumSongsTable = defineComponent({
@@ -477,7 +460,7 @@ const albums = ref([])
 const isInitialLoading = ref(false)
 const isPageLoading = ref(false)
 const isStatsLoading = ref(false)
-const pagination = reactive({ total: 0, page: 1, limit: 10, totalPages: 1 })
+const pagination = reactive({ total: 0, page: 1, limit: 20, totalPages: 1 })
 const filters = reactive({ search: '', genreId: '', releaseYear: '', market: '', sortPlays: '', releaseStatus: '' })
 const meta = reactive({ artists: [], genres: [], markets: [], supportsMarketFilter: false })
 
@@ -567,6 +550,45 @@ const albumStats = reactive({
   hidden: 0,
   empty: 0,
 })
+
+const kpiCards = computed(() => [
+  {
+    title: 'Tổng album',
+    value: albumStats.total,
+    icon: 'album',
+    tone: 'blue'
+  },
+  {
+    title: 'Nháp',
+    value: albumStats.draft,
+    icon: 'edit_document',
+    tone: 'slate'
+  },
+  {
+    title: 'Lên lịch',
+    value: albumStats.scheduled,
+    icon: 'schedule',
+    tone: 'amber'
+  },
+  {
+    title: 'Đã phát hành',
+    value: albumStats.published,
+    icon: 'check_circle',
+    tone: 'green'
+  },
+  {
+    title: 'Đã ẩn',
+    value: albumStats.hidden,
+    icon: 'visibility_off',
+    tone: 'rose'
+  },
+  {
+    title: 'Album rỗng',
+    value: albumStats.empty,
+    icon: 'hourglass_empty',
+    tone: 'purple'
+  }
+])
 const selectedSongIds = computed(() => new Set(selectedSongs.value.map(song => Number(song.id))))
 const availableSongs = computed(() => {
   const query = songSearch.value.trim().toLowerCase()
@@ -730,7 +752,7 @@ async function fetchStats() {
   if (isDetailMode.value) return
   
   const requestId = ++statsRequestId
-  isStatsLoading.value = true
+  if (!albumStats.total) isStatsLoading.value = true
   
   try {
     const res = await api.get('/admin/albums/stats', {
@@ -1198,5 +1220,16 @@ function deriveMarketFromGenreName(name) {
 }
 .dark .metric-box strong {
   color: white;
+}
+
+.full-bleed {
+  margin: -24px;
+  height: calc(100% + 48px);
+}
+@media (max-width: 900px) {
+  .full-bleed {
+    margin: -18px;
+    height: calc(100% + 36px);
+  }
 }
 </style>

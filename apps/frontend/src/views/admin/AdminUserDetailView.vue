@@ -71,6 +71,9 @@
             <div v-if="summary.trends?.totalListens" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalListens.status)">
               {{ summary.trends.totalListens.text }}
             </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Tổng hiện tại
+            </div>
           </div>
           <!-- Decorative SVG -->
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-violet-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
@@ -92,6 +95,9 @@
             <div v-if="summary.trends?.totalListeningMinutes" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalListeningMinutes.status)">
               {{ summary.trends.totalListeningMinutes.text }}
             </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Tổng hiện tại
+            </div>
           </div>
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-cyan-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
             <path d="M0,50 Q25,10 50,30 T100,20 L100,50 Z" fill="currentColor" />
@@ -109,6 +115,9 @@
             <div v-if="summary.trends?.likedSongs" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.likedSongs.status)">
               {{ summary.trends.likedSongs.text }}
             </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Tổng hiện tại
+            </div>
           </div>
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-rose-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
             <path d="M0,50 Q20,30 50,15 T100,25 L100,50 Z" fill="currentColor" />
@@ -122,9 +131,12 @@
             <span class="text-slate-500 text-sm font-medium truncate block">Playlist tự tạo</span>
           </div>
           <div class="mt-2 z-10">
-            <span class="text-slate-900 text-3xl font-bold">{{ summary.createdPlaylists ?? '--' }}</span>
+            <span class="text-slate-900 text-3xl font-bold">{{ userPlaylistsLoading ? '--' : (userPlaylists.summary?.manualCount ?? '--') }}</span>
             <div v-if="summary.trends?.createdPlaylists" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.createdPlaylists.status)">
               {{ summary.trends.createdPlaylists.text }}
+            </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Tổng hiện tại
             </div>
           </div>
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-pink-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
@@ -142,6 +154,9 @@
             <span class="text-slate-900 text-3xl font-bold">{{ summary.followedArtists ?? '--' }}</span>
             <div v-if="summary.trends?.followedArtists" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.followedArtists.status)">
               {{ summary.trends.followedArtists.text }}
+            </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Tổng hiện tại
             </div>
           </div>
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-emerald-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
@@ -162,6 +177,9 @@
             </div>
             <div v-if="summary.trends?.totalSpent" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalSpent.status)">
               {{ summary.trends.totalSpent.text }}
+            </div>
+            <div v-else class="mt-1 text-sm font-medium text-slate-400">
+              Chưa có giao dịch tuần này
             </div>
           </div>
           <svg class="absolute bottom-0 right-0 w-24 h-16 text-amber-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
@@ -289,11 +307,14 @@
             <div class="card">
               <h3>Top Bài Hát Nghe Nhiều</h3>
               <ul v-if="musicTaste.topSongs.length" class="simple-list">
-                <li v-for="(song, i) in musicTaste.topSongs" :key="song.id">
+                <li v-for="(song, i) in musicTaste.topSongs" :key="song.id" 
+                    class="group flex items-center gap-3 rounded-xl px-2 py-2 cursor-pointer hover:bg-slate-50 transition -mx-2" 
+                    title="Mở chi tiết bài hát" 
+                    @click="goToAdminSong(song)">
                   <span class="rank">{{ i + 1 }}</span>
                   <img :src="normalizeImageUrl(song.cover_url)" class="tiny-cover" @error="handleImageError" />
                   <div class="info">
-                    <span class="title">{{ song.title }}</span>
+                    <span class="title group-hover:text-violet-600 transition">{{ song.title }}</span>
                     <span class="subtitle">{{ song.artist }}</span>
                   </div>
                   <span class="stat">{{ song.user_plays ?? song.listen_count ?? song.listens ?? 0 }} lượt của user</span>
@@ -305,11 +326,14 @@
             <div class="card">
               <h3>Top Nghệ Sĩ Nghe Nhiều</h3>
               <ul v-if="musicTaste.topArtists.length" class="simple-list">
-                <li v-for="(artist, i) in musicTaste.topArtists" :key="artist.id">
+                <li v-for="(artist, i) in musicTaste.topArtists" :key="artist.id"
+                    class="group flex items-center gap-3 rounded-xl px-2 py-2 cursor-pointer hover:bg-slate-50 transition -mx-2"
+                    title="Mở chi tiết nghệ sĩ"
+                    @click="goToAdminArtist(artist)">
                   <span class="rank">{{ i + 1 }}</span>
                   <img :src="normalizeImageUrl(artist.avatar_url)" class="tiny-cover rounded-full" style="border-radius: 50%" @error="handleImageError" />
                   <div class="info">
-                    <span class="title">{{ artist.name }}</span>
+                    <span class="title group-hover:text-violet-600 transition">{{ artist.name }}</span>
                   </div>
                   <span class="stat">{{ artist.user_plays ?? artist.listen_count ?? artist.listens ?? 0 }} lượt của user</span>
                 </li>
@@ -387,8 +411,16 @@
                 <div v-if="highlightPlaylists.manual" class="h-full flex flex-col">
                   <div class="relative h-56 cursor-pointer group shrink-0" @click="toggleTracklist('manual')">
                     <div class="w-full h-full bg-gradient-to-br from-violet-100 to-fuchsia-100 flex items-center justify-center overflow-hidden">
-                      <img v-if="getPlaylistCover(highlightPlaylists.manual)" :src="getPlaylistCover(highlightPlaylists.manual)" @error="handleImageError" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <MfIcon v-else name="library_music" size="48" class="text-violet-300" />
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(highlightPlaylists.manual)"
+                        size="custom"
+                        rounded="none"
+                        imgClass="group-hover:scale-110 transition-transform duration-500"
+                        icon="library_music"
+                        iconSize="48"
+                        iconClass="text-violet-300"
+                        class="w-full h-full bg-transparent border-0"
+                      />
                     </div>
                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300 backdrop-blur-[2px]">
                       <div class="w-16 h-16 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white">
@@ -450,8 +482,16 @@
                 <div v-if="highlightPlaylists.system" class="h-full flex flex-col">
                   <div class="relative h-56 cursor-pointer group shrink-0" @click="toggleTracklist('system')">
                     <div class="w-full h-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden">
-                      <img v-if="getPlaylistCover(highlightPlaylists.system)" :src="getPlaylistCover(highlightPlaylists.system)" @error="handleImageError" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <MfIcon v-else name="server" size="48" class="text-blue-300" />
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(highlightPlaylists.system)"
+                        size="custom"
+                        rounded="none"
+                        imgClass="group-hover:scale-110 transition-transform duration-500"
+                        icon="server"
+                        iconSize="48"
+                        iconClass="text-blue-300"
+                        class="w-full h-full bg-transparent border-0"
+                      />
                     </div>
                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300 backdrop-blur-[2px]">
                       <div class="w-16 h-16 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white">
@@ -516,8 +556,16 @@
                 <div v-if="highlightPlaylists.ai" class="h-full flex flex-col">
                   <div class="relative h-56 cursor-pointer group shrink-0" @click="toggleTracklist('ai')">
                     <div class="w-full h-full bg-gradient-to-br from-cyan-100 to-purple-100 flex items-center justify-center overflow-hidden">
-                      <img v-if="getPlaylistCover(highlightPlaylists.ai)" :src="getPlaylistCover(highlightPlaylists.ai)" @error="handleImageError" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <MfIcon v-else name="auto_awesome" size="48" class="text-cyan-300" />
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(highlightPlaylists.ai)"
+                        size="custom"
+                        rounded="none"
+                        imgClass="group-hover:scale-110 transition-transform duration-500"
+                        icon="auto_awesome"
+                        iconSize="48"
+                        iconClass="text-cyan-300"
+                        class="w-full h-full bg-transparent border-0"
+                      />
                     </div>
                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300 backdrop-blur-[2px]">
                       <div class="w-16 h-16 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white">
@@ -636,10 +684,13 @@
                 <div v-show="showFullList.manual" class="p-4 border-t border-slate-200">
                   <div v-if="userPlaylists.created?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <div v-for="pl in userPlaylists.created" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <div class="w-12 h-12 rounded overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
-                        <img v-if="getPlaylistCover(pl)" :src="getPlaylistCover(pl)" @error="handleImageError" class="w-full h-full object-cover" />
-                        <MfIcon v-else name="library_music" class="text-slate-300" />
-                      </div>
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="library_music"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
                       <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
                         <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
@@ -661,10 +712,13 @@
                 <div v-show="showFullList.system" class="p-4 border-t border-slate-200">
                   <div v-if="userPlaylists.system?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <div v-for="pl in userPlaylists.system" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <div class="w-12 h-12 rounded overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
-                        <img v-if="getPlaylistCover(pl)" :src="getPlaylistCover(pl)" @error="handleImageError" class="w-full h-full object-cover" />
-                        <MfIcon v-else name="server" class="text-slate-300" />
-                      </div>
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="server"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
                       <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
                         <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
@@ -686,10 +740,13 @@
                 <div v-show="showFullList.ai" class="p-4 border-t border-slate-200">
                   <div v-if="userPlaylists.ai?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <div v-for="pl in userPlaylists.ai" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <div class="w-12 h-12 rounded overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
-                        <img v-if="getPlaylistCover(pl)" :src="getPlaylistCover(pl)" @error="handleImageError" class="w-full h-full object-cover" />
-                        <MfIcon v-else name="auto_awesome" class="text-slate-300" />
-                      </div>
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="auto_awesome"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
                       <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
                         <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
@@ -827,11 +884,67 @@
               <div v-else class="empty-text p-4 text-center">Chưa có playlist tự động hoặc AI.</div>
             </div>
 
-            <div class="card">
-              <h3>Danh sách bài hát đang gợi ý</h3>
-              <div class="empty-text text-center p-4">
-                <MfIcon name="queue_music" size="32" class="text-gray-300 mb-2 block mx-auto" />
-                Dữ liệu bài hát gợi ý realtime đang được phát triển ở phía backend AI Service.
+            <div class="card playlist-ai-card">
+              <div class="shrink-0">
+                <h3>Bài hát đề xuất cho người dùng</h3>
+                <p class="text-sm text-slate-500 mt-1 mb-4">Dựa trên lịch sử nghe, thể loại yêu thích và mô hình recommendation hiện có.</p>
+              </div>
+              
+              <div v-if="recommendedSongsLoading" class="flex justify-center items-center py-8 shrink-0">
+                <div class="spinner"></div>
+              </div>
+              
+              <div v-else-if="recommendedSongsError" class="p-4 text-center bg-rose-50 rounded-lg border border-rose-100 text-rose-600 text-sm shrink-0">
+                {{ recommendedSongsError }}
+              </div>
+
+              <div v-else-if="recommendedSongs.length" class="playlist-ai-scroll custom-scrollbar">
+                <div class="flex flex-col gap-2">
+                  <div v-for="(song, i) in recommendedSongs" :key="song.song_id || i" class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
+                  <span class="text-slate-400 font-medium w-6 text-center text-sm shrink-0">{{ i + 1 }}</span>
+                  
+                  <img 
+                    :src="song.cover_url || '/images/default-cover.svg'" 
+                    @error="handleImageError" 
+                    class="w-12 h-12 rounded-md object-cover shrink-0 shadow-sm cursor-pointer"
+                    @click="goToAdminSong(song)"
+                  />
+                  
+                  <div class="min-w-0 flex-1 flex flex-col justify-center">
+                    <p 
+                      class="truncate font-semibold text-slate-800 transition-colors w-max max-w-full cursor-pointer hover:text-violet-600"
+                      @click="goToAdminSong(song)"
+                    >
+                      {{ song.title }}
+                    </p>
+
+                    <button
+                      v-if="song.artist_id"
+                      type="button"
+                      class="truncate text-sm text-slate-400 hover:text-violet-600 hover:underline transition-colors w-max max-w-full text-left block"
+                      @click.stop="goToAdminArtist(song)"
+                    >
+                      {{ song.artist_name }}
+                    </button>
+                    <p v-else class="truncate text-sm text-slate-400 w-max max-w-full text-left block">
+                      {{ song.artist_name || 'Không rõ nghệ sĩ' }}
+                    </p>
+                  </div>
+                  
+                  <div class="flex-shrink-0 flex flex-col items-end gap-1">
+                    <span v-if="song.genre" class="badge-tag bg-slate-100 text-slate-600">{{ song.genre }}</span>
+                    <span v-if="song.strategy" class="text-[10px] uppercase font-bold tracking-wider text-slate-400" :title="song.reason">{{ song.strategy.replace('_', ' ') }}</span>
+                  </div>
+                </div>
+              </div>
+              </div>
+
+              <div v-else class="empty-text text-center p-6 bg-slate-50 rounded-xl border border-slate-100 shrink-0">
+                <MfIcon name="auto_awesome" size="32" class="text-slate-300 mb-2 block mx-auto" />
+                <h4 class="font-semibold text-slate-700 mb-2">Chưa có bài hát đề xuất</h4>
+                <p class="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Người dùng này chưa có đủ dữ liệu nghe nhạc để tạo đề xuất cá nhân hóa.
+                </p>
               </div>
             </div>
           </div>
@@ -903,7 +1016,14 @@
         <div class="flex flex-col md:flex-row gap-6 mb-6">
           <div class="shrink-0 mx-auto md:mx-0">
             <div class="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden shadow-lg bg-slate-100">
-              <img :src="getPlaylistCover(drawerPlaylist)" @error="handleImageError" alt="Cover lớn" class="w-full h-full object-cover" />
+              <AdminCoverThumb
+                :src="getPlaylistCover(drawerPlaylist)"
+                size="custom"
+                rounded="none"
+                class="w-full h-full"
+                iconSize="64"
+                alt="Cover lớn"
+              />
             </div>
           </div>
           <div class="flex-1">
@@ -928,15 +1048,40 @@
           <div class="spinner inline-block w-6 h-6"></div>
           <div class="mt-2 text-xs">Đang tải...</div>
         </div>
-        <ul v-else-if="drawerSongs.length" class="simple-list">
-          <li v-for="(song, i) in drawerSongs" :key="song.id">
-            <span class="rank">{{ i + 1 }}</span>
-            <img :src="normalizeImageUrl(song.cover_url)" @error="handleImageError" class="tiny-cover" />
-            <div class="info">
-              <span class="title">{{ song.title }}</span>
-              <span class="subtitle">{{ song.artist_name || song.artist }}</span>
+        <ul v-else-if="drawerSongs.length" class="flex flex-col gap-1 mt-2">
+          <li v-for="(song, i) in drawerSongs" :key="song.id" class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 transition">
+            <span class="text-slate-400 font-medium w-6 text-center text-sm shrink-0">{{ i + 1 }}</span>
+            <div class="flex flex-1 min-w-0 items-center gap-3">
+              <img 
+                :src="normalizeImageUrl(song.cover_url)" 
+                @error="handleImageError" 
+                class="w-10 h-10 rounded-md object-cover shrink-0 shadow-sm"
+                :class="{'cursor-pointer': (song.song_id || song.id)}"
+                @click="(song.song_id || song.id) ? goToAdminSong(song) : null"
+              />
+              <div class="min-w-0 flex-1 flex flex-col justify-center">
+                <p 
+                  class="truncate font-semibold text-slate-800 transition-colors w-max max-w-full" 
+                  :class="{'cursor-pointer hover:text-violet-600': (song.song_id || song.id)}"
+                  @click="(song.song_id || song.id) ? goToAdminSong(song) : null"
+                >
+                  {{ song.title }}
+                </p>
+
+                <button
+                  v-if="song.artist_id"
+                  type="button"
+                  class="truncate text-sm text-slate-400 hover:text-violet-600 hover:underline transition-colors w-max max-w-full text-left block"
+                  @click.stop="goToAdminArtist(song)"
+                >
+                  {{ song.artist_name || song.artist }}
+                </button>
+                <p v-else class="truncate text-sm text-slate-400 w-max max-w-full text-left block">
+                  {{ song.artist_name || song.artist }}
+                </p>
+              </div>
             </div>
-            <span class="stat text-xs">{{ formatDuration(song.duration_sec) }}</span>
+            <span class="text-xs text-slate-500 w-12 text-right shrink-0">{{ formatDuration(song.duration_sec || song.duration) }}</span>
           </li>
         </ul>
         <div v-else class="empty-text p-4 text-center bg-slate-50 rounded-lg border border-slate-100">
@@ -945,13 +1090,27 @@
       </div>
     </div>
     </div>
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
+import AdminCoverThumb from '@/components/admin/AdminCoverThumb.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { normalizeImageUrl, getPlaylistCover } from '@/utils/imageUrl'
 import { Line as LineChart } from 'vue-chartjs'
 import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
@@ -983,6 +1142,32 @@ ChartJS.register(
 const route = useRoute()
 const router = useRouter()
 const userId = route.params.id
+const toast = useToastStore()
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 
 const loading = ref(true)
 const error = ref(null)
@@ -1014,6 +1199,20 @@ const showFullList = ref({
   system: false,
   ai: false
 })
+
+const goToAdminSong = (song) => {
+  const songId = song.song_id || song.id
+  if (!songId) return
+  drawerPlaylist.value = null // Close modal
+  router.push(`/admin/songs/${songId}`)
+}
+
+const goToAdminArtist = (artist) => {
+  const artistId = artist.artist_id || artist.id
+  if (!artistId) return
+  drawerPlaylist.value = null // Close modal
+  router.push(`/admin/artists/${artistId}/detail`)
+}
 
 const highlightPlaylists = computed(() => {
   return {
@@ -1260,7 +1459,7 @@ function handleImageError(e) {
 }
 
 function exportReport() {
-  alert('Chức năng xuất báo cáo đang được hoàn thiện')
+  toast.showToast('Chức năng xuất báo cáo đang được hoàn thiện', 'info')
 }
 
 function formatCurrency(amount) {
@@ -1312,6 +1511,32 @@ async function fetchUserPlaylists() {
   }
 }
 
+// Recommendation API
+const recommendedSongs = ref([])
+const recommendedSongsLoading = ref(false)
+const recommendedSongsError = ref('')
+
+async function fetchRecommendedSongs() {
+  if (recommendedSongs.value.length > 0) return // Already loaded
+  recommendedSongsLoading.value = true
+  recommendedSongsError.value = ''
+  try {
+    const res = await api.get(`/admin/users/${userId}/recommendations?limit=20`)
+    recommendedSongs.value = res.data.data.items || []
+  } catch (err) {
+    console.error('Lỗi khi tải bài hát đề xuất:', err)
+    recommendedSongsError.value = err.response?.data?.message || 'Không thể tải danh sách đề xuất. Vui lòng thử lại.'
+  } finally {
+    recommendedSongsLoading.value = false
+  }
+}
+
+watch(currentTab, (newTab) => {
+  if (newTab === 'recommendation') {
+    fetchRecommendedSongs()
+  }
+})
+
 function formatDuration(seconds) {
   if (!seconds) return '00:00'
   const m = Math.floor(seconds / 60)
@@ -1345,51 +1570,71 @@ async function viewPlaylistDetail(pl) {
   }
 }
 
-async function regenerateUserPlaylist(pl) {
-  if (!confirm(`Bạn có chắc muốn tạo lại playlist "${pl.name}"?`)) return
-  try {
-    await api.post(`/admin/system-playlists/${pl.id}/regenerate`)
-    alert('Đã tạo lại playlist thành công!')
-    fetchUserPlaylists()
-    if (drawerPlaylist.value && drawerPlaylist.value.id === pl.id) {
-      viewPlaylistDetail(pl)
+function regenerateUserPlaylist(pl) {
+  openConfirm({
+    title: 'Tạo lại Playlist?',
+    message: `Bạn có chắc muốn tạo lại playlist "${pl.name}"?`,
+    confirmText: 'Tạo lại',
+    type: 'default',
+    action: async () => {
+      try {
+        await api.post(`/admin/system-playlists/${pl.id}/regenerate`)
+        toast.showToast('Đã tạo lại playlist thành công!', 'success')
+        fetchUserPlaylists()
+        if (drawerPlaylist.value && drawerPlaylist.value.id === pl.id) {
+          viewPlaylistDetail(pl)
+        }
+      } catch (err) {
+        toast.showToast(err.response?.data?.message || 'Lỗi khi tạo lại playlist', 'error')
+      }
     }
-  } catch (err) {
-    alert('Lỗi khi tạo lại playlist: ' + (err.response?.data?.message || err.message))
-  }
+  })
 }
 
 // Quick Actions
-async function toggleRole() {
+function toggleRole() {
   const newRole = user.value.role === 'admin' ? 'user' : 'admin'
-  const message = user.value.role === 'admin' 
-    ? `Hạ quyền quản trị của "${user.value.display_name}"?` 
-    : `Thăng quyền Admin cho "${user.value.display_name}"?`
-    
-  if (confirm(message)) {
-    try {
-      await api.put(`/admin/users/${userId}/role`, { role: newRole })
-      await fetchUserDetail() // refresh
-    } catch (err) {
-      alert('Không thể thay đổi quyền người dùng')
+  const isDemote = user.value.role === 'admin'
+  openConfirm({
+    title: isDemote ? 'Hạ quyền Admin?' : 'Thăng cấp Admin?',
+    message: isDemote 
+      ? `Bạn có chắc muốn hạ quyền quản trị của "${user.value.display_name}"?` 
+      : `Người dùng "${user.value.display_name}" sẽ có quyền truy cập khu vực quản trị.`,
+    confirmText: isDemote ? 'Hạ quyền' : 'Thăng cấp',
+    type: 'warning',
+    action: async () => {
+      try {
+        await api.put(`/admin/users/${userId}/role`, { role: newRole })
+        await fetchUserDetail() // refresh
+        toast.showToast(`Đã ${isDemote ? 'hạ' : 'thăng'} quyền thành công`, 'success')
+      } catch (err) {
+        toast.showToast('Không thể thay đổi quyền người dùng', 'error')
+      }
     }
-  }
+  })
 }
 
-async function toggleStatus() {
+function toggleStatus() {
   const newStatus = user.value.status === 'locked' ? 'active' : 'locked'
-  const message = user.value.status === 'locked'
-    ? `Mở khóa tài khoản cho "${user.value.display_name}"?`
-    : `Khóa tài khoản "${user.value.display_name}"?`
-
-  if (confirm(message)) {
-    try {
-      await api.put(`/admin/users/${userId}/status`, { status: newStatus })
-      await fetchUserDetail()
-    } catch (err) {
-      alert('Không thể cập nhật trạng thái người dùng')
+  const isLocked = user.value.status === 'locked'
+  
+  openConfirm({
+    title: isLocked ? 'Mở khóa tài khoản?' : 'Khóa tài khoản?',
+    message: isLocked
+      ? `Mở khóa tài khoản cho "${user.value.display_name}"?`
+      : `Người dùng "${user.value.display_name}" sẽ không thể đăng nhập cho đến khi được mở khóa.`,
+    confirmText: isLocked ? 'Mở khóa' : 'Khóa tài khoản',
+    type: isLocked ? 'default' : 'warning',
+    action: async () => {
+      try {
+        await api.put(`/admin/users/${userId}/status`, { status: newStatus })
+        await fetchUserDetail()
+        toast.showToast(isLocked ? 'Đã mở khóa tài khoản' : 'Đã khóa tài khoản', 'success')
+      } catch (err) {
+        toast.showToast('Không thể cập nhật trạng thái người dùng', 'error')
+      }
     }
-  }
+  })
 }
 
 function openPremiumModal() {
@@ -1411,8 +1656,9 @@ async function setPremiumExpiry(days) {
     await api.put(`/admin/users/${userId}/premium`, { premium_expires_at: expiry })
     showPremiumModal.value = false
     await fetchUserDetail()
+    toast.showToast('Cập nhật Premium thành công', 'success')
   } catch (err) {
-    alert('Thao tác thất bại')
+    toast.showToast('Thao tác thất bại', 'error')
   } finally {
     savingPremium.value = false
   }
@@ -1425,8 +1671,9 @@ async function saveCustomPremiumExpiry() {
     await api.put(`/admin/users/${userId}/premium`, { premium_expires_at: expiry })
     showPremiumModal.value = false
     await fetchUserDetail()
+    toast.showToast('Cập nhật Premium thành công', 'success')
   } catch (err) {
-    alert('Thao tác thất bại')
+    toast.showToast('Thao tác thất bại', 'error')
   } finally {
     savingPremium.value = false
   }

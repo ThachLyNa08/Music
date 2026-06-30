@@ -154,42 +154,15 @@
   </header>
 
   <!-- Logout Confirmation Modal -->
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="isLogoutModalOpen" class="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-        <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="isLogoutModalOpen = false"></div>
-        
-        <!-- Modal Content -->
-        <div class="relative w-full max-w-sm rounded-2xl bg-[#1e1e1e] border border-white/10 p-6 shadow-2xl transform transition-all">
-          <div class="mb-5 flex flex-col items-center text-center">
-            <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/20 text-red-400">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-              </svg>
-            </div>
-            <h3 class="mb-2 text-xl font-bold text-white">Đăng xuất</h3>
-            <p class="text-sm text-slate-400 font-medium">Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?</p>
-          </div>
-          
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <button
-              class="flex-1 rounded-full border border-white/10 bg-white/5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
-              @click="isLogoutModalOpen = false"
-            >
-              Hủy
-            </button>
-            <button
-              class="flex-1 rounded-full bg-red-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-500/30 transition hover:bg-red-400 hover:shadow-red-400/40"
-              @click="executeLogout"
-            >
-              Đăng xuất
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+  <ConfirmDialog
+    theme="dark"
+    type="danger"
+    v-model:open="isLogoutModalOpen"
+    title="Đăng xuất"
+    message="Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?"
+    confirmText="Đăng xuất"
+    @confirm="executeLogout"
+  />
 </template>
 
 <script setup>
@@ -198,6 +171,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import { usePlayerStore } from '@/stores/player'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import api from '@/api/axios'
 
 defineProps({

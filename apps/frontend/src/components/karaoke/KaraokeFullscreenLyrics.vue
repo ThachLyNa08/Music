@@ -7,7 +7,7 @@
 
       <header class="karaoke-fullscreen__header">
         <div class="karaoke-fullscreen__song">
-          <p class="karaoke-fullscreen__status">{{ statusText }}</p>
+          <p class="karaoke-fullscreen__status">{{ syncBadgeText }}</p>
           <h2>{{ song?.title || 'Karaoke' }}</h2>
           <p>{{ artistName }}</p>
         </div>
@@ -33,13 +33,22 @@
         @touchstart.passive="handleManualScroll"
         @pointerdown="handleManualScroll"
       >
-        <div v-if="!lyrics.length" class="karaoke-fullscreen__empty">
-          Bài hát này chưa có lyrics đồng bộ
+        <div v-if="emptyLyricsMessage && !syncedLyrics.length && !isPlainLyrics" class="karaoke-fullscreen__empty">
+          {{ emptyLyricsMessage }}
+        </div>
+
+        <div v-else-if="isPlainLyrics" class="karaoke-fullscreen__plain-wrap">
+          <div class="karaoke-fullscreen__notice">Bài hát này chưa có lời đồng bộ theo thời gian.</div>
+          <div class="karaoke-fullscreen__plain">
+            <p v-for="(line, index) in plainLyrics" :key="`${index}-${line.words}`" class="karaoke-fullscreen__plain-line">
+              {{ line.words }}
+            </p>
+          </div>
         </div>
 
         <div v-else class="karaoke-fullscreen__lyrics-inner">
           <p
-            v-for="(line, index) in lyrics"
+            v-for="(line, index) in syncedLyrics"
             :key="`${line.time ?? index}-${line.words}`"
             :ref="(el) => setLineRef(el, index)"
             class="karaoke-fullscreen__line"
@@ -106,9 +115,29 @@ const props = defineProps({
     type: Object,
     default: null,
   },
-  lyrics: {
+  syncedLyrics: {
     type: Array,
     default: () => [],
+  },
+  plainLyrics: {
+    type: Array,
+    default: () => [],
+  },
+  isPlainLyrics: {
+    type: Boolean,
+    default: false,
+  },
+  isLowQuality: {
+    type: Boolean,
+    default: false,
+  },
+  emptyLyricsMessage: {
+    type: String,
+    default: 'Bài hát này chưa có lyrics.',
+  },
+  syncBadgeText: {
+    type: String,
+    default: 'Chưa có lyrics',
   },
   currentLyricIndex: {
     type: Number,
@@ -144,7 +173,7 @@ const artistName = computed(() => (
   || props.song?.artists?.map((artist) => artist.name).filter(Boolean).join(', ')
   || 'Nghệ sĩ'
 ))
-const statusText = computed(() => (props.lyrics.length ? 'Lyrics đồng bộ' : 'Chưa có lyrics đồng bộ'))
+
 
 const seekPreviewTime = computed(() => {
   if (isSeeking.value) return seekTime.value
@@ -152,12 +181,13 @@ const seekPreviewTime = computed(() => {
 })
 
 const resolvedCurrentLyricIndex = computed(() => {
+  if (props.isPlainLyrics) return -1
   if (props.currentLyricIndex >= 0) return props.currentLyricIndex
-  if (!props.lyrics.length) return -1
+  if (!props.syncedLyrics.length) return -1
 
   const safeCurrentTime = Math.max(0, Number(props.currentTime) || 0)
-  for (let index = props.lyrics.length - 1; index >= 0; index -= 1) {
-    const time = Number(props.lyrics[index]?.time)
+  for (let index = props.syncedLyrics.length - 1; index >= 0; index -= 1) {
+    const time = Number(props.syncedLyrics[index]?.time)
     if (Number.isFinite(time) && time <= safeCurrentTime) return index
   }
 
@@ -402,6 +432,42 @@ function formatTime(seconds) {
   color: rgba(226, 232, 240, 0.62);
   font-size: clamp(18px, 2.4vw, 28px);
   font-weight: 850;
+  text-align: center;
+}
+
+.karaoke-fullscreen__plain-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 46vh;
+  padding: 6vh 20px 16vh;
+}
+
+.karaoke-fullscreen__notice {
+  font-size: clamp(14px, 1.5vw, 18px);
+  color: rgba(226, 232, 240, 0.6);
+  margin-bottom: 32px;
+  font-weight: 600;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 16px;
+  border-radius: 99px;
+}
+
+.karaoke-fullscreen__plain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: min(1000px, 100%);
+}
+
+.karaoke-fullscreen__plain-line {
+  color: rgba(226, 232, 240, 0.85);
+  font-size: clamp(20px, 3vw, 42px);
+  font-weight: 700;
+  line-height: 1.4;
   text-align: center;
 }
 

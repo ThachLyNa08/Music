@@ -88,6 +88,7 @@
 import { computed, nextTick, onBeforeUnmount, onBeforeUpdate, ref, watch } from 'vue'
 import { getLyricsBySongId } from '@/api/lyrics'
 import { parseLrcLyrics } from '@/utils/parseLrcLyrics'
+import { checkLyricsQuality } from '@/utils/lyricsQuality'
 
 const props = defineProps({
   song: {
@@ -127,17 +128,22 @@ let lastScrollAt = 0
 
 const songId = computed(() => props.song?.id ?? props.song?.song_id ?? props.song?.track_id ?? null)
 const syncedLyricsRaw = computed(() => {
-  const songSyncedLyrics = props.song?.syncedLyrics ?? props.song?.synced_lyrics ?? ''
   const data = lyricsData.value || {}
-  return songSyncedLyrics || data.syncedLyrics || data.synced_lyrics || data.lrcLyrics || data.lrc_lyrics || ''
+  const fetched = data.syncedLyrics || data.synced_lyrics || data.lrcLyrics || data.lrc_lyrics || ''
+  if (fetched) return fetched
+  return props.song?.syncedLyrics ?? props.song?.synced_lyrics ?? ''
 })
 const plainLyricsRaw = computed(() => {
-  const songPlainLyrics = props.song?.lyrics ?? props.song?.plainLyrics ?? props.song?.plain_lyrics ?? ''
   const data = lyricsData.value || {}
-  return songPlainLyrics || data.plainLyrics || data.plain_lyrics || ''
+  const fetched = data.plainLyrics || data.plain_lyrics || ''
+  if (fetched) return fetched
+  return props.song?.lyrics ?? props.song?.plainLyrics ?? props.song?.plain_lyrics ?? ''
 })
 const parsedSyncedLyrics = computed(() => parseLrcLyrics(syncedLyricsRaw.value))
-const hasSyncedLyrics = computed(() => parsedSyncedLyrics.value.length > 0)
+const hasSyncedLyrics = computed(() => {
+  const linesWithText = parsedSyncedLyrics.value.filter(l => l.text?.trim())
+  return linesWithText.length >= 2
+})
 const currentLyricIndex = ref(-1)
 const plainLyricsLines = computed(() => {
   if (Array.isArray(lyricsData.value?.lines) && lyricsData.value.lines.length && !hasSyncedLyrics.value) {
@@ -153,43 +159,79 @@ const plainLyricsLines = computed(() => {
 })
 const syncedLyricsLines = computed(() => parsedSyncedLyrics.value.map((line) => ({ time: line.time, words: line.text })))
 const isInstrumental = computed(() => String(lyricsData.value?.syncType || '').toUpperCase() === 'INSTRUMENTAL')
-const isPlainLyrics = computed(() => !hasSyncedLyrics.value && plainLyricsLines.value.length > 0)
+
+const lyricsState = computed(() => {
+  if (lyricsLoading.value) return 'loading'
+  if (hasSyncedLyrics.value) return 'synced'
+  if (plainLyricsLines.value.length > 0) return 'plain'
+  return 'empty'
+})
+
+const isPlainLyrics = computed(() => lyricsState.value === 'plain')
 const showPlainLyricsNotice = computed(() => isPlainLyrics.value)
-const plainLyricsNotice = 'Lời bài hát hiện chưa có đồng bộ thời gian.'
+const plainLyricsNotice = 'Bài hát này chưa có lời đồng bộ theo thời gian.'
+
 const syncBadgeText = computed(() => {
-  if (hasSyncedLyrics.value) return 'Lyrics đồng bộ'
-  if (isPlainLyrics.value) return 'Chưa có lyrics đồng bộ'
-  return ''
+  switch (lyricsState.value) {
+    case 'loading': return 'Đang tải lyrics...'
+    case 'synced': return 'Lyrics đồng bộ'
+    case 'plain': return 'Lyrics thường'
+    default: return 'Chưa có lyrics'
+  }
 })
 const showSyncBadge = computed(() => Boolean(syncBadgeText.value))
+
 const activeLineText = computed(() => {
-  if (currentLyricIndex.value < 0) return ''
+  if (lyricsState.value !== 'synced' || currentLyricIndex.value < 0) return ''
   return syncedLyricsLines.value[currentLyricIndex.value]?.words || ''
 })
 
 const emptyLyricsMessage = computed(() => {
+  if (lyricsState.value === 'loading') return ''
   if (isInstrumental.value) return 'Bài hát không lời'
-  if (lyricsData.value?.error) return 'Chưa có lời bài hát cho bài này'
-  if (!hasSyncedLyrics.value && !plainLyricsLines.value.length) return 'Chưa có lời bài hát cho bài này'
+  if (lyricsData.value?.error) return 'Bài hát này chưa có lyrics.'
+  if (lyricsState.value === 'empty') return 'Bài hát này chưa có lyrics.'
   return ''
 })
 
 const activeLineIndex = computed(() => currentLyricIndex.value)
 
+watch(
+  () => lyricsState.value,
+  (newState) => {
+    if (import.meta.env.DEV) {
+      console.log('[LyricsState]', {
+        songId: songId.value,
+        hasPlainLyrics: plainLyricsLines.value.length > 0,
+        hasSyncedLyrics: hasSyncedLyrics.value,
+        parsedSyncedLines: syncedLyricsLines.value.length,
+        state: newState,
+      })
+    }
+  },
+  { immediate: true }
+)
+
 defineExpose({
   syncedLyricsLines,
+  plainLyricsLines,
   currentLyricIndex,
   hasSyncedLyrics,
+  isPlainLyrics,
+  emptyLyricsMessage,
+  syncBadgeText,
   lyricsLoading,
 })
 
+const lyricsCache = new Map()
+
 watch(
-  songId,
-  async (nextSongId) => {
+  () => props.song,
+  async (newSong) => {
+    const nextSongId = newSong?.id ?? newSong?.song_id ?? newSong?.track_id ?? null
+    
     requestToken += 1
     const token = requestToken
-    lyricsData.value = null
-    lyricsError.value = false
     lineEls.value = []
     lastScrollAt = 0
     autoFollowLyrics.value = true
@@ -197,30 +239,52 @@ watch(
     lastUserScrollAt.value = 0
     isProgrammaticScroll = false
     clearUserScrollTimeout()
+    currentLyricIndex.value = -1
 
     if (!nextSongId) {
+      lyricsData.value = null
+      lyricsError.value = false
       lyricsLoading.value = false
       return
     }
 
+    if (lyricsCache.has(nextSongId)) {
+      lyricsData.value = lyricsCache.get(nextSongId)
+      lyricsError.value = false
+      lyricsLoading.value = false
+      return
+    }
+
+    lyricsData.value = null
+    lyricsError.value = false
     lyricsLoading.value = true
 
     try {
       const response = await getLyricsBySongId(nextSongId)
       if (token !== requestToken) return
-      lyricsData.value = response?.data || null
+      
+      const payload = response?.data || null
+      lyricsData.value = payload
+      
+      if (payload) {
+        lyricsCache.set(nextSongId, payload)
+      }
 
       if (import.meta.env.DEV) {
-        const payload = lyricsData.value || {}
-        const syncedValue = payload.syncedLyrics ?? payload.synced_lyrics ?? props.song?.syncedLyrics ?? props.song?.synced_lyrics ?? ''
-        const plainValue = payload.plainLyrics ?? payload.plain_lyrics ?? props.song?.lyrics ?? ''
-        console.debug('[lyrics-panel] payload', {
+        const syncedValue = payload?.syncedLyrics ?? payload?.synced_lyrics ?? newSong?.syncedLyrics ?? newSong?.synced_lyrics ?? ''
+        const plainValue = payload?.plainLyrics ?? payload?.plain_lyrics ?? newSong?.lyrics ?? newSong?.plainLyrics ?? newSong?.plain_lyrics ?? ''
+        
+        console.log('[UserLyricsDebug]', {
           songId: nextSongId,
-          hasLyrics: Boolean(plainValue),
+          title: newSong?.title,
+          artist: newSong?.artistName || newSong?.artist_name || newSong?.artist,
+          hasPlainLyrics: Boolean(plainValue),
+          plainLength: plainValue?.length || 0,
           hasSyncedLyrics: Boolean(syncedValue),
-          syncedLyricsLength: typeof syncedValue === 'string' ? syncedValue.length : 0,
-          parsedLineCount: parseLrcLyrics(typeof syncedValue === 'string' ? syncedValue : '').length,
-          syncType: payload.syncType || payload.lyricsSyncType || props.song?.lyricsSyncType || props.song?.lyrics_sync_type || null,
+          syncedLength: syncedValue?.length || 0,
+          provider: payload?.provider || payload?.lyricsProvider,
+          syncType: payload?.syncType || payload?.lyricsSyncType,
+          state: lyricsState.value
         })
       }
     } catch {
@@ -237,9 +301,10 @@ watch(
 watch(
   [syncedLyricsLines, () => props.currentTime],
   ([lines, currentTime]) => {
+    if (lyricsState.value !== 'synced') return;
     currentLyricIndex.value = resolveCurrentLyricIndex(lines, currentTime)
 
-    if (import.meta.env.DEV && hasSyncedLyrics.value) {
+    if (import.meta.env.DEV && hasSyncedLyrics.value && false) {
       console.debug('[lyrics-panel] sync', {
         currentTime: Number(currentTime) || 0,
         currentLyricIndex: currentLyricIndex.value,

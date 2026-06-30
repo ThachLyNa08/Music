@@ -373,6 +373,17 @@
       @close="showDetailDrawer = false"
       @updated="fetchGenres"
     />
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
@@ -387,8 +398,34 @@ import GenreDetailDrawer from '@/components/admin/GenreDetailDrawer.vue';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import MfIcon from '@/components/common/MfIcon.vue';
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 
 const toast = useToastStore();
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+});
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false };
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return;
+  confirmState.value.loading = true;
+  try {
+    await confirmState.value.action();
+  } finally {
+    confirmState.value.open = false;
+    confirmState.value.loading = false;
+  }
+}
 
 const loading = ref(false);
 const genres = ref([]);
@@ -517,32 +554,38 @@ const toggleSelectAll = (e) => {
 const applyBulkAction = async () => {
   if (!bulkAction.value || selectedGenres.value.length === 0) return;
   
-  if (!confirm(`Bạn có chắc chắn muốn áp dụng thao tác này cho ${selectedGenres.value.length} thể loại?`)) return;
+  openConfirm({
+    title: 'Thao tác hàng loạt?',
+    message: `Bạn có chắc chắn muốn áp dụng thao tác này cho ${selectedGenres.value.length} thể loại?`,
+    confirmText: 'Thực hiện',
+    type: 'warning',
+    action: async () => {
+      try {
+        let payload = { genreIds: selectedGenres.value };
+        
+        if (bulkAction.value.startsWith('status_')) {
+          payload.action = 'status';
+          payload.value = bulkAction.value.split('_')[1];
+        } else if (bulkAction.value.startsWith('featured_')) {
+          payload.action = 'featured';
+          payload.value = bulkAction.value === 'featured_true';
+        } else if (bulkAction.value.startsWith('tax_rec_')) {
+          payload.action = 'taxonomy';
+          payload.value = { use_in_recommendation: bulkAction.value === 'tax_rec_true' };
+        }
 
-  try {
-    let payload = { genreIds: selectedGenres.value };
-    
-    if (bulkAction.value.startsWith('status_')) {
-      payload.action = 'status';
-      payload.value = bulkAction.value.split('_')[1];
-    } else if (bulkAction.value.startsWith('featured_')) {
-      payload.action = 'featured';
-      payload.value = bulkAction.value === 'featured_true';
-    } else if (bulkAction.value.startsWith('tax_rec_')) {
-      payload.action = 'taxonomy';
-      payload.value = { use_in_recommendation: bulkAction.value === 'tax_rec_true' };
+        await api.patch('/admin/genres/bulk-action', payload);
+        toast.showToast('Thao tác hàng loạt thành công', 'success');
+        
+        selectedGenres.value = [];
+        bulkAction.value = '';
+        fetchGenres();
+        fetchDashboardData();
+      } catch (error) {
+        toast.showToast('Lỗi khi thực hiện bulk action', 'error');
+      }
     }
-
-    await api.patch('/admin/genres/bulk-action', payload);
-    toast.showToast('Thao tác hàng loạt thành công', 'success');
-    
-    selectedGenres.value = [];
-    bulkAction.value = '';
-    fetchGenres();
-    fetchDashboardData();
-  } catch (error) {
-    toast.showToast('Lỗi khi thực hiện bulk action', 'error');
-  }
+  });
 };
 
 const changePage = (page) => {
@@ -609,15 +652,21 @@ const openSongsDrawer = (genre) => {
 
 // Quick Actions
 const deleteGenre = async (genre) => {
-  if (!confirm(`Bạn có chắc chắn muốn xoá thể loại "${genre.name}"?`)) return;
-  
-  try {
-    await api.delete(`/admin/genres/${genre.id}`);
-    toast.showToast('Đã ẩn/xoá thể loại thành công', 'success');
-    fetchGenres();
-    fetchDashboardData();
-  } catch (error) {
-    toast.showToast(error.response?.data?.message || 'Không thể xoá thể loại này', 'error');
-  }
+  openConfirm({
+    title: 'Xóa thể loại?',
+    message: `Bạn có chắc chắn muốn xoá thể loại "${genre.name}"?`,
+    confirmText: 'Xóa thể loại',
+    type: 'danger',
+    action: async () => {
+      try {
+        await api.delete(`/admin/genres/${genre.id}`);
+        toast.showToast('Đã ẩn/xoá thể loại thành công', 'success');
+        fetchGenres();
+        fetchDashboardData();
+      } catch (error) {
+        toast.showToast(error.response?.data?.message || 'Không thể xoá thể loại này', 'error');
+      }
+    }
+  });
 };
 </script>

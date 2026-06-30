@@ -57,6 +57,17 @@
 
       </div>
     </transition>
+    <!-- Confirm Dialog -->
+    <ConfirmDialog 
+      theme="dark"
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </Teleport>
 </template>
 
@@ -69,6 +80,7 @@ import { paymentApi } from '@/api/payment'
 import { useNotificationStore } from '@/stores/notification'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const props = defineProps({
   show: Boolean,
@@ -89,6 +101,31 @@ const isExpiredState = ref(false)
 const premiumExpiresAt = ref(null)
 let autoPollingInterval = null
 let modalOpenedAt = 0
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 
 const lockScroll = () => {
   document.body.style.overflow = 'hidden'
@@ -161,10 +198,21 @@ const teardownSocket = () => {
 
 const closeModal = () => {
   if (isChecking.value) {
-    const confirmClose = window.confirm('Hệ thống đang kiểm tra giao dịch, bạn có chắc muốn đóng?');
-    if (!confirmClose) return;
+    openConfirm({
+      title: 'Đang kiểm tra giao dịch',
+      message: 'Hệ thống đang kiểm tra giao dịch, bạn có chắc chắn muốn đóng modal này?',
+      confirmText: 'Đóng modal',
+      type: 'warning',
+      action: async () => {
+        executeClose()
+      }
+    })
+  } else {
+    executeClose()
   }
-  
+}
+
+const executeClose = () => {
   if (!isSuccess.value && props.order?.order_code) {
     paymentApi.cancelTransaction(props.order.order_code).catch(err => {
       console.warn('[PaymentModal] Failed to cancel transaction on close', err)

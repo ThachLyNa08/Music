@@ -247,30 +247,15 @@
       </div>
     </Teleport>
 
-    <!-- Confirm Delete Modal -->
-    <Teleport to="body">
-      <div v-if="deleteModalOpen" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeDeleteModal"></div>
-        <div class="relative w-full max-w-md flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all p-6 text-center">
-          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
-            <MfIcon name="warning" size="32" className="text-rose-600 dark:text-rose-400" />
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3" id="modal-title">Xác nhận xóa nghệ sĩ</h3>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
-            Bạn có chắc chắn muốn xóa nghệ sĩ "<span class="font-bold text-gray-800 dark:text-gray-200">{{ artistToDelete?.name }}</span>" khỏi hệ thống? Dữ liệu không thể khôi phục.
-          </p>
-          <div class="flex flex-col sm:flex-row gap-3 justify-center w-full">
-            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-bg-card text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none transition-colors shadow-sm" @click="closeDeleteModal">
-              Hủy bỏ
-            </button>
-            <button type="button" class="w-full sm:w-1/2 inline-flex justify-center items-center rounded-xl border border-transparent px-4 py-3 bg-rose-600 text-sm font-bold text-white shadow-sm hover:bg-rose-700 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="executeDelete" :disabled="deleting">
-              <div v-if="deleting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-              {{ deleting ? 'Đang xóa...' : 'Xóa nghệ sĩ' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
@@ -283,10 +268,36 @@ import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import MfIcon from '@/components/common/MfIcon.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
 const toastStore = useToastStore()
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 
 // State
 const loading = ref(true)
@@ -353,11 +364,11 @@ async function syncArtistMetadata(artist) {
   try {
     const res = await api.post(`/admin/artists/${artist.id}/sync-metadata`)
     if (!res.data?.success) {
-      alert(res.data?.message || 'Không thể đồng bộ thông tin nghệ sĩ')
+      toastStore.showToast(res.data?.message || 'Không thể đồng bộ thông tin nghệ sĩ', 'error')
     }
     await fetchArtists()
   } catch (err) {
-    alert(err.response?.data?.message || 'Không thể đồng bộ thông tin nghệ sĩ')
+    toastStore.showToast(err.response?.data?.message || 'Không thể đồng bộ thông tin nghệ sĩ', 'error')
   } finally {
     syncingArtistId.value = null
   }
@@ -370,10 +381,10 @@ async function syncMissingMetadata() {
   try {
     const res = await api.post('/admin/artists/sync-missing-metadata', { limit: 10 })
     const data = res.data || {}
-    alert(`Đã xử lý ${data.processed || 0} nghệ sĩ. Thành công: ${data.succeeded || 0}, lỗi: ${data.failed || 0}.`)
+    toastStore.showToast(`Đã xử lý ${data.processed || 0} nghệ sĩ. Thành công: ${data.succeeded || 0}, lỗi: ${data.failed || 0}.`, 'info')
     await fetchArtists()
   } catch (err) {
-    alert(err.response?.data?.message || 'Không thể đồng bộ metadata nghệ sĩ')
+    toastStore.showToast(err.response?.data?.message || 'Không thể đồng bộ metadata nghệ sĩ', 'error')
   } finally {
     syncingMissing.value = false
   }
@@ -386,10 +397,10 @@ async function syncMissingBio() {
   try {
     const res = await api.post('/admin/artists/sync-missing-bio', { limit: 20 })
     const data = res.data || {}
-    alert(`Đã xử lý xong. Thành công: ${data.synced || 0}, lỗi: ${data.failed || 0}, bỏ qua: ${data.skipped || 0}.`)
+    toastStore.showToast(`Đã xử lý xong. Thành công: ${data.synced || 0}, lỗi: ${data.failed || 0}, bỏ qua: ${data.skipped || 0}.`, 'info')
     await fetchArtists()
   } catch (err) {
-    alert(err.response?.data?.message || 'Không thể đồng bộ bio nghệ sĩ')
+    toastStore.showToast(err.response?.data?.message || 'Không thể đồng bộ bio nghệ sĩ', 'error')
   } finally {
     syncingMissingBioState.value = false
   }
@@ -402,13 +413,13 @@ async function syncArtistBio(artist) {
   try {
     const res = await api.post(`/admin/artists/${artist.id}/sync-bio`)
     if (!res.data?.success) {
-      alert(res.data?.message || 'Không thể đồng bộ bio nghệ sĩ')
+      toastStore.showToast(res.data?.message || 'Không thể đồng bộ bio nghệ sĩ', 'error')
     } else {
-      alert(res.data.message || 'Đồng bộ bio thành công')
+      toastStore.showToast(res.data.message || 'Đồng bộ bio thành công', 'success')
     }
     await fetchArtists()
   } catch (err) {
-    alert(err.response?.data?.message || 'Không thể đồng bộ bio nghệ sĩ')
+    toastStore.showToast(err.response?.data?.message || 'Không thể đồng bộ bio nghệ sĩ', 'error')
   } finally {
     syncingBioArtistId.value = null
   }
@@ -623,31 +634,24 @@ async function submitForm() {
 
 function confirmDelete(artist) {
   if (artist.song_count > 0) {
-    alert(`Không thể xóa ${artist.name} vì nghệ sĩ này đang có ${artist.song_count} bài hát. Vui lòng xóa bài hát trước!`)
+    toastStore.showToast(`Không thể xóa ${artist.name} vì nghệ sĩ này đang có ${artist.song_count} bài hát. Vui lòng xóa bài hát trước!`, 'warning')
     return
   }
-  artistToDelete.value = artist
-  deleteModalOpen.value = true
-}
-
-function closeDeleteModal() {
-  deleteModalOpen.value = false
-  artistToDelete.value = null
-}
-
-async function executeDelete() {
-  if (!artistToDelete.value) return
-  deleting.value = true
-  try {
-    await api.delete(`/admin/artists/${artistToDelete.value.id}`)
-    fetchArtists()
-    closeDeleteModal()
-    toastStore.showToast('Đã xóa nghệ sĩ thành công', 'success')
-  } catch (err) {
-    alert(err.response?.data?.message || 'Không thể xóa nghệ sĩ này')
-  } finally {
-    deleting.value = false
-  }
+  openConfirm({
+    title: 'Xóa nghệ sĩ?',
+    message: `Bạn có chắc chắn muốn xóa nghệ sĩ "${artist.name}" khỏi hệ thống? Dữ liệu không thể khôi phục.`,
+    confirmText: 'Xóa nghệ sĩ',
+    type: 'danger',
+    action: async () => {
+      try {
+        await api.delete(`/admin/artists/${artist.id}`)
+        fetchArtists()
+        toastStore.showToast('Đã xóa nghệ sĩ thành công', 'success')
+      } catch (err) {
+        toastStore.showToast(err.response?.data?.message || 'Không thể xóa nghệ sĩ này', 'error')
+      }
+    }
+  })
 }
 
 function formatNumber(num) {

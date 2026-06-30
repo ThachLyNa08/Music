@@ -69,6 +69,11 @@
           </div>
           
           <div class="filter-group">
+            <label>Người dùng</label>
+            <input type="text" v-model="filters.owner" placeholder="Nhập tên, email hoặc ID..." class="form-input" @keyup.enter="handleSearch">
+          </div>
+
+          <div class="filter-group">
             <label>Trạng thái</label>
             <select v-model="filters.status" class="form-input">
               <option value="need_update">Cần xử lý (Lỗi/Trống)</option>
@@ -79,17 +84,16 @@
             </select>
           </div>
 
-          <div class="filter-group">
+          <div class="filter-group" style="min-width: 200px">
             <label>Loại System Key</label>
-            <select v-model="filters.type" class="form-input">
-              <option value="all">Tất cả</option>
-              <option value="dailymix">Daily Mix</option>
-              <option value="weeklymix">Weekly Mix</option>
-              <option value="morning_vibes">Morning Vibes</option>
-              <option value="night_vibes">Night Vibes</option>
-              <option value="mood">Mood Mix</option>
-              <option value="genre">Genre Mix</option>
-            </select>
+            <SearchableCombobox
+              v-model="filters.system_key"
+              :options="[{key: 'all', label: 'Tất cả'}, ...systemKeysOptions]"
+              value-key="key"
+              label-key="label"
+              placeholder="Chọn hoặc nhập..."
+              :allow-create="true"
+            />
           </div>
         </div>
         
@@ -143,9 +147,12 @@
             <tr v-else v-for="item in playlists" :key="item.id">
               <td>
                 <div class="flex items-center gap-3">
-                  <div class="playlist-cover">
-                    <img :src="normalizeCoverUrl(item)" @error="handleImageError" alt="Cover" />
-                  </div>
+                  <AdminCoverThumb 
+                    :src="getPlaylistCover(item)" 
+                    size="md"
+                    rounded="lg"
+                    alt="Cover"
+                  />
                   <div>
                     <div class="font-semibold text-slate-900">{{ item.name }}</div>
                   </div>
@@ -199,14 +206,23 @@
       </div>
 
       <!-- Pagination -->
-      <div class="pagination" v-if="totalPages > 1">
-        <button class="btn-page" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">
-          <MfIcon name="chevron_left" size="20" />
-        </button>
-        <span class="page-info">Trang {{ currentPage }} / {{ totalPages }}</span>
-        <button class="btn-page" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">
-          <MfIcon name="chevron_right" size="20" />
-        </button>
+      <div v-if="totalPages > 1 || playlists.length > 0" class="flex flex-col sm:flex-row items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-4 gap-4">
+        <div class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+          <label>Hiển thị:</label>
+          <select v-model="filters.limit" @change="handleLimitChange" class="form-input py-1 px-2 text-sm w-20 bg-white dark:bg-bg-card border-gray-200 dark:border-gray-700">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+        </div>
+
+        <AdminPagination 
+          :currentPage="currentPage" 
+          :totalPages="totalPages" 
+          :disabled="loading"
+          @update:currentPage="changePage" 
+        />
       </div>
     </div>
 
@@ -260,45 +276,76 @@
       </div>
     </div>
 
-    <!-- Drawer Chi Tiết (Reuse logic cũ gọn lại) -->
-    <div class="drawer-overlay" v-if="drawerItem" @click="drawerItem = null"></div>
-    <div class="drawer-content" :class="{ 'open': drawerItem }">
-      <div class="drawer-header" v-if="drawerItem">
-        <h3>Chi tiết Playlist</h3>
-        <button class="btn-icon" @click="drawerItem = null"><MfIcon name="close" size="24" /></button>
-      </div>
-      <div class="drawer-body" v-if="drawerItem">
-        <div class="drawer-cover mb-4">
-          <img :src="normalizeCoverUrl(drawerItem)" @error="handleImageError" alt="Cover lớn" />
-        </div>
-        <h2 class="text-xl font-bold mb-1">{{ drawerItem.name }}</h2>
-        <p class="text-sm text-slate-500 mb-4">{{ drawerItem.description || 'Không có mô tả' }}</p>
-        
-        <div class="flex flex-col gap-2 text-sm text-slate-700 mb-6">
-          <div><span class="font-semibold w-24 inline-block">System Key:</span> <span class="system-key-badge">{{ drawerItem.system_key || 'N/A' }}</span></div>
-          <div><span class="font-semibold w-24 inline-block">Trạng thái:</span> <span class="status-badge" :class="drawerItem.status">{{ formatStatus(drawerItem.status) }}</span></div>
-          <div><span class="font-semibold w-24 inline-block">Số bài hát:</span> {{ drawerItem.song_count }}</div>
-          <div><span class="font-semibold w-24 inline-block">Cập nhật lúc:</span> {{ drawerItem.updated_at ? new Date(drawerItem.updated_at).toLocaleString('vi-VN') : 'N/A' }}</div>
-        </div>
+    <!-- Modal Chi Tiết Playlist -->
+    <Teleport to="body">
+      <div v-if="drawerItem" class="detail-modal-overlay" @click="closeDetailModal">
+        <div class="detail-modal-container" @click.stop>
+          <div class="detail-modal-header">
+            <h3>Chi tiết Playlist</h3>
+            <button class="btn-icon" @click="closeDetailModal" :disabled="isRegeneratingSingle">
+              <MfIcon name="close" size="24" />
+            </button>
+          </div>
+          
+          <div class="detail-modal-body">
+            <div class="detail-modal-cover mb-6">
+              <AdminCoverThumb 
+                :src="getPlaylistCover(drawerItem)" 
+                size="custom"
+                rounded="lg"
+                alt="Cover lớn"
+                style="width: 100%; height: 100%; object-fit: cover;"
+              />
+            </div>
+            <h2 class="text-xl font-bold mb-1">{{ drawerItem.name }}</h2>
+            <p class="text-sm text-slate-500 mb-4">{{ drawerItem.description || 'Không có mô tả' }}</p>
+            
+            <div class="flex flex-col gap-2 text-sm text-slate-700 mb-6">
+              <div><span class="font-semibold w-28 inline-block">System Key:</span> <span class="system-key-badge">{{ drawerItem.system_key || 'N/A' }}</span></div>
+              <div><span class="font-semibold w-28 inline-block">Trạng thái:</span> <span class="status-badge" :class="drawerItem.status">{{ formatStatus(drawerItem.status) }}</span></div>
+              <div><span class="font-semibold w-28 inline-block">Số bài hát:</span> {{ drawerItem.song_count }}</div>
+              <div><span class="font-semibold w-28 inline-block">Cập nhật lúc:</span> {{ drawerItem.updated_at ? new Date(drawerItem.updated_at).toLocaleString('vi-VN') : 'N/A' }}</div>
+              <div v-if="drawerItem.user_id"><span class="font-semibold w-28 inline-block">Owner:</span> {{ drawerItem.owner_name || 'User #' + drawerItem.user_id }}</div>
+            </div>
 
-        <button class="btn-action primary w-full justify-center mb-6" @click="regenerateSingle(drawerItem)">
-          <MfIcon name="sync" size="18" /> Tạo lại Playlist này
-        </button>
-
-        <h4 class="font-bold text-slate-800 mb-3 border-b pb-2">Danh sách bài hát (Đang chờ load)</h4>
-        <div class="empty-text p-4 text-center bg-slate-50 rounded-lg border border-slate-100">
-          Chức năng xem danh sách bài hát thật trong drawer vui lòng xem bên AdminUserDetailView.
+            <h4 class="font-bold text-slate-800 mb-3 border-b pb-2">Danh sách bài hát</h4>
+            <div v-if="drawerItem.user_id" class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center text-center gap-3">
+              <div>
+                <div class="text-slate-800 font-semibold">Danh sách bài hát được quản lý theo từng người dùng</div>
+                <div class="text-slate-500 text-sm mt-1">Để xem đầy đủ bài hát trong playlist này, vui lòng mở trang chi tiết người dùng.</div>
+              </div>
+              <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors" @click="goToUserDetail(drawerItem.user_id)">
+                <MfIcon name="open_in_new" size="16" />
+                Xem tại Admin User Detail
+              </button>
+            </div>
+            <div v-else class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+              <div class="text-slate-500 text-sm">Không xác định được người dùng sở hữu playlist này.</div>
+            </div>
+          </div>
+          
+          <div class="detail-modal-footer">
+            <button class="btn-action primary" @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
+              <MfIcon v-if="isRegeneratingSingle" name="sync" class="spinning" size="18" />
+              <MfIcon v-else name="sync" size="18" /> 
+              {{ isRegeneratingSingle ? 'Đang xử lý...' : 'Tạo lại Playlist này' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { useToastStore } from '@/stores/toast'
+import AdminCoverThumb from '@/components/admin/AdminCoverThumb.vue'
+import AdminPagination from '@/components/admin/AdminPagination.vue'
+import { getPlaylistCover } from '@/utils/imageUrl'
+import SearchableCombobox from '@/components/common/SearchableCombobox.vue'
 
 const toast = useToastStore()
 const router = useRouter()
@@ -316,10 +363,13 @@ const searchWarning = ref('')
 
 const filters = reactive({
   q: '',
-  type: 'all',
+  owner: '',
+  system_key: 'all',
   status: 'need_update', // Mặc định là cần xử lý
   limit: 20
 })
+
+const systemKeysOptions = ref([])
 
 const isRegeneratingAll = ref(false)
 const showConfirmModal = ref(false)
@@ -327,9 +377,16 @@ const regenerateResult = ref(null)
 
 const openActionMenuId = ref(null)
 const drawerItem = ref(null)
+const isRegeneratingSingle = ref(false)
+
+function closeDetailModal() {
+  if (isRegeneratingSingle.value) return;
+  drawerItem.value = null;
+  document.body.style.overflow = '';
+}
 
 const hasActiveFilters = computed(() => {
-  return filters.q || filters.type !== 'all' || filters.status !== 'need_update'
+  return filters.q || filters.owner || filters.system_key !== 'all' || filters.status !== 'need_update'
 })
 
 // Directive for click outside
@@ -357,10 +414,19 @@ async function fetchSummary() {
   }
 }
 
+async function fetchSystemKeys() {
+  try {
+    const res = await api.get('/admin/system-playlists/system-keys')
+    systemKeysOptions.value = res.data?.data || []
+  } catch (err) {
+    console.error('Lỗi lấy system keys:', err)
+  }
+}
+
 async function fetchPlaylists(page = 1) {
   // Validate if status is 'all' and no filter
-  if (filters.status === 'all' && !filters.q && filters.type === 'all') {
-    searchWarning.value = 'Vui lòng nhập từ khóa hoặc chọn loại playlist trước khi tra cứu toàn bộ để tránh tải quá nhiều dữ liệu.'
+  if (filters.status === 'all' && !filters.q && !filters.owner && filters.system_key === 'all') {
+    searchWarning.value = 'Vui lòng nhập từ khóa, chọn người dùng hoặc chọn system key trước khi tra cứu toàn bộ.'
     playlists.value = []
     return
   }
@@ -389,7 +455,8 @@ function handleSearch() {
 
 function resetFilters() {
   filters.q = ''
-  filters.type = 'all'
+  filters.owner = ''
+  filters.system_key = 'all'
   filters.status = 'need_update'
   fetchPlaylists(1)
 }
@@ -409,6 +476,10 @@ function changePage(p) {
   fetchPlaylists(p)
 }
 
+function handleLimitChange() {
+  fetchPlaylists(1)
+}
+
 function toggleActionMenu(id) {
   openActionMenuId.value = openActionMenuId.value === id ? null : id
 }
@@ -420,6 +491,12 @@ function closeActionMenu() {
 function viewDetail(item) {
   closeActionMenu()
   drawerItem.value = item
+  document.body.style.overflow = 'hidden'
+}
+
+function goToUserDetail(userId) {
+  closeDetailModal()
+  router.push(`/admin/users/${userId}`)
 }
 
 function copySystemKey(key) {
@@ -430,16 +507,20 @@ function copySystemKey(key) {
 
 async function regenerateSingle(item) {
   closeActionMenu()
+  isRegeneratingSingle.value = true
   toast.showToast('Đang tạo lại...', 'info')
   try {
     await api.post(`/admin/system-playlists/${item.id}/regenerate`)
     toast.showToast('Đã tạo lại thành công', 'success')
     fetchPlaylists(currentPage.value)
     if (drawerItem.value && drawerItem.value.id === item.id) {
-      drawerItem.value = null // Close drawer for simplicity
+      drawerItem.value = null
+      document.body.style.overflow = ''
     }
   } catch (err) {
     toast.showToast(err.response?.data?.message || 'Lỗi khi tạo lại', 'error')
+  } finally {
+    isRegeneratingSingle.value = false
   }
 }
 
@@ -468,16 +549,6 @@ function closeResultModal() {
 }
 
 // Utils
-function normalizeCoverUrl(pl) {
-  if (pl.cover_url) return pl.cover_url
-  if (pl.first_song_cover_url) return pl.first_song_cover_url
-  return '/default_playlist_cover.png'
-}
-
-function handleImageError(e) {
-  e.target.src = '/default_playlist_cover.png' // Fallback image or a generated data URI
-}
-
 function formatStatus(status) {
   const map = {
     'ok': 'Hoạt động',
@@ -492,9 +563,22 @@ function formatNumber(num) {
   return num ? new Intl.NumberFormat('vi-VN').format(num) : '0'
 }
 
+const handleKeydown = (e) => {
+  if (e.key === 'Escape' && drawerItem.value) {
+    closeDetailModal();
+  }
+}
+
 onMounted(() => {
   fetchSummary()
+  fetchSystemKeys()
   fetchPlaylists(1)
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -613,8 +697,24 @@ onMounted(() => {
   transform: translateY(-2px);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
-.stat-label { color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-.stat-value { font-size: 28px; font-weight: 800; line-height: 1.2; }
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-label { 
+  color: #0f172a; 
+  font-size: 12px; 
+  font-weight: 700; 
+  text-transform: uppercase; 
+  line-height: 1.4;
+}
+.stat-value { 
+  font-size: 32px; 
+  font-weight: 800; 
+  line-height: 1.1; 
+  word-break: break-word;
+}
 .stat-meta { font-size: 12px; color: #94a3b8; }
 .text-indigo { color: #7c3aed; }
 .text-green { color: #16a34a; }
@@ -677,15 +777,6 @@ onMounted(() => {
   font-size: 14px;
   vertical-align: middle;
 }
-.playlist-cover {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #f1f5f9;
-  flex-shrink: 0;
-}
-.playlist-cover img { width: 100%; height: 100%; object-fit: cover; }
 
 .status-badge {
   display: inline-block;
@@ -788,21 +879,81 @@ onMounted(() => {
 .stat-box.failed { background: #fef2f2; color: #dc2626; }
 .stat-box.total { background: #f1f5f9; color: #475569; }
 
-.drawer-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(15,23,42,0.4); z-index: 40;
+/* Detail Modal (Center) */
+.detail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }
-.drawer-content {
-  position: fixed; top: 0; right: -400px; width: 400px; max-width: 100%; height: 100vh;
-  background: white; z-index: 50; transition: right 0.3s;
-  display: flex; flex-direction: column;
-  box-shadow: -4px 0 15px rgba(0,0,0,0.05);
+
+.detail-modal-container {
+  background: white;
+  width: calc(100vw - 32px);
+  max-width: 640px;
+  max-height: calc(100vh - 64px);
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-fade-in 0.2s ease-out;
 }
-.drawer-content.open { right: 0; }
-.drawer-header { padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-.drawer-body { padding: 24px; flex: 1; overflow-y: auto; }
-.drawer-cover { width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #f1f5f9; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.drawer-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+@keyframes modal-fade-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.detail-modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.detail-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.detail-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.detail-modal-cover {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f1f5f9;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.detail-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  justify-content: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
 
 .spinner {
   width: 20px; height: 20px;

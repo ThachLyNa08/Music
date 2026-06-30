@@ -543,7 +543,7 @@ function handleAvatar(event) {
   const file = event.target.files[0]
   if (file) {
     if (!file.type.startsWith('image/')) {
-      alert('Vui lòng chọn file hình ảnh (jpg, png,...)')
+      toastStore.showToast('Vui lòng chọn file hình ảnh (jpg, png,...)', 'error')
       return
     }
     form.value.avatar = file

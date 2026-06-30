@@ -6,6 +6,11 @@ const DEFAULT_MODEL_PATH = path.resolve(
   '../../../../storage/recommendation/models/bpr_mf_latest.json'
 );
 
+const NEW_MODEL_PATH = path.resolve(
+  __dirname,
+  '../../../../datasets/processed/recommendation/final/recommendation_bpr_model_final_semantic_v2.json'
+);
+
 let cached = null;
 let cachedAt = 0;
 let loadStatus = { ok: false, error: null, loadedAt: null, path: null };
@@ -17,8 +22,13 @@ function clearCache() {
 }
 
 function resolveModelPath(overridePath) {
-  const p = overridePath || process.env.BPR_MF_MODEL_PATH || DEFAULT_MODEL_PATH;
-  return path.isAbsolute(p) ? p : path.resolve(__dirname, '../../../', p);
+  if (overridePath) return path.isAbsolute(overridePath) ? overridePath : path.resolve(__dirname, '../../../', overridePath);
+  if (process.env.BPR_MF_MODEL_PATH) return path.isAbsolute(process.env.BPR_MF_MODEL_PATH) ? process.env.BPR_MF_MODEL_PATH : path.resolve(__dirname, '../../../', process.env.BPR_MF_MODEL_PATH);
+  
+  if (fs.existsSync(NEW_MODEL_PATH)) {
+    return NEW_MODEL_PATH;
+  }
+  return DEFAULT_MODEL_PATH;
 }
 
 function validate(artifact) {

@@ -49,17 +49,17 @@
       <table class="users-table">
         <thead>
           <tr>
-            <th>Thành viên</th>
-            <th>Vai trò</th>
-            <th>Trạng thái</th>
-            <th>Hạn Premium</th>
-            <th>Lượt tạo Playlist</th>
-            <th>Nghe nhạc (Giờ)</th>
-            <th style="text-align: right">Hành động</th>
+            <th style="width: 28%">Thành viên</th>
+            <th style="width: 12%">Vai trò</th>
+            <th style="width: 12%">Trạng thái</th>
+            <th style="width: 15%">Hạn Premium</th>
+            <th style="width: 14%">Lượt tạo Playlist</th>
+            <th style="width: 15%">Hoạt động<br>gần nhất</th>
+            <th style="text-align: right; width: 80px;">Hành động</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="u in paginatedUsers" :key="u.id" class="user-row" @click="goToDetail(u.id)" style="cursor: pointer;">
+          <tr v-for="(u, index) in paginatedUsers" :key="u.id" class="user-row" @click="goToDetail(u.id)" style="cursor: pointer;">
             <td>
               <div class="user-info">
                 <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="user-avatar-img" :alt="u.display_name" />
@@ -92,26 +92,38 @@
               </div>
             </td>
             <td><span class="playlist-count">{{ u.playlistCount || 0 }}</span></td>
-            <td style="white-space: nowrap">{{ formatListenHours(u.total_listen_sec) }} giờ</td>
-            <td>
-              <div class="action-buttons">
-                <!-- Toggle Role -->
-                <button class="btn-action icon-only" @click.stop="toggleRole(u)" :title="u.role === 'admin' ? 'Hạ cấp xuống Member' : 'Thăng cấp lên Admin'">
-                  <MfIcon :name="u.role === 'admin' ? 'person' : 'admin_panel_settings'" size="18" />
+            <td style="white-space: nowrap">
+              <span class="last-active-text">{{ formatLastActive(u.last_listened_at) }}</span>
+            </td>
+            <td style="text-align: right;">
+              <div class="action-menu-wrapper" @click.stop>
+                <button class="btn-action-more" @click="toggleDropdown(u.id)">
+                  <MfIcon name="more_vert" size="20" />
                 </button>
-                <!-- Edit Profile -->
-                <button class="btn-action edit icon-only" @click.stop="openEditModal(u)" title="Chỉnh sửa hồ sơ">
-                  <MfIcon name="edit" size="18" />
-                </button>
-
-                <!-- Update Premium expiration -->
-                <button class="btn-action premium icon-only" @click.stop="openPremiumModal(u)" title="Gia hạn Premium">
-                  <MfIcon name="workspace_premium" size="18" />
-                </button>
-                <!-- Delete -->
-                <button class="btn-action delete icon-only" @click.stop="deleteUser(u)" title="Xóa người dùng">
-                  <MfIcon name="delete" size="18" />
-                </button>
+                
+                <div v-if="activeDropdown === u.id" class="action-dropdown" :class="{ 'dropdown-up': index >= paginatedUsers.length - 2 && paginatedUsers.length > 3 }">
+                  <button class="dropdown-item" @click="goToDetail(u.id); closeDropdown()">
+                    <MfIcon name="visibility" size="18" /> Xem chi tiết
+                  </button>
+                  <button class="dropdown-item" @click="openEditModal(u); closeDropdown()">
+                    <MfIcon name="edit" size="18" /> Chỉnh sửa
+                  </button>
+                  <button class="dropdown-item premium-action" @click="openPremiumModal(u); closeDropdown()">
+                    <MfIcon name="workspace_premium" size="18" /> Quản lý Premium
+                  </button>
+                  <button class="dropdown-item" @click="toggleRole(u); closeDropdown()">
+                    <MfIcon :name="u.role === 'admin' ? 'person' : 'admin_panel_settings'" size="18" />
+                    {{ u.role === 'admin' ? 'Hạ cấp Member' : 'Thăng cấp Admin' }}
+                  </button>
+                  <button class="dropdown-item" :class="u.status === 'locked' ? 'unlock-action' : 'lock-action'" @click="toggleStatus(u); closeDropdown()">
+                    <MfIcon :name="u.status === 'locked' ? 'lock_open' : 'lock'" size="18" />
+                    {{ u.status === 'locked' ? 'Mở khóa tài khoản' : 'Khóa tài khoản' }}
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item delete-action" @click="deleteUser(u); closeDropdown()">
+                    <MfIcon name="delete" size="18" /> Xóa người dùng
+                  </button>
+                </div>
               </div>
             </td>
           </tr>
@@ -234,11 +246,22 @@
         </form>
       </div>
     </div>
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog 
+      v-model:open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { normalizeImageUrl } from '@/utils/imageUrl'
@@ -247,6 +270,7 @@ import { useAuthStore } from '@/stores/auth'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const toast = useToastStore()
@@ -256,6 +280,23 @@ const users = ref([])
 const searchQuery = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
+
+// Dropdown state
+const activeDropdown = ref(null)
+
+function toggleDropdown(userId) {
+  activeDropdown.value = activeDropdown.value === userId ? null : userId
+}
+
+function closeDropdown() {
+  activeDropdown.value = null
+}
+
+const handleClickOutside = (e) => {
+  if (!e.target.closest('.action-menu-wrapper')) {
+    activeDropdown.value = null
+  }
+}
 
 // Premium modal state
 const showPremiumModal = ref(false)
@@ -272,6 +313,32 @@ const newUser = ref({
   display_name: '',
   role: 'user'
 })
+
+// Confirm state
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 
 // Edit user modal state
 const showEditUserModal = ref(false)
@@ -353,6 +420,11 @@ const pageSize = ref(20)
 
 watch([searchQuery, filterRole, filterStatus], () => {
   currentPage.value = 1
+  activeDropdown.value = null
+})
+
+watch(currentPage, () => {
+  activeDropdown.value = null
 })
 
 function resetFilters() {
@@ -394,55 +466,95 @@ function formatListenHours(sec) {
   return (sec / 3600).toFixed(1)
 }
 
+function formatLastActive(dateStr) {
+  if (!dateStr) return 'Chưa nghe'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now - date
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+
+  if (diffDay === 0) {
+    if (diffHour > 0) return `${diffHour} giờ trước`
+    if (diffMin > 0) return `${diffMin} phút trước`
+    return 'Vừa xong'
+  }
+  if (diffDay < 7) {
+    return `${diffDay} ngày trước`
+  }
+  return date.toLocaleDateString('vi-VN')
+}
+
 async function toggleRole(user) {
   const newRole = user.role === 'admin' ? 'user' : 'admin'
   const message = user.role === 'admin' 
     ? `Bạn có chắc muốn hạ quyền quản trị của "${user.display_name}"?` 
-    : `Xác nhận thăng quyền Admin cho "${user.display_name}"?`
+    : `Người dùng này sẽ có quyền truy cập khu vực quản trị.`
     
-  if (confirm(message)) {
-    try {
-      await api.put(`/admin/users/${user.id}/role`, { role: newRole })
-      user.role = newRole
-    } catch (err) {
-      console.error('Lỗi khi đổi vai trò:', err)
-      alert('Không thể thay đổi quyền người dùng')
+  openConfirm({
+    title: user.role === 'admin' ? 'Hạ quyền Admin?' : 'Thăng cấp Admin?',
+    message: message,
+    type: 'warning',
+    action: async () => {
+      try {
+        await api.put(`/admin/users/${user.id}/role`, { role: newRole })
+        user.role = newRole
+        toast.showToast(`Đã cập nhật quyền Admin thành công`, 'success')
+      } catch (err) {
+        console.error('Lỗi khi đổi vai trò:', err)
+        toast.showToast(err.response?.data?.message || 'Không thể thay đổi quyền người dùng', 'error')
+      }
     }
-  }
+  })
 }
 
-async function toggleStatus(user) {
+function toggleStatus(user) {
   if (user.id === authStore.user?.id) {
     toast.showToast('Bạn không thể khóa tài khoản của chính mình', 'error')
     return
   }
 
-  const oldStatus = user.status
-  const newStatus = oldStatus === 'locked' ? 'active' : 'locked'
-
-  // Optimistic update
-  user.status = newStatus
-
-  try {
-    await api.put(`/admin/users/${user.id}/status`, { status: newStatus })
-    toast.showToast(newStatus === 'active' ? 'Đã mở khóa tài khoản' : 'Đã khóa tài khoản', 'success')
-  } catch (err) {
-    console.error('Lỗi khi đổi trạng thái:', err)
-    user.status = oldStatus // Rollback
-    toast.showToast('Không thể cập nhật trạng thái người dùng', 'error')
-  }
+  const isLocked = user.status === 'locked'
+  openConfirm({
+    title: isLocked ? 'Mở khóa tài khoản?' : 'Khóa tài khoản?',
+    message: isLocked 
+      ? `Người dùng "${user.display_name}" sẽ có thể đăng nhập lại.` 
+      : `Người dùng sẽ không thể đăng nhập cho đến khi được mở khóa.`,
+    confirmText: isLocked ? 'Mở khóa' : 'Khóa tài khoản',
+    type: isLocked ? 'default' : 'warning',
+    action: async () => {
+      const newStatus = isLocked ? 'active' : 'locked'
+      try {
+        await api.put(`/admin/users/${user.id}/status`, { status: newStatus })
+        user.status = newStatus
+        toast.showToast(newStatus === 'active' ? 'Đã mở khóa tài khoản' : 'Đã khóa tài khoản', 'success')
+      } catch (err) {
+        console.error('Lỗi khi đổi trạng thái:', err)
+        toast.showToast(err.response?.data?.message || 'Không thể cập nhật trạng thái người dùng', 'error')
+      }
+    }
+  })
 }
 
-async function deleteUser(user) {
-  if (confirm(`Bạn có chắc chắn muốn xóa thành viên "${user.display_name}"? Hành động này không thể hoàn tác.`)) {
-    try {
-      await api.delete(`/admin/users/${user.id}`)
-      users.value = users.value.filter(u => u.id !== user.id)
-    } catch (err) {
-      console.error('Lỗi khi xóa người dùng:', err)
-      alert(err.response?.data?.message || 'Không thể xóa người dùng này.')
+function deleteUser(user) {
+  openConfirm({
+    title: 'Xóa người dùng?',
+    message: `Hành động này có thể ảnh hưởng đến playlist, giao dịch và lịch sử nghe nhạc của người dùng.`,
+    confirmText: 'Xóa người dùng',
+    type: 'danger',
+    action: async () => {
+      try {
+        await api.delete(`/admin/users/${user.id}`)
+        users.value = users.value.filter(u => u.id !== user.id)
+        toast.showToast('Đã xóa người dùng thành công', 'success')
+      } catch (err) {
+        console.error('Lỗi khi xóa người dùng:', err)
+        toast.showToast(err.response?.data?.message || 'Không thể xóa người dùng này.', 'error')
+      }
     }
-  }
+  })
 }
 
 function goToDetail(userId) {
@@ -458,7 +570,7 @@ async function submitAddUser() {
     fetchUsers()
   } catch (err) {
     console.error('Lỗi khi thêm người dùng:', err)
-    alert(err.response?.data?.message || 'Không thể thêm người dùng')
+    toast.showToast(err.response?.data?.message || 'Không thể thêm người dùng', 'error')
   } finally {
     savingUser.value = false
   }
@@ -487,7 +599,7 @@ async function setPremiumExpiry(days) {
     showPremiumModal.value = false
   } catch (err) {
     console.error('Lỗi khi gia hạn premium:', err)
-    alert('Thao tác thất bại')
+    toast.showToast(err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại', 'error')
   } finally {
     savingPremium.value = false
   }
@@ -502,7 +614,7 @@ async function saveCustomPremiumExpiry() {
     showPremiumModal.value = false
   } catch (err) {
     console.error('Lỗi khi gia hạn custom premium:', err)
-    alert('Thao tác thất bại')
+    toast.showToast(err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại', 'error')
   } finally {
     savingPremium.value = false
   }
@@ -510,6 +622,11 @@ async function saveCustomPremiumExpiry() {
 
 onMounted(() => {
   fetchUsers()
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -603,30 +720,33 @@ onMounted(() => {
   overflow-x: auto;
   box-shadow: 0 10px 30px rgba(0,0,0,0.02);
   border: 1px solid #f0f2f5;
+  min-height: 450px; /* Ensure space for dropdowns */
 }
 
 .users-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1100px;
   border-collapse: collapse;
   text-align: left;
+  table-layout: fixed;
 }
 .users-table th {
-  padding: 16px 24px;
+  padding: 12px 16px;
   background: #f8f9fa;
   border-bottom: 2px solid #f0f2f5;
-  color: #b2bec3;
+  color: #000000;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 .users-table td {
-  padding: 18px 24px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f0f2f5;
-  color: #2d3436;
+  color: #1e293b;
   font-size: 14px;
   font-weight: 600;
+  height: 56px;
 }
 .user-row {
   transition: background 0.2s;
@@ -638,13 +758,14 @@ onMounted(() => {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 .user-avatar-placeholder, .user-avatar-img {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  box-shadow: 0 4px 10px rgba(162, 155, 254, 0.25);
+  box-shadow: 0 2px 6px rgba(162, 155, 254, 0.15);
+  flex-shrink: 0;
 }
 .user-avatar-placeholder {
   background: linear-gradient(135deg, #a29bfe, #74b9ff);
@@ -653,7 +774,7 @@ onMounted(() => {
   justify-content: center;
   color: white;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 14px;
 }
 .user-avatar-img {
   object-fit: cover;
@@ -661,21 +782,31 @@ onMounted(() => {
 .user-details {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 .user-name {
-  font-weight: 700;
-  color: #2d3436;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .user-email {
   font-size: 12px;
-  color: #b2bec3;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .role-badge {
-  padding: 6px 12px;
+  padding: 4px 8px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   display: inline-block;
   text-transform: uppercase;
@@ -700,116 +831,136 @@ onMounted(() => {
 .switch-ui {
   position: relative;
   display: inline-flex;
-  height: 24px;
-  width: 44px;
+  height: 20px;
+  width: 36px;
   align-items: center;
   border-radius: 9999px;
-  background-color: #ff7675;
+  background-color: #cbd5e1;
   transition: background-color 0.3s ease;
 }
 .switch-ui.is-on {
-  background-color: #00b894;
+  background-color: #10b981;
 }
 .switch-knob {
-  height: 20px;
-  width: 20px;
+  height: 16px;
+  width: 16px;
   border-radius: 9999px;
   background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: transform 0.3s ease;
   transform: translateX(2px);
 }
 .switch-ui.is-on .switch-knob {
-  transform: translateX(22px);
-}
-.status-text {
-  font-size: 13px;
-  font-weight: 700;
-}
-.status-text.active {
-  color: #00b894;
-}
-.status-text.locked {
-  color: #636e72;
+  transform: translateX(18px);
 }
 
 .premium-date {
-  color: #b2bec3;
+  color: #64748b;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 .premium-date.is-active {
-  color: #fd79a8;
-  font-weight: 700;
-  background: rgba(253, 121, 168, 0.1);
+  color: #db2777;
+  font-weight: 600;
+  background: rgba(219, 39, 119, 0.08);
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(253, 121, 168, 0.2);
+}
+
+.last-active-text {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .playlist-count {
-  font-weight: 700;
-  background: #f1f2f6;
+  font-weight: 600;
+  background: #f1f5f9;
   padding: 4px 10px;
   border-radius: 12px;
-  color: #2d3436;
+  color: #334155;
 }
 
-/* Action buttons */
-.action-buttons {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  gap: 8px;
+/* Action Menu */
+.action-menu-wrapper {
+  position: relative;
+  display: inline-block;
 }
-.btn-action {
-  background: #f1f2f6;
-  border: 1px solid #dfe6e9;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #2d3436;
+.btn-action-more {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #64748b;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.btn-action.icon-only {
-  width: 36px;
-  padding: 0;
+.btn-action-more:hover {
+  background: #f1f5f9;
+  color: #334155;
 }
-.btn-action:hover {
-  background: #dfe6e9;
-  transform: translateY(-1px);
+
+.action-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  min-width: 190px;
+  padding: 6px 0;
+  z-index: 50;
+  text-align: left;
 }
-.btn-action.unlock {
-  background: rgba(85, 239, 196, 0.1);
-  color: #00b894;
-  border-color: rgba(85, 239, 196, 0.3);
+.action-dropdown.dropdown-up {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 6px;
 }
-.btn-action.unlock:hover {
-  background: rgba(85, 239, 196, 0.2);
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
 }
-.btn-action.premium {
-  background: rgba(253, 121, 168, 0.1);
-  color: #e84393;
-  border-color: rgba(253, 121, 168, 0.3);
+.dropdown-item:hover {
+  background: #f8fafc;
 }
-.btn-action.premium:hover {
-  background: rgba(253, 121, 168, 0.2);
+.dropdown-item.premium-action {
+  color: #db2777;
 }
-.btn-action.delete {
-  background: rgba(255, 118, 117, 0.1);
-  color: #d63031;
-  border-color: rgba(255, 118, 117, 0.3);
+.dropdown-item.unlock-action {
+  color: #64748b;
 }
-.btn-action.delete:hover {
-  background: rgba(255, 118, 117, 0.2);
+.dropdown-item.lock-action {
+  color: #d97706;
+}
+.dropdown-item.delete-action {
+  color: #e11d48;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 4px 0;
 }
 
 /* Modals Overlay */

@@ -805,7 +805,8 @@ async function fetchData() {
     }
 
     if (transactionsResult.status === 'fulfilled') {
-      transactions.value = transactionsResult.value.data?.data || []
+      const txData = transactionsResult.value.data?.data;
+      transactions.value = Array.isArray(txData) ? txData : (txData?.items || []);
     }
 
     if (trendResult.status === 'fulfilled') {

@@ -1,6 +1,6 @@
 <template>
   <div class="karaoke-view user-page-bg">
-    <section class="karaoke-hero relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+    <section class="karaoke-hero relative overflow-hidden px-8 py-4 md:px-12 md:py-5 mb-6 border-b border-white/5 shadow-xl bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img
         :src="apiMediaUrl('/uploads/playlist_cover/karaoke.png')"
@@ -18,7 +18,7 @@
         <img
           :src="apiMediaUrl('/uploads/playlist_cover/karaoke.png')"
           alt="Karaoke"
-          class="karaoke-cover w-[200px] h-[130px] lg:w-[280px] lg:h-[180px] object-cover rounded-2xl shadow-2xl border border-white/10 flex-shrink-0"
+          class="karaoke-cover w-[160px] h-[100px] lg:w-[220px] lg:h-[140px] object-cover rounded-2xl shadow-2xl border border-white/10 flex-shrink-0"
         />
 
         <div class="karaoke-hero-content min-w-0">
@@ -26,15 +26,6 @@
           <h1 class="karaoke-title">Karaoke</h1>
           <p class="karaoke-subtitle">Trải nghiệm hát karaoke với lời nhạc đồng bộ</p>
           <p class="karaoke-meta">Tách vocal • Nhạc nền instrumental • Lyrics sync realtime</p>
-
-          <div class="karaoke-actions">
-            <button type="button" class="karaoke-primary-btn">
-              Chọn bài hát
-            </button>
-            <button type="button" class="karaoke-secondary-btn">
-              Xem bài đã tách
-            </button>
-          </div>
         </div>
       </div>
     </section>
@@ -104,44 +95,7 @@
           </button>
         </div>
 
-        <div class="spotify-card mic-card user-panel-soft">
-          <div class="card-header space-between">
-            <div class="flex-center gap-2">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" class="icon-pulse text-red-400">
-                <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-              </svg>
-              <h3 class="card-title">Mic Input</h3>
-            </div>
-            <span class="mic-status">Excellent</span>
-          </div>
-          <div class="mic-waveform" aria-hidden="true">
-            <svg class="waveform-svg" viewBox="0 0 360 74" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="micWaveGradient" x1="0" x2="1" y1="0" y2="0">
-                  <stop offset="0%" stop-color="#22d3ee" />
-                  <stop offset="48%" stop-color="#34d399" />
-                  <stop offset="100%" stop-color="#14b8a6" />
-                </linearGradient>
-                <filter id="micWaveGlow" x="-20%" y="-80%" width="140%" height="260%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="waveform-guide" d="M4 37 H356" />
-              <path
-                class="waveform-line waveform-line--ghost"
-                d="M4 37 C18 37 18 28 32 28 S46 49 60 49 S74 19 88 19 S102 56 116 56 S130 32 144 32 S158 40 172 40 S186 14 200 14 S214 62 228 62 S242 26 256 26 S270 44 284 44 S298 22 312 22 S326 52 340 52 S350 37 356 37"
-              />
-              <path
-                class="waveform-line waveform-line--main"
-                d="M4 37 C18 37 18 28 32 28 S46 49 60 49 S74 19 88 19 S102 56 116 56 S130 32 144 32 S158 40 172 40 S186 14 200 14 S214 62 228 62 S242 26 256 26 S270 44 284 44 S298 22 312 22 S326 52 340 52 S350 37 356 37"
-              />
-            </svg>
-          </div>
-        </div>
+        <MicInputCard status="idle" />
       </aside>
 
       <main class="lyrics-column">
@@ -282,7 +236,12 @@
     <KaraokeFullscreenLyrics
       :is-open="isKaraokeFullscreenOpen"
       :song="player.currentSong"
-      :lyrics="fullscreenLyrics"
+      :synced-lyrics="fullscreenLyrics"
+      :plain-lyrics="fullscreenPlainLyrics"
+      :is-plain-lyrics="fullscreenIsPlainLyrics"
+      :is-low-quality="fullscreenIsLowQuality"
+      :empty-lyrics-message="fullscreenEmptyLyricsMessage"
+      :sync-badge-text="fullscreenSyncBadgeText"
       :current-lyric-index="fullscreenCurrentLyricIndex"
       :current-time="lyricsCurrentTime"
       :duration="karaokeDuration"
@@ -302,10 +261,13 @@ import { stemApi } from '@/api/stem'
 import { songApi } from '@/api/song'
 import KaraokeFullscreenLyrics from '@/components/karaoke/KaraokeFullscreenLyrics.vue'
 import LyricsPanel from '@/components/player/LyricsPanel.vue'
+import MicInputCard from '@/components/user/MicInputCard.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
+import { useToastStore } from '@/stores/toast'
 
 const auth = useAuthStore()
 const player = usePlayerStore()
+const toast = useToastStore()
 const isPremium = computed(() => auth.isPremium)
 
 const vocalVolume = ref(20)
@@ -350,6 +312,14 @@ const fullscreenLyrics = computed(() => {
   const lines = lyricsPanelRef.value?.syncedLyricsLines
   return Array.isArray(lines) ? lines : []
 })
+const fullscreenPlainLyrics = computed(() => {
+  const lines = lyricsPanelRef.value?.plainLyricsLines
+  return Array.isArray(lines) ? lines : []
+})
+const fullscreenIsPlainLyrics = computed(() => lyricsPanelRef.value?.isPlainLyrics || false)
+const fullscreenIsLowQuality = computed(() => lyricsPanelRef.value?.isLowQualityLyrics || false)
+const fullscreenEmptyLyricsMessage = computed(() => lyricsPanelRef.value?.emptyLyricsMessage || 'Bài hát này chưa có lyrics.')
+const fullscreenSyncBadgeText = computed(() => lyricsPanelRef.value?.syncBadgeText || 'Chưa có lyrics')
 const fullscreenCurrentLyricIndex = computed(() => {
   const index = Number(lyricsPanelRef.value?.currentLyricIndex)
   return Number.isFinite(index) ? index : -1
@@ -577,7 +547,7 @@ async function toggleKaraokePlay() {
 
 async function downloadBeat() {
   if (!isPremium.value) {
-    alert('Vui lòng nâng cấp Premium để tải beat nhạc nền.')
+    toast.showToast('Vui lòng nâng cấp Premium để tải beat nhạc nền.', 'warning')
     return
   }
   if (!stemJob.value?.id || !isStemCompleted.value) return
@@ -593,7 +563,7 @@ async function downloadBeat() {
     link.remove()
     URL.revokeObjectURL(blobUrl)
   } catch (err) {
-    alert(err.response?.data?.message || 'Không thể tải beat.')
+    toast.showToast(err.response?.data?.message || 'Không thể tải beat.', 'error')
   } finally {
     downloadingBeat.value = false
   }
@@ -863,10 +833,9 @@ onBeforeUnmount(() => {
 }
 
 .karaoke-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
   gap: 24px;
-  align-items: flex-start;
 }
 
 .stem-panel {
@@ -1195,15 +1164,17 @@ onBeforeUnmount(() => {
 .lyrics-column {
   flex: 2 1 450px;
   min-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  position: relative;
+  min-height: 520px;
 }
 
 .lyrics-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
-  min-height: 520px;
-  max-height: calc(100vh - 230px);
   flex-direction: column;
   overflow: hidden;
   padding: 0 !important;
@@ -1217,7 +1188,6 @@ onBeforeUnmount(() => {
 
 .lyrics-card :deep(.lyrics-panel__body) {
   min-height: 0;
-  max-height: calc(100vh - 365px);
   overflow-y: auto;
 }
 
@@ -1267,7 +1237,7 @@ onBeforeUnmount(() => {
 .lyrics-controls {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(14, 14, 18, 0.88);
-  padding: 16px 24px;
+  padding: 10px 24px;
 }
 
 .karaoke-mini-player {
@@ -1275,7 +1245,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 14px;
-  min-height: 78px;
+  min-height: 60px;
 }
 
 .seekbar-wrapper {
@@ -1648,9 +1618,7 @@ onBeforeUnmount(() => {
     max-height: none;
   }
 
-  .lyrics-card :deep(.lyrics-panel__body) {
-    max-height: 560px;
-  }
+
 
   .karaoke-mini-player {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1658,7 +1626,7 @@ onBeforeUnmount(() => {
       'info actions'
       'seek seek';
     gap: 12px 14px;
-    min-height: 96px;
+    min-height: 80px;
   }
 
   .song-info {
@@ -1702,12 +1670,10 @@ onBeforeUnmount(() => {
     padding: 20px 16px 4px;
   }
 
-  .lyrics-card :deep(.lyrics-panel__body) {
-    max-height: 420px;
-  }
+
 
   .lyrics-controls {
-    padding: 12px 14px 14px;
+    padding: 8px 12px;
   }
 
   .karaoke-mini-player {
@@ -1716,7 +1682,7 @@ onBeforeUnmount(() => {
       'info actions'
       'seek seek';
     gap: 10px 12px;
-    min-height: 98px;
+    min-height: 80px;
   }
 
   .song-cover {

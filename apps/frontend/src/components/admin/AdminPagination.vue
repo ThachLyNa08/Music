@@ -1,5 +1,5 @@
 <template>
-  <div v-if="totalPages > 1" class="flex items-center gap-2" :class="{ 'opacity-50 pointer-events-none': disabled }">
+  <div class="flex items-center gap-2" :class="{ 'opacity-50 pointer-events-none': disabled }">
     <!-- First Page -->
     <button 
       @click="changePage(1)" 

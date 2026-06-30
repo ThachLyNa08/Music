@@ -317,19 +317,17 @@
     </div>
   </Teleport>
 
-  <!-- Delete Modal -->
-  <Teleport to="body">
-    <div v-if="showDeleteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]" @click.self="showDeleteModal = false">
-      <div class="user-modal w-full max-w-sm">
-        <h2 class="m-0 mb-4 font-black text-2xl text-white">Xóa Playlist?</h2>
-        <p class="text-gray-400 text-sm font-medium mb-8 leading-relaxed">Bạn có chắc chắn muốn xóa playlist <strong class="text-white">{{ playlist?.name }}</strong> không? Hành động này không thể hoàn tác.</p>
-        <div class="flex gap-3">
-          <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-transparent border border-gray-700 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white transition-colors" @click="showDeleteModal = false">Hủy</button>
-          <button type="button" class="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all" @click="confirmDelete" :disabled="isSubmitting">Xóa vĩnh viễn</button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <!-- Confirm Dialog -->
+  <ConfirmDialog 
+    theme="dark"
+    v-model:open="confirmState.open"
+    :title="confirmState.title"
+    :message="confirmState.message"
+    :confirmText="confirmState.confirmText"
+    :type="confirmState.type"
+    :loading="confirmState.loading"
+    @confirm="handleConfirm"
+  />
 </template>
 
 <script setup>
@@ -347,6 +345,7 @@ import SongRow from '@/components/common/SongRow.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import PlaybackButton from '@/components/common/PlaybackButton.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import PlaylistRecommendations from '@/components/playlist/PlaylistRecommendations.vue'
 import PlaylistInlineSearch from '@/components/playlist/PlaylistInlineSearch.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
@@ -363,11 +362,35 @@ const error = ref('')
 const loadingData = ref(true)
 
 const showEditModal = ref(false)
-const showDeleteModal = ref(false)
 const isSubmitting = ref(false)
 const isCloning = ref(false)
 const editForm = ref({ name: '', description: '', is_public: true, coverFile: null })
 const editPreviewUrl = ref(null)
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 
 const addingSongIds = ref(new Set())
 const isReorderingSongs = ref(false)
@@ -615,36 +638,42 @@ async function handlePlaylistDragEnd(event) {
 
 async function removeSong(songId) {
   if (!canEditSongs.value) return;
-  if(!confirm('Xóa bài này khỏi playlist?')) return;
-  try {
-    await playlistApi.removeSong(playlist.value.id, songId);
-    await fetchDetail(true);
-    toast.showToast('Đã xóa bài hát khỏi danh sách phát', 'danger');
-  } catch (e) {
-    toast.showToast('Lỗi xóa bài hát', 'error');
-  }
+  openConfirm({
+    title: 'Xóa khỏi danh sách?',
+    message: 'Bạn có chắc muốn xóa bài hát này khỏi playlist không?',
+    confirmText: 'Xóa bài hát',
+    type: 'danger',
+    action: async () => {
+      try {
+        await playlistApi.removeSong(playlist.value.id, songId);
+        await fetchDetail(true);
+        toast.showToast('Đã xóa bài hát khỏi danh sách phát', 'danger');
+      } catch (e) {
+        toast.showToast('Lỗi xóa bài hát', 'error');
+      }
+    }
+  });
 }
 
 function deletePlaylist() {
   if (!canEditMetadata.value) return;
-  showDeleteModal.value = true;
-}
-
-async function confirmDelete() {
-  if (!canEditMetadata.value) return;
-  isSubmitting.value = true;
-  try {
-    const res = await playlistApi.deletePlaylist(playlist.value.id);
-    if (res.data?.success) {
-      showDeleteModal.value = false;
-      toast.showToast('Đã xóa danh sách phát', 'danger');
-      router.push('/library');
+  openConfirm({
+    title: 'Xóa playlist?',
+    message: 'Playlist này sẽ bị xóa vĩnh viễn và không thể khôi phục.',
+    confirmText: 'Xóa vĩnh viễn',
+    type: 'danger',
+    action: async () => {
+      try {
+        const res = await playlistApi.deletePlaylist(playlist.value.id);
+        if (res.data?.success) {
+          toast.showToast('Đã xóa danh sách phát', 'danger');
+          router.push('/library');
+        }
+      } catch (e) {
+        toast.showToast(e.response?.data?.message || 'Lỗi khi xóa playlist', 'error');
+      }
     }
-  } catch (e) {
-    toast.showToast(e.response?.data?.message || 'Lỗi khi xóa playlist', 'error');
-  } finally {
-    isSubmitting.value = false;
-  }
+  });
 }
 
 function editPlaylist() {

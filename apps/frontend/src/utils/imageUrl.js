@@ -68,12 +68,36 @@ function getSongCover(song) {
 
 export const DEFAULT_PLAYLIST_COVER = '/images/default-cover.svg'
 
-export function getPlaylistCover(playlist) {
-  if (!playlist) return normalizeImageUrl(DEFAULT_PLAYLIST_COVER)
+export function normalizeCoverUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const clean = url.trim();
+  if (!clean || clean === 'null' || clean === 'undefined' || clean === 'N/A' || clean === '[object Object]') {
+    return null;
+  }
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+    return clean;
+  }
+  if (clean.startsWith('/uploads')) {
+    return `${ASSET_BASE_URL}${clean}`;
+  }
+  if (clean.startsWith('uploads')) {
+    return `${ASSET_BASE_URL}/${clean}`;
+  }
+  if (clean.startsWith('/images')) {
+    return clean;
+  }
+  if (clean.startsWith('images')) {
+    return `/${clean}`;
+  }
+  return clean;
+}
 
-  // 1. Ưu tiên cao nhất: cover_url đã được backend cấp
-  if (playlist.cover_url && playlist.cover_url.trim() !== '') {
-    return normalizeImageUrl(playlist.cover_url);
+export function getPlaylistCover(playlist) {
+  if (!playlist) return null;
+
+  if (playlist.cover_url) {
+    const url = normalizeCoverUrl(playlist.cover_url);
+    if (url) return url;
   }
 
   // 2. Nếu là system playlist nhưng thiếu cover_url (fallback dự phòng)
@@ -96,12 +120,18 @@ export function getPlaylistCover(playlist) {
   };
 
   if (playlist.system_key && systemCovers[playlist.system_key]) {
-    return normalizeImageUrl(systemCovers[playlist.system_key]);
+    return normalizeCoverUrl(systemCovers[playlist.system_key]);
   }
 
   // 3. Fallback lấy cover từ bài hát (user playlist)
-  if (playlist.effective_cover_url && playlist.effective_cover_url.trim() !== '') {
-    return normalizeImageUrl(playlist.effective_cover_url);
+  if (playlist.effective_cover_url) {
+    const url = normalizeCoverUrl(playlist.effective_cover_url);
+    if (url) return url;
+  }
+  
+  if (playlist.first_song_cover_url) {
+    const url = normalizeCoverUrl(playlist.first_song_cover_url);
+    if (url) return url;
   }
 
   const songs = playlist?.songs || playlist?.tracks || playlist?.items || []
@@ -118,11 +148,14 @@ export function getPlaylistCover(playlist) {
     playlist?.cover ||
     playlist?.image ||
     getSongCover(playlist?.song) ||
-    getSongCover(firstSongWithCover) ||
-    DEFAULT_PLAYLIST_COVER
+    getSongCover(firstSongWithCover)
 
-  if (raw === DEFAULT_PLAYLIST_COVER) return raw; // Assuming it's in public folder
-  return normalizeImageUrl(raw)
+  if (raw) {
+    const url = normalizeCoverUrl(raw);
+    if (url) return url;
+  }
+
+  return null;
 }
 
 export function getItemCover(item) {
