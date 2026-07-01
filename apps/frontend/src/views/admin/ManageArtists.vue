@@ -1,7 +1,7 @@
 <template>
   <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
     <!-- Header -->
-    <header class="py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4 z-20">
+    <header class="sticky -top-6 z-30 py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Nghệ sĩ</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý danh sách ca sĩ, band nhạc và các nghệ sĩ trên hệ thống</p>
@@ -115,71 +115,75 @@
       <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
-    <!-- Data Table -->
-    <AdminTableShell 
-      :loading="loading" 
-      :empty="!loading && paginatedArtists.length === 0" 
-      emptyTitle="Không tìm thấy nghệ sĩ nào" 
-      emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
-    >
-      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
-          <thead>
-            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 w-48">Metadata</th>
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 min-w-[200px]">Nghệ sĩ</th>
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Khu vực / Thế hệ</th>
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Số bài hát</th>
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Tổng lượt nghe</th>
-              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24 z-30 shadow-[-1px_0_0_0_#e2e8f0] dark:shadow-[-1px_0_0_0_#334155]">Hành động</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group" :class="{ 'bg-emerald-50 dark:bg-emerald-500/10': route.query.focus == artist.id }">
-              <td class="py-2.5 px-3">
-                <div class="flex flex-wrap gap-1.5 max-w-[260px]">
-                  <span v-for="issue in getArtistMetadataIssues(artist)" :key="issue.key" :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', issue.class]">
-                    {{ issue.label }}
-                  </span>
-                  <span v-if="getArtistMetadataIssues(artist).length === 0" class="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    Đủ dữ liệu
-                  </span>
-                </div>
-              </td>
-              <td class="py-2.5 px-3">
-                <div @click="goToDetail(artist.id)" class="flex items-center gap-3 max-w-[300px] cursor-pointer hover:opacity-80">
-                  <img :src="formatAvatarUrl(artist.avatar_url)" @error="handleImageError" class="w-9 h-9 rounded-full object-cover shadow-sm bg-gray-100" />
-                  <div class="flex flex-col min-w-0">
-                    <span class="font-bold text-gray-900 dark:text-white truncate" :title="artist.name">{{ artist.name }}</span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 truncate" :title="artist.bio">{{ artist.bio || 'Chưa có tiểu sử' }}</span>
+    <!-- Data Table and Pagination Wrapper -->
+    <div class="flex flex-col gap-3">
+      <AdminTableShell 
+        maxHeight="442px" 
+        style="min-height: 442px;"
+        :loading="loading" 
+        :empty="!loading && paginatedArtists.length === 0" 
+        emptyTitle="Không tìm thấy nghệ sĩ nào" 
+        emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+      >
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead>
+              <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 w-48">Metadata</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 min-w-[200px]">Nghệ sĩ</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Khu vực / Thế hệ</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Số bài hát</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Tổng lượt nghe</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24 z-30 shadow-[-1px_0_0_0_#e2e8f0] dark:shadow-[-1px_0_0_0_#334155]">Hành động</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
+              <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group" :class="{ 'bg-emerald-50 dark:bg-emerald-500/10': route.query.focus == artist.id }">
+                <td class="py-2.5 px-3">
+                  <div class="flex flex-wrap gap-1.5 max-w-[260px]">
+                    <span v-for="issue in getArtistMetadataIssues(artist)" :key="issue.key" :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', issue.class]">
+                      {{ issue.label }}
+                    </span>
+                    <span v-if="getArtistMetadataIssues(artist).length === 0" class="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                      Đủ dữ liệu
+                    </span>
                   </div>
-                </div>
-              </td>
-              <td class="py-2.5 px-3 text-center">
-                <span :class="['inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase', getRegionBadgeClass(artist.region)]">
-                  {{ artist.region || 'Khác' }}
-                </span>
-              </td>
-              <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
-                {{ artist.song_count }}
-              </td>
-              <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
-                {{ formatNumber(artist.total_plays ?? artist.totalPlays ?? 0) }}
-              </td>
-              <td class="py-2.5 px-3 text-right sticky right-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors shadow-[-1px_0_0_0_#f3f4f6] dark:shadow-[-1px_0_0_0_#1e293b]">
-                <div class="flex justify-end">
-                  <AdminActionMenu :actions="getArtistActions(artist)" />
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                </td>
+                <td class="py-2.5 px-3">
+                  <div @click="goToDetail(artist.id)" class="flex items-center gap-3 max-w-[300px] cursor-pointer hover:opacity-80">
+                    <img :src="formatAvatarUrl(artist.avatar_url)" @error="handleImageError" class="w-9 h-9 rounded-full object-cover shadow-sm bg-gray-100" />
+                    <div class="flex flex-col min-w-0">
+                      <span class="font-bold text-gray-900 dark:text-white truncate" :title="artist.name">{{ artist.name }}</span>
+                      <span class="text-xs text-gray-400 dark:text-gray-500 truncate" :title="artist.bio">{{ artist.bio || 'Chưa có tiểu sử' }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-2.5 px-3 text-center">
+                  <span :class="['inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase', getRegionBadgeClass(artist.region)]">
+                    {{ artist.region || 'Khác' }}
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
+                  {{ artist.song_count }}
+                </td>
+                <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
+                  {{ formatNumber(artist.total_plays ?? artist.totalPlays ?? 0) }}
+                </td>
+                <td class="py-2.5 px-3 text-right sticky right-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors shadow-[-1px_0_0_0_#f3f4f6] dark:shadow-[-1px_0_0_0_#1e293b]">
+                  <div class="flex justify-end">
+                    <AdminActionMenu :actions="getArtistActions(artist)" />
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
       </AdminTableShell>
 
       <!-- Pagination -->
-      <div class="py-4 flex items-center justify-between" v-if="totalPages > 1">
+      <div class="flex items-center justify-between" v-if="totalPages > 1">
         <span class="text-sm text-slate-500 hidden md:block">Hiển thị {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredArtists.length) }} trong {{ filteredArtists.length }} nghệ sĩ</span>
         <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
       </div>
+    </div>
 
     <!-- Centered Modal (Edit/Add/View) -->
     <Teleport to="body">
@@ -823,24 +827,28 @@ async function submitForm() {
   if (form.avatar) formData.append('avatar', form.avatar)
 
   try {
+    let successMsg = ''
     if (mode.value === 'edit') {
       await api.put(`/admin/artists/${selectedArtistId.value}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      statusMessage.value = 'Đã cập nhật nghệ sĩ thành công!'
+      successMsg = 'Đã cập nhật nghệ sĩ thành công!'
     } else {
       await api.post('/admin/artists', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      statusMessage.value = 'Đã thêm nghệ sĩ mới!'
+      successMsg = 'Đã thêm nghệ sĩ mới!'
     }
     
     isError.value = false
-    fetchArtists() // Reload list
+    closeModal()
     
+    // Show toast after modal closes
     setTimeout(() => {
-      closeModal()
-    }, 1000)
+      toastStore.showToast(successMsg, 'success')
+    }, 300)
+    
+    fetchArtists() // Reload list
     
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.'

@@ -1,28 +1,26 @@
 <template>
-  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative overflow-hidden full-bleed h-full">
-    <header class="py-6 bg-white dark:bg-bg-card border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-20">
+  <div class="space-y-6 pb-10">
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
       </div>
     </header>
-
-    <div class="flex-1 overflow-auto p-4 md:p-6 flex flex-col">
     <!-- Filters & Search -->
     <AdminFilterBar>
       <div class="relative flex-1 min-w-[200px]">
         <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9" />
+        <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
       </div>
-      <div class="w-full md:w-40">
-        <select v-model="filterRole" class="admin-input">
+      <div class="w-48">
+        <select v-model="filterRole" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả vai trò</option>
           <option value="user">Người dùng thường</option>
           <option value="admin">Quản trị viên (Admin)</option>
         </select>
       </div>
-      <div class="w-full md:w-40">
-        <select v-model="filterStatus" class="admin-input">
+      <div class="w-48">
+        <select v-model="filterStatus" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
           <option value="locked">Bị khóa</option>
@@ -42,54 +40,54 @@
         emptyTitle="Không tìm thấy người dùng" 
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
-          <thead>
-            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[250px]">Thành viên</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Vai trò</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Trạng thái</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Hạn Premium</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Lượt tạo Playlist</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Hoạt động gần nhất</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
+          <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
+            <tr>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[25%]">Thành viên</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[12%]">Vai trò</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[12%]">Trạng thái</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Hạn Premium</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[10%] text-right">Lượt tạo Playlist</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Hoạt động gần nhất</th>
+              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[11%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="u in paginatedUsers" :key="u.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group cursor-pointer" @click="goToDetail(u.id)">
-              <td class="py-3 px-4">
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="u in paginatedUsers" :key="u.id" class="hover:bg-slate-50 transition group cursor-pointer" @click="goToDetail(u.id)">
+              <td class="px-4 py-3 truncate">
                 <div class="flex items-center gap-3">
-                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover" :alt="u.display_name" />
-                  <div v-else class="w-10 h-10 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
-                    {{ u.display_name.charAt(0).toUpperCase() }}
+                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover shrink-0" :alt="u.display_name" />
+                  <div v-else class="w-10 h-10 shrink-0 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
+                    {{ u.display_name?.charAt(0).toUpperCase() }}
                   </div>
                   <div class="flex flex-col min-w-0">
-                    <span class="font-bold text-gray-900 dark:text-white truncate">{{ u.display_name }}</span>
+                    <span class="font-bold text-gray-900 truncate">{{ u.display_name }}</span>
                     <span class="text-xs text-gray-500 truncate">{{ u.email }}</span>
                   </div>
                 </div>
               </td>
-              <td class="py-3 px-4">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider" :class="u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/30' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">
+              <td class="px-4 py-3 truncate">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider" :class="u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-gray-100 text-gray-600'">
                   {{ u.role === 'admin' ? 'Quản trị viên' : 'Thành viên' }}
                 </span>
               </td>
-              <td class="py-3 px-4">
+              <td class="px-4 py-3">
                 <div class="flex items-center gap-2" @click.stop="toggleStatus(u)" :title="u.status === 'locked' ? 'Bị khóa' : 'Hoạt động'">
                   <div class="w-10 h-5 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out shadow-inner" :class="u.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'">
                     <div class="bg-white w-3 h-3 rounded-full shadow-md transform duration-300 ease-in-out" :class="{ 'translate-x-5': u.status === 'active' }"></div>
                   </div>
                 </div>
               </td>
-              <td class="py-3 px-4">
+              <td class="px-4 py-3 truncate">
                 <div class="flex flex-col gap-1 items-start">
-                  <span class="inline-flex px-2 py-1 rounded text-[11px] font-bold tracking-wider" :class="isPremiumActive(u.premium_expires_at) ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">
+                  <span class="inline-flex px-2 py-1 rounded text-[11px] font-bold tracking-wider" :class="isPremiumActive(u.premium_expires_at) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'">
                     {{ formatPremiumDate(u.premium_expires_at) }}
                   </span>
                 </div>
               </td>
-              <td class="py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-300">{{ u.playlistCount || 0 }}</td>
-              <td class="py-3 px-4 text-xs font-medium text-gray-500">{{ formatLastActive(u.last_listened_at) }}</td>
-              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+              <td class="px-4 py-3 text-right text-sm font-medium text-gray-600">{{ u.playlistCount || 0 }}</td>
+              <td class="px-4 py-3 text-xs font-medium text-gray-500 truncate">{{ formatLastActive(u.last_listened_at) }}</td>
+              <td class="px-4 py-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10" @click.stop>
                 <div class="flex justify-end">
                   <AdminActionMenu :actions="getUserActions(u)" />
                 </div>
@@ -100,9 +98,21 @@
       </AdminTableShell>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ currentPage }} / {{ totalPages }}</span>
-        <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
+      <div v-if="totalPages > 1 || filteredUsers.length > 0" class="flex items-center justify-between mt-4">
+        <div class="flex items-center gap-2 text-sm text-slate-500">
+          <label>Hiển thị:</label>
+          <select v-model="pageSize" @change="currentPage = 1" class="px-2 py-1 text-sm border border-slate-300 rounded-lg focus:outline-none">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+          </select>
+        </div>
+
+        <AdminPagination 
+          :limit="pageSize"
+          v-model:currentPage="currentPage" 
+          :totalPages="totalPages" 
+        />
       </div>
     </div>
 
@@ -219,15 +229,15 @@
 
     <!-- Confirm Dialog -->
     <ConfirmDialog 
-      v-model:open="confirmState.open"
+      :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
       :confirmText="confirmState.confirmText"
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
+      @cancel="confirmState.open = false"
     />
-    </div>
   </div>
 </template>
 
@@ -417,11 +427,6 @@ const pageSize = ref(20)
 
 watch([searchQuery, filterRole, filterStatus], () => {
   currentPage.value = 1
-  activeDropdown.value = null
-})
-
-watch(currentPage, () => {
-  activeDropdown.value = null
 })
 
 function resetFilters() {

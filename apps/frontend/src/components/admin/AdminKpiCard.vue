@@ -18,7 +18,7 @@
       
       <div v-if="showIcon" class="flex items-start justify-between gap-4">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" :class="iconClass">
-          <MfIcon :name="icon" size="20" />
+          <MfIcon :name="icon || 'info'" size="20" />
         </div>
 
         <div class="min-w-0 text-right flex-1">

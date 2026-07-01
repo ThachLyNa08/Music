@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-user-detail">
+  <div class="space-y-6 pb-10">
     <!-- Header: Quick info & Actions -->
     <header class="detail-header" v-if="!loading && user">
       <div class="header-back" @click="$router.push('/admin/users')">
@@ -61,132 +61,48 @@
     <div v-else class="detail-content">
       <!-- KPI Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-        <!-- 1. Tổng lượt nghe -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Tổng lượt nghe</span>
-          </div>
-          <div class="mt-2 z-10">
-            <span class="text-slate-900 text-3xl font-bold">{{ summary.totalListens ?? '--' }}</span>
-            <div v-if="summary.trends?.totalListens" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalListens.status)">
-              {{ summary.trends.totalListens.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Tổng hiện tại
-            </div>
-          </div>
-          <!-- Decorative SVG -->
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-violet-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q25,20 50,40 T100,10 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q25,20 50,40 T100,10" fill="none" stroke="currentColor" stroke-width="2" class="text-violet-300" />
-          </svg>
-        </div>
-
-        <!-- 2. Thời gian nghe -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Thời gian nghe</span>
-          </div>
-          <div class="mt-2 z-10 flex flex-col items-center">
-            <div class="flex items-baseline justify-center gap-1">
-              <span class="text-slate-900 text-3xl font-bold">{{ summary.totalListeningMinutes ?? '--' }}</span>
-              <span v-if="summary.totalListeningMinutes !== undefined && summary.totalListeningMinutes !== null" class="text-slate-500 text-base">phút</span>
-            </div>
-            <div v-if="summary.trends?.totalListeningMinutes" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalListeningMinutes.status)">
-              {{ summary.trends.totalListeningMinutes.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Tổng hiện tại
-            </div>
-          </div>
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-cyan-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q25,10 50,30 T100,20 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q25,10 50,30 T100,20" fill="none" stroke="currentColor" stroke-width="2" class="text-cyan-300" />
-          </svg>
-        </div>
-
-        <!-- 3. Bài hát yêu thích -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Bài hát yêu thích</span>
-          </div>
-          <div class="mt-2 z-10">
-            <span class="text-slate-900 text-3xl font-bold">{{ summary.likedSongs ?? '--' }}</span>
-            <div v-if="summary.trends?.likedSongs" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.likedSongs.status)">
-              {{ summary.trends.likedSongs.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Tổng hiện tại
-            </div>
-          </div>
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-rose-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q20,30 50,15 T100,25 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q20,30 50,15 T100,25" fill="none" stroke="currentColor" stroke-width="2" class="text-rose-300" />
-          </svg>
-        </div>
-
-        <!-- 4. Playlist tự tạo -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Playlist tự tạo</span>
-          </div>
-          <div class="mt-2 z-10">
-            <span class="text-slate-900 text-3xl font-bold">{{ userPlaylistsLoading ? '--' : (userPlaylists.summary?.manualCount ?? '--') }}</span>
-            <div v-if="summary.trends?.createdPlaylists" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.createdPlaylists.status)">
-              {{ summary.trends.createdPlaylists.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Tổng hiện tại
-            </div>
-          </div>
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-pink-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q30,10 60,35 T100,10 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q30,10 60,35 T100,10" fill="none" stroke="currentColor" stroke-width="2" class="text-pink-300" />
-          </svg>
-        </div>
-
-        <!-- 5. Đang theo dõi -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Đang theo dõi</span>
-          </div>
-          <div class="mt-2 z-10">
-            <span class="text-slate-900 text-3xl font-bold">{{ summary.followedArtists ?? '--' }}</span>
-            <div v-if="summary.trends?.followedArtists" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.followedArtists.status)">
-              {{ summary.trends.followedArtists.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Tổng hiện tại
-            </div>
-          </div>
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-emerald-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q25,35 50,15 T100,30 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q25,35 50,15 T100,30" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-300" />
-          </svg>
-        </div>
-
-        <!-- 6. Chi tiêu -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 min-h-[110px] flex flex-col justify-center items-center text-center relative transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group">
-          <div class="z-10">
-            <span class="text-slate-500 text-sm font-medium truncate block">Chi tiêu</span>
-          </div>
-          <div class="mt-2 z-10 flex flex-col items-center">
-            <div class="flex items-baseline justify-center gap-1">
-              <span class="text-slate-900 text-3xl font-bold">{{ summary.totalSpent !== undefined ? formatCurrency(summary.totalSpent) : '--' }}</span>
-              <span v-if="summary.totalSpent !== undefined" class="text-slate-500 text-base">đ</span>
-            </div>
-            <div v-if="summary.trends?.totalSpent" class="mt-1 text-sm font-medium" :class="getTrendClass(summary.trends.totalSpent.status)">
-              {{ summary.trends.totalSpent.text }}
-            </div>
-            <div v-else class="mt-1 text-sm font-medium text-slate-400">
-              Chưa có giao dịch tuần này
-            </div>
-          </div>
-          <svg class="absolute bottom-0 right-0 w-24 h-16 text-amber-200 opacity-40 z-0 pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M0,50 Q40,20 60,40 T100,5 L100,50 Z" fill="currentColor" />
-            <path d="M0,50 Q40,20 60,40 T100,5" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-300" />
-          </svg>
-        </div>
+        <AdminKpiCard
+          title="Tổng lượt nghe"
+          :value="summary.totalListens ?? '--'"
+          :subtitle="summary.trends?.totalListens?.text || 'Tổng hiện tại'"
+          icon="play_arrow"
+          tone="purple"
+        />
+        <AdminKpiCard
+          title="Thời gian nghe"
+          :value="summary.totalListeningMinutes !== undefined && summary.totalListeningMinutes !== null ? `${summary.totalListeningMinutes} phút` : '--'"
+          :subtitle="summary.trends?.totalListeningMinutes?.text || 'Tổng hiện tại'"
+          icon="timer"
+          tone="cyan"
+        />
+        <AdminKpiCard
+          title="Bài hát yêu thích"
+          :value="summary.likedSongs ?? '--'"
+          :subtitle="summary.trends?.likedSongs?.text || 'Tổng hiện tại'"
+          icon="favorite"
+          tone="rose"
+        />
+        <AdminKpiCard
+          title="Playlist tự tạo"
+          :value="userPlaylistsLoading ? '--' : (userPlaylists.summary?.manualCount ?? '--')"
+          :subtitle="summary.trends?.createdPlaylists?.text || 'Tổng hiện tại'"
+          icon="queue_music"
+          tone="pink"
+        />
+        <AdminKpiCard
+          title="Đang theo dõi"
+          :value="summary.followedArtists ?? '--'"
+          :subtitle="summary.trends?.followedArtists?.text || 'Tổng hiện tại'"
+          icon="person_add"
+          tone="emerald"
+        />
+        <AdminKpiCard
+          title="Chi tiêu"
+          :value="summary.totalSpent !== undefined ? `${formatCurrency(summary.totalSpent)}đ` : '--'"
+          :subtitle="summary.trends?.totalSpent?.text || 'Chưa có giao dịch tuần này'"
+          icon="payment"
+          tone="amber"
+        />
       </div>
 
       <!-- Tabs Navigation -->
@@ -1093,18 +1009,20 @@
 
     <!-- Confirm Dialog -->
     <ConfirmDialog 
-      v-model:open="confirmState.open"
+      :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
       :confirmText="confirmState.confirmText"
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
+      @cancel="confirmState.open = false"
     />
   </div>
 </template>
 
 <script setup>
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from '@/stores/toast'

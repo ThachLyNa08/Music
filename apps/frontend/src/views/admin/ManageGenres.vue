@@ -1,7 +1,7 @@
 <template>
   <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
     <!-- Header Hero -->
-    <header class="py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4 z-20">
+    <header class="sticky -top-6 z-30 py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4">
       <!-- Background subtle gradient -->
       <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
       
@@ -23,48 +23,26 @@
 
     <div class="p-4 md:p-6 flex flex-col space-y-6">
       <!-- Stat Cards -->
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Tổng thể loại</div>
-        <div class="text-2xl font-black text-gray-900 dark:text-white">{{ formatNumber(summary.total) }}</div>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-2">
+        <AdminKpiCard
+          v-for="item in genreKpiCards"
+          :key="item.title"
+          v-bind="item"
+          :loading="isStatsLoading"
+          :show-icon="false"
+          compact
+        />
       </div>
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center relative group">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex justify-between">
-          <span>Hoạt động</span>
-          <span class="text-[10px] text-gray-400 border border-gray-200 dark:border-gray-700 px-1 rounded">{{ summary.empty_active }} rỗng</span>
-        </div>
-        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-          {{ formatNumber(summary.active_with_data) }}
-          <span class="text-sm font-medium text-gray-400 line-through ml-1" v-if="summary.empty_active > 0">{{ formatNumber(summary.active_total) }}</span>
-        </div>
-      </div>
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Featured</div>
-        <div class="text-2xl font-black text-amber-500 dark:text-amber-400">{{ formatNumber(summary.featured) }}</div>
-      </div>
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Nghe (7 ngày)</div>
-        <div class="text-2xl font-black text-blue-600 dark:text-blue-400">{{ formatNumber(summary.listens_7d) }}</div>
-      </div>
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">User Đăng ký</div>
-        <div class="text-2xl font-black text-purple-600 dark:text-purple-400">{{ formatNumber(summary.users_selected) }}</div>
-      </div>
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
-        <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Playlist Dùng</div>
-        <div class="text-2xl font-black text-rose-600 dark:text-rose-400">{{ formatNumber(summary.playlist_usage) }}</div>
-      </div>
-    </div>
 
     <!-- Genre Intelligence -->
     <h2 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-      <MfIcon name="insights" size="18" class="text-indigo-500" />
+      <MfIcon name="ai" size="18" class="text-indigo-500" />
       Genre Intelligence
     </h2>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <!-- Trending -->
       <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-xl shadow-md text-white relative overflow-hidden group">
-        <MfIcon name="trending_up" size="80" class="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform" />
+        <MfIcon name="activity" size="80" class="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform" />
         <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
           Đang Trending
         </div>
@@ -115,22 +93,42 @@
     </div>
 
     <!-- Filters & Bulk Actions -->
-    <div class="flex flex-col xl:flex-row justify-between gap-3 mb-4">
-      <AdminFilterBar class="flex-1">
-        <div class="relative w-full sm:w-auto min-w-[200px]">
+    <div class="flex flex-col xl:flex-row justify-between gap-3 mb-2">
+      <AdminFilterBar class="flex-1 !mb-0">
+        <div class="relative flex-1 min-w-[200px]">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
           <input 
             v-model="filters.search"
-            @keyup.enter="fetchGenres"
+            @input="handleSearchInput"
+            @keyup.enter="handleEnter"
+            @focus="showHistory = true"
+            @blur="handleBlur"
             type="text" 
             placeholder="Tìm kiếm thể loại..."
-            class="admin-input pl-9"
+            class="admin-input pl-9 pr-8"
           >
+          <button v-if="filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+            <MfIcon name="close" size="14" />
+          </button>
+          <!-- History Dropdown -->
+          <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg overflow-hidden animate-fade-in-up">
+            <ul>
+              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <MfIcon name="history" size="14" class="text-gray-400 flex-shrink-0" />
+                  <span class="text-sm text-gray-600 dark:text-gray-300 truncate">{{ item }}</span>
+                </div>
+                <button @mousedown.prevent.stop="removeHistoryItem(item)" class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition px-1">
+                  <MfIcon name="close" size="12" />
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
         <select 
           v-model="filters.data_status"
           @change="fetchGenres"
-          class="admin-input"
+          class="admin-input lg:w-40"
         >
           <option value="all">Tất cả dữ liệu</option>
           <option value="has_data">Có dữ liệu</option>
@@ -139,7 +137,7 @@
         <select 
           v-model="filters.taxonomy_flag"
           @change="fetchGenres"
-          class="admin-input"
+          class="admin-input lg:w-48"
         >
           <option value="all">Mọi cờ Taxonomy</option>
           <option value="cold_start">Dùng Cold Start</option>
@@ -149,7 +147,7 @@
         <select 
           v-model="filters.status"
           @change="fetchGenres"
-          class="admin-input"
+          class="admin-input lg:w-40"
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
@@ -186,24 +184,25 @@
     <!-- Data Table -->
     <div class="flex-1 flex flex-col mb-8">
       <AdminTableShell 
+        maxHeight="375px"
         :loading="loading" 
         :empty="!loading && genres.length === 0" 
         emptyTitle="Không tìm thấy thể loại nào" 
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
-          <thead>
-            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 w-10 text-center">
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
+          <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+            <tr>
+              <th class="py-3 px-2 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 z-30 bg-gray-50 dark:bg-bg-card">
                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
               </th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[220px]">Thể loại</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[120px]">Market/Parent</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Data (Bài/NS/Alb)</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Lượt nghe 7N</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Taxonomy Flags</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Trạng thái</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 w-[80px] text-right sticky right-0 bg-gray-50 dark:bg-bg-card">Hành động</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 w-[220px] min-w-[220px] sticky left-[50px] z-30 bg-gray-50 dark:bg-bg-card shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]">Thể loại</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 w-[120px]">Market/Parent</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 text-center w-[140px]">Data (Bài/NS/Alb)</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 text-center w-[110px]">Lượt nghe 7N</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 text-center w-[130px]">Taxonomy Flags</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 text-center w-[100px]">Trạng thái</th>
+              <th class="py-3 px-4 font-bold text-gray-900 dark:text-gray-300 w-[80px] text-right sticky right-0 z-30 bg-gray-50 dark:bg-bg-card shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)]">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
@@ -214,12 +213,12 @@
               @click="openDetailDrawer(genre.id, $event)"
             >
               <!-- Checkbox -->
-              <td class="py-3 px-4 text-center" @click.stop>
+              <td class="py-3 px-2 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-indigo-50/30 dark:group-hover:bg-indigo-500/5 transition-colors" @click.stop>
                 <input type="checkbox" :value="genre.id" v-model="selectedGenres" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
               </td>
 
               <!-- Tên Thể loại & Cover -->
-              <td class="py-3 px-4">
+              <td class="py-3 px-4 sticky left-[50px] z-10 bg-white dark:bg-bg-surface group-hover:bg-indigo-50/30 dark:group-hover:bg-indigo-500/5 transition-colors shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]">
                 <div class="flex items-center gap-3">
                   <div class="relative w-10 h-10 shrink-0 rounded-lg overflow-hidden border border-gray-200 dark:border-bg-border flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                     <img v-if="genre.cover_url || genre.coverUrl" :src="$formatImageUrl(genre.cover_url || genre.coverUrl)" class="w-full h-full object-cover" alt="cover">
@@ -294,7 +293,7 @@
               </td>
 
               <!-- Hành động -->
-              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+              <td class="py-3 px-4 text-right sticky right-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-indigo-50/30 dark:group-hover:bg-indigo-500/5 transition-colors shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)]" @click.stop>
                 <div class="flex justify-end">
                   <AdminActionMenu :actions="getGenreActions(genre)" />
                 </div>
@@ -369,6 +368,7 @@ import AdminTableShell from '@/components/admin/AdminTableShell.vue';
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
 import AdminResetButton from '@/components/admin/AdminResetButton.vue';
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue';
 
 const toast = useToastStore();
 
@@ -420,6 +420,7 @@ function getGenreActions(genre) {
 }
 
 const loading = ref(false);
+const isStatsLoading = ref(false);
 const genres = ref([]);
 const allGenresForDropdown = ref([]);
 const pagination = reactive({ page: 1, limit: 10, totalPages: 1, total: 0 });
@@ -484,6 +485,7 @@ onMounted(() => {
 });
 
 const fetchDashboardData = async () => {
+  isStatsLoading.value = true;
   try {
     const [summaryRes, insightsRes] = await Promise.all([
       api.get('/admin/genres/summary'),
@@ -493,6 +495,8 @@ const fetchDashboardData = async () => {
     if (insightsRes.data.success) Object.assign(insights, insightsRes.data.data);
   } catch (error) {
     console.error('Lỗi khi tải dashboard data', error);
+  } finally {
+    isStatsLoading.value = false;
   }
 };
 
@@ -518,6 +522,61 @@ const fetchGenres = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// Search & History
+const searchTimeout = ref(null);
+const showHistory = ref(false);
+const searchHistory = ref(JSON.parse(localStorage.getItem('adminGenresSearchHistory') || '[]'));
+
+const saveSearchHistory = (term) => {
+  const t = term?.trim();
+  if (t && !searchHistory.value.includes(t)) {
+    searchHistory.value.unshift(t);
+    if (searchHistory.value.length > 5) searchHistory.value.pop();
+    localStorage.setItem('adminGenresSearchHistory', JSON.stringify(searchHistory.value));
+  }
+};
+
+const handleSearchInput = () => {
+  clearTimeout(searchTimeout.value);
+  searchTimeout.value = setTimeout(() => {
+    pagination.page = 1;
+    fetchGenres();
+  }, 500);
+};
+
+const handleEnter = () => {
+  clearTimeout(searchTimeout.value);
+  pagination.page = 1;
+  fetchGenres();
+  saveSearchHistory(filters.search);
+  showHistory.value = false;
+};
+
+const clearSearch = () => {
+  filters.search = '';
+  pagination.page = 1;
+  fetchGenres();
+  showHistory.value = false;
+};
+
+const handleBlur = () => {
+  setTimeout(() => {
+    showHistory.value = false;
+  }, 200);
+};
+
+const selectHistoryItem = (item) => {
+  filters.search = item;
+  showHistory.value = false;
+  pagination.page = 1;
+  fetchGenres();
+};
+
+const removeHistoryItem = (item) => {
+  searchHistory.value = searchHistory.value.filter(i => i !== item);
+  localStorage.setItem('adminGenresSearchHistory', JSON.stringify(searchHistory.value));
 };
 
 const getParentName = (parentId) => {
@@ -589,6 +648,51 @@ const formatNumber = (num) => {
   if (num === undefined || num === null) return '0';
   return new Intl.NumberFormat('vi-VN').format(num);
 };
+
+const genreKpiCards = computed(() => [
+  {
+    title: 'Tổng thể loại',
+    value: summary.total,
+    subtitle: 'Trong thư viện',
+    icon: 'music',
+    tone: 'blue'
+  },
+  {
+    title: 'Hoạt động',
+    value: summary.active_with_data,
+    subtitle: `${summary.empty_active || 0} rỗng`,
+    icon: 'check',
+    tone: 'green'
+  },
+  {
+    title: 'Featured',
+    value: summary.featured,
+    subtitle: 'Đang nổi bật',
+    icon: 'star',
+    tone: 'amber'
+  },
+  {
+    title: 'Nghe 7 ngày',
+    value: formatNumber(summary.listens_7d),
+    subtitle: 'Tổng lượt nghe',
+    icon: 'activity',
+    tone: 'purple'
+  },
+  {
+    title: 'User đăng ký',
+    value: formatNumber(summary.users_selected),
+    subtitle: 'Theo gu nghe',
+    icon: 'users',
+    tone: 'cyan'
+  },
+  {
+    title: 'Playlist dùng',
+    value: formatNumber(summary.playlist_usage),
+    subtitle: 'AI/System playlist',
+    icon: 'list-music',
+    tone: 'rose'
+  }
+]);
 
 const toggleDropdown = (id) => {
   activeDropdown.value = activeDropdown.value === id ? null : id;

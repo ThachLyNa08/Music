@@ -91,22 +91,10 @@
 
       <!-- 2. KPI CARDS -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-4 shadow-sm flex flex-col">
-          <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Tổng Lượt Nghe</span>
-          <span class="text-2xl font-extrabold text-gray-900 dark:text-white">{{ summary.totalListens.toLocaleString('vi-VN') }}</span>
-        </div>
-        <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-4 shadow-sm flex flex-col">
-          <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Người Nghe Duy Nhất</span>
-          <span class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{{ summary.uniqueListeners.toLocaleString('vi-VN') }}</span>
-        </div>
-        <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-4 shadow-sm flex flex-col">
-          <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Lượt Thích</span>
-          <span class="text-2xl font-extrabold text-pink-600 dark:text-pink-400">{{ summary.likedCount.toLocaleString('vi-VN') }}</span>
-        </div>
-        <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-4 shadow-sm flex flex-col">
-          <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Thêm vào Playlist</span>
-          <span class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ summary.playlistAdds.toLocaleString('vi-VN') }}</span>
-        </div>
+        <AdminKpiCard title="Tổng Lượt Nghe" :value="summary.totalListens.toLocaleString('vi-VN')" icon="play_arrow" tone="blue" />
+        <AdminKpiCard title="Người Nghe Duy Nhất" :value="summary.uniqueListeners.toLocaleString('vi-VN')" icon="person" tone="indigo" />
+        <AdminKpiCard title="Lượt Thích" :value="summary.likedCount.toLocaleString('vi-VN')" icon="favorite" tone="rose" />
+        <AdminKpiCard title="Thêm vào Playlist" :value="summary.playlistAdds.toLocaleString('vi-VN')" icon="playlist_add" tone="emerald" />
       </div>
 
       <!-- 3. DATA QUALITY -->
@@ -399,6 +387,7 @@ import {
 } from 'chart.js';
 import SongFormModal from '@/components/admin/SongFormModal.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue';
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, BarElement, LinearScale, CategoryScale);
 
@@ -619,7 +608,7 @@ async function submitForm(submitData) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="postcss">
 .animate-fade-in-up {
   animation: fadeInUp 0.4s ease-out forwards;
 }

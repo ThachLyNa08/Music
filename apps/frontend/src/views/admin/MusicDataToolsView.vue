@@ -32,106 +32,14 @@
 
     <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- 2. KPI Cards -->
-    <section class="mb-8 mt-6">
-      <div v-if="loading && !summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 animate-pulse">
-        <div v-for="i in 6" :key="i" class="h-32 bg-slate-200 rounded-2xl"></div>
-      </div>
-      <div v-else-if="summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <!-- Total Songs -->
-        <div class="kpi-card total bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-              <MfIcon name="library_music" size="20" />
-            </div>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ summary.totalSongs.toLocaleString() }}</div>
-          <div class="text-sm text-slate-500">Tổng bài hát</div>
-        </div>
-
-        <!-- Cover Status -->
-        <div class="kpi-card cover bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <MfIcon name="image" size="20" />
-            </div>
-            <div class="text-right">
-              <div class="text-xs text-slate-400">Thiếu</div>
-              <div class="text-sm font-bold text-red-500">{{ (summary.cover.total - summary.cover.has).toLocaleString() }}</div>
-            </div>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ summary.cover.has.toLocaleString() }}</div>
-          <div class="text-sm text-slate-500">Cover <span class="text-emerald-600 font-medium">Đã có</span></div>
-          <div class="mt-2 w-full bg-slate-100 rounded-full h-1.5">
-            <div class="bg-emerald-500 h-1.5 rounded-full" :style="{ width: percent(summary.cover.has, summary.cover.total) + '%' }"></div>
-          </div>
-        </div>
-
-        <!-- Lyrics Status -->
-        <div class="kpi-card lyrics bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
-              <MfIcon name="article" size="20" />
-            </div>
-            <div class="text-right">
-              <div class="text-xs text-slate-400">Thiếu</div>
-              <div class="text-sm font-bold text-red-500">{{ (summary.lyrics.total - summary.lyrics.has).toLocaleString() }}</div>
-            </div>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ summary.lyrics.has.toLocaleString() }}</div>
-          <div class="text-sm text-slate-500">Lyrics <span class="text-purple-600 font-medium">Đã có</span></div>
-          <div class="mt-2 w-full bg-slate-100 rounded-full h-1.5">
-            <div class="bg-purple-500 h-1.5 rounded-full" :style="{ width: percent(summary.lyrics.has, summary.lyrics.total) + '%' }"></div>
-          </div>
-        </div>
-
-        <!-- Audio Features -->
-        <div class="kpi-card audio bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
-              <MfIcon name="equalizer" size="20" />
-            </div>
-            <div class="text-right">
-              <div class="text-xs text-slate-400">Chưa</div>
-              <div class="text-sm font-bold text-red-500">{{ (summary.audioFeatures.total - summary.audioFeatures.has).toLocaleString() }}</div>
-            </div>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ summary.audioFeatures.has.toLocaleString() }}</div>
-          <div class="text-sm text-slate-500">Audio Features <span class="text-amber-600 font-medium">Đã phân tích</span></div>
-          <div class="mt-2 w-full bg-slate-100 rounded-full h-1.5">
-            <div class="bg-amber-500 h-1.5 rounded-full" :style="{ width: percent(summary.audioFeatures.has, summary.audioFeatures.total) + '%' }"></div>
-          </div>
-        </div>
-
-        <!-- Metadata Health -->
-        <div class="kpi-card health bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600">
-              <MfIcon name="favorite" size="20" />
-            </div>
-            <span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Avg</span>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ overallHealthPercent }}%</div>
-          <div class="text-sm text-slate-500">Metadata Health</div>
-          <div class="mt-2 flex items-center gap-2">
-            <div class="flex-1 bg-slate-100 rounded-full h-1.5">
-              <div class="bg-cyan-500 h-1.5 rounded-full" :style="{ width: overallHealthPercent + '%' }"></div>
-            </div>
-            <span class="text-xs text-cyan-600 font-medium">{{ getHealthLabelByPercent(overallHealthPercent) }}</span>
-          </div>
-        </div>
-
-        <!-- Cần xử lý -->
-        <div class="kpi-card processing bg-white rounded-2xl p-5 border border-slate-200 card-hover shadow-sm">
-          <div class="flex justify-between items-start mb-3">
-            <div class="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
-              <MfIcon name="warning" size="20" />
-            </div>
-          </div>
-          <div class="text-2xl font-bold text-slate-900 mb-1">{{ totalMissingMetadata.toLocaleString() }}</div>
-          <div class="text-sm text-slate-500">Cần xử lý <span class="text-rose-600 font-medium">Missing data</span></div>
-        </div>
-      </div>
-    </section>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-6 mt-6">
+      <AdminKpiCard
+        v-for="item in kpiCards"
+        :key="item.title"
+        v-bind="item"
+        :loading="loading && !summary"
+      />
+    </div>
 
     <!-- 3. Filter Bar -->
     <AdminFilterBar>
@@ -157,19 +65,6 @@
         </select>
       </div>
       
-      <!-- Dummy filter (TODO) -->
-      <div class="w-full md:w-48">
-        <select disabled title="TODO: Tích hợp API lọc theo Nghệ sĩ" class="admin-input opacity-50 cursor-not-allowed">
-          <option>Tất cả nghệ sĩ</option>
-        </select>
-      </div>
-      
-      <div class="w-full md:w-48">
-        <select disabled title="TODO: Tích hợp API lọc theo Thể loại" class="admin-input opacity-50 cursor-not-allowed">
-          <option>Tất cả thể loại</option>
-        </select>
-      </div>
-
       <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
@@ -259,33 +154,11 @@
 
       <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
         <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ pagination.page }} / {{ pagination.totalPages }}</span>
-        <AdminPagination v-model:currentPage="pagination.page" :totalPages="pagination.totalPages" />
+        <AdminPagination :limit="20" v-model:currentPage="pagination.page" :totalPages="pagination.totalPages" />
       </div>
     </div>
 
-    <!-- 5. PROCESSING STATE -->
-    <section v-if="processingState.active" class="mb-6 animate-fade-in">
-      <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-              <MfIcon name="settings" class="fa-spin text-indigo-600" size="20" />
-            </div>
-            <div>
-              <div class="text-sm font-semibold text-indigo-900">{{ processingState.title }}</div>
-              <div class="text-xs text-indigo-600">Batch #{{ new Date().toISOString().slice(0,10) }} &bull; {{ processingState.total }} bài hát trong queue</div>
-            </div>
-          </div>
-          <div class="text-right">
-            <div class="text-xs font-semibold text-indigo-700 mb-1">Đang xử lý...</div>
-            <div class="text-xs text-indigo-600">Total: {{ processingState.total }}</div>
-          </div>
-        </div>
-        <div class="w-full bg-indigo-200 rounded-full h-2.5 overflow-hidden">
-          <div class="bg-indigo-500 h-2.5 rounded-full w-full animate-pulse"></div>
-        </div>
-      </div>
-    </section>
+
 
     <!-- 6. STATS SECTION -->
     <section class="mb-8" v-if="summary && summary.healthDistribution">
@@ -543,6 +416,20 @@ import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+
+const kpiCards = computed(() => {
+  if (!summary.value) return Array(6).fill({})
+  const s = summary.value
+  return [
+    { title: 'Tổng bài hát', value: s.totalSongs, subtitle: 'Thư viện', icon: 'library_music', tone: 'blue' },
+    { title: 'Cover Đã có', value: s.cover?.has, subtitle: `Thiếu: ${s.cover?.total - s.cover?.has}`, icon: 'image', tone: 'emerald' },
+    { title: 'Lyrics Đã có', value: s.lyrics?.has, subtitle: `Thiếu: ${s.lyrics?.total - s.lyrics?.has}`, icon: 'article', tone: 'purple' },
+    { title: 'Audio Features', value: s.audioFeatures?.has, subtitle: `Chưa phân tích: ${s.audioFeatures?.total - s.audioFeatures?.has}`, icon: 'equalizer', tone: 'amber' },
+    { title: 'Metadata Health', value: `${overallHealthPercent.value}%`, subtitle: getHealthLabelByPercent(overallHealthPercent.value), icon: 'favorite', tone: 'cyan' },
+    { title: 'Cần xử lý', value: totalMissingMetadata.value, subtitle: 'Missing data', icon: 'warning', tone: 'rose' }
+  ]
+})
 
 const toastStore = useToastStore()
 const toast = {
@@ -554,7 +441,7 @@ const loading = ref(true)
 const summary = ref(null)
 const songs = ref([])
 const selectedIds = ref([])
-const pagination = ref({ page: 1, limit: 10, total: 0, totalPages: 1 })
+const pagination = ref({ page: 1, limit: 20, total: 0, totalPages: 1 })
 const filters = ref({ search: '', missing: '' })
 const showBulkMenu = ref(false)
 const lastUpdatedStr = ref(new Date().toLocaleString('vi-VN'))

@@ -94,7 +94,9 @@ const ICONS = {
   copy: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
   expand_more: 'M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z',
   expand_less: 'M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z',
-  open_in_new: 'M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z'
+  open_in_new: 'M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
+  save: 'M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z',
+  call_merge: 'M17 20.41L18.41 19 15 15.59 13.59 17 17 20.41zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5 7.5 8z'
 }
 
 const ALIASES = {
@@ -211,7 +213,17 @@ const ALIASES = {
   'followed-artists': 'follow',
   followed_artist: 'follow',
   'artist-follow': 'follow',
-  'user-follow': 'follow'
+  'user-follow': 'follow',
+  lyrics: 'music',
+  build_circle: 'build',
+  visibility_off: 'info',
+  playlist_add: 'playlist',
+  insights: 'activity',
+  undefined: 'info',
+  timer: 'clock',
+  image_not_supported: 'error',
+  hourglass_empty: 'clock',
+  call_merge: 'settings'
 }
 
 const resolvedName = computed(() => {

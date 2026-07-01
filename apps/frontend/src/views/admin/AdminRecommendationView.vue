@@ -1,131 +1,140 @@
 <template>
-  <div class="admin-recommendation">
-    <div class="header-section">
+  <div class="space-y-6 pb-10">
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
-        <h1 class="page-title">Recommendation</h1>
-        <p class="page-subtitle">Giám sát mô hình gợi ý, dữ liệu huấn luyện và chất lượng đề xuất cá nhân hóa</p>
+        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Recommendation</h1>
+        <p class="text-gray-500 mt-1 text-sm font-medium">Giám sát mô hình gợi ý, dữ liệu huấn luyện và chất lượng đề xuất cá nhân hóa</p>
       </div>
-      <div class="header-actions">
-        <button class="btn-secondary btn-icon" title="Làm mới" @click="fetchData(true)" :disabled="loading">
-          <MfIcon name="sync" size="20" :class="{ 'spinning': loading }" />
+      <div class="flex gap-2 mt-4 md:mt-0">
+        <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Làm mới" @click="fetchData(true)" :disabled="loading">
+          <MfIcon name="sync" size="20" :class="{ 'animate-spin': loading }" />
         </button>
-        <button class="btn-primary btn-icon" title="Xuất báo cáo" @click="exportReport">
+        <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport">
           <MfIcon name="download" size="20" />
         </button>
+        <button class="btn-primary px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm flex items-center gap-2 hover:bg-indigo-700 transition" @click="openRetrainConfirm">
+          <MfIcon name="refresh" size="18" /> Retrain Model
+        </button>
       </div>
-    </div>
+    </header>
 
-    <div v-if="loading && !summary" class="loading-state">
+    <div v-if="loading && !summary" class="flex flex-col items-center justify-center py-20">
       <div class="spinner"></div>
-      <p>Đang tải dữ liệu hệ thống gợi ý...</p>
+      <p class="mt-4 text-slate-500">Đang tải dữ liệu hệ thống gợi ý...</p>
     </div>
 
     <template v-else>
       <!-- KPI Cards -->
-      <div class="stats-overview">
-        <div class="summary-card">
-          <div class="card-icon revenue"><MfIcon name="group" size="24" /></div>
-          <div class="card-info">
-            <span class="card-label">Người dùng có dữ liệu</span>
-            <span class="card-value">{{ summary?.eligibleUsers ?? '—' }}</span>
-            <span class="card-subline" v-if="summary?.usersWithHistory">Đủ điều kiện train từ {{ summary.usersWithHistory }} user có lịch sử</span>
-          </div>
-        </div>
-        <div class="summary-card">
-          <div class="card-icon count"><MfIcon name="library_music" size="24" /></div>
-          <div class="card-info">
-            <span class="card-label">Bài hát trong Catalog</span>
-            <span class="card-value">{{ summary?.catalogSongs ?? '—' }}</span>
-            <span class="card-subline">Các bài hát public có audio</span>
-          </div>
-        </div>
-        <div class="summary-card">
-          <div class="card-icon paid"><MfIcon name="ai" size="24" /></div>
-          <div class="card-info">
-            <span class="card-label">Model hiện tại</span>
-            <span class="card-value">{{ formatStrategyName(summary?.currentStrategy) }}</span>
-            <span class="card-subline" :class="summary?.modelLoaded ? 'text-emerald-600' : 'text-amber-600'">
-              {{ summary?.modelLoaded ? 'Đã load vào bộ nhớ' : 'Sử dụng fallback' }}
-            </span>
-          </div>
-        </div>
-        <div class="summary-card">
-          <div class="card-icon pending"><MfIcon name="analytics" size="24" /></div>
-          <div class="card-info">
-            <span class="card-label">Coverage@20 (BPR-MF)</span>
-            <span class="card-value">{{ getMetricValue('bpr_mf', 'global_catalog_coverage_at_20', true) }}</span>
-            <span class="card-subline">Tỷ lệ bao phủ catalog</span>
-          </div>
-        </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <AdminKpiCard
+          title="Người dùng có dữ liệu"
+          :value="summary?.eligibleUsers ?? '—'"
+          :subtitle="summary?.usersWithHistory ? `Đủ điều kiện train từ ${summary.usersWithHistory} user` : ''"
+          icon="users"
+          tone="blue"
+          :loading="loading"
+        />
+        <AdminKpiCard
+          title="Bài hát trong Catalog"
+          :value="summary?.catalogSongs ?? '—'"
+          subtitle="Các bài hát public có audio"
+          icon="music"
+          tone="purple"
+          :loading="loading"
+        />
+        <AdminKpiCard
+          title="Model hiện tại"
+          :value="formatStrategyName(summary?.currentStrategy)"
+          :subtitle="summary?.modelLoaded ? 'Đã load vào bộ nhớ' : 'Sử dụng fallback'"
+          icon="ai"
+          :tone="summary?.modelLoaded ? 'green' : 'amber'"
+          :loading="loading"
+        />
+        <AdminKpiCard
+          title="Coverage@20 (BPR-MF)"
+          :value="getMetricValue('bpr_mf', 'global_catalog_coverage_at_20', true)"
+          subtitle="Tỷ lệ bao phủ catalog"
+          icon="analytics"
+          tone="cyan"
+          :loading="loading"
+        />
       </div>
 
-      <div class="grid-2-col">
+      <!-- Detail Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Model Status Card -->
-        <div class="status-card">
-          <h2 class="section-title">Trạng thái mô hình</h2>
-          <div class="status-content">
-            <div class="info-row">
-              <span class="info-label">Chiến lược đang dùng:</span>
-              <span class="info-value font-semibold">{{ summary?.currentStrategy || '—' }}</span>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50">
+            <h2 class="text-lg font-bold text-slate-800">Trạng thái mô hình</h2>
+          </div>
+          <div class="p-5 flex-1 text-sm text-slate-600 space-y-4">
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-slate-500">Chiến lược đang dùng:</span>
+              <span class="font-bold text-slate-900">{{ summary?.currentStrategy || '—' }}</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">Artifact path:</span>
-              <span class="info-value text-xs text-slate-500 truncate-path" :title="summary?.modelArtifact">{{ formatPath(summary?.modelArtifact) }}</span>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-slate-500">Artifact path:</span>
+              <span class="text-xs text-slate-500 truncate ml-4" :title="summary?.modelArtifact">{{ formatPath(summary?.modelArtifact) }}</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">Cập nhật lúc:</span>
-              <span class="info-value">{{ formatDate(summary?.modelUpdatedAt) }}</span>
+            <div class="flex justify-between items-center">
+              <span class="font-medium text-slate-500">Cập nhật lúc:</span>
+              <span class="font-medium">{{ formatDate(summary?.modelUpdatedAt) }}</span>
             </div>
             
-            <div class="divider"></div>
+            <hr class="border-slate-100">
             
             <template v-if="summary?.metadata">
-              <div class="info-row">
-                <span class="info-label">Trained Users:</span>
-                <span class="info-value">{{ summary.metadata.trained_users || summary.trainedUsers }}</span>
+              <div class="flex justify-between items-center">
+                <span class="font-medium text-slate-500">Trained Users:</span>
+                <span class="font-medium">{{ summary.metadata.trained_users || summary.trainedUsers }}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Trained Items:</span>
-                <span class="info-value">{{ summary.metadata.trained_items || summary.trainedItems }}</span>
+              <div class="flex justify-between items-center">
+                <span class="font-medium text-slate-500">Trained Items:</span>
+                <span class="font-medium">{{ summary.metadata.trained_items || summary.trainedItems }}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Latent Factors:</span>
-                <span class="info-value">{{ summary.metadata.factors || summary.factors }}</span>
+              <div class="flex justify-between items-center">
+                <span class="font-medium text-slate-500">Latent Factors:</span>
+                <span class="font-medium">{{ summary.metadata.factors || summary.factors }}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Epochs:</span>
-                <span class="info-value">{{ summary.metadata.hyperparameters?.epochs || summary.epochs || '—' }}</span>
+              <div class="flex justify-between items-center">
+                <span class="font-medium text-slate-500">Epochs:</span>
+                <span class="font-medium">{{ summary.metadata.hyperparameters?.epochs || summary.epochs || '—' }}</span>
               </div>
             </template>
-            <div v-else class="empty-metadata">
+            <div v-else class="text-center py-4 text-slate-400 italic">
               Chưa có metadata model
             </div>
           </div>
         </div>
 
-        <!-- Fallback Strategy -->
-        <div class="status-card fallback-card">
-          <h2 class="section-title">Chiến lược Fallback</h2>
-          <div class="fallback-content">
-            <p class="fallback-desc">Hệ thống gợi ý sử dụng cơ chế fallback đa tầng để đảm bảo luôn có kết quả phù hợp cho user:</p>
-            <ul class="fallback-list">
+        <!-- Fallback Strategy Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div class="px-5 py-4 border-b border-slate-100 bg-amber-50">
+            <h2 class="text-lg font-bold text-amber-900">Chiến lược Fallback</h2>
+          </div>
+          <div class="p-5 flex-1 text-sm text-slate-700">
+            <p class="mb-3">Hệ thống gợi ý sử dụng cơ chế fallback đa tầng để đảm bảo luôn có kết quả phù hợp cho user:</p>
+            <ul class="list-disc pl-5 space-y-2 mb-4">
               <li>
-                <strong>User đủ dữ liệu:</strong> Sử dụng <code>BPR-MF</code> / <code>Hybrid</code> rerank để tối ưu hóa cá nhân hóa.
+                <strong class="text-slate-900">User đủ dữ liệu:</strong> Sử dụng <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded text-xs">BPR-MF</code> / <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded text-xs">Hybrid</code> rerank để tối ưu hóa cá nhân hóa.
               </li>
               <li>
-                <strong>User ít dữ liệu:</strong> Chuyển sang <code>content_based_fallback</code> dựa trên lịch sử nghe nhạc gần đây.
+                <strong class="text-slate-900">User ít dữ liệu:</strong> Chuyển sang <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded text-xs">content_based_fallback</code> dựa trên lịch sử nghe nhạc gần đây.
               </li>
               <li>
-                <strong>User mới (Cold Start):</strong> 
-                <br> - Nếu có chọn sở thích: dùng <code>cold_start_preferences</code>
-                <br> - Nếu không: dùng <code>popular_fallback</code>
+                <strong class="text-slate-900">User mới (Cold Start):</strong> 
+                <div class="mt-1 ml-2 space-y-1 text-slate-600">
+                  <p>- Nếu có chọn sở thích: dùng <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded text-xs">cold_start_preferences</code></p>
+                  <p>- Nếu không: dùng <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded text-xs">popular_fallback</code></p>
+                </div>
               </li>
             </ul>
-            <div class="fallback-rules mt-4">
-              <strong>Quy tắc bổ sung (Rules):</strong>
-              <div class="text-xs text-slate-600 mt-1">
-                - Artist Cap (tránh lặp quá nhiều bài của 1 nghệ sĩ)<br>
-                - Market Strict Rule (ưu tiên nhạc cùng thị trường với gu nghe)
+            <div class="mt-4 pt-4 border-t border-slate-100">
+              <strong class="text-slate-900 block mb-2">Quy tắc bổ sung (Rules):</strong>
+              <div class="text-xs text-slate-600 space-y-1">
+                <p>- Artist Cap (tránh lặp quá nhiều bài của 1 nghệ sĩ)</p>
+                <p>- Market Strict Rule (ưu tiên nhạc cùng thị trường với gu nghe)</p>
               </div>
             </div>
           </div>
@@ -133,37 +142,39 @@
       </div>
 
       <!-- Evaluation Metrics -->
-      <div class="metrics-section">
-        <h2 class="section-title">Đánh giá mô hình (Metrics)</h2>
+      <div class="mt-6">
+        <h2 class="text-xl font-bold text-slate-800 mb-4">Đánh giá mô hình (Metrics)</h2>
         
-        <div v-if="!metrics" class="empty-state">
-          <MfIcon name="analytics" size="48" class="text-slate-300 mb-2" />
-          <h3>Chưa có dữ liệu đánh giá mô hình</h3>
-          <p>Hãy chạy script evaluation để tạo metrics trước khi hiển thị.</p>
+        <div v-if="!metrics" class="bg-white p-10 rounded-2xl border border-slate-200 text-center shadow-sm">
+          <MfIcon name="analytics" size="48" class="text-slate-300 mx-auto mb-3" />
+          <h3 class="text-lg font-semibold text-slate-700">Chưa có dữ liệu đánh giá mô hình</h3>
+          <p class="text-slate-500 mt-1">Hãy chạy script evaluation để tạo metrics trước khi hiển thị.</p>
         </div>
         
-        <div v-else class="metrics-grid">
-          <div v-for="(metricGroup, key) in metrics" :key="key" class="metric-card" :class="{'is-best-model': key === bestModelKey}">
-            <h3 class="metric-title">
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div v-for="(metricGroup, key) in metrics" :key="key" class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm relative" :class="{'ring-2 ring-indigo-500': key === bestModelKey}">
+            <div v-if="key === bestModelKey" class="absolute -top-3 -right-3 bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md uppercase tracking-wider">
+              Tốt nhất
+            </div>
+            <h3 class="font-bold text-slate-800 mb-4 capitalize border-b border-slate-100 pb-2">
               {{ metricGroup.label || key }}
-              <span v-if="key === bestModelKey" class="best-badge">Tốt nhất</span>
             </h3>
-            <div class="metric-stats">
-              <div class="stat-item">
-                <span class="stat-lbl">Precision@10</span>
-                <span class="stat-val">{{ formatPercent(metricGroup.precision_at_10) }}</span>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-xs text-slate-500 mb-1">Precision@10</div>
+                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.precision_at_10) }}</div>
               </div>
-              <div class="stat-item">
-                <span class="stat-lbl">Recall@10</span>
-                <span class="stat-val">{{ formatPercent(metricGroup.recall_at_10) }}</span>
+              <div>
+                <div class="text-xs text-slate-500 mb-1">Recall@10</div>
+                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.recall_at_10) }}</div>
               </div>
-              <div class="stat-item">
-                <span class="stat-lbl">NDCG@10</span>
-                <span class="stat-val">{{ formatPercent(metricGroup.ndcg_at_10) }}</span>
+              <div>
+                <div class="text-xs text-slate-500 mb-1">NDCG@10</div>
+                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.ndcg_at_10) }}</div>
               </div>
-              <div class="stat-item">
-                <span class="stat-lbl">Coverage@20</span>
-                <span class="stat-val">{{ formatPercent(metricGroup.global_catalog_coverage_at_20) }}</span>
+              <div>
+                <div class="text-xs text-slate-500 mb-1">Coverage@20</div>
+                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.global_catalog_coverage_at_20) }}</div>
               </div>
             </div>
           </div>
@@ -171,72 +182,95 @@
       </div>
 
       <!-- Recent Recommendation Samples -->
-      <div class="preview-section">
-        <h2 class="section-title">Kiểm tra nhanh đề xuất</h2>
+      <div class="mt-8">
+        <h2 class="text-xl font-bold text-slate-800 mb-4">Kiểm tra nhanh đề xuất</h2>
         
-        <div class="preview-controls">
-          <input 
-            type="number" 
-            v-model="previewUserId" 
-            placeholder="Nhập User ID để xem đề xuất..." 
-            class="search-input"
-            @keyup.enter="fetchPreview"
-          />
-          <button class="btn-primary" @click="fetchPreview" :disabled="previewLoading || !previewUserId">
-            <MfIcon name="search" size="18" /> Xem đề xuất
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center mb-4">
+          <div class="relative flex-1 w-full">
+            <MfIcon name="search" size="18" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="number" 
+              v-model="previewUserId" 
+              placeholder="Nhập User ID để xem đề xuất..." 
+              class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              @keyup.enter="fetchPreview"
+            />
+          </div>
+          <button class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition whitespace-nowrap flex items-center gap-2" @click="fetchPreview" :disabled="previewLoading || !previewUserId">
+            <span v-if="previewLoading" class="animate-spin"><MfIcon name="sync" size="16" /></span>
+            <span v-else><MfIcon name="search" size="16" /> Xem đề xuất</span>
           </button>
         </div>
 
-        <div v-if="previewLoading" class="preview-loading">
-          <div class="spinner small"></div> Đang lấy danh sách đề xuất...
-        </div>
-
-        <div v-else-if="previewError" class="preview-error">
+        <div v-if="previewError" class="bg-rose-50 text-rose-600 p-4 rounded-xl border border-rose-100 text-sm mb-4">
           {{ previewError }}
         </div>
 
-        <div v-else-if="previewResults.length > 0" class="table-container shadow-sm mt-4">
-          <table class="preview-table">
-            <thead>
+        <AdminTableShell 
+          v-if="previewResults.length > 0"
+          :loading="previewLoading" 
+          :empty="false"
+        >
+          <table class="w-full text-left border-collapse whitespace-nowrap">
+            <thead class="bg-slate-50 border-b border-slate-200 text-xs text-slate-900 uppercase tracking-wider">
               <tr>
-                <th width="50">#</th>
-                <th width="60">Ảnh</th>
-                <th>Bài hát</th>
-                <th>Nghệ sĩ</th>
-                <th>Chiến lược (Strategy)</th>
-                <th>Lý do (Reason)</th>
+                <th class="p-4 font-semibold w-12 text-center">#</th>
+                <th class="p-4 font-semibold w-16">Ảnh</th>
+                <th class="p-4 font-semibold">Bài hát</th>
+                <th class="p-4 font-semibold">Nghệ sĩ</th>
+                <th class="p-4 font-semibold">Chiến lược</th>
+                <th class="p-4 font-semibold max-w-[200px]">Lý do</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in previewResults" :key="item.song_id" class="preview-row">
-                <td class="text-slate-400 font-medium">{{ idx + 1 }}</td>
-                <td>
-                  <img :src="item.cover_url" class="song-cover" alt="" v-if="item.cover_url" />
-                  <div class="song-cover-placeholder" v-else><MfIcon name="music_note" /></div>
+              <tr v-for="(item, idx) in previewResults" :key="item.song_id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                <td class="p-4 text-center text-sm text-slate-400">{{ idx + 1 }}</td>
+                <td class="p-4">
+                  <img v-if="item.cover_url" :src="item.cover_url" class="w-10 h-10 rounded-md object-cover shadow-sm" alt="" />
+                  <div v-else class="w-10 h-10 rounded-md bg-slate-100 flex items-center justify-center">
+                    <MfIcon name="music_note" class="text-slate-400" size="18" />
+                  </div>
                 </td>
-                <td>
-                  <a href="#" @click.prevent="goToSong(item.song_id)" class="item-link song-title">
+                <td class="p-4">
+                  <a href="#" @click.prevent="goToSong(item.song_id)" class="text-sm font-bold text-slate-900 hover:text-indigo-600 hover:underline">
                     {{ item.title }}
                   </a>
                 </td>
-                <td>
-                  <a href="#" @click.prevent="goToArtist(item.artist_id)" class="item-link" v-if="item.artist_id">
+                <td class="p-4 text-sm text-slate-600">
+                  <a href="#" @click.prevent="goToArtist(item.artist_id)" class="hover:text-indigo-600 hover:underline" v-if="item.artist_id">
                     {{ item.artist_name }}
                   </a>
                   <span v-else>{{ item.artist_name }}</span>
                 </td>
-                <td><span class="badge badge-strategy">{{ item.strategy }}</span></td>
-                <td class="text-xs text-slate-500">{{ item.reason }}</td>
+                <td class="p-4">
+                  <span class="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded uppercase">
+                    {{ item.strategy }}
+                  </span>
+                </td>
+                <td class="p-4 text-xs text-slate-500 truncate max-w-[200px]" :title="item.reason">
+                  {{ item.reason }}
+                </td>
               </tr>
             </tbody>
           </table>
-        </div>
+        </AdminTableShell>
         
-        <div v-else-if="previewSearched" class="empty-state small">
-          <p>Không tìm thấy đề xuất nào cho User ID này.</p>
+        <div v-else-if="previewSearched && !previewLoading" class="bg-white p-8 rounded-2xl border border-slate-200 text-center shadow-sm">
+          <p class="text-slate-500">Không tìm thấy đề xuất nào cho User ID này.</p>
         </div>
       </div>
     </template>
+
+    <ConfirmDialog 
+      :open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirmRetrain"
+      @cancel="confirmState.open = false"
+    />
   </div>
 </template>
 
@@ -246,6 +280,9 @@ import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { useToastStore } from '@/stores/toast'
 import MfIcon from '@/components/common/MfIcon.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const toast = useToastStore()
@@ -259,6 +296,15 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const previewResults = ref([])
 const previewSearched = ref(false)
+
+const confirmState = ref({
+  open: false,
+  title: 'Huấn luyện lại mô hình',
+  message: 'Quá trình huấn luyện mô hình gợi ý có thể tốn nhiều tài nguyên của hệ thống và mất một khoảng thời gian. Bạn có chắc chắn muốn thực hiện ngay bây giờ?',
+  confirmText: 'Bắt đầu huấn luyện',
+  type: 'danger',
+  loading: false
+})
 
 watch(previewUserId, (newVal) => {
   if (!newVal || newVal.toString().trim() === '') {
@@ -276,8 +322,8 @@ async function fetchData(showToastSuccess = false) {
   loading.value = true
   try {
     const [sumRes, metRes] = await Promise.all([
-      api.get('/admin/recommendation/summary'),
-      api.get('/admin/recommendation/metrics')
+      api.get('/admin/recommendation/summary').catch(() => ({ data: {} })),
+      api.get('/admin/recommendation/metrics').catch(() => ({ data: {} }))
     ])
     
     if (sumRes.data?.success) {
@@ -349,6 +395,29 @@ function exportReport() {
   toast.showToast('Chức năng xuất báo cáo đang được hoàn thiện', 'info')
 }
 
+function openRetrainConfirm() {
+  confirmState.value.open = true
+}
+
+async function handleConfirmRetrain() {
+  confirmState.value.loading = true
+  try {
+    const res = await api.post('/admin/recommendation/retrain')
+    if (res.data?.success) {
+      toast.showToast('Đã bắt đầu tiến trình huấn luyện mô hình', 'success')
+      fetchData()
+    } else {
+      toast.showToast(res.data?.message || 'Có lỗi xảy ra khi gọi lệnh retrain', 'error')
+    }
+  } catch (err) {
+    console.error('Retrain error:', err)
+    toast.showToast('Không thể thực hiện huấn luyện lúc này', 'error')
+  } finally {
+    confirmState.value.loading = false
+    confirmState.value.open = false
+  }
+}
+
 function goToSong(id) {
   if (id) router.push(`/admin/songs/${id}`)
 }
@@ -395,413 +464,5 @@ function getMetricValue(strategy, field, format = false) {
 </script>
 
 <style scoped>
-.admin-recommendation {
-  padding: 8px 16px 40px;
-  animation: fadeIn 0.4s ease-out;
-  color: #1e293b;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.btn-icon {
-  padding: 0;
-  width: 40px;
-  height: 40px;
-  justify-content: center;
-}
-
-.header-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 24px;
-}
-.page-title {
-  font-size: 28px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0;
-}
-.page-subtitle {
-  color: #64748b;
-  margin: 6px 0 0 0;
-  font-size: 14px;
-}
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.btn-primary, .btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  height: 40px;
-}
-.btn-primary {
-  background: #6366f1;
-  color: white;
-  border: none;
-}
-.btn-primary:hover:not(:disabled) { background: #4f46e5; }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-secondary {
-  background: white;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-}
-.btn-secondary:hover:not(:disabled) { background: #f8fafc; }
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  100% { transform: rotate(360deg); }
-}
-
-/* Stats Overview */
-.stats-overview {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.summary-card {
-  background: white;
-  border-radius: 16px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  border: 1px solid #f1f5f9;
-}
-.card-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.card-icon.revenue { background: #e0e7ff; color: #4f46e5; }
-.card-icon.count { background: #ecfdf5; color: #059669; }
-.card-icon.paid { background: #fffbeb; color: #d97706; }
-.card-icon.pending { background: #fef2f2; color: #dc2626; }
-
-.card-info {
-  display: flex;
-  flex-direction: column;
-}
-.card-label {
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.card-value {
-  font-size: 20px;
-  font-weight: 800;
-  color: #0f172a;
-  margin-top: 4px;
-  line-height: 1.2;
-}
-.card-subline {
-  font-size: 10px;
-  margin-top: 4px;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-/* Grid layout for Status and Fallback */
-.grid-2-col {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 24px;
-  margin-bottom: 24px;
-}
-.status-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  border: 1px solid #f1f5f9;
-}
-.section-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 16px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.status-content .info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px dashed #e2e8f0;
-}
-.status-content .info-row:last-child {
-  border-bottom: none;
-}
-.info-label {
-  color: #64748b;
-  font-size: 14px;
-}
-.info-value {
-  color: #0f172a;
-  font-size: 14px;
-  text-align: right;
-  flex: 1;
-  word-break: break-all;
-}
-.truncate-path {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  word-break: normal;
-  display: block;
-  max-width: 100%;
-}
-.divider {
-  height: 1px;
-  background: #e2e8f0;
-  margin: 16px 0;
-}
-.empty-metadata {
-  text-align: center;
-  padding: 16px;
-  color: #94a3b8;
-  font-style: italic;
-  font-size: 14px;
-}
-
-.fallback-content {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #475569;
-}
-.fallback-desc {
-  margin-bottom: 12px;
-}
-.fallback-list {
-  padding-left: 20px;
-  margin: 0;
-}
-.fallback-list li {
-  margin-bottom: 8px;
-}
-.fallback-list code {
-  background: #f1f5f9;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: #dc2626;
-}
-
-/* Metrics Section */
-.metrics-section {
-  margin-bottom: 32px;
-}
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-}
-.metric-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  border: 1px solid #e2e8f0;
-}
-.metric-card.is-best-model {
-  border-color: #a855f7;
-  box-shadow: 0 0 0 1px #a855f710;
-  background: #faf5ff;
-}
-.metric-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 16px 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.best-badge {
-  background: #e9d5ff;
-  color: #7e22ce;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: 600;
-}
-.stat-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-}
-.stat-lbl {
-  color: #64748b;
-  font-size: 13px;
-}
-.stat-val {
-  font-weight: 600;
-  color: #1e293b;
-  font-size: 14px;
-}
-
-/* Preview Section */
-.preview-section {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  border: 1px solid #f1f5f9;
-}
-.preview-controls {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.search-input {
-  width: 300px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  font-size: 14px;
-  outline: none;
-}
-.search-input:focus {
-  border-color: #6366f1;
-}
-
-.preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-.preview-table th {
-  padding: 12px 16px;
-  background: #f8fafc;
-  color: #64748b;
-  font-weight: 600;
-  font-size: 13px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.preview-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 14px;
-  vertical-align: middle;
-}
-.preview-row:hover {
-  background: #f8fafc;
-}
-
-.song-cover {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-.song-cover-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-}
-
-.item-link {
-  color: #4f46e5;
-  text-decoration: none;
-  font-weight: 500;
-}
-.item-link:hover {
-  text-decoration: underline;
-}
-.song-title {
-  color: #0f172a;
-}
-
-.badge-strategy {
-  background: #f3f4f6;
-  color: #4b5563;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px 24px;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px dashed #cbd5e1;
-}
-.empty-state h3 {
-  margin: 0 0 8px 0;
-  color: #334155;
-  font-size: 16px;
-}
-.empty-state p {
-  margin: 0;
-  color: #64748b;
-  font-size: 14px;
-}
-.empty-state.small {
-  padding: 24px;
-}
-
-.loading-state, .preview-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px;
-  color: #64748b;
-}
-
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-.spinner.small {
-  width: 16px;
-  height: 16px;
-  border-width: 2px;
-}
-
-.text-emerald-600 { color: #059669; }
-.text-amber-600 { color: #d97706; }
-.preview-error {
-  padding: 12px 16px;
-  background: #fef2f2;
-  color: #dc2626;
-  border-radius: 8px;
-  font-size: 14px;
-}
+/* Scoped styles have been removed in favor of Tailwind CSS utility classes */
 </style>

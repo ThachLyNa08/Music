@@ -1,6 +1,6 @@
 <template>
-  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
-    <header class="py-6 bg-white dark:bg-bg-card border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-20">
+  <div class="space-y-6 pb-10">
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Lịch sử Giao dịch</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi lịch sử thanh toán hóa đơn nâng cấp Premium và doanh thu hệ thống</p>
@@ -16,36 +16,34 @@
         </button>
       </div>
     </header>
-
-    <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- Overview Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <AdminKpiCard 
         title="Tổng Doanh thu" 
         :value="formatCurrency(summary.totalRevenue)" 
         icon="payments" 
-        color="emerald" 
+        tone="emerald" 
         :loading="loadingSummary"
       />
       <AdminKpiCard 
         title="Số Giao dịch" 
         :value="summary.totalTransactions" 
         icon="receipt_long" 
-        color="blue" 
+        tone="blue" 
         :loading="loadingSummary"
       />
       <AdminKpiCard 
         title="Đã thanh toán" 
         :value="summary.paidTransactions" 
         icon="check_circle" 
-        color="emerald" 
+        tone="emerald" 
         :loading="loadingSummary"
       />
       <AdminKpiCard 
         title="Chờ xử lý / Thất bại" 
         :value="summary.pendingTransactions + summary.expiredTransactions + summary.cancelledTransactions" 
         icon="clock" 
-        color="amber" 
+        tone="amber" 
         :loading="loadingSummary"
       >
         <template #subtext v-if="!loadingSummary">
@@ -65,18 +63,18 @@
     <AdminFilterBar>
       <div class="relative flex-1 min-w-[200px]">
         <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input v-model="filterForm.q" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="admin-input pl-9" @keyup.enter="applyFilters" />
+        <input v-model="filterForm.q" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="applyFilters" />
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterForm.gateway" class="admin-input">
-          <option value="">Tất cả cổng thanh toán</option>
+      <div class="w-48">
+        <select v-model="filterForm.gateway" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <option value="">Tất cả cổng TT</option>
           <option value="sepay">SePay</option>
           <option value="momo">MoMo</option>
           <option value="vnpay">VNPay</option>
         </select>
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterForm.status" class="admin-input">
+      <div class="w-48">
+        <select v-model="filterForm.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả trạng thái</option>
           <option value="paid">Đã thanh toán</option>
           <option value="pending">Đang chờ</option>
@@ -180,15 +178,15 @@
     />
 
     <ConfirmDialog 
-      v-model:isOpen="confirmState.open"
+      :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
       :confirmText="confirmState.confirmText"
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
+      @cancel="confirmState.open = false"
     />
-    </div>
   </div>
 </template>
 

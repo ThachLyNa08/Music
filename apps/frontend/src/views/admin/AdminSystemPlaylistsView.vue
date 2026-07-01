@@ -15,238 +15,138 @@
     </header>
 
     <!-- Thống kê tổng quan -->
-    <div class="stats-grid" v-if="summary">
-      <div class="stat-card">
-        <div class="stat-content">
-          <span class="stat-label">Tổng Playlist Hệ Thống</span>
-          <span class="stat-value text-indigo">{{ formatNumber(summary.total_playlists) }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-content">
-          <span class="stat-label">Đang Hoạt Động</span>
-          <span class="stat-value text-green">{{ formatNumber(summary.total_playlists - summary.empty_playlists - summary.missing_cover_playlists) }}</span>
-        </div>
-        <div class="stat-meta">Trạng thái bình thường</div>
-      </div>
-      <div class="stat-card cursor-pointer" @click="setFilter('empty')" title="Lọc playlist trống">
-        <div class="stat-content">
-          <span class="stat-label">Playlist Trống</span>
-          <span class="stat-value text-amber">{{ formatNumber(summary.empty_playlists) }}</span>
-        </div>
-        <div class="stat-meta">0 bài hát</div>
-      </div>
-      <div class="stat-card cursor-pointer" @click="setFilter('missing_cover')" title="Lọc playlist thiếu ảnh">
-        <div class="stat-content">
-          <span class="stat-label">Thiếu Ảnh Bìa</span>
-          <span class="stat-value text-orange">{{ formatNumber(summary.missing_cover_playlists) }}</span>
-        </div>
-        <div class="stat-meta">Chưa có cover/first_song_cover</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-content">
-          <span class="stat-label">Tổng Số Bài Hát</span>
-          <span class="stat-value text-blue">{{ formatNumber(summary.total_songs) }}</span>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 mt-6">
+      <AdminKpiCard
+        v-for="item in kpiCards"
+        :key="item.title"
+        v-bind="item"
+        :loading="loading && !summary"
+        :class="{'cursor-pointer hover:bg-slate-50 transition': !!item.onClick}"
+      />
     </div>
 
     <!-- Tra cứu nâng cao -->
-    <div class="panel filter-panel">
-      <div class="panel-header" @click="toggleAdvancedSearch" style="cursor: pointer;">
-        <h2>
-          <MfIcon name="search" size="20" /> Tra cứu nâng cao
-          <span v-if="hasActiveFilters" class="filter-badge">Có bộ lọc</span>
-        </h2>
-        <MfIcon :name="showAdvancedSearch ? 'expand_less' : 'expand_more'" size="20" />
-      </div>
-      
-      <div class="panel-body" v-show="showAdvancedSearch">
-        <div class="filter-grid">
-          <div class="filter-group">
-            <label>Từ khóa (Tên / System Key)</label>
-            <input type="text" v-model="filters.q" placeholder="Nhập từ khóa..." class="form-input" @keyup.enter="handleSearch">
-          </div>
-          
-          <div class="filter-group">
-            <label>Người dùng</label>
-            <input type="text" v-model="filters.owner" placeholder="Nhập tên, email hoặc ID..." class="form-input" @keyup.enter="handleSearch">
-          </div>
-
-          <div class="filter-group">
-            <label>Trạng thái</label>
-            <select v-model="filters.status" class="form-input">
-              <option value="need_update">Cần xử lý (Lỗi/Trống)</option>
-              <option value="all">Tất cả</option>
-              <option value="active">Bình thường (Active)</option>
-              <option value="empty">Trống bài hát</option>
-              <option value="missing_cover">Thiếu ảnh bìa</option>
-            </select>
-          </div>
-
-          <div class="filter-group" style="min-width: 200px">
-            <label>Loại System Key</label>
-            <SearchableCombobox
-              v-model="filters.system_key"
-              :options="[{key: 'all', label: 'Tất cả'}, ...systemKeysOptions]"
-              value-key="key"
-              label-key="label"
-              placeholder="Chọn hoặc nhập..."
-              :allow-create="true"
-            />
-          </div>
+    <div class="mb-6 space-y-4">
+      <AdminFilterBar>
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Từ khóa (Tên / System Key)</label>
+          <input type="text" v-model="filters.q" placeholder="Nhập từ khóa..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="handleSearch">
         </div>
         
-        <div v-if="searchWarning" class="alert-warning mt-4">
-          <MfIcon name="warning" size="18" />
-          {{ searchWarning }}
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Người dùng</label>
+          <input type="text" v-model="filters.owner" placeholder="Nhập tên, email hoặc ID..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="handleSearch">
         </div>
-        
-        <div class="filter-actions mt-4">
-          <button class="btn-action" @click="resetFilters">Xóa bộ lọc</button>
-          <button class="btn-action primary" @click="handleSearch">Tìm kiếm</button>
+
+        <div class="w-48">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Trạng thái</label>
+          <select v-model="filters.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="need_update">Cần xử lý</option>
+            <option value="all">Tất cả</option>
+            <option value="active">Bình thường</option>
+            <option value="empty">Trống bài hát</option>
+            <option value="missing_cover">Thiếu ảnh bìa</option>
+          </select>
         </div>
+
+        <div class="w-48">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Loại System Key</label>
+          <select v-model="filters.system_key" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="all">Tất cả</option>
+            <option v-for="opt in systemKeysOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <button @click="handleSearch" class="px-4 py-2 h-[38px] mt-[auto] text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm">
+          Lọc
+        </button>
+        <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
+      </AdminFilterBar>
+      <div v-if="searchWarning" class="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm flex items-center gap-2 border border-rose-100">
+        <MfIcon name="warning" size="18" />
+        {{ searchWarning }}
       </div>
     </div>
 
     <!-- Bảng danh sách cần xử lý -->
-    <div class="panel mt-6">
-      <div class="panel-header">
-        <h2>
-          <MfIcon name="list_alt" size="20" />
-          {{ filters.status === 'need_update' ? 'Danh sách cần xử lý' : 'Kết quả tra cứu' }}
-        </h2>
-        <span class="text-sm text-slate-500">Hiển thị {{ playlists.length }} / {{ totalItems }} kết quả</span>
-      </div>
-      
-      <div class="table-responsive">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Playlist</th>
-              <th>Người Dùng (Owner)</th>
-              <th>Loại / System Key</th>
-              <th>Số bài</th>
-              <th>Trạng thái</th>
-              <th>Cập nhật</th>
-              <th class="text-center">Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading">
-              <td colspan="7" class="text-center py-8">
-                <div class="spinner inline-block"></div>
-                <div class="mt-2 text-slate-500">Đang tải dữ liệu...</div>
-              </td>
-            </tr>
-            <tr v-else-if="playlists.length === 0">
-              <td colspan="7" class="text-center py-8 text-slate-500">
-                Không tìm thấy playlist nào phù hợp.
-              </td>
-            </tr>
-            <tr v-else v-for="item in playlists" :key="item.id">
-              <td>
-                <div class="flex items-center gap-3">
-                  <AdminCoverThumb 
-                    :src="getPlaylistCover(item)" 
-                    size="md"
-                    rounded="lg"
-                    alt="Cover"
-                  />
-                  <div>
-                    <div class="font-semibold text-slate-900">{{ item.name }}</div>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <router-link v-if="item.user_id" :to="`/admin/users/${item.user_id}`" class="text-indigo-600 hover:underline">
-                  {{ item.owner_name || 'User #' + item.user_id }}
-                </router-link>
-                <span v-else class="text-slate-400">Hệ thống</span>
-              </td>
-              <td>
-                <div class="system-key-badge" v-if="item.system_key">{{ item.system_key }}</div>
-                <div class="text-xs text-slate-500 mt-1 uppercase">{{ item.type }}</div>
-              </td>
-              <td :class="{'text-red-500 font-bold': item.song_count === 0}">
-                {{ item.song_count }}
-              </td>
-              <td>
-                <span class="status-badge" :class="item.status">
-                  {{ formatStatus(item.status) }}
-                </span>
-              </td>
-              <td class="text-sm text-slate-500">
-                {{ item.updated_at ? new Date(item.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}
-              </td>
-              <td>
-                <div class="action-menu-container" v-click-outside="() => closeActionMenu(item.id)">
-                  <button class="btn-icon" @click.stop="toggleActionMenu(item.id)">
-                    <MfIcon name="more_vert" size="20" />
-                  </button>
-                  <div v-if="openActionMenuId === item.id" class="dropdown-menu">
-                    <button class="dropdown-item" @click="viewDetail(item)">
-                      <MfIcon name="visibility" size="16" /> Xem chi tiết
-                    </button>
-                    <button class="dropdown-item" v-if="item.user_id" @click="$router.push(`/admin/users/${item.user_id}`)">
-                      <MfIcon name="person" size="16" /> Xem người dùng
-                    </button>
-                    <button class="dropdown-item" @click="regenerateSingle(item)">
-                      <MfIcon name="sync" size="16" /> Tạo lại playlist này
-                    </button>
-                    <button class="dropdown-item" v-if="item.system_key" @click="copySystemKey(item.system_key)">
-                      <MfIcon name="content_copy" size="16" /> Sao chép system_key
-                    </button>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    <AdminTableShell :loading="loading" :empty="!loading && playlists.length === 0" emptyTitle="Không tìm thấy playlist" emptyDescription="Thử thay đổi bộ lọc.">
+      <table class="w-full text-left text-sm whitespace-nowrap table-fixed">
+        <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
+          <tr>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[25%]">Playlist</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Người Dùng</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Loại / System Key</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[10%]">Số bài</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Trạng thái</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[10%]">Cập nhật</th>
+            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr v-for="item in playlists" :key="item.id" class="hover:bg-slate-50 transition group">
+            <td class="px-4 py-3 truncate">
+              <div class="flex items-center gap-3">
+                <AdminCoverThumb :src="getPlaylistCover(item)" size="custom" class="w-10 h-10 shrink-0" rounded="lg" />
+                <span class="font-semibold text-slate-900 truncate" :title="item.name">{{ item.name }}</span>
+              </div>
+            </td>
+            <td class="px-4 py-3 truncate">
+              <router-link v-if="item.user_id" :to="`/admin/users/${item.user_id}`" class="text-primary hover:underline font-medium">
+                {{ item.owner_name || 'User #' + item.user_id }}
+              </router-link>
+              <span v-else class="text-slate-400">Hệ thống</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="inline-block px-1.5 py-0.5 rounded text-xs font-mono bg-slate-100 border text-slate-600 mb-1" v-if="item.system_key">{{ item.system_key }}</div>
+              <div class="text-[11px] text-slate-500 uppercase font-semibold">{{ item.type }}</div>
+            </td>
+            <td class="px-4 py-3 text-right" :class="{'text-rose-600 font-bold': item.song_count === 0, 'text-slate-700 font-medium': item.song_count > 0}">
+              {{ item.song_count }}
+            </td>
+            <td class="px-4 py-3">
+              <span class="status-badge" :class="item.status">{{ formatStatus(item.status) }}</span>
+            </td>
+            <td class="px-4 py-3 text-xs text-slate-500">
+              {{ item.updated_at ? new Date(item.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}
+            </td>
+            <td class="px-4 py-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
+              <AdminActionMenu :actions="getToolsActions(item)" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </AdminTableShell>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1 || playlists.length > 0" class="flex items-center justify-between mt-4">
+      <div class="flex items-center gap-2 text-sm text-slate-500">
+        <label>Hiển thị:</label>
+        <select v-model="filters.limit" @change="handleLimitChange" class="px-2 py-1 text-sm border border-slate-300 rounded-lg focus:outline-none">
+          <option :value="10">10</option>
+          <option :value="20">20</option>
+          <option :value="50">50</option>
+        </select>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="totalPages > 1 || playlists.length > 0" class="flex flex-col sm:flex-row items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-4 gap-4">
-        <div class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-          <label>Hiển thị:</label>
-          <select v-model="filters.limit" @change="handleLimitChange" class="form-input py-1 px-2 text-sm w-20 bg-white dark:bg-bg-card border-gray-200 dark:border-gray-700">
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </div>
-
-        <AdminPagination 
-          :currentPage="currentPage" 
-          :totalPages="totalPages" 
-          :disabled="loading"
-          @update:currentPage="changePage" 
-        />
-      </div>
+      <AdminPagination 
+        :limit="filters.limit"
+        :currentPage="currentPage" 
+        :totalPages="totalPages" 
+        :disabled="loading"
+        @update:currentPage="changePage" 
+      />
     </div>
 
     <!-- Modals & Drawers -->
-    <!-- Confirm Modal for Regenerate All -->
-    <div class="modal-backdrop" v-if="showConfirmModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Xác nhận tạo lại TẤT CẢ System Playlists</h3>
-        </div>
-        <div class="modal-body">
-          <p class="text-slate-600 mb-4">Bạn sắp chạy tiến trình tạo lại hàng loạt cho toàn bộ playlist hệ thống của tất cả người dùng.</p>
-          <div class="alert-warning mb-4">
-            <MfIcon name="warning" size="20" />
-            Quá trình này rất nặng, có thể ảnh hưởng hiệu năng database và mất vài phút để hoàn thành. Hãy đảm bảo chạy vào giờ thấp điểm.
-          </div>
-          <p class="text-sm font-semibold text-slate-800">Bạn có chắc chắn muốn tiếp tục?</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-action" @click="showConfirmModal = false">Hủy bỏ</button>
-          <button class="btn-action primary" @click="executeRegenerateAll">Xác nhận Tạo Lại</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :open="showConfirmModal"
+      title="Xác nhận tạo lại TẤT CẢ System Playlists"
+      message="Bạn sắp chạy tiến trình tạo lại hàng loạt cho toàn bộ playlist hệ thống của tất cả người dùng. Quá trình này rất nặng, có thể ảnh hưởng hiệu năng database."
+      confirmText="Xác nhận Tạo Lại"
+      type="danger"
+      @confirm="executeRegenerateAll"
+      @cancel="showConfirmModal = false"
+    />
 
     <!-- Regenerate Result Modal -->
     <div class="modal-backdrop" v-if="regenerateResult">
@@ -346,6 +246,12 @@ import AdminCoverThumb from '@/components/admin/AdminCoverThumb.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
 import SearchableCombobox from '@/components/common/SearchableCombobox.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
+import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const toast = useToastStore()
 const router = useRouter()
@@ -387,6 +293,17 @@ function closeDetailModal() {
 
 const hasActiveFilters = computed(() => {
   return filters.q || filters.owner || filters.system_key !== 'all' || filters.status !== 'need_update'
+})
+
+const kpiCards = computed(() => {
+  if (!summary.value) return Array(4).fill({})
+  const s = summary.value
+  return [
+    { title: 'Tổng Playlist', value: formatNumber(s.total_playlists), subtitle: 'Hệ thống', icon: 'library_music', tone: 'blue' },
+    { title: 'Đang Hoạt Động', value: formatNumber(s.total_playlists - s.empty_playlists - s.missing_cover_playlists), subtitle: 'Trạng thái bình thường', icon: 'check_circle', tone: 'emerald' },
+    { title: 'Playlist Trống', value: formatNumber(s.empty_playlists), subtitle: '0 bài hát', icon: 'hourglass_empty', tone: 'amber', onClick: () => setFilter('empty') },
+    { title: 'Thiếu Ảnh Bìa', value: formatNumber(s.missing_cover_playlists), subtitle: 'Cần cập nhật cover', icon: 'image_not_supported', tone: 'orange', onClick: () => setFilter('missing_cover') },
+  ]
 })
 
 // Directive for click outside
@@ -486,6 +403,20 @@ function toggleActionMenu(id) {
 
 function closeActionMenu() {
   openActionMenuId.value = null
+}
+
+function getToolsActions(item) {
+  const actions = [
+    { label: 'Xem chi tiết', icon: 'visibility', onClick: () => viewDetail(item) }
+  ]
+  if (item.user_id) {
+    actions.push({ label: 'Xem người dùng', icon: 'person', onClick: () => router.push(`/admin/users/${item.user_id}`) })
+  }
+  actions.push({ label: 'Tạo lại playlist này', icon: 'sync', onClick: () => regenerateSingle(item) })
+  if (item.system_key) {
+    actions.push({ label: 'Sao chép system_key', icon: 'content_copy', onClick: () => copySystemKey(item.system_key) })
+  }
+  return actions
 }
 
 function viewDetail(item) {

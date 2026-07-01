@@ -69,7 +69,7 @@
     </template>
 
     <template v-else>
-      <header class="py-5 bg-white dark:bg-bg-surface border-b border-slate-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 shrink-0">
+      <header class="sticky -top-6 z-30 py-5 bg-white dark:bg-bg-surface border-b border-slate-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-6 shrink-0">
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Album</h1>
           <p class="text-sm text-gray-500 dark:text-text-secondary mt-1">Quản lý metadata, bài hát và trạng thái phát hành của album.</p>
@@ -121,11 +121,26 @@
             </ul>
           </div>
         </div>
-        <div class="w-full md:w-40">
-          <select v-model="filters.genreId" class="admin-input">
-            <option value="">Tất cả thể loại</option>
-            <option v-for="genre in meta.genres" :key="genre.id" :value="genre.id">{{ genre.name }}</option>
-          </select>
+        <div class="w-full md:w-40 relative" ref="filterGenreDropdownRef">
+          <input 
+            v-model="filterGenreSearch" 
+            @focus="showGenreDropdown = true"
+            @blur="handleFilterGenreBlur"
+            class="admin-input pr-8 text-sm cursor-pointer"
+            :placeholder="selectedFilterGenreName"
+          />
+          <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+            <MfIcon name="expand_more" size="18" />
+          </div>
+          <div v-if="showGenreDropdown" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg max-h-[160px] overflow-y-auto">
+            <button type="button" @mousedown.prevent="selectFilterGenre('')" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === '' }">
+              Tất cả thể loại
+            </button>
+            <button v-for="genre in filterAvailableGenres" :key="genre.id" type="button" @mousedown.prevent="selectFilterGenre(genre.id)" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === genre.id }">
+              {{ genre.name }}
+            </button>
+            <div v-if="filterAvailableGenres.length === 0" class="px-4 py-3 text-sm text-gray-500 italic">Không tìm thấy</div>
+          </div>
         </div>
         <div class="w-full md:w-40">
           <select v-model="filters.sortPlays" class="admin-input">
@@ -199,7 +214,7 @@
                 </td>
                 <td class="py-2 px-3 text-center font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.song_count) }}</td>
                 <td class="py-2 px-3 text-right font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.total_plays) }}</td>
-                <td class="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-gray-50/80 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
+                <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50/80 dark:group-hover:bg-bg-card/80 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
                   <div class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <AdminActionMenu :actions="getAlbumActions(album)" />
                   </div>
@@ -360,64 +375,49 @@
         </div>
       </div>
     </Teleport>
-
-    <Teleport to="body">
-      <div v-if="deleteTarget" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeDeleteConfirm"></div>
-        <div class="relative w-full max-w-md bg-white dark:bg-bg-surface rounded-2xl shadow-2xl p-6 text-center">
-          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-50 mb-4">
-            <MfIcon name="delete_outline" size="32" className="text-rose-600" />
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Xóa album</h3>
-          <p class="text-sm text-gray-500 mb-8">Bạn có chắc muốn xóa album "{{ deleteTarget?.title }}"? Bài hát sẽ không bị xóa.</p>
-          <div class="flex gap-3">
-            <button type="button" class="flex-1 rounded-xl border border-gray-200 px-4 py-3 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50" @click="closeDeleteConfirm">Hủy</button>
-            <button type="button" class="flex-1 rounded-xl px-4 py-3 bg-rose-600 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-60" @click="deleteAlbum" :disabled="deleting">{{ deleting ? 'Đang xóa...' : 'Xóa' }}</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-
-    <Teleport to="body">
-      <div v-if="removeSongTarget" class="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeRemoveSongConfirm"></div>
-        <div class="relative w-full max-w-md bg-white dark:bg-bg-surface rounded-2xl shadow-2xl p-6 text-center">
-          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-50 mb-4">
-            <MfIcon name="close" size="32" className="text-rose-600" />
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Gỡ bài hát</h3>
-          <p class="text-sm text-gray-500 mb-8">Bạn có chắc muốn gỡ bài hát "{{ removeSongTarget?.title }}" khỏi album này?</p>
-          <div class="flex gap-3">
-            <button type="button" class="flex-1 rounded-xl border border-gray-200 px-4 py-3 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50" @click="closeRemoveSongConfirm">Hủy</button>
-            <button type="button" class="flex-1 rounded-xl px-4 py-3 bg-rose-600 text-sm font-bold text-white hover:bg-rose-700" @click="executeRemoveSong">Gỡ bài hát</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-    <Teleport to="body">
-      <div v-if="quickReleaseTarget" class="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeQuickReleaseConfirm"></div>
-        <div class="relative w-full max-w-md bg-white dark:bg-bg-surface rounded-2xl shadow-2xl p-6 text-center">
-          <div :class="['mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4', quickReleaseStatus === 'published' ? 'bg-emerald-50' : 'bg-rose-50']">
-            <MfIcon :name="quickReleaseStatus === 'published' ? 'publish' : (quickReleaseStatus === 'hidden' ? 'visibility_off' : 'undo')" size="32" :className="quickReleaseStatus === 'published' ? 'text-emerald-600' : 'text-rose-600'" />
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Xác nhận</h3>
-          <p class="text-sm text-gray-500 mb-8">Bạn có chắc muốn {{ quickReleaseLabel }} album "{{ quickReleaseTarget?.title }}"?</p>
-          <div class="flex gap-3">
-            <button type="button" class="flex-1 rounded-xl border border-gray-200 px-4 py-3 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50" @click="closeQuickReleaseConfirm">Hủy</button>
-            <button type="button" :class="['flex-1 rounded-xl px-4 py-3 text-sm font-bold text-white disabled:opacity-60', quickReleaseStatus === 'published' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700']" @click="executeQuickRelease" :disabled="quickReleaseLoading">
-              {{ quickReleaseLoading ? 'Đang xử lý...' : 'Xác nhận' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    
+    <ConfirmDialog 
+      :open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirmText="confirmState.confirmText"
+      :type="confirmState.type"
+      :loading="confirmState.loading"
+      @confirm="handleConfirm"
+      @cancel="confirmState.open = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, defineComponent, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+
+const confirmState = ref({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận',
+  type: 'default',
+  loading: false,
+  action: null
+})
+
+function openConfirm(options) {
+  confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
+}
+
+async function handleConfirm() {
+  if (!confirmState.value.action) return
+  confirmState.value.loading = true
+  try {
+    await confirmState.value.action()
+  } finally {
+    confirmState.value.open = false
+    confirmState.value.loading = false
+  }
+}
 import draggable from 'vuedraggable'
 import api from '@/api/axios'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
@@ -492,6 +492,32 @@ const isStatsLoading = ref(false)
 const pagination = reactive({ total: 0, page: 1, limit: 20, totalPages: 1 })
 const filters = reactive({ search: '', genreId: '', releaseYear: '', market: '', sortPlays: '', releaseStatus: '' })
 const meta = reactive({ artists: [], genres: [], markets: [], supportsMarketFilter: false })
+
+const showGenreDropdown = ref(false)
+const filterGenreSearch = ref('')
+const filterGenreDropdownRef = ref(null)
+
+const filterAvailableGenres = computed(() => {
+  if (!filterGenreSearch.value) return meta.genres
+  const q = filterGenreSearch.value.toLowerCase()
+  return meta.genres.filter(g => g.name.toLowerCase().includes(q))
+})
+
+const selectedFilterGenreName = computed(() => {
+  if (!filters.genreId) return 'Tất cả thể loại'
+  const g = meta.genres.find(g => g.id === filters.genreId)
+  return g ? g.name : 'Tất cả thể loại'
+})
+
+function selectFilterGenre(id) {
+  filters.genreId = id
+  showGenreDropdown.value = false
+  filterGenreSearch.value = ''
+}
+
+function handleFilterGenreBlur() {
+  setTimeout(() => { showGenreDropdown.value = false }, 200)
+}
 
 const detail = reactive({ album: null, artist: null, stats: {}, songs: [], schema: {} })
 const detailLoading = ref(false)
@@ -983,21 +1009,17 @@ function addSong(song) {
   selectedSongs.value.push({ ...song })
 }
 
-const removeSongTarget = ref(null)
-
 function removeSong(song) {
-  removeSongTarget.value = song
-}
-
-function closeRemoveSongConfirm() {
-  removeSongTarget.value = null
-}
-
-function executeRemoveSong() {
-  if (!removeSongTarget.value) return
-  selectedSongs.value = selectedSongs.value.filter(s => Number(s.id) !== Number(removeSongTarget.value.id))
-  toastStore.showToast(`Đã gỡ bài hát "${removeSongTarget.value.title}" khỏi album.`, 'success')
-  removeSongTarget.value = null
+  openConfirm({
+    title: 'Gỡ bài hát',
+    message: `Bạn có chắc muốn gỡ bài hát "${song.title}" khỏi album này?`,
+    confirmText: 'Gỡ bài hát',
+    type: 'danger',
+    action: async () => {
+      selectedSongs.value = selectedSongs.value.filter(s => Number(s.id) !== Number(song.id))
+      toastStore.showToast(`Đã gỡ bài hát "${song.title}" khỏi album.`, 'success')
+    }
+  })
 }
 
 async function submitAlbum() {
@@ -1045,67 +1067,36 @@ async function submitAlbum() {
   }
 }
 
-const quickReleaseTarget = ref(null)
-const quickReleaseStatus = ref('')
-const quickReleaseLoading = ref(false)
-
-const quickReleaseLabel = computed(() => {
-  const labels = { published: 'phát hành', hidden: 'ẩn', draft: 'chuyển về nháp' }
-  return labels[quickReleaseStatus.value] || 'cập nhật'
-})
-
 function quickRelease(album, status) {
-  quickReleaseTarget.value = album
-  quickReleaseStatus.value = status
-}
-
-function closeQuickReleaseConfirm() {
-  if (quickReleaseLoading.value) return
-  quickReleaseTarget.value = null
-  quickReleaseStatus.value = ''
-}
-
-async function executeQuickRelease() {
-  if (!quickReleaseTarget.value) return
-  quickReleaseLoading.value = true
-  try {
-    await api.put(`/admin/albums/${quickReleaseTarget.value.id}`, { release_status: quickReleaseStatus.value })
-    toastStore.showToast('Đã cập nhật trạng thái phát hành.', 'success')
-    quickReleaseTarget.value = null
-    quickReleaseStatus.value = ''
-    if (isDetailMode.value) await fetchDetail()
-    else await fetchAlbums()
-  } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Không thể cập nhật trạng thái.', 'error')
-  } finally {
-    quickReleaseLoading.value = false
-  }
+  const isPublish = status === 'published'
+  const actionLabel = isPublish ? 'phát hành' : (status === 'hidden' ? 'ẩn' : 'hoàn tác')
+  openConfirm({
+    title: 'Xác nhận',
+    message: `Bạn có chắc muốn ${actionLabel} album "${album.title}"?`,
+    confirmText: 'Xác nhận',
+    type: isPublish ? 'default' : 'danger',
+    action: async () => {
+      await api.put(`/admin/albums/${album.id}`, { release_status: status })
+      toastStore.showToast('Đã cập nhật trạng thái phát hành.', 'success')
+      if (isDetailMode.value) await fetchDetail()
+      else await fetchAlbums()
+    }
+  })
 }
 
 function confirmDelete(album) {
-  deleteTarget.value = album
-}
-
-function closeDeleteConfirm() {
-  if (deleting.value) return
-  deleteTarget.value = null
-}
-
-async function deleteAlbum() {
-  if (!deleteTarget.value) return
-  const album = deleteTarget.value
-  deleting.value = true
-  try {
-    await api.delete(`/admin/albums/${album.id}`)
-    toastStore.showToast(`Đã xóa album "${album.title}".`, 'success')
-    deleteTarget.value = null
-    if (isDetailMode.value) router.push('/admin/albums')
-    else await fetchAlbums()
-  } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Không thể xóa album.', 'error')
-  } finally {
-    deleting.value = false
-  }
+  openConfirm({
+    title: 'Xóa album',
+    message: `Bạn có chắc muốn xóa album "${album.title}"? Bài hát sẽ không bị xóa.`,
+    confirmText: 'Xóa',
+    type: 'danger',
+    action: async () => {
+      await api.delete(`/admin/albums/${album.id}`)
+      toastStore.showToast(`Đã xóa album "${album.title}".`, 'success')
+      if (isDetailMode.value) router.push('/admin/albums')
+      else await fetchAlbums()
+    }
+  })
 }
 
 function releaseLabel(item) {

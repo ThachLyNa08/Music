@@ -1,20 +1,18 @@
 <template>
-  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
-    <header class="py-6 bg-white dark:bg-bg-card border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-20">
+  <div class="space-y-6 pb-10">
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Premium</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
       </div>
     </header>
-
-    <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- Overview Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <AdminKpiCard 
         title="Người dùng Premium" 
         :value="summary?.totalPremiumUsers ?? 0" 
         icon="workspace_premium" 
-        color="indigo" 
+        tone="indigo" 
         :loading="isSummaryLoading"
       >
         <template #subtext v-if="!isSummaryLoading">
@@ -27,7 +25,7 @@
         title="Sắp hết hạn (7 ngày)" 
         :value="summary?.expiringSoonUsers ?? 0" 
         icon="history" 
-        color="amber" 
+        tone="amber" 
         :loading="isSummaryLoading"
       >
         <template #subtext v-if="!isSummaryLoading">
@@ -41,7 +39,7 @@
         title="Doanh thu tháng này" 
         :value="formatCurrency(summary?.monthlyPremiumRevenue)" 
         icon="payments" 
-        color="blue" 
+        tone="blue" 
         :loading="isSummaryLoading"
       >
         <template #subtext v-if="!isSummaryLoading">
@@ -53,7 +51,7 @@
         title="Giao dịch đang chờ" 
         :value="summary?.pendingPremiumTransactions ?? 0" 
         icon="history" 
-        color="slate" 
+        tone="slate" 
         :loading="isSummaryLoading"
       >
         <template #subtext v-if="!isSummaryLoading">
@@ -73,12 +71,12 @@
           @keyup.enter="handleFilterChange" 
           type="text" 
           placeholder="Tìm theo tên, email hoặc ID..." 
-          class="admin-input pl-9" 
+          class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" 
           :disabled="isInitialLoading"
         />
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input" :disabled="isInitialLoading">
+      <div class="w-48">
+        <select v-model="filterForm.status" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isInitialLoading">
           <option value="Tất cả Premium">Tất cả Premium</option>
           <option value="Đang hoạt động">Đang hoạt động</option>
           <option value="Sắp hết hạn">Sắp hết hạn</option>
@@ -86,14 +84,14 @@
           <option value="Chưa Premium">Chưa Premium</option>
         </select>
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input" :disabled="isPlansLoading">
+      <div class="w-48">
+        <select v-model="filterForm.plan" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isPlansLoading">
           <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
           <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
         </select>
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input" :disabled="isInitialLoading">
+      <div class="w-48">
+        <select v-model="filterForm.sort" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isInitialLoading">
           <option value="">Sắp xếp mặc định</option>
           <option value="Hết hạn gần nhất">Hết hạn gần nhất</option>
           <option value="Mới nâng cấp gần đây">Mới nâng cấp gần đây</option>
@@ -202,15 +200,15 @@
     />
 
     <ConfirmDialog 
-      v-model:open="confirmState.open"
+      :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
       :confirmText="confirmState.confirmText"
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
+      @cancel="confirmState.open = false"
     />
-    </div>
   </div>
 </template>
 

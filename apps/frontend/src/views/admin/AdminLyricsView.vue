@@ -6,6 +6,7 @@ import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 
 const router = useRouter()
 
@@ -271,7 +272,7 @@ onMounted(() => {
           v-for="item in kpiCards"
           :key="item.title"
           v-bind="item"
-          :show-icon="false"
+          :showIcon="false"
           compact
           :loading="loading && !summary.totalSongs"
           @click="applyKpiFilter(item)"
@@ -329,13 +330,11 @@ onMounted(() => {
             <option value="MANUAL">Manual</option>
           </select>
         </div>
-        <button @click="resetFilters" class="px-3 py-2 h-[38px] mt-[auto] text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
-          Reset
-        </button>
+        <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
       </AdminFilterBar>
 
       <!-- Table -->
-      <AdminTableShell maxHeight="380px" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
+      <AdminTableShell maxHeight="375px" style="min-height: 375px;" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
         <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[900px]">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
@@ -377,7 +376,7 @@ onMounted(() => {
       <div class="py-4 flex items-center justify-between" v-if="pagination.total > 0">
         <p class="text-sm text-slate-500">{{ displayRange }}</p>
         <div v-if="pagination.totalPages > 1">
-          <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
+          <AdminPagination :limit="20" :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
         </div>
       </div>
     </div>

@@ -119,6 +119,8 @@
     <!-- Data Table -->
     <div class="mb-8 flex flex-col">
       <AdminTableShell 
+        maxHeight="375px" 
+        style="min-height: 375px;"
         :loading="store.loading.songs" 
         :empty="!store.loading.songs && store.songs.length === 0" 
         emptyTitle="Không tìm thấy bài hát nào" 
