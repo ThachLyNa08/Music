@@ -1,12 +1,12 @@
 <template>
-  <div class="p-4 md:p-6 bg-gray-50 dark:bg-bg-base min-h-screen text-gray-800 dark:text-text-base font-sans">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10 font-sans text-gray-800 dark:text-text-base">
     <!-- Header -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-3">
+    <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm">
       <div>
         <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Quản lý bài hát</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý kho nhạc, metadata, trạng thái hiển thị và hiệu suất nghe của từng bài hát.</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 mt-4 md:mt-0">
         <!-- Optional Bulk Upload Button -->
         <button class="flex items-center gap-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm">
           <MfIcon name="upload" size="16" />
@@ -14,10 +14,11 @@
         </button>
         <AdminAddButton title="Thêm bài hát" @click="openAddModal" />
       </div>
-    </div>
+    </header>
 
-    <!-- Group Cards -->
-    <SongGroupCards 
+    <div class="p-4 md:p-6 flex flex-col space-y-6">
+      <!-- Group Cards -->
+      <SongGroupCards 
       :summary="store.groupsSummary" 
       :selectedGroup="store.selectedGroup" 
       @select-group="handleGroupSelect" 
@@ -29,10 +30,36 @@
     </h2>
 
     <!-- Filters & Search -->
-    <div class="flex flex-col md:flex-row gap-3 mb-5">
-      <div class="relative flex-1">
+    <AdminFilterBar>
+      <div class="relative flex-1 min-w-[200px]">
         <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-        <input v-model="store.filters.search" @input="handleSearchInput" @keyup.enter="store.applyFilters" type="text" placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." class="w-full pl-9 pr-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm" />
+        <input 
+          v-model="store.filters.search" 
+          @input="handleSearchInput" 
+          @keyup.enter="handleEnter" 
+          @focus="showHistory = true"
+          @blur="handleBlur"
+          type="text" 
+          placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." 
+          class="w-full pl-9 pr-8 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm" 
+        />
+        <button v-if="store.filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+          <MfIcon name="close" size="14" />
+        </button>
+        <!-- History Dropdown -->
+        <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg overflow-hidden animate-fade-in-up">
+          <ul>
+            <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+              <div class="flex items-center gap-2 overflow-hidden">
+                <MfIcon name="history" size="14" class="text-gray-400 flex-shrink-0" />
+                <span class="text-sm text-gray-600 dark:text-gray-300 truncate">{{ item }}</span>
+              </div>
+              <button @mousedown.prevent.stop="removeHistoryItem(item)" class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition px-1">
+                <MfIcon name="close" size="12" />
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
       <div class="w-full md:w-40">
         <select v-model="store.filters.genreId" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
@@ -64,8 +91,8 @@
           <option value="duration_sec">Thời lượng</option>
         </select>
       </div>
-      <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" />
-    </div>
+      <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" class="h-[38px] mt-[auto]" />
+    </AdminFilterBar>
 
     <!-- Bulk Actions -->
     <div v-if="selectedSongIds.length > 0" class="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-3 mb-5 flex items-center justify-between animate-fade-in-up">
@@ -90,64 +117,57 @@
     </div>
 
     <!-- Data Table -->
-    <div class="relative bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl shadow-sm overflow-hidden mb-8 min-h-[640px] flex flex-col">
-      <!-- Loading Overlay -->
-      <div v-if="store.loading.songs" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/55 dark:bg-bg-surface/60 backdrop-blur-[1px] transition-opacity duration-300">
-        <div class="w-10 h-10 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-        <p class="font-medium text-sm text-gray-700 dark:text-gray-300 shadow-white">Đang tải dữ liệu...</p>
-      </div>
-
-      <div v-if="store.songs.length === 0 && !store.loading.songs" class="flex-1 p-16 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-        <MfIcon name="music_off" size="64" className="mb-4 text-gray-300 dark:text-gray-600" />
-        <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy bài hát nào</h3>
-        <p class="text-sm dark:text-text-secondary">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
-      </div>
-
-      <div v-else class="flex-1 overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-gray-50/50 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold border-b border-gray-100 dark:border-bg-border">
-              <th class="py-3 px-4 w-12 text-center whitespace-nowrap">
+    <div class="mb-8 flex flex-col">
+      <AdminTableShell 
+        :loading="store.loading.songs" 
+        :empty="!store.loading.songs && store.songs.length === 0" 
+        emptyTitle="Không tìm thấy bài hát nào" 
+        emptyDescription="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+      >
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
+          <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#1e293b]">
+            <tr class="text-black dark:text-white uppercase tracking-wider font-bold">
+              <th class="py-2 px-3 w-10 text-center">
                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               </th>
-              <th class="py-3 px-4 w-full min-w-[250px] whitespace-nowrap">Tên Bài hát</th>
-              <th class="py-3 px-4 min-w-[150px] whitespace-nowrap">Nghệ sĩ</th>
-              <th class="py-3 px-4 min-w-[120px] whitespace-nowrap">Thị trường</th>
-              <th class="py-3 px-4 min-w-[140px] text-center whitespace-nowrap">Phát hành</th>
-              <th class="py-3 px-4 min-w-[120px] text-center whitespace-nowrap">Trạng thái</th>
-              <th class="py-3 px-4 w-[100px] text-right whitespace-nowrap">Hành động</th>
+              <th class="py-2 px-3 w-full min-w-[250px]">Tên Bài hát</th>
+              <th class="py-2 px-3 min-w-[150px]">Nghệ sĩ</th>
+              <th class="py-2 px-3 min-w-[120px]">Thị trường</th>
+              <th class="py-2 px-3 min-w-[140px] text-center">Phát hành</th>
+              <th class="py-2 px-3 min-w-[120px] text-center">Trạng thái</th>
+              <th class="py-2 px-3 w-[80px] text-right sticky right-0 bg-gray-50 dark:bg-bg-card z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
             <tr v-for="song in store.songs" :key="song.id" @click="goToDetail(song.id)" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group cursor-pointer" :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/80 dark:bg-indigo-500/20 z-10 relative': route.query.focus == song.id }">
               <!-- Checkbox -->
-              <td class="py-3 px-4 text-center" @click.stop>
+              <td class="py-2 px-3 text-center" @click.stop>
                 <input type="checkbox" :value="song.id" v-model="selectedSongIds" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               </td>
               <!-- Bài hát -->
-              <td class="py-3 px-4 max-w-0">
+              <td class="py-2 px-3 max-w-0">
                 <div class="flex items-center gap-3">
-                  <div class="relative w-12 h-12 shrink-0 group-hover:scale-105 transition-transform duration-300">
-                    <img :src="$formatImageUrl(song.cover_url)" @error="e => e.target.src = '/default-cover.png'" loading="lazy" class="w-full h-full rounded-lg object-cover shadow-sm bg-gray-100" />
-                    <button @click.stop="previewSong(song)" class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                      <MfIcon name="play_arrow" filled size="20" className="text-white" />
+                  <div class="relative w-10 h-10 shrink-0 group-hover:scale-105 transition-transform duration-300">
+                    <img :src="$formatImageUrl(song.cover_url)" @error="e => e.target.src = '/default-cover.png'" loading="lazy" class="w-full h-full rounded-md object-cover shadow-sm bg-gray-100" />
+                    <button @click.stop="previewSong(song)" class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MfIcon name="play_arrow" filled size="18" className="text-white" />
                     </button>
                   </div>
                   <div class="flex flex-col min-w-0 flex-1">
-                    <span class="text-sm font-bold text-gray-900 dark:text-white truncate" :title="song.title">{{ song.title }}</span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 font-medium truncate">{{ formatDuration(song.duration_sec) }} • {{ song.play_count }} lượt nghe</span>
+                    <span class="text-[13px] font-bold text-gray-900 dark:text-white truncate" :title="song.title">{{ song.title }}</span>
+                    <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium truncate">{{ formatDuration(song.duration_sec) }} • {{ song.play_count }} lượt nghe</span>
                   </div>
                 </div>
               </td>
               <!-- Nghệ sĩ -->
-              <td class="py-3 px-4 max-w-0">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 truncate max-w-full" :title="song.artist_name || song.artist">
+              <td class="py-2 px-3 max-w-0">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 truncate max-w-full" :title="song.artist_name || song.artist">
                   {{ song.artist_name || song.artist || 'N/A' }}
                 </span>
               </td>
               <!-- Thị trường -->
-              <td class="py-3 px-4">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold" :class="{
+              <td class="py-2 px-3">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold" :class="{
                   'bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400': song.market === 'KPOP',
                   'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400': song.market === 'VPOP',
                   'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400': song.market === 'USUK',
@@ -157,32 +177,30 @@
                 </span>
               </td>
               <!-- Trạng thái -->
-              <td class="py-3 px-4 text-center">
-                <span class="inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold" :class="releaseBadgeClass(song)">
+              <td class="py-2 px-3 text-center">
+                <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold" :class="releaseBadgeClass(song)">
                   {{ releaseLabel(song) }}
                 </span>
               </td>
-              <td class="py-3 px-4 text-center" @click.stop>
+              <td class="py-2 px-3 text-center" @click.stop>
                 <label class="relative inline-flex items-center cursor-pointer" :title="song.is_active ? 'Đang hoạt động' : 'Đã ẩn'">
                   <input type="checkbox" class="sr-only peer" :checked="song.is_active" @change="toggleStatus(song)">
-                  <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                  <div class="w-7 h-4 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
               </td>
               <!-- Hành động -->
-              <td class="py-3 px-4 text-right">
-                <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button @click.stop="openEditModal(song)" class="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors focus:outline-none" title="Chỉnh sửa">
-                    <MfIcon name="edit" size="20" />
-                  </button>
-                  <button @click.stop="confirmDelete(song)" class="p-2 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors focus:outline-none" title="Xóa bài hát">
-                    <MfIcon name="delete" size="20" />
-                  </button>
+              <td class="py-2 px-3 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50/80 dark:group-hover:bg-bg-card transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
+                <div class="flex items-center justify-end">
+                  <AdminActionMenu :actions="[
+                    { label: 'Chỉnh sửa', icon: 'edit', onClick: () => openEditModal(song) },
+                    { label: 'Xóa bài hát', icon: 'delete', danger: true, onClick: () => confirmDelete(song) }
+                  ]" />
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </AdminTableShell>
 
       <!-- Pagination -->
       <div v-if="store.pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
@@ -235,7 +253,8 @@
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
-    />
+    </ConfirmDialog>
+    </div>
   </div>
 </template>
 
@@ -252,6 +271,9 @@ import MetadataIssuesPanel from '@/components/admin/MetadataIssuesPanel.vue';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import AdminResetButton from '@/components/admin/AdminResetButton.vue';
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
+import AdminTableShell from '@/components/admin/AdminTableShell.vue';
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 import { useToastStore } from '@/stores/toast';
 
@@ -286,11 +308,50 @@ async function handleConfirm() {
 }
 
 let searchTimeout = null;
+const searchHistory = ref(JSON.parse(localStorage.getItem('adminSongsSearchHistory') || '[]'));
+const showHistory = ref(false);
+
 const handleSearchInput = () => {
   if (searchTimeout) clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     store.applyFilters();
   }, 500);
+};
+
+const handleEnter = () => {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  const term = store.filters.search.trim();
+  store.applyFilters();
+  if (term && !searchHistory.value.includes(term)) {
+    searchHistory.value.unshift(term);
+    if (searchHistory.value.length > 5) searchHistory.value.pop();
+    localStorage.setItem('adminSongsSearchHistory', JSON.stringify(searchHistory.value));
+  }
+  showHistory.value = false;
+};
+
+const selectHistoryItem = (item) => {
+  store.filters.search = item;
+  store.applyFilters();
+  showHistory.value = false;
+};
+
+const clearSearch = () => {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  store.filters.search = '';
+  store.applyFilters();
+  showHistory.value = false;
+};
+
+const handleBlur = () => {
+  setTimeout(() => {
+    showHistory.value = false;
+  }, 200);
+};
+
+const removeHistoryItem = (item) => {
+  searchHistory.value = searchHistory.value.filter(i => i !== item);
+  localStorage.setItem('adminSongsSearchHistory', JSON.stringify(searchHistory.value));
 };
 
 function goToDetail(id) {
@@ -551,6 +612,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.full-bleed {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+}
+@media (min-width: 1024px) {
+  .full-bleed {
+    width: auto;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    margin-top: -1.5rem;
+    margin-bottom: -1.5rem;
+  }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.3s ease-out forwards;
 }

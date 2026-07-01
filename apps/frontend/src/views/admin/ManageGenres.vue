@@ -1,31 +1,30 @@
 <template>
-  <div class="p-4 md:p-6 bg-gray-50 dark:bg-bg-base min-h-screen text-gray-800 dark:text-text-base font-sans">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
     <!-- Header Hero -->
-    <div class="mb-6 bg-white dark:bg-bg-surface p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-bg-border relative overflow-hidden">
+    <header class="py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4 z-20">
       <!-- Background subtle gradient -->
       <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
       
-      <div class="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div class="flex items-center gap-3 mb-2">
-            <h1 class="text-3xl font-black text-gray-900 dark:text-white tracking-tight">Taxonomy Center</h1>
-            <span class="px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20">
-              Quản lý Thể loại
-            </span>
-          </div>
-          <p class="text-gray-500 dark:text-text-secondary text-sm font-medium max-w-2xl">
-            Trung tâm quản lý phân loại âm nhạc. Dữ liệu tại đây điều phối thuật toán Gợi ý (Recommendation), trải nghiệm người dùng mới (Cold Start) và bộ máy AI Playlist.
-          </p>
+      <div class="relative z-10">
+        <div class="flex items-center gap-3 mb-2">
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Taxonomy Center</h1>
+          <span class="px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20">
+            Quản lý Thể loại
+          </span>
         </div>
-        <div class="flex gap-2">
-          <AdminAddButton title="Thêm thể loại" @click="openCreateModal" />
-        </div>
+        <p class="text-gray-500 dark:text-text-secondary text-sm font-medium max-w-2xl">
+          Trung tâm quản lý phân loại âm nhạc. Dữ liệu tại đây điều phối thuật toán Gợi ý (Recommendation), trải nghiệm người dùng mới (Cold Start) và bộ máy AI Playlist.
+        </p>
       </div>
-    </div>
+      <div class="relative z-10 flex gap-2">
+        <AdminAddButton title="Thêm thể loại" @click="openCreateModal" />
+      </div>
+    </header>
 
-    <!-- Stat Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
+    <div class="p-4 md:p-6 flex flex-col space-y-6">
+      <!-- Stat Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-gray-100 dark:border-bg-border shadow-sm flex flex-col justify-center">
         <div class="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Tổng thể loại</div>
         <div class="text-2xl font-black text-gray-900 dark:text-white">{{ formatNumber(summary.total) }}</div>
       </div>
@@ -117,7 +116,7 @@
 
     <!-- Filters & Bulk Actions -->
     <div class="flex flex-col xl:flex-row justify-between gap-3 mb-4">
-      <div class="flex flex-wrap gap-3 flex-1">
+      <AdminFilterBar class="flex-1">
         <div class="relative w-full sm:w-auto min-w-[200px]">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
           <input 
@@ -125,13 +124,13 @@
             @keyup.enter="fetchGenres"
             type="text" 
             placeholder="Tìm kiếm thể loại..."
-            class="w-full pl-9 pr-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm"
+            class="admin-input pl-9"
           >
         </div>
         <select 
           v-model="filters.data_status"
           @change="fetchGenres"
-          class="px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer"
+          class="admin-input"
         >
           <option value="all">Tất cả dữ liệu</option>
           <option value="has_data">Có dữ liệu</option>
@@ -140,7 +139,7 @@
         <select 
           v-model="filters.taxonomy_flag"
           @change="fetchGenres"
-          class="px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer"
+          class="admin-input"
         >
           <option value="all">Mọi cờ Taxonomy</option>
           <option value="cold_start">Dùng Cold Start</option>
@@ -150,20 +149,14 @@
         <select 
           v-model="filters.status"
           @change="fetchGenres"
-          class="px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer"
+          class="admin-input"
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
           <option value="hidden">Đã ẩn</option>
         </select>
-        <button 
-          @click="fetchGenres"
-          class="px-4 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-bg-surface transition-colors shadow-sm flex items-center justify-center"
-          title="Làm mới"
-        >
-          <MfIcon name="refresh" size="18" />
-        </button>
-      </div>
+        <AdminResetButton :disabled="loading" @click="fetchGenres" class="h-[38px] mt-[auto]" />
+      </AdminFilterBar>
 
       <!-- Bulk Actions -->
       <div v-if="selectedGenres.length > 0" class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm animate-fade-in">
@@ -191,38 +184,26 @@
     </div>
 
     <!-- Data Table -->
-    <div class="relative bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl shadow-sm overflow-hidden mb-8 min-h-[500px] flex flex-col">
-      <!-- Legend for Taxonomy Flags -->
-      <div class="px-5 py-3 border-b border-gray-100 dark:border-bg-border bg-gray-50/30 dark:bg-bg-card/20 flex gap-4 text-[11px] font-bold text-gray-500 dark:text-gray-400">
-        <div class="flex items-center gap-1"><span class="text-indigo-500">✨</span> Recommendation</div>
-        <div class="flex items-center gap-1"><span class="text-emerald-500">🌱</span> Cold Start</div>
-        <div class="flex items-center gap-1"><span class="text-amber-500">🤖</span> AI Playlist</div>
-      </div>
-      <div v-if="loading" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/55 dark:bg-bg-surface/60 backdrop-blur-[1px] transition-opacity duration-300">
-        <div class="w-10 h-10 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-        <p class="font-medium text-sm text-gray-700 dark:text-gray-300">Đang tải dữ liệu...</p>
-      </div>
-
-      <div v-if="genres.length === 0 && !loading" class="flex-1 p-16 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-        <MfIcon name="music_off" size="64" className="mb-4 text-gray-300 dark:text-gray-600" />
-        <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy thể loại nào</h3>
-        <p class="text-sm dark:text-text-secondary">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
-      </div>
-
-      <div v-else class="flex-1 overflow-x-auto">
-        <table class="w-full text-left border-collapse">
+    <div class="flex-1 flex flex-col mb-8">
+      <AdminTableShell 
+        :loading="loading" 
+        :empty="!loading && genres.length === 0" 
+        emptyTitle="Không tìm thấy thể loại nào" 
+        emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+      >
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
           <thead>
-            <tr class="bg-gray-50/80 dark:bg-bg-card/80 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold border-b border-gray-100 dark:border-bg-border">
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
               <th class="py-3 px-4 w-10 text-center">
                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
               </th>
-              <th class="py-3 px-4 min-w-[220px]">Thể loại</th>
-              <th class="py-3 px-4 min-w-[120px]">Market/Parent</th>
-              <th class="py-3 px-4 text-center">Data (Bài/NS/Alb)</th>
-              <th class="py-3 px-4 text-center">Lượt nghe 7N</th>
-              <th class="py-3 px-4 text-center">Taxonomy Flags</th>
-              <th class="py-3 px-4 text-center">Trạng thái</th>
-              <th class="py-3 px-4 w-[80px] text-right"></th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[220px]">Thể loại</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[120px]">Market/Parent</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Data (Bài/NS/Alb)</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Lượt nghe 7N</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Taxonomy Flags</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Trạng thái</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 w-[80px] text-right sticky right-0 bg-gray-50 dark:bg-bg-card">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
@@ -313,36 +294,20 @@
               </td>
 
               <!-- Hành động -->
-              <td class="py-3 px-4 text-right" @click.stop>
-                <div class="relative inline-block text-left">
-                  <button @click="toggleDropdown(genre.id)" class="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors focus:outline-none" title="Thao tác">
-                    <MfIcon name="more_vert" size="20" />
-                  </button>
-
-                  <div v-if="activeDropdown === genre.id" class="absolute right-0 mt-1 w-40 rounded-xl shadow-lg bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border z-20 origin-top-right focus:outline-none py-1 overflow-hidden" v-click-outside="closeDropdown">
-
-                    <button @click="openEditModal(genre); closeDropdown()" class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-bg-card font-medium flex items-center gap-2">
-                      <MfIcon name="edit" size="14" /> Sửa thông tin
-                    </button>
-                    <button @click="openMergeModal(genre); closeDropdown()" class="w-full text-left px-4 py-2 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 font-medium flex items-center gap-2">
-                      <MfIcon name="call_merge" size="14" /> Gộp thể loại
-                    </button>
-                    <div class="border-t border-gray-100 dark:border-bg-border my-1"></div>
-                    <button @click="deleteGenre(genre); closeDropdown()" class="w-full text-left px-4 py-2 text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 font-medium flex items-center gap-2">
-                      <MfIcon name="delete" size="14" /> Xoá
-                    </button>
-                  </div>
+              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+                <div class="flex justify-end">
+                  <AdminActionMenu :actions="getGenreActions(genre)" />
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </AdminTableShell>
 
       <!-- Pagination -->
-      <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
+      <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
         <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ pagination.page }} / {{ pagination.totalPages }}</span>
-        <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="changePage" />
+        <AdminPagination v-model:currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="changePage" />
       </div>
     </div>
 
@@ -384,6 +349,7 @@
       :loading="confirmState.loading"
       @confirm="handleConfirm"
     />
+    </div>
   </div>
 </template>
 
@@ -399,6 +365,10 @@ import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import MfIcon from '@/components/common/MfIcon.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
+import AdminTableShell from '@/components/admin/AdminTableShell.vue';
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
+import AdminResetButton from '@/components/admin/AdminResetButton.vue';
 
 const toast = useToastStore();
 
@@ -425,6 +395,28 @@ async function handleConfirm() {
     confirmState.value.open = false;
     confirmState.value.loading = false;
   }
+}
+
+function getGenreActions(genre) {
+  return [
+    {
+      label: 'Sửa thông tin',
+      icon: 'edit',
+      onClick: () => openEditModal(genre)
+    },
+    {
+      label: 'Gộp thể loại',
+      icon: 'call_merge',
+      variant: 'warning',
+      onClick: () => openMergeModal(genre)
+    },
+    {
+      label: 'Xoá',
+      icon: 'delete',
+      danger: true,
+      onClick: () => deleteGenre(genre)
+    }
+  ]
 }
 
 const loading = ref(false);

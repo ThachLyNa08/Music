@@ -1,7 +1,7 @@
 <template>
-  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative overflow-hidden full-bleed h-full font-sans text-gray-800 dark:text-text-base">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10 font-sans text-gray-800 dark:text-text-base">
     <template v-if="isDetailMode">
-      <div class="flex-1 overflow-y-auto p-4 md:p-6">
+      <div class="p-4 md:p-6 flex flex-col space-y-6">
         <div class="flex items-center justify-between gap-4 mb-5">
         <button @click="router.push('/admin/albums')" class="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-emerald-600">
           <MfIcon name="arrow_back" size="20" />
@@ -79,7 +79,7 @@
         </div>
       </header>
 
-      <div class="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col">
+      <div class="p-4 md:p-6 flex flex-col space-y-6">
         <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5 shrink-0">
         <AdminKpiCard
           v-for="item in kpiCards"
@@ -91,90 +91,117 @@
         />
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_160px_150px_170px_150px_44px] gap-3 mb-5 items-center">
-        <div class="relative">
+      <AdminFilterBar>
+        <div class="relative flex-1 min-w-[200px]">
           <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input v-model="filters.search" type="text" placeholder="Tìm album hoặc nghệ sĩ..." class="admin-input album-search-input" />
-        </div>
-        <select v-model="filters.genreId" class="admin-input">
-          <option value="">Tất cả thể loại</option>
-          <option v-for="genre in meta.genres" :key="genre.id" :value="genre.id">{{ genre.name }}</option>
-        </select>
-
-        <select v-model="filters.sortPlays" class="admin-input">
-          <option value="">Lượt nghe mặc định</option>
-          <option value="desc">Lượt nghe giảm dần</option>
-          <option value="asc">Lượt nghe tăng dần</option>
-        </select>
-        <select v-model="filters.releaseStatus" class="admin-input">
-          <option value="">Tất cả trạng thái</option>
-          <option value="draft">Nháp</option>
-          <option value="scheduled">Lên lịch</option>
-          <option value="published">Đã phát hành</option>
-          <option value="hidden">Đã ẩn</option>
-        </select>
-        <select v-if="meta.supportsMarketFilter" v-model="filters.market" class="admin-input">
-          <option value="">Tất cả khu vực</option>
-          <option v-for="market in meta.markets" :key="market" :value="market">{{ market }}</option>
-        </select>
-        <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" />
-      </div>
-
-      <div class="panel overflow-hidden relative min-h-[500px] flex-1 flex flex-col">
-        <div v-if="isInitialLoading" class="p-12 text-center text-gray-400 absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-bg-surface/80 z-20">
-          <div class="w-10 h-10 mx-auto border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-          <p class="text-sm font-semibold">Đang tải danh sách album...</p>
-        </div>
-        <div v-else-if="albums.length === 0" class="p-16 text-center text-gray-400 flex flex-col items-center justify-center h-full min-h-[300px]">
-          <MfIcon name="album" size="64" className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-          <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy album nào</h3>
-        </div>
-        <div v-else class="overflow-auto relative flex-1">
-          <div v-if="isPageLoading" class="absolute inset-0 bg-white/60 dark:bg-bg-surface/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
-            <div class="w-8 h-8 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
+          <input 
+            v-model="filters.search" 
+            @keyup.enter="handleEnter"
+            @focus="showHistory = true"
+            @blur="handleBlur"
+            type="text" 
+            placeholder="Tìm album hoặc nghệ sĩ..." 
+            class="admin-input album-search-input pl-9 pr-8" 
+          />
+          <button v-if="filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+            <MfIcon name="close" size="14" />
+          </button>
+          <!-- History Dropdown -->
+          <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg overflow-hidden animate-fade-in-up">
+            <ul>
+              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <MfIcon name="history" size="14" class="text-gray-400 flex-shrink-0" />
+                  <span class="text-sm text-gray-600 dark:text-gray-300 truncate">{{ item }}</span>
+                </div>
+                <button @mousedown.prevent.stop="removeHistoryItem(item)" class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition px-1">
+                  <MfIcon name="close" size="12" />
+                </button>
+              </li>
+            </ul>
           </div>
-          <table class="w-full text-left border-collapse table-fixed min-w-[1000px] text-sm">
-            <thead class="bg-gray-50/95 dark:bg-bg-card/95 backdrop-blur sticky top-0 z-20 shadow-[0_1px_0_0_#f3f4f6] dark:shadow-[0_1px_0_0_#273142]">
-              <tr class="text-black dark:text-white text-xs uppercase tracking-wider font-bold">
-                <th class="py-3 px-4 w-[35%]">Album</th>
-                <th class="py-3 px-4 w-[20%]">Nghệ sĩ</th>
-                <th class="py-3 px-4 w-36 whitespace-nowrap">Thể loại</th>
-                <th v-if="meta.supportsMarketFilter" class="py-3 px-4 w-24 whitespace-nowrap">Khu vực</th>
-                <th class="py-3 px-4 w-32 text-center whitespace-nowrap">Phát hành</th>
-                <th class="py-3 px-4 w-24 text-center whitespace-nowrap">Bài hát</th>
-                <th class="py-3 px-4 w-28 text-right whitespace-nowrap">Lượt nghe</th>
-                <th class="py-3 px-4 w-24 text-center whitespace-nowrap">Hành động</th>
+        </div>
+        <div class="w-full md:w-40">
+          <select v-model="filters.genreId" class="admin-input">
+            <option value="">Tất cả thể loại</option>
+            <option v-for="genre in meta.genres" :key="genre.id" :value="genre.id">{{ genre.name }}</option>
+          </select>
+        </div>
+        <div class="w-full md:w-40">
+          <select v-model="filters.sortPlays" class="admin-input">
+            <option value="">Lượt nghe mặc định</option>
+            <option value="desc">Lượt nghe giảm dần</option>
+            <option value="asc">Lượt nghe tăng dần</option>
+          </select>
+        </div>
+        <div class="w-full md:w-40">
+          <select v-model="filters.releaseStatus" class="admin-input">
+            <option value="">Tất cả trạng thái</option>
+            <option value="draft">Nháp</option>
+            <option value="scheduled">Lên lịch</option>
+            <option value="published">Đã phát hành</option>
+            <option value="hidden">Đã ẩn</option>
+          </select>
+        </div>
+        <div v-if="meta.supportsMarketFilter" class="w-full md:w-40">
+          <select v-model="filters.market" class="admin-input">
+            <option value="">Tất cả khu vực</option>
+            <option v-for="market in meta.markets" :key="market" :value="market">{{ market }}</option>
+          </select>
+        </div>
+        <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" class="h-[38px] mt-[auto]" />
+      </AdminFilterBar>
+
+      <div class="flex-1 flex flex-col">
+        <AdminTableShell 
+          class="h-[440px] flex-none"
+          :loading="isInitialLoading || isPageLoading" 
+          :empty="!isInitialLoading && !isPageLoading && albums.length === 0" 
+          emptyTitle="Không tìm thấy album nào" 
+          emptyDescription="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+        >
+          <table class="w-full text-left border-collapse table-fixed min-w-[1000px] text-xs">
+            <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#f3f4f6] dark:shadow-[0_1px_0_0_#273142]">
+              <tr class="text-black dark:text-white uppercase tracking-wider font-bold">
+                <th class="py-2 px-3 w-[35%]">Album</th>
+                <th class="py-2 px-3 w-[20%]">Nghệ sĩ</th>
+                <th class="py-2 px-3 w-36 whitespace-nowrap">Thể loại</th>
+                <th v-if="meta.supportsMarketFilter" class="py-2 px-3 w-24 whitespace-nowrap">Khu vực</th>
+                <th class="py-2 px-3 w-32 text-center whitespace-nowrap">Phát hành</th>
+                <th class="py-2 px-3 w-24 text-center whitespace-nowrap">Bài hát</th>
+                <th class="py-2 px-3 w-28 text-right whitespace-nowrap">Lượt nghe</th>
+                <th class="py-2 px-3 w-24 text-center whitespace-nowrap sticky right-0 bg-gray-50 dark:bg-bg-card z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
+            <tbody class="divide-y divide-gray-100 dark:divide-bg-border relative">
               <tr v-for="album in albums" :key="album.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group">
-                <td class="py-3 px-4">
+                <td class="py-2 px-3">
                   <button @click="router.push(`/admin/albums/${album.id}/detail`)" class="flex items-center gap-3 max-w-[320px] text-left">
-                    <img :src="formatImageUrl(album.cover_url)" @error="handleImageError" class="w-12 h-12 rounded-lg object-cover bg-gray-100 border border-gray-100 dark:border-bg-border shadow-sm" />
-                    <span class="font-bold text-gray-900 dark:text-white truncate hover:text-emerald-600" :title="album.title">{{ album.title }}</span>
+                    <img :src="formatImageUrl(album.cover_url)" @error="handleImageError" class="w-10 h-10 rounded-md object-cover bg-gray-100 border border-gray-100 dark:border-bg-border shadow-sm" />
+                    <span class="font-bold text-[13px] text-gray-900 dark:text-white truncate hover:text-emerald-600" :title="album.title">{{ album.title }}</span>
                   </button>
                 </td>
-                <td class="py-3 px-4">
-                  <button @click="goToArtist(album.artist_id)" class="inline-flex items-center gap-2 max-w-[190px] text-sm font-bold text-gray-700 dark:text-gray-200 hover:text-emerald-600">
+                <td class="py-2 px-3">
+                  <button @click="goToArtist(album.artist_id)" class="inline-flex items-center gap-2 max-w-[190px] text-[11px] font-bold text-gray-700 dark:text-gray-200 hover:text-emerald-600">
                     <span class="truncate">{{ album.artist_name }}</span>
                   </button>
                 </td>
-                <td class="py-3 px-4 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ album.genre_name || 'Chưa phân loại' }}</td>
-                <td v-if="meta.supportsMarketFilter" class="py-3 px-4 whitespace-nowrap">
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                <td class="py-2 px-3 text-[11px] text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ album.genre_name || 'Chưa phân loại' }}</td>
+                <td v-if="meta.supportsMarketFilter" class="py-2 px-3 whitespace-nowrap">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                     {{ album.market || 'OTHER' }}
                   </span>
                 </td>
-                <td class="py-3 px-4 text-center">
-                  <span class="inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold" :class="releaseBadgeClass(album)">
+                <td class="py-2 px-3 text-center">
+                  <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold" :class="releaseBadgeClass(album)">
                     {{ releaseLabel(album) }}
                   </span>
                 </td>
-                <td class="py-3 px-4 text-center font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.song_count) }}</td>
-                <td class="py-3 px-4 text-right font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.total_plays) }}</td>
-                <td class="py-3 px-4 text-center">
+                <td class="py-2 px-3 text-center font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.song_count) }}</td>
+                <td class="py-2 px-3 text-right font-bold text-gray-700 dark:text-gray-200">{{ formatNumber(album.total_plays) }}</td>
+                <td class="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-gray-50/80 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
                   <div class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <AdminActionDropdown :actions="getAlbumActions(album)" />
+                    <AdminActionMenu :actions="getAlbumActions(album)" />
                   </div>
                 </td>
               </tr>
@@ -186,7 +213,7 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </AdminTableShell>
         <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
           <span class="hidden md:inline text-sm font-medium text-gray-500">Hiển thị {{ pageStart }} - {{ pageEnd }} trong {{ pagination.total }} album</span>
           <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" :disabled="isInitialLoading || isPageLoading" @update:currentPage="setPage" />
@@ -396,8 +423,10 @@ import api from '@/api/axios'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
-import AdminActionDropdown from '@/components/admin/AdminActionDropdown.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import { useToastStore } from '@/stores/toast'
 
 const AlbumSongsTable = defineComponent({
@@ -627,6 +656,40 @@ watch(() => ({ ...filters }), () => {
     fetchStats()
   }, 300)
 }, { deep: true })
+
+const searchHistory = ref(JSON.parse(localStorage.getItem('adminAlbumsSearchHistory') || '[]'))
+const showHistory = ref(false)
+
+const handleEnter = () => {
+  const term = filters.search.trim()
+  if (term && !searchHistory.value.includes(term)) {
+    searchHistory.value.unshift(term)
+    if (searchHistory.value.length > 5) searchHistory.value.pop()
+    localStorage.setItem('adminAlbumsSearchHistory', JSON.stringify(searchHistory.value))
+  }
+  showHistory.value = false
+}
+
+const selectHistoryItem = (item) => {
+  filters.search = item
+  showHistory.value = false
+}
+
+const clearSearch = () => {
+  filters.search = ''
+  showHistory.value = false
+}
+
+const handleBlur = () => {
+  setTimeout(() => {
+    showHistory.value = false
+  }, 200)
+}
+
+const removeHistoryItem = (item) => {
+  searchHistory.value = searchHistory.value.filter(i => i !== item)
+  localStorage.setItem('adminAlbumsSearchHistory', JSON.stringify(searchHistory.value))
+}
 
 watch(() => route.params.id, () => {
   if (isDetailMode.value) fetchDetail()

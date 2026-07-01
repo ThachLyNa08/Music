@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 
 const router = useRouter()
 
@@ -39,46 +41,63 @@ const kpiCards = computed(() => {
       title: 'Tổng bài hát',
       value: total,
       subtitle: 'Trong thư viện',
-      icon: 'library_music',
-      tone: 'blue'
+      icon: 'library',
+      tone: 'blue',
+      filterState: { status: 'all', provider: 'all' }
     },
     {
       title: 'Có lyrics',
       value: s.songsWithLyrics || 0,
       subtitle: `${coverageRate}% đã có lời`,
-      icon: 'check_circle',
-      tone: 'green'
+      icon: 'check-circle',
+      tone: 'green',
+      filterState: { status: 'has_lyrics', provider: 'all' }
     },
     {
       title: 'Đồng bộ',
       value: s.syncedLyricsCount || 0,
       subtitle: 'Có timestamp',
-      icon: 'format_align_left',
-      tone: 'purple'
+      icon: 'karaoke',
+      tone: 'purple',
+      filterState: { status: 'synced', provider: 'all' }
     },
     {
       title: 'Lyrics thường',
       value: s.plainLyricsCount || 0,
       subtitle: 'Chưa có timestamp',
-      icon: 'notes',
-      tone: 'amber'
+      icon: 'article',
+      tone: 'amber',
+      filterState: { status: 'plain', provider: 'all' }
     },
     {
       title: 'LRCLIB',
       value: s.lrclibCount || 0,
       subtitle: 'Nguồn tự động',
-      icon: 'cloud_download',
-      tone: 'cyan'
+      icon: 'download',
+      tone: 'cyan',
+      filterState: { status: 'all', provider: 'LRCLIB' }
     },
     {
       title: 'Thiếu lyrics',
       value: s.songsMissingLyrics || 0,
       subtitle: 'Cần bổ sung',
       icon: 'warning',
-      tone: 'rose'
+      tone: 'rose',
+      filterState: { status: 'missing', provider: 'all' }
     }
   ]
 })
+
+const isKpiActive = (item) => {
+  if (!item.filterState) return false
+  return Object.entries(item.filterState).every(([k, v]) => filters.value[k] === v)
+}
+
+const applyKpiFilter = (item) => {
+  if (!item.filterState) return
+  filters.value = { ...filters.value, status: 'all', provider: 'all', market: 'all' }
+  Object.assign(filters.value, item.filterState)
+}
 
 const filters = ref({
   q: '',
@@ -86,6 +105,54 @@ const filters = ref({
   provider: 'all',
   market: 'all'
 })
+
+const searchInput = ref('')
+const searchHistory = ref(JSON.parse(localStorage.getItem('adminLyricsSearchHistory') || '[]'))
+const showHistory = ref(false)
+let searchTimeout = null
+
+const handleSearchInput = () => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    filters.value.q = searchInput.value.trim()
+  }, 500)
+}
+
+const handleEnter = () => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  const term = searchInput.value.trim()
+  filters.value.q = term
+  if (term && !searchHistory.value.includes(term)) {
+    searchHistory.value.unshift(term)
+    if (searchHistory.value.length > 5) searchHistory.value.pop()
+    localStorage.setItem('adminLyricsSearchHistory', JSON.stringify(searchHistory.value))
+  }
+  showHistory.value = false
+}
+
+const selectHistoryItem = (item) => {
+  searchInput.value = item
+  filters.value.q = item
+  showHistory.value = false
+}
+
+const clearSearch = () => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchInput.value = ''
+  filters.value.q = ''
+  showHistory.value = false
+}
+
+const handleBlur = () => {
+  setTimeout(() => {
+    showHistory.value = false
+  }, 200)
+}
+
+const removeHistoryItem = (item) => {
+  searchHistory.value = searchHistory.value.filter(i => i !== item)
+  localStorage.setItem('adminLyricsSearchHistory', JSON.stringify(searchHistory.value))
+}
 
 const fetchSummary = async () => {
   try {
@@ -120,6 +187,7 @@ const fetchSongs = async (page = 1) => {
 
 const resetFilters = () => {
   filters.value = { q: '', status: 'all', provider: 'all', market: 'all' }
+  searchInput.value = ''
   fetchSongs(1)
 }
 
@@ -206,64 +274,82 @@ onMounted(() => {
           :show-icon="false"
           compact
           :loading="loading && !summary.totalSongs"
+          @click="applyKpiFilter(item)"
+          class="cursor-pointer hover:bg-slate-50"
         />
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm">
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="flex-1 min-w-[200px]">
-            <label class="block text-xs font-medium text-slate-500 mb-1.5">Tìm kiếm</label>
-            <input v-model.lazy="filters.q" type="text" placeholder="Bài hát, nghệ sĩ..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <AdminFilterBar>
+        <div class="flex-1 min-w-[200px] relative">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Tìm kiếm</label>
+          <div class="relative">
+            <input 
+              v-model="searchInput" 
+              @input="handleSearchInput"
+              @keyup.enter="handleEnter()"
+              @focus="showHistory = true"
+              @blur="handleBlur"
+              type="text" 
+              placeholder="Nhập tên bài hát, nghệ sĩ để tìm kiếm. " 
+              class="w-full pl-3 pr-8 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <button v-if="searchInput" @click="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              <MfIcon name="close" size="16" />
+            </button>
           </div>
-          <div class="w-40">
-            <label class="block text-xs font-medium text-slate-500 mb-1.5">Trạng thái</label>
-            <select v-model="filters.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="all">Tất cả</option>
-              <option value="missing">Thiếu lyrics</option>
-              <option value="has_lyrics">Có lyrics</option>
-              <option value="synced">Lyrics đồng bộ</option>
-              <option value="plain">Lyrics thường</option>
-            </select>
+          <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+            <div class="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-slate-100 flex justify-between">
+              Lịch sử tìm kiếm
+            </div>
+            <ul>
+              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+                <span class="text-sm text-slate-700 flex-1 truncate"><MfIcon name="history" size="14" class="inline align-middle mr-1 text-slate-400" /> {{ item }}</span>
+                <button @mousedown.prevent.stop="removeHistoryItem(item)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500">
+                  <MfIcon name="close" size="14" />
+                </button>
+              </li>
+            </ul>
           </div>
-          <div class="w-40">
-            <label class="block text-xs font-medium text-slate-500 mb-1.5">Provider</label>
-            <select v-model="filters.provider" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="all">Tất cả</option>
-              <option value="LRCLIB">LRCLIB</option>
-              <option value="MANUAL">Manual</option>
-            </select>
-          </div>
-          <button @click="resetFilters" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
-            Reset
-          </button>
         </div>
-      </div>
+        <div class="w-40">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Trạng thái</label>
+          <select v-model="filters.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="all">Tất cả</option>
+            <option value="missing">Thiếu lyrics</option>
+            <option value="has_lyrics">Có lyrics</option>
+            <option value="synced">Lyrics đồng bộ</option>
+            <option value="plain">Lyrics thường</option>
+          </select>
+        </div>
+        <div class="w-40">
+          <label class="block text-xs font-medium text-slate-500 mb-1.5">Provider</label>
+          <select v-model="filters.provider" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="all">Tất cả</option>
+            <option value="LRCLIB">LRCLIB</option>
+            <option value="MANUAL">Manual</option>
+          </select>
+        </div>
+        <button @click="resetFilters" class="px-3 py-2 h-[38px] mt-[auto] text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+          Reset
+        </button>
+      </AdminFilterBar>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[500px]">
-        <div ref="tableContainer" class="overflow-auto flex-1 relative">
-          <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[900px]">
-            <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
-              <tr>
-                <th class="px-4 py-3 font-semibold text-black w-20">Cover</th>
-                <th class="px-4 py-3 font-semibold text-black w-[35%]">Bài hát</th>
-                <th class="px-4 py-3 font-semibold text-black w-[25%]">Nghệ sĩ</th>
-                <th class="px-4 py-3 font-semibold text-black w-32">Trạng thái</th>
-                <th class="px-4 py-3 font-semibold text-black w-32">Provider</th>
-                <th class="px-4 py-3 font-semibold text-black text-right w-40 sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 relative">
-              <tr v-if="loading && songs.length === 0" class="animate-pulse">
-                <td colspan="6" class="p-8 text-center text-slate-400">Đang tải...</td>
-              </tr>
-              <tr v-else-if="!loading && songs.length === 0">
-                <td colspan="6" class="p-8 text-center text-slate-400">Không tìm thấy bài hát nào</td>
-              </tr>
-              <template v-else>
-                <tr v-for="song in songs" :key="song.song_id" class="hover:bg-slate-50 transition group" :class="{'opacity-50 pointer-events-none': loading}">
-                  <td class="px-4 py-3">
+      <AdminTableShell maxHeight="380px" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
+        <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[900px]">
+          <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
+            <tr>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-20">Cover</th>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[35%]">Bài hát</th>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[25%]">Nghệ sĩ</th>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-32">Trạng thái</th>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-32">Provider</th>
+              <th class="px-4 py-3 font-semibold text-black uppercase text-xs text-right w-40 sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 relative">
+              <tr v-for="song in songs" :key="song.song_id" class="hover:bg-slate-50 transition group" :class="{'opacity-50 pointer-events-none': loading}">
+                <td class="px-4 py-3">
                   <img :src="song.cover_url" class="w-10 h-10 rounded object-cover border border-slate-200">
                 </td>
                 <td class="px-4 py-3 font-medium text-slate-800 truncate" :title="song.title">{{ song.title }}</td>
@@ -282,18 +368,16 @@ onMounted(() => {
                     Xem / Sửa lyrics
                   </button>
                 </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-        
-        <!-- Pagination -->
-        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50" v-if="pagination.total > 0">
-          <p class="text-sm text-slate-500">{{ displayRange }}</p>
-          <div v-if="pagination.totalPages > 1">
-            <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
-          </div>
+              </tr>
+          </tbody>
+        </table>
+      </AdminTableShell>
+
+      <!-- Pagination -->
+      <div class="py-4 flex items-center justify-between" v-if="pagination.total > 0">
+        <p class="text-sm text-slate-500">{{ displayRange }}</p>
+        <div v-if="pagination.totalPages > 1">
+          <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
         </div>
       </div>
     </div>

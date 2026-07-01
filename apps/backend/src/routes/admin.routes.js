@@ -116,6 +116,7 @@ router.put('/albums/:id/songs/reorder', adminController.reorderAdminAlbumSongs);
 router.delete('/albums/:id', adminController.deleteAdminAlbum);
 
 // Quan ly nghe si
+router.get('/artists/summary', adminController.getArtistSummary);
 router.get('/artists', adminController.getAllArtists);
 router.post('/artists/sync-missing-metadata', adminController.syncMissingArtistMetadata);
 router.post('/artists/sync-missing-bio', adminController.syncMissingArtistBio);

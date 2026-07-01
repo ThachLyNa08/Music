@@ -1,12 +1,14 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import MfIcon from '@/components/common/MfIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToastStore()
 
 const songId = route.params.songId
 const currentSong = ref(null)
@@ -57,12 +59,12 @@ const fetchSongDetail = async () => {
         sync_type: currentSong.value.lyrics?.sync_type || 'NONE'
       }
     } else {
-      alert('Không tìm thấy bài hát')
+      toast.showToast('Không tìm thấy bài hát', 'error')
       router.push('/admin/lyrics')
     }
   } catch (err) {
     console.error('Failed to fetch song detail:', err)
-    alert('Không thể tải dữ liệu bài hát')
+    toast.showToast('Không thể tải dữ liệu bài hát', 'error')
     router.push('/admin/lyrics')
   } finally {
     loading.value = false
@@ -71,7 +73,7 @@ const fetchSongDetail = async () => {
 
 const confirmSave = () => {
   if (!isSyncedValid.value) {
-    alert('Timestamp synced lyrics không hợp lệ. Vui lòng kiểm tra lại định dạng [mm:ss.xx]')
+    toast.showToast('Timestamp synced lyrics không hợp lệ. Vui lòng kiểm tra lại định dạng [mm:ss.xx]', 'error')
     return
   }
   isConfirmOpen.value = true
@@ -82,12 +84,12 @@ const doSave = async () => {
     const res = await api.put(`/admin/lyrics/${songId}`, editForm.value)
     if (res.data?.success) {
       isConfirmOpen.value = false
-      alert('Đã cập nhật lyrics thành công (Provider: MANUAL)')
+      toast.showToast('Đã cập nhật lyrics thành công (Provider: MANUAL)', 'success')
       fetchSongDetail()
     }
   } catch (err) {
     console.error('Save failed:', err)
-    alert('Lỗi khi lưu lyrics')
+    toast.showToast('Lỗi khi lưu lyrics', 'error')
     isConfirmOpen.value = false
   }
 }
@@ -95,7 +97,7 @@ const doSave = async () => {
 const copyToClipboard = (text) => {
   if (text) {
     navigator.clipboard.writeText(text)
-    alert('Đã copy!')
+    toast.showToast('Đã copy!', 'success')
   }
 }
 

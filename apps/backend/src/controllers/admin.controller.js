@@ -2574,6 +2574,37 @@ exports.getAllTransactions = async (req, res, next) => {
 };
 
 // 4. Quản lý Nghệ sĩ
+exports.getArtistSummary = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        COUNT(*) AS totalArtists,
+        SUM(CASE WHEN avatar_url IS NOT NULL AND avatar_url <> '' THEN 1 ELSE 0 END) AS artistsWithImage,
+        SUM(CASE WHEN avatar_url IS NULL OR avatar_url = '' THEN 1 ELSE 0 END) AS artistsMissingImage,
+        SUM(CASE WHEN bio IS NOT NULL AND bio <> '' THEN 1 ELSE 0 END) AS artistsWithBio,
+        SUM(CASE WHEN bio IS NULL OR bio = '' THEN 1 ELSE 0 END) AS artistsMissingBio,
+        COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN a.id END) AS artistsWithSongs
+      FROM artists a
+      LEFT JOIN songs s ON a.id = s.artist_id
+    `);
+    
+    return res.json({
+      success: true,
+      data: {
+        totalArtists: Number(rows[0].totalArtists || 0),
+        artistsWithImage: Number(rows[0].artistsWithImage || 0),
+        artistsMissingImage: Number(rows[0].artistsMissingImage || 0),
+        artistsWithBio: Number(rows[0].artistsWithBio || 0),
+        artistsMissingBio: Number(rows[0].artistsMissingBio || 0),
+        artistsWithSongs: Number(rows[0].artistsWithSongs || 0)
+      }
+    });
+  } catch (error) {
+    console.error('getArtistSummary Error:', error);
+    next(error);
+  }
+};
+
 exports.getAllArtists = async (req, res, next) => {
   try {
     const [artists] = await pool.query(`

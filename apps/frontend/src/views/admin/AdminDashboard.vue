@@ -27,26 +27,14 @@
       <button type="button" @click="fetchData">Thử lại</button>
     </div>
 
-    <div class="stats-grid" aria-label="Chỉ số chính">
-      <div v-for="card in statCards" :key="card.key" class="stat-card">
-        <template v-if="loading">
-          <div class="skeleton icon-skeleton"></div>
-          <div class="stat-body">
-            <div class="skeleton line short"></div>
-            <div class="skeleton line value"></div>
-            <div class="skeleton line medium"></div>
-          </div>
-        </template>
-
-        <template v-else>
-          <div class="stat-icon" :class="card.tone" v-html="card.icon"></div>
-          <div class="stat-body">
-            <span class="stat-label">{{ card.label }}</span>
-            <strong class="stat-value">{{ card.value }}</strong>
-            <span class="stat-note">{{ card.note }}</span>
-          </div>
-        </template>
-      </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8" aria-label="Chỉ số chính">
+      <AdminKpiCard
+        v-for="card in statCards"
+        :key="card.key"
+        v-bind="card"
+        :loading="loading"
+        :show-icon="false"
+      />
     </div>
 
     <div v-if="auxiliaryWarning && !loading" class="inline-warning">
@@ -454,37 +442,34 @@ import {
 import { Bar, Line } from 'vue-chartjs'
 import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Filler)
 
 const loading = ref(true)
 const error = ref(null)
-const auxiliaryWarning = ref('')
+const auxiliaryWarning = ref(null)
+
 const stats = ref({})
-const rawCharts = ref({ revenue: [], genres: [] })
+const rawCharts = ref({ revenue: [], genres: [], users: [] })
+const songGroups = ref([])
+const listeningTrend = ref({ topSongs: [], series: [] })
+const topArtists = ref([])
+const transactions = ref([])
 const latestUsers = ref([])
 const quickOperations = ref(null)
-const topArtists = ref([])
-const songGroups = ref([])
-const transactions = ref([])
 const trendLoading = ref(true)
-const trendRange = ref('today')
-const listeningTrend = ref({ series: [], topSongs: [] })
 const topArtistLoading = ref(true)
-const topArtistRange = ref('7d')
 const topArtistTrend = ref({ series: [], topArtists: [] })
 
+const trendRange = ref('today')
+const topArtistRange = ref('7d')
 const trendRangeOptions = [
   { label: 'Hôm nay', value: 'today' },
   { label: '7 ngày', value: '7d' },
   { label: '30 ngày', value: '30d' }
 ]
-
-const iconUsers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11a4 4 0 1 0-8 0m8 0a4 4 0 0 1-8 0m8 0c2.2.7 4 2.2 4 4.5V19H4v-3.5C4 13.2 5.8 11.7 8 11"/></svg>'
-const iconSongs = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 18V5l10-2v13M9 18a3 3 0 1 1-2-2.83M19 16a3 3 0 1 1-2-2.83M9 9l10-2"/></svg>'
-const iconListens = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 0 1 16 0M4 12v3a2 2 0 0 0 2 2h1v-7H6a2 2 0 0 0-2 2Zm16 0v3a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2Z"/></svg>'
-const iconRevenue = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m3-9.5A3 3 0 0 0 12 7c-1.7 0-3 1-3 2.3 0 3.4 6 1.4 6 4.8 0 1.3-1.3 2.4-3 2.4a3.4 3.4 0 0 1-3.2-1.8"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>'
 
 const totalListens = computed(() => {
   const allGroup = songGroups.value.find(group => group.key === 'ALL')
@@ -495,35 +480,35 @@ const totalListens = computed(() => {
 const statCards = computed(() => [
   {
     key: 'songs',
-    label: 'Tổng bài hát',
+    title: 'Tổng bài hát',
     value: formatNumber(stats.value.totalSongs || 0),
-    note: `${formatNumber(activeSongs.value)} bài đang hoạt động`,
-    icon: iconSongs,
-    tone: 'tone-primary'
+    subtitle: `${formatNumber(activeSongs.value)} bài đang hoạt động`,
+    icon: 'music',
+    tone: 'purple'
   },
   {
     key: 'users',
-    label: 'Tổng người dùng',
+    title: 'Tổng người dùng',
     value: formatNumber(stats.value.totalUsers || 0),
-    note: `${formatNumber(stats.value.totalPremium || 0)} tài khoản Premium`,
-    icon: iconUsers,
-    tone: 'tone-blue'
+    subtitle: `${formatNumber(stats.value.totalPremium || 0)} tài khoản Premium`,
+    icon: 'user',
+    tone: 'blue'
   },
   {
     key: 'listens',
-    label: 'Tổng lượt nghe',
+    title: 'Tổng lượt nghe',
     value: formatNumber(totalListens.value),
-    note: totalListens.value ? 'Tổng từ thống kê bài hát' : 'Chưa có lượt nghe',
-    icon: iconListens,
-    tone: 'tone-green'
+    subtitle: totalListens.value ? 'Tổng từ thống kê bài hát' : 'Chưa có lượt nghe',
+    icon: 'play',
+    tone: 'green'
   },
   {
     key: 'revenue',
-    label: 'Doanh thu Premium',
+    title: 'Doanh thu Premium',
     value: formatCurrency(stats.value.totalRevenue || 0),
-    note: 'Từ giao dịch thanh toán thành công',
-    icon: iconRevenue,
-    tone: 'tone-purple'
+    subtitle: 'Từ giao dịch thanh toán thành công',
+    icon: 'transaction',
+    tone: 'purple'
   }
 ])
 

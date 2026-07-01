@@ -9,7 +9,7 @@ export const useAdminSongStore = defineStore('adminSong', {
     statistics: null,
     pagination: {
       page: 1,
-      limit: 10,
+      limit: 20,
       total: 0,
       totalPages: 1
     },

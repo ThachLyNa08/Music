@@ -235,6 +235,56 @@ h1, h2,
   .font-body {
     font-family: 'Inter', sans-serif !important;
   }
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+.full-bleed {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+}
+@media (min-width: 1024px) {
+  .full-bleed {
+    width: auto;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    margin-top: -1.5rem;
+    margin-bottom: -1.5rem;
+  }
+}
+
+/* Admin Form Controls */
+@layer components {
+  .admin-input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(229 231 235);
+    background: white;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgb(17 24 39);
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  .admin-input:focus {
+    border-color: rgb(16 185 129);
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+  }
+  .dark .admin-input {
+    border-color: #273142;
+    background: #151c2b;
+    color: white;
+  }
+  .admin-label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    color: rgb(5 150 105);
+  }
+}
+
   .mf-title {
     font-family: 'Playfair Display', serif;
     font-weight: 700;

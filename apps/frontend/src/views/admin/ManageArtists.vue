@@ -1,31 +1,104 @@
 <template>
-  <div class="p-6 md:p-8 bg-gray-50 dark:bg-bg-base min-h-screen text-gray-800 dark:text-text-base font-sans">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
     <!-- Header -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <header class="py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4 z-20">
       <div>
-        <h1 class="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Quản lý Nghệ sĩ</h1>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Nghệ sĩ</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý danh sách ca sĩ, band nhạc và các nghệ sĩ trên hệ thống</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <AdminAddButton title="Thêm nghệ sĩ mới" @click="openAddModal" />
       </div>
-    </div>
+    </header>
 
-    <!-- Filters & Search -->
-    <div class="flex flex-col md:flex-row gap-4 mb-6">
+    <div class="p-6 flex flex-col space-y-5">
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 shrink-0">
+        <AdminKpiCard
+          v-for="item in artistKpiCards"
+          :key="item.title"
+          v-bind="item"
+          :loading="summaryLoading"
+          :show-icon="false"
+          compact
+        />
+      </div>
+
+      <!-- Filters & Search -->
+    <AdminFilterBar>
       <div class="relative flex-1">
         <MfIcon name="search" size="20" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-        <input v-model="searchQuery" type="text" placeholder="Tìm theo tên nghệ sĩ..." class="w-full pl-11 pr-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm" />
+        <input 
+          v-model="searchQuery" 
+          @keyup.enter="handleEnter"
+          @focus="showHistory = true"
+          @blur="handleBlur"
+          type="text" 
+          placeholder="Tìm theo tên nghệ sĩ..." 
+          class="admin-input pl-11 pr-10" 
+        />
+        <button v-if="searchQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+          <MfIcon name="close" size="18" />
+        </button>
+        <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg overflow-hidden">
+          <div class="px-3 py-2 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-bg-card border-b border-gray-100 dark:border-bg-border flex justify-between">
+            Lịch sử tìm kiếm
+          </div>
+          <ul>
+            <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer group transition-colors" @mousedown.prevent="selectHistoryItem(item)">
+              <span class="text-sm text-gray-700 dark:text-gray-200 flex-1 truncate font-medium"><MfIcon name="history" size="16" class="inline align-text-bottom mr-2 text-gray-400" /> {{ item }}</span>
+              <button @mousedown.prevent.stop="removeHistoryItem(item)" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-rose-500 transition-all">
+                <MfIcon name="close" size="16" />
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="relative w-full md:w-48" ref="genreDropdownRef">
+        <div class="relative cursor-pointer" @click="genreDropdownOpen = true">
+          <input 
+            v-model="genreSearchText" 
+            @focus="genreDropdownOpen = true"
+            placeholder="Tất cả thể loại" 
+            class="admin-input pr-8 cursor-pointer text-sm" 
+            :class="{ 'text-emerald-600 font-bold': filterMainGenre !== '' }"
+          />
+          <MfIcon name="expand_more" size="20" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }" />
+        </div>
+        
+        <div v-if="genreDropdownOpen" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg overflow-hidden flex flex-col">
+          <ul class="max-h-[160px] overflow-y-auto custom-scrollbar py-1">
+            <li 
+              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors" 
+              :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === '' }"
+              @click="selectGenre('')"
+            >
+              Tất cả thể loại
+            </li>
+            <li 
+              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors" 
+              :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === 'unclassified' }"
+              @click="selectGenre('unclassified')"
+            >
+              Chưa phân loại
+            </li>
+            <li 
+              v-for="g in filteredGenresList" 
+              :key="g"
+              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors"
+              :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === g }"
+              @click="selectGenre(g)"
+            >
+              {{ g }}
+            </li>
+            <li v-if="filteredGenresList.length === 0" class="px-3 py-2 text-sm text-gray-400 italic text-center">
+              Không tìm thấy
+            </li>
+          </ul>
+        </div>
       </div>
       <div class="w-full md:w-48">
-        <select v-model="filterMainGenre" class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm appearance-none cursor-pointer">
-          <option value="">Tất cả thể loại</option>
-          <option value="unclassified">Chưa phân loại</option>
-          <option v-for="g in mainGenresList" :key="g" :value="g">{{ g }}</option>
-        </select>
-      </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterSongCount" class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm appearance-none cursor-pointer">
+        <select v-model="filterSongCount" class="admin-input">
           <option value="all">Tất cả bài hát</option>
           <option value="0">Chưa có bài hát</option>
           <option value="1-10">1 - 10 bài</option>
@@ -34,42 +107,35 @@
         </select>
       </div>
       <div class="w-full md:w-48">
-        <select v-model="filterRegion" class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm appearance-none cursor-pointer">
+        <select v-model="filterRegion" class="admin-input">
           <option value="">Tất cả khu vực</option>
           <option v-for="r in regionsList" :key="r" :value="r">{{ r }}</option>
         </select>
       </div>
-      <AdminResetButton :disabled="loading" @click="resetFilters" />
-    </div>
+      <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
+    </AdminFilterBar>
 
     <!-- Data Table -->
-    <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl shadow-sm overflow-hidden">
-      <div v-if="loading" class="p-12 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-        <div class="w-10 h-10 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-        <p class="font-medium text-sm">Đang tải danh sách nghệ sĩ...</p>
-      </div>
-
-      <div v-else-if="paginatedArtists.length === 0" class="p-16 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-        <MfIcon name="person_off" size="64" className="mb-4 text-gray-300 dark:text-gray-600" />
-        <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">Không tìm thấy nghệ sĩ nào</h3>
-        <p class="text-sm dark:text-text-secondary">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
-      </div>
-
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
+    <AdminTableShell 
+      :loading="loading" 
+      :empty="!loading && paginatedArtists.length === 0" 
+      emptyTitle="Không tìm thấy nghệ sĩ nào" 
+      emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+    >
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
           <thead>
-            <tr class="bg-gray-50/50 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold border-b border-gray-100 dark:border-bg-border">
-              <th class="py-4 px-6">Metadata</th>
-              <th class="py-4 px-6">Nghệ sĩ</th>
-              <th class="py-4 px-6">Khu vực / Thế hệ</th>
-              <th class="py-4 px-6 text-center">Số bài hát</th>
-              <th class="py-4 px-6 text-center">Tổng lượt nghe</th>
-              <th class="py-4 px-6 text-right">Hành động</th>
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 w-48">Metadata</th>
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 min-w-[200px]">Nghệ sĩ</th>
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Khu vực / Thế hệ</th>
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Số bài hát</th>
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-center">Tổng lượt nghe</th>
+              <th class="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24 z-30 shadow-[-1px_0_0_0_#e2e8f0] dark:shadow-[-1px_0_0_0_#334155]">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group" :class="{ 'ring-2 ring-emerald-500 bg-emerald-50/80 dark:bg-emerald-500/20 z-10 relative': route.query.focus == artist.id }">
-              <td class="py-4 px-6">
+            <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group" :class="{ 'bg-emerald-50 dark:bg-emerald-500/10': route.query.focus == artist.id }">
+              <td class="py-2.5 px-3">
                 <div class="flex flex-wrap gap-1.5 max-w-[260px]">
                   <span v-for="issue in getArtistMetadataIssues(artist)" :key="issue.key" :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', issue.class]">
                     {{ issue.label }}
@@ -79,50 +145,41 @@
                   </span>
                 </div>
               </td>
-              <td class="py-4 px-6">
-                <div @click="goToDetail(artist.id)" class="flex items-center gap-4 max-w-[300px] cursor-pointer hover:opacity-80">
-                  <img :src="formatAvatarUrl(artist.avatar_url)" @error="handleImageError" class="w-12 h-12 rounded-full object-cover shadow-sm group-hover:shadow transition-shadow border-2 border-white dark:border-gray-800" />
-                  <div class="flex flex-col overflow-hidden">
+              <td class="py-2.5 px-3">
+                <div @click="goToDetail(artist.id)" class="flex items-center gap-3 max-w-[300px] cursor-pointer hover:opacity-80">
+                  <img :src="formatAvatarUrl(artist.avatar_url)" @error="handleImageError" class="w-9 h-9 rounded-full object-cover shadow-sm bg-gray-100" />
+                  <div class="flex flex-col min-w-0">
                     <span class="font-bold text-gray-900 dark:text-white truncate" :title="artist.name">{{ artist.name }}</span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 font-medium truncate" :title="artist.bio">{{ artist.bio || 'Chưa có tiểu sử' }}</span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 truncate" :title="artist.bio">{{ artist.bio || 'Chưa có tiểu sử' }}</span>
                   </div>
                 </div>
               </td>
-              <td class="py-4 px-6">
-                <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold', getRegionBadgeClass(artist.region)]">
+              <td class="py-2.5 px-3 text-center">
+                <span :class="['inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase', getRegionBadgeClass(artist.region)]">
                   {{ artist.region || 'Khác' }}
                 </span>
               </td>
-              <td class="py-4 px-6 text-center font-semibold text-gray-700 dark:text-gray-300">
+              <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
                 {{ artist.song_count }}
               </td>
-              <td class="py-4 px-6 text-center font-semibold text-gray-700 dark:text-gray-300">
+              <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
                 {{ formatNumber(artist.total_plays ?? artist.totalPlays ?? 0) }}
               </td>
-              <td class="py-4 px-6 text-right">
-                <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button @click="goToDetail(artist.id)" class="p-2 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors focus:outline-none" title="Xem chi tiết & Danh sách bài hát">
-                    <MfIcon name="visibility" size="20" />
-                  </button>
-                  <button @click="openEditModal(artist)" class="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors focus:outline-none" title="Chỉnh sửa">
-                    <MfIcon name="edit" size="20" />
-                  </button>
-                  <button @click="confirmDelete(artist)" class="p-2 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors focus:outline-none" title="Xóa nghệ sĩ">
-                    <MfIcon name="delete" size="20" />
-                  </button>
+              <td class="py-2.5 px-3 text-right sticky right-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors shadow-[-1px_0_0_0_#f3f4f6] dark:shadow-[-1px_0_0_0_#1e293b]">
+                <div class="flex justify-end">
+                  <AdminActionMenu :actions="getArtistActions(artist)" />
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </AdminTableShell>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Hiển thị {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredArtists.length) }} trong {{ filteredArtists.length }} nghệ sĩ</span>
+      <div class="py-4 flex items-center justify-between" v-if="totalPages > 1">
+        <span class="text-sm text-slate-500 hidden md:block">Hiển thị {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredArtists.length) }} trong {{ filteredArtists.length }} nghệ sĩ</span>
         <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
       </div>
-    </div>
 
     <!-- Centered Modal (Edit/Add/View) -->
     <Teleport to="body">
@@ -256,19 +313,24 @@
       :loading="confirmState.loading"
       @confirm="handleConfirm"
     />
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { onClickOutside } from '@vueuse/core'
 import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
-import MfIcon from '@/components/common/MfIcon.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -283,6 +345,27 @@ const confirmState = ref({
   loading: false,
   action: null
 })
+
+function getArtistActions(artist) {
+  return [
+    {
+      label: 'Xem chi tiết',
+      icon: 'visibility',
+      onClick: () => goToDetail(artist.id)
+    },
+    {
+      label: 'Chỉnh sửa',
+      icon: 'edit',
+      onClick: () => openEditModal(artist)
+    },
+    {
+      label: 'Xóa nghệ sĩ',
+      icon: 'delete',
+      danger: true,
+      onClick: () => confirmDelete(artist)
+    }
+  ]
+}
 
 function openConfirm(options) {
   confirmState.value = { ...confirmState.value, ...options, open: true, loading: false }
@@ -300,9 +383,21 @@ async function handleConfirm() {
 }
 
 // State
+const summary = ref({
+  totalArtists: 0,
+  artistsWithImage: 0,
+  artistsMissingImage: 0,
+  artistsWithBio: 0,
+  artistsMissingBio: 0,
+  artistsWithSongs: 0
+})
+const summaryLoading = ref(false)
+
 const loading = ref(true)
 const artists = ref([])
 const searchQuery = ref('')
+const searchHistory = ref(JSON.parse(localStorage.getItem('adminArtistsSearchHistory') || '[]'))
+const showHistory = ref(false)
 const filterRegion = ref('')
 const filterMainGenre = ref('')
 const filterSongCount = ref('all')
@@ -311,13 +406,58 @@ const syncingMissingBioState = ref(false)
 const syncingArtistId = ref(null)
 const syncingBioArtistId = ref(null)
 
+const artistKpiCards = computed(() => [
+  {
+    title: 'Tổng nghệ sĩ',
+    value: summary.value.totalArtists,
+    subtitle: 'Trong thư viện',
+    icon: 'users',
+    tone: 'blue'
+  },
+  {
+    title: 'Có ảnh',
+    value: summary.value.artistsWithImage,
+    subtitle: 'Đã có avatar/cover',
+    icon: 'image',
+    tone: 'green'
+  },
+  {
+    title: 'Thiếu ảnh',
+    value: summary.value.artistsMissingImage,
+    subtitle: 'Cần bổ sung hình ảnh',
+    icon: 'alert-triangle',
+    tone: 'rose'
+  },
+  {
+    title: 'Có tiểu sử',
+    value: summary.value.artistsWithBio,
+    subtitle: 'Đã có mô tả',
+    icon: 'file-text',
+    tone: 'purple'
+  },
+  {
+    title: 'Thiếu tiểu sử',
+    value: summary.value.artistsMissingBio,
+    subtitle: 'Cần crawl/bổ sung',
+    icon: 'edit',
+    tone: 'amber'
+  },
+  {
+    title: 'Có bài hát',
+    value: summary.value.artistsWithSongs,
+    subtitle: 'Đã gắn dữ liệu nhạc',
+    icon: 'music',
+    tone: 'cyan'
+  }
+])
+
 const regionsList = [
   'VPOP', 'KPOP', 'US-UK', 'Khác'
 ]
 
 // Pagination
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(20)
 
 // Modal State
 const isSlideOverOpen = ref(false)
@@ -345,8 +485,21 @@ const form = reactive({
 })
 
 // Fetch Data
+async function fetchArtistSummary() {
+  summaryLoading.value = true
+  try {
+    const res = await api.get('/admin/artists/summary')
+    summary.value = res.data?.data || res.data || summary.value
+  } catch (err) {
+    console.error('Lỗi khi tải summary:', err)
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
 async function fetchArtists() {
   loading.value = true
+  fetchArtistSummary()
   try {
     const res = await api.get('/admin/artists')
     artists.value = res.data.data
@@ -465,15 +618,80 @@ const mainGenresList = computed(() => {
   return Array.from(genres).sort()
 })
 
+const genreDropdownRef = ref(null)
+const genreDropdownOpen = ref(false)
+const genreSearchText = ref('')
+
+onClickOutside(genreDropdownRef, () => {
+  genreDropdownOpen.value = false
+  if (filterMainGenre.value === '') genreSearchText.value = ''
+  else if (filterMainGenre.value === 'unclassified') genreSearchText.value = 'Chưa phân loại'
+  else genreSearchText.value = filterMainGenre.value
+})
+
+const filteredGenresList = computed(() => {
+  if (!genreSearchText.value) return mainGenresList.value
+  const query = genreSearchText.value.toLowerCase()
+  if (
+    (filterMainGenre.value === '' && query === '') ||
+    (filterMainGenre.value === 'unclassified' && query === 'chưa phân loại') ||
+    (filterMainGenre.value && filterMainGenre.value.toLowerCase() === query)
+  ) {
+    return mainGenresList.value
+  }
+  return mainGenresList.value.filter(g => g.toLowerCase().includes(query))
+})
+
+function selectGenre(val) {
+  filterMainGenre.value = val
+  if (val === '') genreSearchText.value = ''
+  else if (val === 'unclassified') genreSearchText.value = 'Chưa phân loại'
+  else genreSearchText.value = val
+  genreDropdownOpen.value = false
+}
+
 // Watch filters to reset page
 watch([searchQuery, filterRegion, filterMainGenre, filterSongCount], () => {
   currentPage.value = 1
 })
 
+function handleEnter() {
+  const term = searchQuery.value.trim()
+  if (term && !searchHistory.value.includes(term)) {
+    searchHistory.value.unshift(term)
+    if (searchHistory.value.length > 5) searchHistory.value.pop()
+    localStorage.setItem('adminArtistsSearchHistory', JSON.stringify(searchHistory.value))
+  }
+  showHistory.value = false
+}
+
+function handleBlur() {
+  setTimeout(() => {
+    showHistory.value = false
+  }, 200)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  showHistory.value = false
+}
+
+function selectHistoryItem(item) {
+  searchQuery.value = item
+  showHistory.value = false
+  handleEnter()
+}
+
+function removeHistoryItem(item) {
+  searchHistory.value = searchHistory.value.filter(i => i !== item)
+  localStorage.setItem('adminArtistsSearchHistory', JSON.stringify(searchHistory.value))
+}
+
 function resetFilters() {
   searchQuery.value = ''
   filterRegion.value = ''
   filterMainGenre.value = ''
+  genreSearchText.value = ''
   filterSongCount.value = 'all'
   currentPage.value = 1
 }

@@ -1,105 +1,84 @@
 <template>
-  <div class="manage-premium page-fade-in">
-    <header class="header-section">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
+    <header class="py-6 bg-white dark:bg-bg-card border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-20">
       <div>
-        <h1 class="page-title">Quản lý Premium</h1>
-        <p class="page-subtitle">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Premium</h1>
+        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
       </div>
     </header>
 
+    <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- Overview Stats Cards -->
-    <div class="stats-overview">
-      <!-- 1. Người dùng Premium -->
-      <div class="summary-card">
-        <div class="card-icon" style="background: #eef2ff; color: #6366f1;">
-          <MfIcon name="workspace_premium" size="24" />
-        </div>
-        <div class="card-info">
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-label"></div>
-          <span v-else class="card-label">Người dùng Premium</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-value"></div>
-          <span v-else class="card-value">{{ summary?.totalPremiumUsers ?? 0 }}</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-subline" style="margin-top: 6px;"></div>
-          <div v-else class="card-subline">
-            <span class="text-emerald-600">{{ summary?.activePremiumUsers ?? 0 }} đang hoạt động</span> &middot; 
-            <span class="text-rose-500">{{ summary?.expiredPremiumUsers ?? 0 }} đã hết hạn</span>
-          </div>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <AdminKpiCard 
+        title="Người dùng Premium" 
+        :value="summary?.totalPremiumUsers ?? 0" 
+        icon="workspace_premium" 
+        color="indigo" 
+        :loading="isSummaryLoading"
+      >
+        <template #subtext v-if="!isSummaryLoading">
+          <span class="text-emerald-600">{{ summary?.activePremiumUsers ?? 0 }} đang hoạt động</span> &middot; 
+          <span class="text-rose-500">{{ summary?.expiredPremiumUsers ?? 0 }} đã hết hạn</span>
+        </template>
+      </AdminKpiCard>
       
-      <!-- 2. Sắp hết hạn -->
-      <div class="summary-card">
-        <div class="card-icon" style="background: #fffbeb; color: #f59e0b;">
-          <MfIcon name="history" size="24" />
-        </div>
-        <div class="card-info">
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-label"></div>
-          <span v-else class="card-label">Sắp hết hạn (7 ngày)</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-value"></div>
-          <span v-else class="card-value">{{ summary?.expiringSoonUsers ?? 0 }}</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-subline" style="margin-top: 6px;"></div>
-          <div v-else class="card-subline" :class="(summary?.expiringSoonUsers ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
+      <AdminKpiCard 
+        title="Sắp hết hạn (7 ngày)" 
+        :value="summary?.expiringSoonUsers ?? 0" 
+        icon="history" 
+        color="amber" 
+        :loading="isSummaryLoading"
+      >
+        <template #subtext v-if="!isSummaryLoading">
+          <span :class="(summary?.expiringSoonUsers ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
             {{ (summary?.expiringSoonUsers ?? 0) > 0 ? 'Cần gia hạn ngay' : 'Không có cảnh báo' }}
-          </div>
-        </div>
-      </div>
+          </span>
+        </template>
+      </AdminKpiCard>
       
-      <!-- 3. Doanh thu tháng này -->
-      <div class="summary-card">
-        <div class="card-icon" style="background: #eff6ff; color: #3b82f6;">
-          <MfIcon name="payments" size="24" />
-        </div>
-        <div class="card-info">
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-label"></div>
-          <span v-else class="card-label">Doanh thu tháng này</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-value" style="width: 100px;"></div>
-          <span v-else class="card-value">{{ formatCurrency(summary?.monthlyPremiumRevenue) }}</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-subline" style="margin-top: 6px;"></div>
-          <div v-else class="card-subline text-slate-400">Từ giao dịch đã thanh toán</div>
-        </div>
-      </div>
+      <AdminKpiCard 
+        title="Doanh thu tháng này" 
+        :value="formatCurrency(summary?.monthlyPremiumRevenue)" 
+        icon="payments" 
+        color="blue" 
+        :loading="isSummaryLoading"
+      >
+        <template #subtext v-if="!isSummaryLoading">
+          <span class="text-slate-400">Từ giao dịch đã thanh toán</span>
+        </template>
+      </AdminKpiCard>
       
-      <!-- 4. Giao dịch đang chờ -->
-      <div class="summary-card">
-        <div class="card-icon" style="background: #f1f5f9; color: #64748b;">
-          <MfIcon name="history" size="24" />
-        </div>
-        <div class="card-info">
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-label"></div>
-          <span v-else class="card-label">Giao dịch đang chờ</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-value"></div>
-          <span v-else class="card-value">{{ summary?.pendingPremiumTransactions ?? 0 }}</span>
-          
-          <div v-if="isSummaryLoading" class="skeleton-box skeleton-subline" style="margin-top: 6px;"></div>
-          <div v-else class="card-subline" :class="(summary?.pendingPremiumTransactions ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
+      <AdminKpiCard 
+        title="Giao dịch đang chờ" 
+        :value="summary?.pendingPremiumTransactions ?? 0" 
+        icon="history" 
+        color="slate" 
+        :loading="isSummaryLoading"
+      >
+        <template #subtext v-if="!isSummaryLoading">
+          <span :class="(summary?.pendingPremiumTransactions ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
             {{ (summary?.pendingPremiumTransactions ?? 0) > 0 ? 'Chờ xác nhận thanh toán' : 'Không có giao dịch chờ' }}
-          </div>
-        </div>
-      </div>
+          </span>
+        </template>
+      </AdminKpiCard>
     </div>
 
     <!-- Filters & Search -->
-    <div class="filter-bar">
-      <div class="search-input-wrapper">
-        <MfIcon name="search" size="18" className="search-icon" />
+    <AdminFilterBar>
+      <div class="relative flex-1 min-w-[200px]">
+        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input 
           v-model="filterForm.q" 
           @keyup.enter="handleFilterChange" 
           type="text" 
           placeholder="Tìm theo tên, email hoặc ID..." 
-          class="search-field" 
+          class="admin-input pl-9" 
           :disabled="isInitialLoading"
         />
       </div>
-      <div class="filter-select-wrapper">
-        <select v-model="filterForm.status" @change="handleFilterChange" class="filter-select" :disabled="isInitialLoading">
+      <div class="w-full md:w-48">
+        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input" :disabled="isInitialLoading">
           <option value="Tất cả Premium">Tất cả Premium</option>
           <option value="Đang hoạt động">Đang hoạt động</option>
           <option value="Sắp hết hạn">Sắp hết hạn</option>
@@ -107,14 +86,14 @@
           <option value="Chưa Premium">Chưa Premium</option>
         </select>
       </div>
-      <div class="filter-select-wrapper">
-        <select v-model="filterForm.plan" @change="handleFilterChange" class="filter-select" :disabled="isPlansLoading">
+      <div class="w-full md:w-48">
+        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input" :disabled="isPlansLoading">
           <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
           <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
         </select>
       </div>
-      <div class="filter-select-wrapper">
-        <select v-model="filterForm.sort" @change="handleFilterChange" class="filter-select" :disabled="isInitialLoading">
+      <div class="w-full md:w-48">
+        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input" :disabled="isInitialLoading">
           <option value="">Sắp xếp mặc định</option>
           <option value="Hết hạn gần nhất">Hết hạn gần nhất</option>
           <option value="Mới nâng cấp gần đây">Mới nâng cấp gần đây</option>
@@ -122,152 +101,87 @@
           <option value="Tên A-Z">Tên A-Z</option>
         </select>
       </div>
-      <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" />
-    </div>
+      <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="h-[38px] mt-[auto]" />
+    </AdminFilterBar>
 
     <!-- Main Content -->
-    <div class="table-container shadow-3d">
-      <table class="users-table">
-        <thead>
-          <tr>
-            <th style="width: 24%">Người dùng</th>
-            <th style="width: 14%">Trạng thái</th>
-            <th style="width: 14%">Gói hiện tại</th>
-            <th style="width: 14%">Ngày hết hạn</th>
-            <th style="width: 11%">Tổng chi</th>
-            <th style="width: 18%; white-space: nowrap;">Lần cuối thanh toán</th>
-            <th style="text-align: right; width: 5%"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Initial Skeleton Loading -->
-          <template v-if="isInitialLoading || (isTableLoading && users.length === 0)">
-            <tr v-for="i in 8" :key="'skel-row-'+i" class="user-row">
-              <td>
-                <div class="user-info">
-                  <div class="skeleton-box skeleton-avatar"></div>
-                  <div class="user-details">
-                    <div class="skeleton-box skeleton-text"></div>
-                    <div class="skeleton-box skeleton-text-short"></div>
-                  </div>
-                </div>
-              </td>
-              <td><div class="skeleton-box skeleton-badge"></div></td>
-              <td><div class="skeleton-box skeleton-badge" style="width: 70px;"></div></td>
-              <td>
-                <div class="expiry-cell">
-                  <div class="skeleton-box skeleton-text"></div>
-                  <div class="skeleton-box skeleton-text-short"></div>
-                </div>
-              </td>
-              <td><div class="skeleton-box skeleton-text" style="width: 70px;"></div></td>
-              <td>
-                <div class="last-paid-cell">
-                  <div class="skeleton-box skeleton-text"></div>
-                  <div class="skeleton-box skeleton-text-short" style="width: 60px;"></div>
-                </div>
-              </td>
-              <td><div class="skeleton-box skeleton-avatar" style="width: 24px; height: 24px; margin-left: auto;"></div></td>
+    <div class="flex-1 flex flex-col mb-8">
+      <AdminTableShell 
+        :loading="isInitialLoading || isTableLoading" 
+        :empty="!(isInitialLoading || isTableLoading) && users.length === 0" 
+        emptyTitle="Không tìm thấy người dùng" 
+        emptySubtitle="Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm."
+      >
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[250px]">Người dùng</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Trạng thái</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Gói hiện tại</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Ngày hết hạn</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Tổng chi</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Lần cuối thanh toán</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
             </tr>
-          </template>
-
-          <!-- Empty State -->
-          <tr v-else-if="users.length === 0 && !isTableLoading">
-            <td colspan="7" class="empty-state-cell">
-              <div class="empty-state">
-                <MfIcon name="workspace_premium" size="48" />
-                <h3>Không tìm thấy người dùng</h3>
-                <p>Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm.</p>
-              </div>
-            </td>
-          </tr>
-
-          <!-- Data Rows -->
-          <template v-else>
-            <tr v-for="(u, index) in users" :key="u.user_id" class="user-row" @click="goToDetail(u.user_id)" style="cursor: pointer;">
-              <td>
-                <div class="user-info">
-                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="user-avatar-img" :alt="u.name" />
-                  <div v-else class="user-avatar-placeholder">
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
+            <tr v-for="(u, index) in users" :key="u.user_id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group cursor-pointer" @click="goToDetail(u.user_id)">
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-3">
+                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover" :alt="u.name" />
+                  <div v-else class="w-10 h-10 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
                     {{ u.name.charAt(0).toUpperCase() }}
                   </div>
-                  <div class="user-details">
-                    <span class="user-name">{{ u.name }}</span>
-                    <span class="user-email">{{ u.email }}</span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="font-bold text-gray-900 dark:text-white truncate">{{ u.name }}</span>
+                    <span class="text-xs text-gray-500 truncate">{{ u.email }}</span>
                   </div>
                 </div>
               </td>
-              <td>
-                <span class="status-badge" :class="u.premium_status">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="u.premium_status === 'active' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : (u.premium_status === 'expiring_soon' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' : (u.premium_status === 'expired' ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'))">
                   {{ formatPremiumStatus(u.premium_status) }}
                 </span>
               </td>
-              <td>
-                <span class="plan-badge" :class="{'active': u.plan_id}">
+              <td class="py-3 px-4">
+                <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider" :class="u.plan_id ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">
                   {{ (u.plan_name && u.plan_name !== '-') ? u.plan_name : 'Free' }}
                 </span>
               </td>
-              <td>
-                <div class="expiry-cell">
-                  <span class="expiry-date" :class="{'text-red-500': u.premium_status === 'expired' || u.premium_status === 'expiring_soon'}">
+              <td class="py-3 px-4">
+                <div class="flex flex-col gap-0.5">
+                  <span class="font-bold" :class="{'text-rose-500': u.premium_status === 'expired' || u.premium_status === 'expiring_soon', 'text-gray-900 dark:text-white': u.premium_status === 'active'}">
                     {{ u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString('vi-VN') : '—' }}
                   </span>
-                  <span v-if="u.days_remaining !== null" class="expiry-days" :class="{'text-red-500': u.days_remaining <= 7, 'text-slate-400': u.days_remaining < 0}">
+                  <span v-if="u.days_remaining !== null" class="text-[10px] font-bold" :class="{'text-rose-500': u.days_remaining <= 7, 'text-gray-500': u.days_remaining > 7, 'text-gray-400': u.days_remaining < 0}">
                     ({{ formatDaysRemaining(u.days_remaining) }})
                   </span>
                 </div>
               </td>
-              <td>
-                <span class="amount-val">{{ formatCurrency(u.total_spent) }}</span>
+              <td class="py-3 px-4">
+                <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(u.total_spent) }}</span>
               </td>
-              <td>
-                <div v-if="u.last_paid_at" class="last-paid-cell">
-                  <span class="last-paid-date">{{ new Date(u.last_paid_at).toLocaleDateString('vi-VN') }}</span>
-                  <span v-if="u.last_transaction_code" class="last-paid-code">#{{ u.last_transaction_code }}</span>
+              <td class="py-3 px-4">
+                <div v-if="u.last_paid_at" class="flex flex-col gap-0.5">
+                  <span class="text-xs font-bold text-gray-700 dark:text-gray-300">{{ new Date(u.last_paid_at).toLocaleDateString('vi-VN') }}</span>
+                  <span v-if="u.last_transaction_code" class="text-[10px] text-gray-500 font-mono">#{{ u.last_transaction_code }}</span>
                 </div>
-                <span v-else class="text-secondary">—</span>
+                <span v-else class="text-gray-400">—</span>
               </td>
-              <td style="text-align: right;">
-                <div class="action-menu-wrapper" @click.stop>
-                  <button class="btn-action-more" @click="toggleDropdown(u.user_id)">
-                    <MfIcon name="more_vert" size="20" />
-                  </button>
-                  
-                  <div v-if="activeDropdown === u.user_id" class="action-dropdown" :class="{ 'dropdown-up': index >= users.length - 2 && users.length > 3 }">
-                    <button class="dropdown-item" @click="openDetailModal(u); closeDropdown()">
-                      <MfIcon name="visibility" size="16" /> Xem chi tiết gói
-                    </button>
-                    <button class="dropdown-item" @click="openPremiumModal(u, u.plan_id ? 'extend' : 'activate'); closeDropdown()">
-                      <MfIcon name="add" size="16" /> {{ u.plan_id ? 'Gia hạn thêm' : 'Kích hoạt Premium' }}
-                    </button>
-                    <button class="dropdown-item" @click="goToDetail(u.user_id); closeDropdown()">
-                      <MfIcon name="open_in_new" size="16" /> Mở hồ sơ
-                    </button>
-                    <div v-if="u.premium_status === 'active' || u.premium_status === 'expiring_soon'" class="dropdown-divider"></div>
-                    <button v-if="u.premium_status === 'active' || u.premium_status === 'expiring_soon'" class="dropdown-item delete-action" @click="cancelPremium(u); closeDropdown()">
-                      <MfIcon name="cancel" size="16" /> Hủy Premium
-                    </button>
-                  </div>
+              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+                <div class="flex justify-end">
+                  <AdminActionMenu :actions="getPremiumActions(u)" />
                 </div>
               </td>
             </tr>
-          </template>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </AdminTableShell>
 
-      <!-- Table Loading Overlay for subsequent fetches -->
-      <div v-if="isTableLoading && users.length > 0 && !isInitialLoading" class="table-loading-overlay">
-        <div class="spinner-small"></div>
+      <div v-if="totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ currentPage }} / {{ totalPages }}</span>
+        <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
       </div>
-    </div>
-
-    <!-- Pagination -->
-    <div class="pagination-wrapper">
-      <AdminPagination 
-        v-if="totalPages > 1 || isInitialLoading" 
-        v-model:currentPage="currentPage" 
-        :totalPages="isInitialLoading ? 1 : totalPages" 
-      />
     </div>
 
     <!-- Modals -->
@@ -296,6 +210,7 @@
       :loading="confirmState.loading"
       @confirm="handleConfirm"
     />
+    </div>
   </div>
 </template>
 
@@ -311,6 +226,10 @@ import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import PremiumManageModal from '@/components/admin/PremiumManageModal.vue'
 import PremiumDetailModal from '@/components/admin/PremiumDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 
 const router = useRouter()
 const toast = useToastStore()
@@ -353,18 +272,35 @@ const confirmState = ref({
   action: null
 })
 
-function toggleDropdown(userId) {
-  activeDropdown.value = activeDropdown.value === userId ? null : userId
-}
-
-function closeDropdown() {
-  activeDropdown.value = null
-}
-
-const handleClickOutside = (e) => {
-  if (!e.target.closest('.action-menu-wrapper')) {
-    activeDropdown.value = null
+function getPremiumActions(u) {
+  const actions = [
+    {
+      label: 'Xem chi tiết gói',
+      icon: 'visibility',
+      onClick: () => openDetailModal(u)
+    },
+    {
+      label: u.plan_id ? 'Gia hạn thêm' : 'Kích hoạt Premium',
+      icon: 'add',
+      onClick: () => openPremiumModal(u, u.plan_id ? 'extend' : 'activate')
+    },
+    {
+      label: 'Mở hồ sơ',
+      icon: 'open_in_new',
+      onClick: () => goToDetail(u.user_id)
+    }
+  ]
+  
+  if (u.premium_status === 'active' || u.premium_status === 'expiring_soon') {
+    actions.push({
+      label: 'Hủy Premium',
+      icon: 'cancel',
+      danger: true,
+      onClick: () => cancelPremium(u)
+    })
   }
+  
+  return actions
 }
 
 async function fetchSummary() {
@@ -469,10 +405,6 @@ function goToDetail(userId) {
   router.push(`/admin/users/${userId}`)
 }
 
-function goToTransactions(userId) {
-  router.push({ path: '/admin/payments', query: { userId } })
-}
-
 function openDetailModal(user) {
   selectedUser.value = user
   showDetailModal.value = true
@@ -527,8 +459,6 @@ function cancelPremium(user) {
 }
 
 onMounted(async () => {
-  document.addEventListener('click', handleClickOutside)
-  
   // Parallel fetch for initial load
   await Promise.allSettled([
     fetchSummary(),
@@ -540,7 +470,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 

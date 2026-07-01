@@ -1,68 +1,57 @@
 <template>
-  <div class="manage-transactions">
-    <header class="header-section">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
+    <header class="py-6 bg-white dark:bg-bg-card border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-20">
       <div>
-        <h1 class="page-title">Lịch sử Giao dịch</h1>
-        <p class="page-subtitle">Theo dõi lịch sử thanh toán hóa đơn nâng cấp Premium và doanh thu hệ thống</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Lịch sử Giao dịch</h1>
+        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi lịch sử thanh toán hóa đơn nâng cấp Premium và doanh thu hệ thống</p>
       </div>
-      <div class="header-actions">
-        <button class="btn-secondary btn-icon" @click="fetchData(true)" title="Làm mới">
-          <MfIcon name="sync" size="18" :class="{'spinning': loading}" />
+      <div class="flex items-center gap-3 mt-4 md:mt-0">
+        <button class="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition" @click="fetchData(true)" title="Làm mới">
+          <MfIcon name="sync" size="18" :class="{'fa-spin': loading}" class="mr-2" />
+          Làm mới
         </button>
-        <button class="btn-primary btn-icon" @click="exportReport" title="Xuất báo cáo">
-          <MfIcon name="download" size="18" />
+        <button class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm" @click="exportReport" title="Xuất báo cáo">
+          <MfIcon name="download" size="18" class="mr-2" />
+          Xuất báo cáo
         </button>
       </div>
     </header>
 
+    <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- Overview Stats Cards -->
-    <div class="stats-overview">
-      <div class="summary-card">
-        <div class="card-icon revenue">
-          <MfIcon name="payments" size="24" />
-        </div>
-        <div class="card-info">
-          <span class="card-label">Tổng Doanh thu</span>
-          <span class="card-value" v-if="loadingSummary"><div class="skeleton-text"></div></span>
-          <span class="card-value" v-else>{{ formatCurrency(summary.totalRevenue) }}</span>
-        </div>
-      </div>
-
-      <div class="summary-card">
-        <div class="card-icon count">
-          <MfIcon name="receipt_long" size="24" />
-        </div>
-        <div class="card-info">
-          <span class="card-label">Số Giao dịch</span>
-          <span class="card-value" v-if="loadingSummary"><div class="skeleton-text"></div></span>
-          <span class="card-value" v-else>{{ summary.totalTransactions }}</span>
-        </div>
-      </div>
-
-      <div class="summary-card">
-        <div class="card-icon paid">
-          <MfIcon name="check_circle" size="24" />
-        </div>
-        <div class="card-info">
-          <span class="card-label">Đã thanh toán</span>
-          <span class="card-value" v-if="loadingSummary"><div class="skeleton-text"></div></span>
-          <span class="card-value text-emerald-600" v-else>{{ summary.paidTransactions }}</span>
-        </div>
-      </div>
-
-      <div class="summary-card">
-        <div class="card-icon pending">
-          <MfIcon name="clock" size="24" />
-        </div>
-        <div class="card-info">
-          <span class="card-label">Chờ xử lý / Thất bại</span>
-          <span class="card-value" v-if="loadingSummary"><div class="skeleton-text"></div></span>
-          <span class="card-value text-amber-600" v-else>{{ summary.pendingTransactions + summary.expiredTransactions + summary.cancelledTransactions }}</span>
-          <span class="card-subline" v-if="!loadingSummary">
-            <span class="text-amber-600 font-bold">{{ summary.pendingTransactions }}</span> chờ &middot; <span class="text-slate-500 font-bold">{{ summary.expiredTransactions }}</span> hết hạn &middot; <span class="text-rose-500 font-bold">{{ summary.cancelledTransactions }}</span> đã hủy
-          </span>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <AdminKpiCard 
+        title="Tổng Doanh thu" 
+        :value="formatCurrency(summary.totalRevenue)" 
+        icon="payments" 
+        color="emerald" 
+        :loading="loadingSummary"
+      />
+      <AdminKpiCard 
+        title="Số Giao dịch" 
+        :value="summary.totalTransactions" 
+        icon="receipt_long" 
+        color="blue" 
+        :loading="loadingSummary"
+      />
+      <AdminKpiCard 
+        title="Đã thanh toán" 
+        :value="summary.paidTransactions" 
+        icon="check_circle" 
+        color="emerald" 
+        :loading="loadingSummary"
+      />
+      <AdminKpiCard 
+        title="Chờ xử lý / Thất bại" 
+        :value="summary.pendingTransactions + summary.expiredTransactions + summary.cancelledTransactions" 
+        icon="clock" 
+        color="amber" 
+        :loading="loadingSummary"
+      >
+        <template #subtext v-if="!loadingSummary">
+          <span class="text-amber-600 font-bold">{{ summary.pendingTransactions }}</span> chờ &middot; <span class="text-slate-500 font-bold">{{ summary.expiredTransactions }}</span> hết hạn &middot; <span class="text-rose-500 font-bold">{{ summary.cancelledTransactions }}</span> đã hủy
+        </template>
+      </AdminKpiCard>
     </div>
 
     <!-- Filters & Search -->
@@ -73,21 +62,21 @@
       </button>
     </div>
 
-    <div class="filter-bar">
-      <div class="search-input-wrapper">
-        <MfIcon name="search" size="18" className="search-icon" />
-        <input v-model="filterForm.q" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="search-field" @keyup.enter="applyFilters" />
+    <AdminFilterBar>
+      <div class="relative flex-1 min-w-[200px]">
+        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input v-model="filterForm.q" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="admin-input pl-9" @keyup.enter="applyFilters" />
       </div>
-      <div class="filter-select-wrapper">
-        <select v-model="filterForm.gateway" class="filter-select">
+      <div class="w-full md:w-48">
+        <select v-model="filterForm.gateway" class="admin-input">
           <option value="">Tất cả cổng thanh toán</option>
           <option value="sepay">SePay</option>
           <option value="momo">MoMo</option>
           <option value="vnpay">VNPay</option>
         </select>
       </div>
-      <div class="filter-select-wrapper">
-        <select v-model="filterForm.status" class="filter-select">
+      <div class="w-full md:w-48">
+        <select v-model="filterForm.status" class="admin-input">
           <option value="">Tất cả trạng thái</option>
           <option value="paid">Đã thanh toán</option>
           <option value="pending">Đang chờ</option>
@@ -95,147 +84,94 @@
           <option value="cancelled">Đã hủy</option>
         </select>
       </div>
-      <button class="btn-primary" @click="applyFilters" style="height: 42px">Tìm kiếm</button>
-      <AdminResetButton :disabled="loading" @click="resetFilters" style="height: 42px" />
-    </div>
+      <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors" @click="applyFilters" style="height: 38px; margin-top: auto;">Tìm kiếm</button>
+      <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
+    </AdminFilterBar>
 
     <!-- Main Content -->
-    <div v-if="loading && transactions.length === 0" class="table-container shadow-3d">
-      <table class="transactions-table">
-        <thead>
-          <tr>
-            <th>Mã Đơn hàng</th>
-            <th>Khách hàng</th>
-            <th>Gói Premium</th>
-            <th>Số tiền</th>
-            <th>Cổng thanh toán</th>
-            <th>Trạng thái</th>
-            <th>Thời gian</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="i in 5" :key="i">
-            <td><div class="skeleton-box" style="width: 100px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 150px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 80px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 80px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 60px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 80px; height: 24px;"></div></td>
-            <td><div class="skeleton-box" style="width: 100px; height: 24px;"></div></td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div v-else-if="error" class="empty-state">
-      <MfIcon name="error_outline" size="64" style="color: #ff7675" />
-      <h3 style="color: #d63031">Đã có lỗi xảy ra</h3>
-      <p>{{ error }}</p>
-      <button @click="fetchData" class="retry-btn">Thử lại</button>
-    </div>
-
-    <div v-else-if="transactions.length === 0" class="empty-state">
-      <MfIcon name="credit_card_off" size="64" />
-      <h3>Không tìm thấy giao dịch nào</h3>
-      <p>Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm.</p>
-    </div>
-
-    <div v-else class="table-container shadow-3d relative">
-      <div v-if="loading" class="table-loading-overlay">
-        <div class="spinner-small"></div>
+    <div class="flex-1 flex flex-col mb-8">
+      <div v-if="error" class="p-16 flex flex-col items-center justify-center text-rose-500">
+        <MfIcon name="error_outline" size="64" />
+        <h3 class="text-lg font-bold mt-4 mb-2">Đã có lỗi xảy ra</h3>
+        <p class="text-sm mb-4">{{ error }}</p>
+        <button @click="fetchData" class="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition font-bold">Thử lại</button>
       </div>
-      <table class="transactions-table">
-        <thead>
-          <tr>
-            <th>Mã Đơn hàng</th>
-            <th>Khách hàng</th>
-            <th>Gói Premium</th>
-            <th>Số tiền</th>
-            <th>Cổng TT</th>
-            <th>Trạng thái</th>
-            <th>Thời gian</th>
-            <th class="text-right">Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(t, index) in transactions" :key="t.id" class="txn-row" @click="openDetail(t.id)" style="cursor: pointer;">
-            <td>
-              <div class="flex items-center gap-2">
-                <span class="order-code">#{{ truncateCode(t.order_code) }}</span>
-                <button class="btn-icon-small" @click.stop="copyCode(t.order_code)" title="Sao chép">
-                  <MfIcon name="content_copy" size="14" />
-                </button>
-              </div>
-            </td>
-            <td>
-              <div class="user-details" @click.stop="goToUser(t.user_id)">
-                <span class="user-name">{{ t.user_name }}</span>
-                <span class="user-email">{{ t.user_email }}</span>
-              </div>
-            </td>
-            <td>
-              <span class="plan-badge" v-if="t.plan_name">{{ t.plan_name }}</span>
-              <span class="text-slate-400" v-else>—</span>
-            </td>
-            <td>
-              <span class="amount-val">{{ formatCurrency(t.amount) }}</span>
-            </td>
-            <td>
-              <span class="provider-badge" :class="t.provider">
-                {{ t.provider || '—' }}
-              </span>
-            </td>
-            <td>
-              <span class="status-badge" :class="t.status">
-                {{ formatStatus(t.status) }}
-              </span>
-            </td>
-            <td>
-              <div class="time-cell">
-                <span class="time-main">{{ formatDate(t.created_at) }}</span>
-                <span class="time-sub">{{ formatTime(t.created_at) }}</span>
-                <span class="time-paid text-emerald-600" v-if="t.paid_at && t.status === 'paid'">
-                  Thanh toán: {{ formatTime(t.paid_at) }}
-                </span>
-              </div>
-            </td>
-            <td class="text-right">
-              <div class="action-menu-wrapper" @click.stop>
-                <button class="btn-action-more" @click="toggleDropdown(t.id)">
-                  <MfIcon name="more_vert" size="20" />
-                </button>
-                
-                <div v-if="activeDropdown === t.id" class="action-dropdown" :class="{ 'dropdown-up': index >= transactions.length - 2 && transactions.length > 3 }">
-                  <button class="dropdown-item" @click="openDetail(t.id); closeDropdown()">
-                    <MfIcon name="visibility" size="16" /> Xem chi tiết
-                  </button>
-                  <button class="dropdown-item" @click="goToUser(t.user_id); closeDropdown()">
-                    <MfIcon name="open_in_new" size="16" /> Mở hồ sơ
-                  </button>
-                  <button class="dropdown-item" @click="copyCode(t.order_code); closeDropdown()">
-                    <MfIcon name="content_copy" size="16" /> Sao chép mã
-                  </button>
-                  <div class="dropdown-divider" v-if="t.status === 'pending'"></div>
-                  <button class="dropdown-item text-rose-600" v-if="t.status === 'pending'" @click="cancelTx(t); closeDropdown()">
-                    <MfIcon name="cancel" size="16" /> Hủy giao dịch
+      <AdminTableShell 
+        v-else
+        :loading="loading" 
+        :empty="!loading && transactions.length === 0" 
+        emptyTitle="Không tìm thấy giao dịch nào" 
+        emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+      >
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Mã Đơn hàng</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[200px]">Khách hàng</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Gói Premium</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Số tiền</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Cổng TT</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Trạng thái</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Thời gian</th>
+              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
+            <tr v-for="(t, index) in transactions" :key="t.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group cursor-pointer" @click="openDetail(t.id)">
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold text-gray-900 dark:text-white">#{{ truncateCode(t.order_code) }}</span>
+                  <button class="text-gray-400 hover:text-indigo-600 transition" @click.stop="copyCode(t.order_code)" title="Sao chép">
+                    <MfIcon name="content_copy" size="14" />
                   </button>
                 </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="flex flex-col hover:opacity-80 transition" @click.stop="goToUser(t.user_id)">
+                  <span class="font-bold text-gray-900 dark:text-white truncate">{{ t.user_name }}</span>
+                  <span class="text-xs text-gray-500 truncate">{{ t.user_email }}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400" v-if="t.plan_name">{{ t.plan_name }}</span>
+                <span class="text-gray-400" v-else>—</span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(t.amount) }}</span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  {{ t.provider || '—' }}
+                </span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="t.status === 'paid' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : (t.status === 'pending' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400')">
+                  {{ formatStatus(t.status) }}
+                </span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs font-bold text-gray-700 dark:text-gray-300">{{ formatDate(t.created_at) }}</span>
+                  <span class="text-[10px] text-gray-500">{{ formatTime(t.created_at) }}</span>
+                  <span class="text-[10px] text-emerald-600 font-bold" v-if="t.paid_at && t.status === 'paid'">
+                    TT: {{ formatTime(t.paid_at) }}
+                  </span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+                <div class="flex justify-end">
+                  <AdminActionMenu :actions="getTxActions(t)" />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </AdminTableShell>
 
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="flex justify-end mt-4 px-2">
-      <AdminPagination 
-        :currentPage="currentPage" 
-        :totalPages="totalPages" 
-        @update:currentPage="onPageChange"
-      />
+      <div v-if="totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ currentPage }} / {{ totalPages }}</span>
+        <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" @update:currentPage="onPageChange" />
+      </div>
     </div>
 
     <PaymentDetailModal 
@@ -252,6 +188,7 @@
       :loading="confirmState.loading"
       @confirm="handleConfirm"
     />
+    </div>
   </div>
 </template>
 
@@ -264,6 +201,11 @@ import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import PaymentDetailModal from '@/components/admin/PaymentDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import MfIcon from '@/components/common/MfIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -307,22 +249,33 @@ const confirmState = ref({
   action: null
 })
 
-function toggleDropdown(id) {
-  if (activeDropdown.value === id) {
-    activeDropdown.value = null
-  } else {
-    activeDropdown.value = id
+function getTxActions(t) {
+  const actions = [
+    {
+      label: 'Xem chi tiết',
+      icon: 'visibility',
+      onClick: () => openDetail(t.id)
+    },
+    {
+      label: 'Mở hồ sơ',
+      icon: 'open_in_new',
+      onClick: () => goToUser(t.user_id)
+    },
+    {
+      label: 'Sao chép mã',
+      icon: 'content_copy',
+      onClick: () => copyCode(t.order_code)
+    }
+  ]
+  if (t.status === 'pending') {
+    actions.push({
+      label: 'Hủy giao dịch',
+      icon: 'cancel',
+      danger: true,
+      onClick: () => cancelTx(t)
+    })
   }
-}
-
-function closeDropdown() {
-  activeDropdown.value = null
-}
-
-function handleClickOutside(e) {
-  if (!e.target.closest('.action-menu-wrapper')) {
-    closeDropdown()
-  }
+  return actions
 }
 
 async function fetchData(showToastSuccess = false) {
@@ -505,12 +458,10 @@ function formatTime(dateStr) {
 }
 
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
+  if (route.query.userId) {
+    filterForm.q = ''
+  }
   fetchData()
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
