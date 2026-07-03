@@ -10,11 +10,9 @@
         <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Làm mới" @click="fetchData(true)" :disabled="loading">
           <MfIcon name="sync" size="20" :class="{ 'animate-spin': loading }" />
         </button>
-        <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport">
-          <MfIcon name="download" size="20" />
-        </button>
-        <button class="btn-primary px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm flex items-center gap-2 hover:bg-indigo-700 transition" @click="openRetrainConfirm">
-          <MfIcon name="refresh" size="18" /> Retrain Model
+        <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport" :disabled="exportLoading">
+          <MfIcon v-if="exportLoading" name="sync" size="20" class="animate-spin" />
+          <MfIcon v-else name="download" size="20" />
         </button>
       </div>
     </header>
@@ -28,34 +26,34 @@
       <!-- KPI Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <AdminKpiCard
-          title="Người dùng có dữ liệu"
-          :value="summary?.eligibleUsers ?? '—'"
-          :subtitle="summary?.usersWithHistory ? `Đủ điều kiện train từ ${summary.usersWithHistory} user` : ''"
-          icon="users"
+          title="Chiến lược"
+          :value="formatStrategyName(summary?.strategy)"
+          subtitle="Đang phục vụ gợi ý"
+          :show-icon="false"
           tone="blue"
           :loading="loading"
         />
         <AdminKpiCard
-          title="Bài hát trong Catalog"
-          :value="summary?.catalogSongs ?? '—'"
-          subtitle="Các bài hát public có audio"
-          icon="music"
+          title="Model"
+          :value="summary?.hasArtifact ? 'Sẵn sàng' : 'Fallback'"
+          :subtitle="summary?.hasArtifact ? 'Có artifact' : 'Chưa có artifact'"
+          :show-icon="false"
+          :tone="summary?.hasArtifact ? 'green' : 'amber'"
+          :loading="loading"
+        />
+        <AdminKpiCard
+          title="Precision@10"
+          :value="summary?.metrics?.precisionAt10 ?? '—'"
+          subtitle="Đánh giá offline"
+          :show-icon="false"
           tone="purple"
           :loading="loading"
         />
         <AdminKpiCard
-          title="Model hiện tại"
-          :value="formatStrategyName(summary?.currentStrategy)"
-          :subtitle="summary?.modelLoaded ? 'Đã load vào bộ nhớ' : 'Sử dụng fallback'"
-          icon="ai"
-          :tone="summary?.modelLoaded ? 'green' : 'amber'"
-          :loading="loading"
-        />
-        <AdminKpiCard
-          title="Coverage@20 (BPR-MF)"
-          :value="getMetricValue('bpr_mf', 'global_catalog_coverage_at_20', true)"
-          subtitle="Tỷ lệ bao phủ catalog"
-          icon="analytics"
+          title="NDCG@10"
+          :value="summary?.metrics?.ndcgAt10 ?? '—'"
+          subtitle="Chất lượng xếp hạng"
+          :show-icon="false"
           tone="cyan"
           :loading="loading"
         />
@@ -64,46 +62,66 @@
       <!-- Detail Cards -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Model Status Card -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
             <h2 class="text-lg font-bold text-slate-800">Trạng thái mô hình</h2>
           </div>
-          <div class="p-5 flex-1 text-sm text-slate-600 space-y-4">
-            <div class="flex justify-between items-center">
+          <div class="p-5 flex-1 text-sm text-slate-600 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
               <span class="font-medium text-slate-500">Chiến lược đang dùng:</span>
-              <span class="font-bold text-slate-900">{{ summary?.currentStrategy || '—' }}</span>
+              <div class="flex flex-col items-end">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-900">{{ formatStrategyName(summary?.strategy) }}</span>
+                  <span v-if="summary?.strategy && summary.strategy.includes('fallback')" class="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded uppercase">
+                    Đang dùng fallback
+                  </span>
+                </div>
+                <span class="text-[10px] text-slate-400 mt-0.5">Mã chiến lược: {{ summary?.strategy || '—' }}</span>
+              </div>
             </div>
-            <div class="flex justify-between items-center">
+            <div class="flex justify-between items-center mb-4">
               <span class="font-medium text-slate-500">Artifact path:</span>
-              <span class="text-xs text-slate-500 truncate ml-4" :title="summary?.modelArtifact">{{ formatPath(summary?.modelArtifact) }}</span>
+              <span class="text-xs text-slate-500 truncate ml-4" :title="summary?.artifactPath">{{ summary?.artifactPath || 'Không có' }}</span>
             </div>
             <div class="flex justify-between items-center">
               <span class="font-medium text-slate-500">Cập nhật lúc:</span>
-              <span class="font-medium">{{ formatDate(summary?.modelUpdatedAt) }}</span>
+              <span class="font-medium">{{ summary?.updatedAt ? formatDate(summary.updatedAt) : '—' }}</span>
             </div>
             
-            <hr class="border-slate-100">
+            <hr class="border-slate-100 my-4">
             
-            <template v-if="summary?.metadata">
-              <div class="flex justify-between items-center">
-                <span class="font-medium text-slate-500">Trained Users:</span>
-                <span class="font-medium">{{ summary.metadata.trained_users || summary.trainedUsers }}</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="font-medium text-slate-500">Trained Items:</span>
-                <span class="font-medium">{{ summary.metadata.trained_items || summary.trainedItems }}</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="font-medium text-slate-500">Latent Factors:</span>
-                <span class="font-medium">{{ summary.metadata.factors || summary.factors }}</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="font-medium text-slate-500">Epochs:</span>
-                <span class="font-medium">{{ summary.metadata.hyperparameters?.epochs || summary.epochs || '—' }}</span>
+            <template v-if="summary?.hasArtifact">
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="font-medium text-slate-500">Trained Users:</span>
+                  <span class="font-medium">{{ summary?.training?.trainedUsers || '—' }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="font-medium text-slate-500">Trained Items:</span>
+                  <span class="font-medium">{{ summary?.training?.trainedItems || '—' }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="font-medium text-slate-500">Latent Factors:</span>
+                  <span class="font-medium">{{ summary?.training?.factors || '—' }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="font-medium text-slate-500">Epochs:</span>
+                  <span class="font-medium">{{ summary?.training?.epochs || '—' }}</span>
+                </div>
               </div>
             </template>
-            <div v-else class="text-center py-4 text-slate-400 italic">
-              Chưa có metadata model
+            <div v-else class="flex-1 bg-slate-50 rounded-xl p-5 border border-slate-100 text-center flex flex-col justify-center mt-2">
+              <MfIcon name="info" size="32" class="text-slate-400 mx-auto mb-2" />
+              <h3 class="font-bold text-slate-700 mb-1">Chưa có metadata model</h3>
+              <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+                Hệ thống hiện đang dùng chiến lược fallback để đảm bảo vẫn có gợi ý cho người dùng. 
+                Bạn có thể kiểm tra artifact model hoặc chạy lại pipeline huấn luyện nếu cần.
+              </p>
+              <div class="flex justify-center">
+                <button class="btn-secondary px-4 py-2 text-sm bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-semibold" @click="fetchData(true)">
+                  Làm mới
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -145,38 +163,56 @@
       <div class="mt-6">
         <h2 class="text-xl font-bold text-slate-800 mb-4">Đánh giá mô hình (Metrics)</h2>
         
-        <div v-if="!metrics" class="bg-white p-10 rounded-2xl border border-slate-200 text-center shadow-sm">
+        <div v-if="!summary?.hasMetrics" class="bg-white py-8 px-5 rounded-2xl border border-slate-200 text-center shadow-sm">
           <MfIcon name="analytics" size="48" class="text-slate-300 mx-auto mb-3" />
           <h3 class="text-lg font-semibold text-slate-700">Chưa có dữ liệu đánh giá mô hình</h3>
           <p class="text-slate-500 mt-1">Hãy chạy script evaluation để tạo metrics trước khi hiển thị.</p>
         </div>
         
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div v-for="(metricGroup, key) in metrics" :key="key" class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm relative" :class="{'ring-2 ring-indigo-500': key === bestModelKey}">
-            <div v-if="key === bestModelKey" class="absolute -top-3 -right-3 bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md uppercase tracking-wider">
-              Tốt nhất
-            </div>
-            <h3 class="font-bold text-slate-800 mb-4 capitalize border-b border-slate-100 pb-2">
-              {{ metricGroup.label || key }}
-            </h3>
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <div class="text-xs text-slate-500 mb-1">Precision@10</div>
-                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.precision_at_10) }}</div>
-              </div>
-              <div>
-                <div class="text-xs text-slate-500 mb-1">Recall@10</div>
-                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.recall_at_10) }}</div>
-              </div>
-              <div>
-                <div class="text-xs text-slate-500 mb-1">NDCG@10</div>
-                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.ndcg_at_10) }}</div>
-              </div>
-              <div>
-                <div class="text-xs text-slate-500 mb-1">Coverage@20</div>
-                <div class="font-semibold text-slate-800 text-lg">{{ formatPercent(metricGroup.global_catalog_coverage_at_20) }}</div>
-              </div>
-            </div>
+        <div v-else class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm relative">
+          <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-900">
+                  Metric
+                </th>
+                <th
+                  v-for="model in metricsComparison"
+                  :key="model.key"
+                  class="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-slate-900"
+                  :class="model.key === bestModelKey ? 'bg-emerald-50 text-emerald-900' : ''"
+                >
+                  <div class="flex flex-col items-center gap-1">
+                    <span>{{ model.name }}</span>
+                    <span
+                      v-if="model.key === bestModelKey"
+                      class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800"
+                    >
+                      Đang chọn
+                    </span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="row in metricRows" :key="row.key">
+                <td class="px-5 py-4">
+                  <p class="font-semibold text-slate-800">{{ row.label }}</p>
+                  <p class="text-xs text-slate-500">{{ row.description }}</p>
+                </td>
+                <td
+                  v-for="model in metricsComparison"
+                  :key="`${model.key}-${row.key}`"
+                  class="px-5 py-4 text-center text-lg font-bold text-slate-900"
+                  :class="model.key === bestModelKey ? 'bg-emerald-50/60 text-emerald-700' : ''"
+                >
+                  {{ formatPercent(model[row.key]) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
+            Nguồn metrics: {{ summary?.metricsPath || summary?.files?.metrics || '—' }}
           </div>
         </div>
       </div>
@@ -260,17 +296,6 @@
         </div>
       </div>
     </template>
-
-    <ConfirmDialog 
-      :open="confirmState.open"
-      :title="confirmState.title"
-      :message="confirmState.message"
-      :confirmText="confirmState.confirmText"
-      :type="confirmState.type"
-      :loading="confirmState.loading"
-      @confirm="handleConfirmRetrain"
-      @cancel="confirmState.open = false"
-    />
   </div>
 </template>
 
@@ -282,29 +307,20 @@ import { useToastStore } from '@/stores/toast'
 import MfIcon from '@/components/common/MfIcon.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 
 const router = useRouter()
 const toast = useToastStore()
 
-const loading = ref(true)
 const summary = ref(null)
-const metrics = ref(null)
+const loading = ref(true)
+const exportLoading = ref(false)
 
 const previewUserId = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
 const previewResults = ref([])
 const previewSearched = ref(false)
-
-const confirmState = ref({
-  open: false,
-  title: 'Huấn luyện lại mô hình',
-  message: 'Quá trình huấn luyện mô hình gợi ý có thể tốn nhiều tài nguyên của hệ thống và mất một khoảng thời gian. Bạn có chắc chắn muốn thực hiện ngay bây giờ?',
-  confirmText: 'Bắt đầu huấn luyện',
-  type: 'danger',
-  loading: false
-})
 
 watch(previewUserId, (newVal) => {
   if (!newVal || newVal.toString().trim() === '') {
@@ -321,22 +337,12 @@ onMounted(() => {
 async function fetchData(showToastSuccess = false) {
   loading.value = true
   try {
-    const [sumRes, metRes] = await Promise.all([
-      api.get('/admin/recommendation/summary').catch(() => ({ data: {} })),
-      api.get('/admin/recommendation/metrics').catch(() => ({ data: {} }))
-    ])
-    
+    const sumRes = await api.get('/admin/recommendation/summary')
     if (sumRes.data?.success) {
       summary.value = sumRes.data.data
-    }
-    if (metRes.data?.success && metRes.data.data) {
-      metrics.value = metRes.data.data
-    } else {
-      metrics.value = null
-    }
-
-    if (showToastSuccess) {
-      toast.showToast('Làm mới dữ liệu thành công!', 'success')
+      if (showToastSuccess) {
+        toast.showToast('Làm mới dữ liệu thành công!', 'success')
+      }
     }
   } catch (err) {
     console.error('Error loading recommendation data:', err)
@@ -346,19 +352,52 @@ async function fetchData(showToastSuccess = false) {
   }
 }
 
+const metricsComparison = computed(() => summary.value?.metricsComparison || [])
+
 const bestModelKey = computed(() => {
-  if (!metrics.value) return null
-  let bestKey = null
-  let maxScore = -1
-  for (const [key, data] of Object.entries(metrics.value)) {
-    const score = data.ndcg_at_10 || data.precision_at_10 || 0
-    if (score > maxScore) {
-      maxScore = score
-      bestKey = key
-    }
-  }
-  return bestKey
+  const models = metricsComparison.value
+  if (!models.length) return null
+
+  // Check backend strategy
+  const currentStrategy = summary.value?.strategy || ''
+  const matchedModel = models.find(m => currentStrategy.includes(m.key))
+  if (matchedModel) return matchedModel.key
+
+  // Fallback to highest NDCG@10
+  return [...models].sort((a, b) => {
+    const av = Number(a.ndcgAt10 || 0)
+    const bv = Number(b.ndcgAt10 || 0)
+    return bv - av
+  })[0]?.key
 })
+
+const metricRows = computed(() => [
+  {
+    key: 'precisionAt10',
+    label: 'Precision@10',
+    description: 'Tỷ lệ bài được gợi ý đúng trong top 10'
+  },
+  {
+    key: 'recallAt10',
+    label: 'Recall@10',
+    description: 'Mức độ bao phủ bài đúng trong tập kiểm thử'
+  },
+  {
+    key: 'ndcgAt10',
+    label: 'NDCG@10',
+    description: 'Chất lượng thứ tự xếp hạng'
+  },
+  {
+    key: 'coverageAt20',
+    label: 'Coverage@20',
+    description: 'Độ phủ danh mục bài hát'
+  },
+  {
+    key: 'mapAt10',
+    label: 'MAP@10',
+    description: 'Độ chính xác trung bình nếu có'
+  }
+])
 
 async function fetchPreview() {
   if (!previewUserId.value) {
@@ -391,30 +430,24 @@ async function fetchPreview() {
   }
 }
 
-function exportReport() {
-  toast.showToast('Chức năng xuất báo cáo đang được hoàn thiện', 'info')
-}
-
-function openRetrainConfirm() {
-  confirmState.value.open = true
-}
-
-async function handleConfirmRetrain() {
-  confirmState.value.loading = true
+async function exportReport() {
+  exportLoading.value = true
   try {
-    const res = await api.post('/admin/recommendation/retrain')
-    if (res.data?.success) {
-      toast.showToast('Đã bắt đầu tiến trình huấn luyện mô hình', 'success')
-      fetchData()
+    const response = await api.get('/admin/recommendation/export', { responseType: 'blob' })
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'recommendation_metrics_report.json'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    console.error('Export error:', error)
+    if (error.response?.status === 404) {
+      toast.showToast('Không tìm thấy báo cáo', 'error')
     } else {
-      toast.showToast(res.data?.message || 'Có lỗi xảy ra khi gọi lệnh retrain', 'error')
+      toast.showToast('Không thể xuất báo cáo. Vui lòng thử lại.', 'error')
     }
-  } catch (err) {
-    console.error('Retrain error:', err)
-    toast.showToast('Không thể thực hiện huấn luyện lúc này', 'error')
   } finally {
-    confirmState.value.loading = false
-    confirmState.value.open = false
+    exportLoading.value = false
   }
 }
 
@@ -429,11 +462,14 @@ function goToArtist(id) {
 // Helpers
 function formatStrategyName(str) {
   if (!str) return '—'
-  if (str === 'bpr_mf_rerank') return 'BPR-MF Rerank'
-  if (str === 'bpr_mf') return 'BPR-MF'
-  if (str === 'content_based_fallback') return 'Content-Based Fallback'
-  if (str === 'popular_fallback') return 'Popular Fallback'
-  return str
+  const strategyLabelMap = {
+    bpr_mf_rerank: 'BPR-MF cá nhân hóa',
+    bpr_mf: 'BPR-MF',
+    content_based_fallback: 'Fallback theo nội dung',
+    popular_fallback: 'Fallback phổ biến',
+    cold_start_preferences: 'Dựa trên sở thích ban đầu'
+  }
+  return strategyLabelMap[str] || str
 }
 
 function formatDate(dateStr) {
@@ -443,9 +479,15 @@ function formatDate(dateStr) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function formatPercent(val) {
-  if (val === undefined || val === null) return '—'
-  return (val * 100).toFixed(1) + '%'
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+  const percent = numeric <= 1 ? numeric * 100 : numeric
+
+  return `${percent.toFixed(2)}%`
 }
 
 function formatPath(fullPath) {
@@ -453,13 +495,6 @@ function formatPath(fullPath) {
   const parts = fullPath.split(/[/\\]/)
   if (parts.length <= 3) return fullPath
   return '.../' + parts.slice(-3).join('/')
-}
-
-function getMetricValue(strategy, field, format = false) {
-  if (!metrics.value || !metrics.value[strategy]) return '—'
-  const val = metrics.value[strategy][field]
-  if (val === null || val === undefined) return '—'
-  return format ? formatPercent(val) : val
 }
 </script>
 

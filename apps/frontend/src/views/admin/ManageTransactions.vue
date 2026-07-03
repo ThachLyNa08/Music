@@ -1,6 +1,6 @@
 <template>
-  <div class="space-y-6 pb-10">
-    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10">
+    <header class="sticky -top-6 z-30 py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Lịch sử Giao dịch</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi lịch sử thanh toán hóa đơn nâng cấp Premium và doanh thu hệ thống</p>
@@ -10,20 +10,19 @@
           <MfIcon name="sync" size="18" :class="{'fa-spin': loading}" class="mr-2" />
           Làm mới
         </button>
-        <button class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm" @click="exportReport" title="Xuất báo cáo">
-          <MfIcon name="download" size="18" class="mr-2" />
-          Xuất báo cáo
-        </button>
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>
-    <!-- Overview Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="p-6 flex flex-col space-y-6">
+      <!-- Overview Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
       <AdminKpiCard 
         title="Tổng Doanh thu" 
         :value="formatCurrency(summary.totalRevenue)" 
         icon="payments" 
         tone="emerald" 
         :loading="loadingSummary"
+        :show-icon="false"
       />
       <AdminKpiCard 
         title="Số Giao dịch" 
@@ -31,6 +30,7 @@
         icon="receipt_long" 
         tone="blue" 
         :loading="loadingSummary"
+        :show-icon="false"
       />
       <AdminKpiCard 
         title="Đã thanh toán" 
@@ -38,6 +38,7 @@
         icon="check_circle" 
         tone="emerald" 
         :loading="loadingSummary"
+        :show-icon="false"
       />
       <AdminKpiCard 
         title="Chờ xử lý / Thất bại" 
@@ -45,6 +46,7 @@
         icon="clock" 
         tone="amber" 
         :loading="loadingSummary"
+        :show-icon="false"
       >
         <template #subtext v-if="!loadingSummary">
           <span class="text-amber-600 font-bold">{{ summary.pendingTransactions }}</span> chờ &middot; <span class="text-slate-500 font-bold">{{ summary.expiredTransactions }}</span> hết hạn &middot; <span class="text-rose-500 font-bold">{{ summary.cancelledTransactions }}</span> đã hủy
@@ -61,29 +63,59 @@
     </div>
 
     <AdminFilterBar>
-      <div class="relative flex-1 min-w-[200px]">
-        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input v-model="filterForm.q" type="text" placeholder="Tìm theo mã đơn, tên hoặc email khách hàng..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="applyFilters" />
-      </div>
-      <div class="w-48">
-        <select v-model="filterForm.gateway" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <option value="">Tất cả cổng TT</option>
-          <option value="sepay">SePay</option>
-          <option value="momo">MoMo</option>
-          <option value="vnpay">VNPay</option>
-        </select>
-      </div>
-      <div class="w-48">
-        <select v-model="filterForm.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <div class="flex w-full flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center">
+        <div class="relative min-w-[240px] flex-1">
+          <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input 
+            v-model="filterForm.q" 
+            @input="handleSearchInput"
+            @keyup.enter="handleEnter"
+            @focus="showHistory = true"
+            @blur="handleBlur"
+            type="text" 
+            placeholder="Tìm mã đơn, khách hàng..." 
+            class="admin-input pl-9 pr-8 w-full" 
+          />
+          <button v-if="filterForm.q" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+            <MfIcon name="close" size="14" />
+          </button>
+          
+          <!-- History Dropdown -->
+          <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg overflow-hidden animate-fade-in-up">
+            <ul>
+              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <MfIcon name="history" size="14" class="text-gray-400 flex-shrink-0" />
+                  <span class="text-sm text-gray-600 dark:text-gray-300 truncate">{{ item }}</span>
+                </div>
+                <button @mousedown.prevent.stop="removeHistoryItem(item)" class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition px-1">
+                  <MfIcon name="close" size="12" />
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <select v-model="filterForm.status" @change="applyFilters" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả trạng thái</option>
           <option value="paid">Đã thanh toán</option>
           <option value="pending">Đang chờ</option>
           <option value="expired">Hết hạn</option>
           <option value="cancelled">Đã hủy</option>
         </select>
+        <select v-model="filterForm.gateway" @change="applyFilters" class="admin-input w-full xl:w-36 xl:shrink-0 cursor-pointer">
+          <option value="">Tất cả cổng</option>
+          <option value="sepay">SePay</option>
+          <option value="momo">MoMo</option>
+          <option value="vnpay">VNPay</option>
+        </select>
+        <select v-model="filterForm.plan" @change="applyFilters" class="admin-input w-full xl:w-36 xl:shrink-0 cursor-pointer">
+          <option value="">Tất cả gói</option>
+          <option value="BASIC">Gói Cơ Bản</option>
+          <option value="PLUS">Gói Nâng Cao</option>
+          <option value="PREMIUM">Gói Cao Cấp</option>
+        </select>
+        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
       </div>
-      <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors" @click="applyFilters" style="height: 38px; margin-top: auto;">Tìm kiếm</button>
-      <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
     <!-- Main Content -->
@@ -100,18 +132,20 @@
         :empty="!loading && transactions.length === 0" 
         emptyTitle="Không tìm thấy giao dịch nào" 
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+        maxHeight="450px"
+        class="h-[450px]"
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
           <thead>
             <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Mã Đơn hàng</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[200px]">Khách hàng</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Gói Premium</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Số tiền</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Cổng TT</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Trạng thái</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Thời gian</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[15%]">Mã Đơn hàng</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[25%] truncate">Khách hàng</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[15%]">Gói Premium</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[10%]">Số tiền</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[10%]">Cổng TT</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[12%]">Trạng thái</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white w-[13%]">Thời gian</th>
+              <th class="py-3 px-4 font-bold text-black dark:text-white text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
@@ -124,10 +158,12 @@
                   </button>
                 </div>
               </td>
-              <td class="py-3 px-4">
-                <div class="flex flex-col hover:opacity-80 transition" @click.stop="goToUser(t.user_id)">
-                  <span class="font-bold text-gray-900 dark:text-white truncate">{{ t.user_name }}</span>
-                  <span class="text-xs text-gray-500 truncate">{{ t.user_email }}</span>
+              <td class="py-3 px-4 truncate">
+                <div class="flex flex-col hover:opacity-80 transition truncate" @click.stop="goToUser(t.user_id)">
+                  <span class="font-bold text-gray-900 dark:text-white text-sm truncate" :title="t.user_name || t.user_email">
+                    {{ t.user_name || 'Khách hàng' }}
+                  </span>
+                  <span class="text-xs text-gray-500 truncate" :title="t.user_email">{{ t.user_email }}</span>
                 </div>
               </td>
               <td class="py-3 px-4">
@@ -187,6 +223,7 @@
       @confirm="handleConfirm"
       @cancel="confirmState.open = false"
     />
+    </div>
   </div>
 </template>
 
@@ -197,6 +234,8 @@ import api from '@/api/axios'
 import { useToastStore } from '@/stores/toast'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import PaymentDetailModal from '@/components/admin/PaymentDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
@@ -225,8 +264,62 @@ const summary = ref({
 const filterForm = reactive({
   q: '',
   gateway: '',
-  status: ''
+  status: '',
+  plan: '',
+  dateFrom: '',
+  dateTo: ''
 })
+
+// Search History State
+const showHistory = ref(false)
+const searchHistory = ref(JSON.parse(localStorage.getItem('paymentSearchHistory')) || [])
+let searchTimeout = null
+
+function saveSearchHistory(term) {
+  if (!term || term.trim() === '') return
+  const current = searchHistory.value.filter(item => item !== term)
+  current.unshift(term)
+  if (current.length > 10) current.pop()
+  searchHistory.value = current
+  localStorage.setItem('paymentSearchHistory', JSON.stringify(current))
+}
+
+function handleSearchInput() {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    applyFilters()
+  }, 500)
+}
+
+function handleEnter() {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  saveSearchHistory(filterForm.q)
+  showHistory.value = false
+  applyFilters()
+}
+
+function handleBlur() {
+  setTimeout(() => {
+    showHistory.value = false
+  }, 200)
+}
+
+function clearSearch() {
+  filterForm.q = ''
+  applyFilters()
+}
+
+function selectHistoryItem(item) {
+  filterForm.q = item
+  showHistory.value = false
+  applyFilters()
+}
+
+function removeHistoryItem(item) {
+  searchHistory.value = searchHistory.value.filter(i => i !== item)
+  localStorage.setItem('paymentSearchHistory', JSON.stringify(searchHistory.value))
+}
+
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -294,6 +387,9 @@ function buildQueryParams() {
   if (filterForm.q) params.q = filterForm.q
   if (filterForm.gateway) params.gateway = filterForm.gateway
   if (filterForm.status) params.status = filterForm.status
+  if (filterForm.plan) params.plan = filterForm.plan
+  if (filterForm.dateFrom) params.dateFrom = filterForm.dateFrom
+  if (filterForm.dateTo) params.dateTo = filterForm.dateTo
   if (route.query.userId) params.userId = route.query.userId
   return params
 }
@@ -331,26 +427,55 @@ async function fetchList() {
   }
 }
 
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/payments/export', {
+      params: {
+        q: filterForm.q,
+        status: filterForm.status,
+        gateway: filterForm.gateway,
+        userId: route.query.userId || ''
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-payments.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toast.error('Không thể xuất báo cáo. Vui lòng thử lại.')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
 function applyFilters() {
   currentPage.value = 1
-  fetchData()
+  fetchList()
 }
 
 function onPageChange(page) {
   currentPage.value = page
-  fetchData()
+  fetchList()
 }
 
 function resetFilters() {
   filterForm.q = ''
   filterForm.gateway = ''
   filterForm.status = ''
-  currentPage.value = 1
+  filterForm.plan = ''
   
   if (route.query.userId) {
-    router.replace({ path: route.path, query: {} })
+    router.replace({ path: route.path, query: {} }).then(() => {
+      applyFilters()
+    })
   } else {
-    fetchData()
+    applyFilters()
   }
 }
 

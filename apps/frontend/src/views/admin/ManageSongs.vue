@@ -7,6 +7,7 @@
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý kho nhạc, metadata, trạng thái hiển thị và hiệu suất nghe của từng bài hát.</p>
       </div>
       <div class="flex gap-2 mt-4 md:mt-0">
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
         <!-- Optional Bulk Upload Button -->
         <button class="flex items-center gap-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm">
           <MfIcon name="upload" size="16" />
@@ -29,20 +30,20 @@
       {{ store.selectedGroup === 'ALL' ? 'Tất cả bài hát' : `Bài hát ${groupLabel(store.selectedGroup)}` }}
     </h2>
 
-    <!-- Filters & Search -->
     <AdminFilterBar>
-      <div class="relative flex-1 min-w-[200px]">
-        <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-        <input 
-          v-model="store.filters.search" 
-          @input="handleSearchInput" 
-          @keyup.enter="handleEnter" 
-          @focus="showHistory = true"
-          @blur="handleBlur"
-          type="text" 
-          placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." 
-          class="w-full pl-9 pr-8 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow shadow-sm" 
-        />
+      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="relative min-w-[320px] flex-1">
+          <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <input 
+            v-model="store.filters.search" 
+            @input="handleSearchInput" 
+            @keyup.enter="handleEnter" 
+            @focus="showHistory = true"
+            @blur="handleBlur"
+            type="text" 
+            placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." 
+            class="admin-input pl-9 pr-8 w-full" 
+          />
         <button v-if="store.filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
           <MfIcon name="close" size="14" />
         </button>
@@ -61,37 +62,30 @@
           </ul>
         </div>
       </div>
-      <div class="w-full md:w-40">
-        <select v-model="store.filters.genreId" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
+      <select v-model="store.filters.genreId" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả thể loại</option>
           <option v-for="g in formData.genres" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
-      </div>
-      <div class="w-full md:w-40">
-        <select v-model="store.filters.status" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
+        <select v-model="store.filters.status" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Đang hoạt động</option>
           <option value="inactive">Đã ẩn</option>
         </select>
-      </div>
-      <div class="w-full md:w-40">
-        <select v-model="store.filters.releaseStatus" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
+        <select v-model="store.filters.releaseStatus" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả phát hành</option>
           <option value="draft">Nháp</option>
           <option value="scheduled">Lên lịch</option>
           <option value="published">Đã phát hành</option>
           <option value="hidden">Đã ẩn</option>
         </select>
-      </div>
-      <div class="w-full md:w-40">
-        <select v-model="store.filters.sortBy" @change="store.applyFilters" class="w-full px-3 py-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm appearance-none cursor-pointer">
+        <select v-model="store.filters.sortBy" @change="store.applyFilters" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
           <option value="created_at">Mới nhất</option>
           <option value="play_count">Lượt nghe</option>
           <option value="title">Tên bài hát</option>
           <option value="duration_sec">Thời lượng</option>
         </select>
+        <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" class="xl:shrink-0" />
       </div>
-      <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
     <!-- Bulk Actions -->
@@ -273,7 +267,8 @@ import MetadataIssuesPanel from '@/components/admin/MetadataIssuesPanel.vue';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import AdminResetButton from '@/components/admin/AdminResetButton.vue';
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
+import AdminExportButton from '@/components/admin/AdminExportButton.vue';
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob';
 import AdminTableShell from '@/components/admin/AdminTableShell.vue';
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
@@ -363,8 +358,38 @@ function goToDetail(id) {
 // Bulk Selection State
 const selectedSongIds = ref([]);
 const isAllSelected = computed(() => {
-  return store.songs.length > 0 && selectedSongIds.value.length === store.songs.length;
-});
+  return store.songs.length > 0 && selectedSongIds.value.length === store.songs.length
+})
+
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/songs/export', {
+      params: {
+        group: store.selectedGroup,
+        search: store.filters.search,
+        genreId: store.filters.genreId,
+        artistId: store.filters.artistId,
+        status: store.filters.status,
+        releaseStatus: store.filters.releaseStatus,
+        sortBy: store.filters.sortBy,
+        sortOrder: store.filters.sortOrder
+      },
+      responseType: 'blob'
+    })
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-songs.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toast.error('Không thể xuất báo cáo. Vui lòng thử lại.')
+  } finally {
+    exportLoading.value = false
+  }
+}
 
 function toggleSelectAll(e) {
   if (e.target.checked) {

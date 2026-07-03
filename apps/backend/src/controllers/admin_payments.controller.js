@@ -1,5 +1,6 @@
 // apps/backend/src/controllers/admin_payments.controller.js
 const { pool } = require('../config/database');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 exports.getPaymentSummary = async (req, res, next) => {
   try {
@@ -189,6 +190,90 @@ exports.getPayments = async (req, res, next) => {
   } catch (error) {
     console.error('getPayments Error:', error);
     next(error);
+  }
+};
+
+exports.exportPayments = async (req, res, next) => {
+  try {
+    const { q, status, gateway, plan, dateFrom, dateTo } = req.query;
+
+    let conditions = ['1 = 1'];
+    let params = [];
+
+    if (q) {
+      conditions.push('(t.payment_code LIKE ? OR u.email LIKE ? OR u.display_name LIKE ?)');
+      const searchPattern = `%${q}%`;
+      params.push(searchPattern, searchPattern, searchPattern);
+    }
+    
+    if (status) {
+      conditions.push('t.status = ?');
+      params.push(status.toLowerCase());
+    }
+    
+    if (gateway) {
+      conditions.push('t.provider = ?');
+      params.push(gateway);
+    }
+    
+    if (plan) {
+      conditions.push('p.name = ?');
+      params.push(plan);
+    }
+    
+    if (dateFrom) {
+      conditions.push('t.created_at >= ?');
+      params.push(dateFrom + ' 00:00:00');
+    }
+    
+    if (dateTo) {
+      conditions.push('t.created_at <= ?');
+      params.push(dateTo + ' 23:59:59');
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const query = `
+      SELECT 
+        t.id as transaction_id, 
+        u.display_name as user_name, 
+        u.email as user_email,
+        p.name as plan_name,
+        t.amount,
+        t.status,
+        t.provider as gateway,
+        t.payment_code as transaction_code,
+        t.paid_at,
+        t.created_at
+      FROM payment_transactions t
+      LEFT JOIN users u ON t.user_id = u.id
+      LEFT JOIN premium_plans p ON t.plan_id = p.id
+      WHERE ${whereClause}
+      ORDER BY t.created_at DESC
+      LIMIT 10000
+    `;
+
+    const [rows] = await pool.query(query, params);
+
+    const columns = [
+      { header: 'Transaction ID', key: 'transaction_id' },
+      { header: 'User Name', key: 'user_name' },
+      { header: 'Email', key: 'user_email' },
+      { header: 'Plan', key: 'plan_name' },
+      { header: 'Amount', key: 'amount' },
+      { header: 'Status', key: 'status' },
+      { header: 'Gateway', key: 'gateway' },
+      { header: 'Transaction Code', key: 'transaction_code' },
+      { header: 'Paid At', key: 'paid_at' },
+      { header: 'Created At', key: 'created_at' }
+    ];
+
+    const csvContent = jsonToCsv(rows, columns);
+    const filename = createCsvFilename('payments');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportPayments Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
 

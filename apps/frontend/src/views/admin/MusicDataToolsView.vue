@@ -38,39 +38,39 @@
         :key="item.title"
         v-bind="item"
         :loading="loading && !summary"
+        :showIcon="false"
       />
     </div>
 
-    <!-- 3. Filter Bar -->
-    <AdminFilterBar>
-      <!-- Search -->
-      <div class="relative flex-1 min-w-[240px]">
-        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input 
-          v-model="filters.search" 
-          type="text" 
-          placeholder="Tìm kiếm bài hát, nghệ sĩ..." 
-          @keyup.enter="applyFilters"
-          class="admin-input pl-9"
-        >
-      </div>
+    <!-- Main Content Group (Filter & Table) -->
+    <div class="flex flex-col gap-3">
+      <!-- 3. Filter Bar -->
+      <AdminFilterBar class="!mb-0">
+        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+          <!-- Search -->
+          <AdminSearchInput
+            v-model="filters.search"
+            placeholder="Tìm kiếm bài hát, nghệ sĩ..."
+            icon="search"
+            historyKey="admin-music-data-tools-search"
+          />
 
-      <!-- Filters -->
-      <div class="w-full md:w-48">
-        <select v-model="filters.missing" @change="applyFilters" class="admin-input">
-          <option value="">Tất cả trạng thái</option>
-          <option value="cover">Thiếu Cover</option>
-          <option value="lyrics">Thiếu Lyrics</option>
-          <option value="features">Thiếu Audio Features</option>
-        </select>
-      </div>
-      
-      <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
-    </AdminFilterBar>
+          <!-- Filters -->
+          <select v-model="filters.missing" @change="applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
+            <option value="">Tất cả trạng thái</option>
+            <option value="cover">Thiếu Cover</option>
+            <option value="lyrics">Thiếu Lyrics</option>
+            <option value="features">Thiếu Audio Features</option>
+          </select>
+          
+          <AdminResetButton @click="resetFilters" class="xl:shrink-0" />
+        </div>
+      </AdminFilterBar>
 
-    <!-- 4. Data Table -->
-    <div class="flex-1 flex flex-col mb-8">
+      <!-- 4. Data Table -->
+      <div class="flex flex-col">
       <AdminTableShell 
+        maxHeight="375px"
         :loading="loading" 
         :empty="!loading && songs.length === 0" 
         emptyTitle="Chưa có bài hát nào" 
@@ -88,17 +88,17 @@
         <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 w-4"></th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Cover</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Bài hát</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Nghệ sĩ</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Album</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Health</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Cover</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Lyrics</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-center">Audio</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Updated</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Actions</th>
+              <th class="py-3 px-4 w-[50px]"></th>
+              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300">Cover</th>
+              <th class="py-3 px-4 min-w-[250px] font-bold text-black dark:text-gray-300">Bài hát</th>
+              <th class="py-3 px-4 min-w-[150px] font-bold text-black dark:text-gray-300">Nghệ sĩ</th>
+              <th class="py-3 px-4 min-w-[150px] font-bold text-black dark:text-gray-300">Album</th>
+              <th class="py-3 px-4 w-[100px] font-bold text-black dark:text-gray-300 text-center">Health</th>
+              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Cover</th>
+              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Lyrics</th>
+              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Audio</th>
+              <th class="py-3 px-4 w-[120px] font-bold text-black dark:text-gray-300">Updated</th>
+              <th class="py-3 px-4 w-[100px] font-bold text-black dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
@@ -152,10 +152,11 @@
         </table>
       </AdminTableShell>
 
-      <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30 mt-auto">
+      <div v-if="pagination.totalPages > 1" class="flex items-center justify-between mt-1">
         <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ pagination.page }} / {{ pagination.totalPages }}</span>
         <AdminPagination :limit="20" v-model:currentPage="pagination.page" :totalPages="pagination.totalPages" />
       </div>
+    </div>
     </div>
 
 
@@ -417,6 +418,7 @@ import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminSearchInput from '@/components/admin/AdminSearchInput.vue'
 
 const kpiCards = computed(() => {
   if (!summary.value) return Array(6).fill({})

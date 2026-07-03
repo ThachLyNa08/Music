@@ -75,6 +75,7 @@
           <p class="text-sm text-gray-500 dark:text-text-secondary mt-1">Quản lý metadata, bài hát và trạng thái phát hành của album.</p>
         </div>
         <div class="flex gap-2 mt-3 md:mt-0">
+          <AdminExportButton :loading="exportLoading" @click="handleExport" />
           <AdminAddButton title="Thêm album" @click="openCreateModal" />
         </div>
       </header>
@@ -92,7 +93,8 @@
       </div>
 
       <AdminFilterBar>
-        <div class="relative flex-1 min-w-[200px]">
+        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+          <div class="relative flex-1 min-w-[200px]">
           <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input 
             v-model="filters.search" 
@@ -120,10 +122,10 @@
               </li>
             </ul>
           </div>
-        </div>
-        <div class="w-full md:w-40 relative" ref="filterGenreDropdownRef">
-          <input 
-            v-model="filterGenreSearch" 
+          </div>
+          <div class="w-full xl:w-40 xl:shrink-0 relative" ref="filterGenreDropdownRef">
+            <input 
+              v-model="filterGenreSearch" 
             @focus="showGenreDropdown = true"
             @blur="handleFilterGenreBlur"
             class="admin-input pr-8 text-sm cursor-pointer"
@@ -133,38 +135,39 @@
             <MfIcon name="expand_more" size="18" />
           </div>
           <div v-if="showGenreDropdown" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg max-h-[160px] overflow-y-auto">
-            <button type="button" @mousedown.prevent="selectFilterGenre('')" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === '' }">
-              Tất cả thể loại
-            </button>
-            <button v-for="genre in filterAvailableGenres" :key="genre.id" type="button" @mousedown.prevent="selectFilterGenre(genre.id)" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === genre.id }">
-              {{ genre.name }}
-            </button>
-            <div v-if="filterAvailableGenres.length === 0" class="px-4 py-3 text-sm text-gray-500 italic">Không tìm thấy</div>
+              <button type="button" @mousedown.prevent="selectFilterGenre('')" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === '' }">
+                Tất cả thể loại
+              </button>
+              <button v-for="genre in filterAvailableGenres" :key="genre.id" type="button" @mousedown.prevent="selectFilterGenre(genre.id)" class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-bg-card transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 h-[40px] truncate" :class="{ 'bg-gray-50 dark:bg-bg-card font-bold': filters.genreId === genre.id }">
+                {{ genre.name }}
+              </button>
+              <div v-if="filterAvailableGenres.length === 0" class="px-4 py-3 text-sm text-gray-500 italic">Không tìm thấy</div>
+            </div>
           </div>
-        </div>
-        <div class="w-full md:w-40">
-          <select v-model="filters.sortPlays" class="admin-input">
-            <option value="">Lượt nghe mặc định</option>
-            <option value="desc">Lượt nghe giảm dần</option>
+          <div class="w-full xl:w-40 xl:shrink-0">
+            <select v-model="filters.sortPlays" class="admin-input w-full cursor-pointer">
+              <option value="">Lượt nghe mặc định</option>
+              <option value="desc">Lượt nghe giảm dần</option>
             <option value="asc">Lượt nghe tăng dần</option>
           </select>
-        </div>
-        <div class="w-full md:w-40">
-          <select v-model="filters.releaseStatus" class="admin-input">
-            <option value="">Tất cả trạng thái</option>
+          </div>
+          <div class="w-full xl:w-40 xl:shrink-0">
+            <select v-model="filters.releaseStatus" class="admin-input w-full cursor-pointer">
+              <option value="">Tất cả trạng thái</option>
             <option value="draft">Nháp</option>
             <option value="scheduled">Lên lịch</option>
             <option value="published">Đã phát hành</option>
             <option value="hidden">Đã ẩn</option>
           </select>
         </div>
-        <div v-if="meta.supportsMarketFilter" class="w-full md:w-40">
-          <select v-model="filters.market" class="admin-input">
-            <option value="">Tất cả khu vực</option>
-            <option v-for="market in meta.markets" :key="market" :value="market">{{ market }}</option>
-          </select>
+        <div v-if="meta.supportsMarketFilter" class="w-full xl:w-40 xl:shrink-0">
+            <select v-model="filters.market" class="admin-input w-full cursor-pointer">
+              <option value="">Tất cả khu vực</option>
+              <option v-for="market in meta.markets" :key="market" :value="market">{{ market }}</option>
+            </select>
+          </div>
+          <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" class="xl:shrink-0" />
         </div>
-        <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" class="h-[38px] mt-[auto]" />
       </AdminFilterBar>
 
       <div class="flex-1 flex flex-col">
@@ -420,6 +423,8 @@ async function handleConfirm() {
 }
 import draggable from 'vuedraggable'
 import api from '@/api/axios'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
@@ -672,6 +677,36 @@ const coverPreviewSrc = computed(() => {
   }
   return ''
 })
+
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/albums/export', {
+      params: {
+        search: filters.search,
+        genreId: filters.genreId,
+        artistId: filters.artistId,
+        releaseStatus: filters.releaseStatus,
+        market: filters.market,
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortOrder
+      },
+      responseType: 'blob'
+    })
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-albums.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    const toast = useToastStore()
+    toast.error('Không thể xuất báo cáo. Vui lòng thử lại.')
+  } finally {
+    exportLoading.value = false
+  }
+}
 
 let searchTimer = null
 watch(() => ({ ...filters }), () => {

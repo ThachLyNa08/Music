@@ -5,8 +5,11 @@
     </label>
     
     <div 
-      class="relative flex items-center w-full px-4 py-3 bg-gray-50 dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl focus-within:bg-white dark:focus-within:bg-bg-surface focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all shadow-sm"
-      :class="{ 'opacity-60 cursor-not-allowed': disabled }"
+      class="relative flex items-center w-full bg-gray-50 dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl focus-within:bg-white dark:focus-within:bg-bg-surface focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all shadow-sm"
+      :class="[
+        compact ? 'h-10 px-3' : 'px-4 py-3',
+        { 'opacity-60 cursor-not-allowed': disabled }
+      ]"
     >
       <input
         ref="inputRef"
@@ -24,17 +27,16 @@
       />
       <button 
         v-if="searchQuery && !disabled"
-        type="button" 
         class="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
-        @click="clearSelection"
+        @click="() => clearSelection(true, true)"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
-      <div v-else class="ml-2 text-gray-400">
+      <button v-else type="button" class="ml-2 text-gray-400 hover:text-gray-600 focus:outline-none" @click.stop="toggleDropdown">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{ 'transform rotate-180': isOpen }">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
-      </div>
+      </button>
     </div>
 
     <!-- Dropdown -->
@@ -45,7 +47,7 @@
         class="absolute z-[9999] mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl shadow-xl overflow-hidden"
         :style="dropdownStyle"
       >
-        <ul class="max-h-60 overflow-y-auto py-1">
+        <ul :class="[maxHeightClass, 'overflow-y-auto py-1']">
           <!-- Create New Option -->
           <li 
             v-if="allowCreate && showCreateOption && searchQuery.trim()"
@@ -98,6 +100,8 @@ const props = defineProps({
   allowCreate: { type: Boolean, default: false },
   required: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
+  maxHeightClass: { type: String, default: 'max-h-60' },
 });
 
 const emit = defineEmits(['update:modelValue', 'change']);
@@ -191,6 +195,15 @@ const openDropdown = () => {
   updateDropdownPosition();
 };
 
+const toggleDropdown = () => {
+  if (props.disabled) return;
+  if (isOpen.value) {
+    closeDropdown();
+  } else {
+    openDropdown();
+  }
+};
+
 const closeDropdown = () => {
   isOpen.value = false;
   // If user didn't explicitly select, revert or handle
@@ -200,10 +213,10 @@ const closeDropdown = () => {
       if (exactMatch.value) {
         selectOption(exactMatch.value);
       } else {
-        clearSelection();
+        clearSelection(true, false);
       }
     } else {
-      clearSelection();
+      clearSelection(true, false);
     }
   } else {
     // Restore the label of the internal selection
@@ -227,27 +240,33 @@ const selectCreateNew = () => {
   emitSelection();
 };
 
-const clearSelection = (shouldEmit = true) => {
+const clearSelection = (shouldEmit = true, focusInput = true) => {
   searchQuery.value = '';
   internalSelection.value = null;
   if (shouldEmit) {
     emitSelection();
+  }
+  if (focusInput) {
     inputRef.value?.focus();
   }
 };
 
 const emitSelection = () => {
   if (!internalSelection.value) {
-    emit('update:modelValue', '');
-    emit('change', null);
+    if (props.modelValue !== '' && props.modelValue !== null) {
+      emit('update:modelValue', '');
+      emit('change', null);
+    }
   } else if (internalSelection.value.isNew) {
     // Emit the whole object so parent knows it's a new item
     emit('update:modelValue', internalSelection.value);
     emit('change', internalSelection.value);
   } else {
     // Emit just the value for existing items
-    emit('update:modelValue', internalSelection.value.value);
-    emit('change', internalSelection.value);
+    if (props.modelValue !== internalSelection.value.value) {
+      emit('update:modelValue', internalSelection.value.value);
+      emit('change', internalSelection.value);
+    }
   }
 };
 

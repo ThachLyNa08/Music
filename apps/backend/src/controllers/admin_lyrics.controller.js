@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 function hasValidSyncedLyrics(text) {
   if (!text || !text.trim()) return false;
@@ -242,5 +243,100 @@ exports.exportAudit = async (req, res, next) => {
     }
   } catch (error) {
     next(error);
+  }
+};
+
+exports.exportLyrics = async (req, res, next) => {
+  try {
+    const { q, status, provider } = req.query;
+
+    let whereConditions = [];
+    let queryParams = [];
+
+    if (q) {
+      whereConditions.push(`(s.title LIKE ? OR a.name LIKE ?)`);
+      queryParams.push(`%${q}%`, `%${q}%`);
+    }
+
+    if (status) {
+      if (status === 'missing') {
+        whereConditions.push(`(sl.song_id IS NULL OR sl.sync_type = 'NONE' OR (TRIM(sl.plain_lyrics) = '' AND TRIM(sl.synced_lyrics) = ''))`);
+      } else if (status === 'has_lyrics') {
+        whereConditions.push(`sl.song_id IS NOT NULL`);
+      } else if (status === 'synced') {
+        whereConditions.push(`sl.sync_type = 'LINE_SYNCED'`);
+      } else if (status === 'plain') {
+        whereConditions.push(`sl.sync_type = 'PLAIN_TEXT'`);
+      }
+    }
+
+    if (provider && provider !== 'all') {
+      whereConditions.push(`UPPER(sl.provider) = UPPER(?)`);
+      queryParams.push(provider);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    const dataQuery = `
+      SELECT 
+        s.id as song_id, s.title, a.name as artist_name,
+        sl.provider, sl.sync_type, sl.updated_at,
+        IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
+        IF(sl.synced_lyrics IS NOT NULL AND TRIM(sl.synced_lyrics) != '', 1, 0) as has_synced_lyrics,
+        LENGTH(sl.plain_lyrics) as plain_lyrics_length,
+        LENGTH(sl.synced_lyrics) as synced_lyrics_length
+      FROM songs s
+      LEFT JOIN artists a ON s.artist_id = a.id
+      LEFT JOIN song_lyrics sl ON s.id = sl.song_id
+      ${whereClause}
+      ORDER BY s.id DESC
+      LIMIT 10000
+    `;
+    
+    const [rows] = await pool.query(dataQuery, queryParams);
+
+    const formattedRows = rows.map(row => {
+      let effectiveSyncType = 'NONE';
+      if (row.has_synced_lyrics && row.sync_type === 'LINE_SYNCED') {
+        effectiveSyncType = 'LINE_SYNCED';
+      } else if (row.has_plain_lyrics) {
+        effectiveSyncType = 'PLAIN_TEXT';
+      }
+
+      let lyricsStatus = 'Chưa có lyrics';
+      if (effectiveSyncType === 'LINE_SYNCED') lyricsStatus = 'Lyrics đồng bộ';
+      else if (effectiveSyncType === 'PLAIN_TEXT') lyricsStatus = 'Lyrics thường';
+
+      return {
+        ...row,
+        provider: row.provider ? row.provider.toUpperCase() : '',
+        effective_sync_type: effectiveSyncType,
+        lyrics_status: lyricsStatus,
+        has_plain_lyrics: row.has_plain_lyrics === 1 ? 'Có' : 'Không',
+        has_synced_lyrics: row.has_synced_lyrics === 1 ? 'Có' : 'Không'
+      };
+    });
+
+    const columns = [
+      { header: 'Song ID', key: 'song_id' },
+      { header: 'Title', key: 'title' },
+      { header: 'Artist', key: 'artist_name' },
+      { header: 'Provider', key: 'provider' },
+      { header: 'Sync Type (DB)', key: 'sync_type' },
+      { header: 'Effective Sync Type', key: 'effective_sync_type' },
+      { header: 'Lyrics Status', key: 'lyrics_status' },
+      { header: 'Has Plain Lyrics', key: 'has_plain_lyrics' },
+      { header: 'Has Synced Lyrics', key: 'has_synced_lyrics' },
+      { header: 'Plain Lyrics Length', key: 'plain_lyrics_length' },
+      { header: 'Synced Lyrics Length', key: 'synced_lyrics_length' },
+      { header: 'Updated At', key: 'updated_at' }
+    ];
+
+    const csvContent = jsonToCsv(formattedRows, columns);
+    const filename = createCsvFilename('lyrics');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportLyrics Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };

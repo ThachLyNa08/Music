@@ -7,6 +7,7 @@
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý danh sách ca sĩ, band nhạc và các nghệ sĩ trên hệ thống</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
         <AdminAddButton title="Thêm nghệ sĩ mới" @click="openAddModal" />
       </div>
     </header>
@@ -26,17 +27,18 @@
 
       <!-- Filters & Search -->
     <AdminFilterBar>
-      <div class="relative flex-1">
-        <MfIcon name="search" size="20" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-        <input 
-          v-model="searchQuery" 
-          @keyup.enter="handleEnter"
-          @focus="showHistory = true"
-          @blur="handleBlur"
-          type="text" 
-          placeholder="Tìm theo tên nghệ sĩ..." 
-          class="admin-input pl-11 pr-10" 
-        />
+      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="relative flex-1 min-w-[200px]">
+          <MfIcon name="search" size="20" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <input 
+            v-model="searchQuery" 
+            @keyup.enter="handleEnter"
+            @focus="showHistory = true"
+            @blur="handleBlur"
+            type="text" 
+            placeholder="Tìm theo tên nghệ sĩ..." 
+            class="admin-input pl-11 pr-10 w-full" 
+          />
         <button v-if="searchQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
           <MfIcon name="close" size="18" />
         </button>
@@ -53,18 +55,18 @@
             </li>
           </ul>
         </div>
-      </div>
-      <div class="relative w-full md:w-48" ref="genreDropdownRef">
-        <div class="relative cursor-pointer" @click="genreDropdownOpen = true">
-          <input 
-            v-model="genreSearchText" 
-            @focus="genreDropdownOpen = true"
-            placeholder="Tất cả thể loại" 
-            class="admin-input pr-8 cursor-pointer text-sm" 
-            :class="{ 'text-emerald-600 font-bold': filterMainGenre !== '' }"
-          />
-          <MfIcon name="expand_more" size="20" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }" />
         </div>
+        <div class="relative w-full xl:w-48 xl:shrink-0" ref="genreDropdownRef">
+          <div class="relative cursor-pointer" @click="genreDropdownOpen = true">
+            <input 
+              v-model="genreSearchText" 
+              @focus="genreDropdownOpen = true"
+              placeholder="Tất cả thể loại" 
+              class="admin-input pr-8 cursor-pointer text-sm w-full" 
+              :class="{ 'text-emerald-600 font-bold': filterMainGenre !== '' }"
+            />
+            <MfIcon name="expand_more" size="20" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }" />
+          </div>
         
         <div v-if="genreDropdownOpen" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg overflow-hidden flex flex-col">
           <ul class="max-h-[160px] overflow-y-auto custom-scrollbar py-1">
@@ -96,23 +98,24 @@
             </li>
           </ul>
         </div>
+        </div>
+        <div class="w-full xl:w-48 xl:shrink-0">
+          <select v-model="filterSongCount" class="admin-input w-full cursor-pointer">
+            <option value="all">Tất cả bài hát</option>
+            <option value="0">Chưa có bài hát</option>
+            <option value="1-10">1 - 10 bài</option>
+            <option value="11-50">11 - 50 bài</option>
+            <option value=">50">Trên 50 bài</option>
+          </select>
+        </div>
+        <div class="w-full xl:w-48 xl:shrink-0">
+          <select v-model="filterRegion" class="admin-input w-full cursor-pointer">
+            <option value="">Tất cả khu vực</option>
+            <option v-for="r in regionsList" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
+        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
       </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterSongCount" class="admin-input">
-          <option value="all">Tất cả bài hát</option>
-          <option value="0">Chưa có bài hát</option>
-          <option value="1-10">1 - 10 bài</option>
-          <option value="11-50">11 - 50 bài</option>
-          <option value=">50">Trên 50 bài</option>
-        </select>
-      </div>
-      <div class="w-full md:w-48">
-        <select v-model="filterRegion" class="admin-input">
-          <option value="">Tất cả khu vực</option>
-          <option v-for="r in regionsList" :key="r" :value="r">{{ r }}</option>
-        </select>
-      </div>
-      <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
     <!-- Data Table and Pagination Wrapper -->
@@ -328,13 +331,15 @@ import { onClickOutside } from '@vueuse/core'
 import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
-import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -511,6 +516,30 @@ async function fetchArtists() {
     console.error('Lỗi khi tải danh sách nghệ sĩ:', err)
   } finally {
     loading.value = false
+  }
+}
+
+const exportLoading = ref(false)
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/artists/export', {
+      params: {
+        search: searchQuery.value,
+        region: filterRegion.value
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-artists.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toastStore.showToast('Không thể xuất báo cáo. Vui lòng thử lại.', 'error')
+  } finally {
+    exportLoading.value = false
   }
 }
 

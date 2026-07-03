@@ -170,7 +170,7 @@ exports.retryJob = async (req, res) => {
     const { id } = req.params;
 
     // Check current status
-    const [rows] = await db.execute('SELECT status FROM song_stems WHERE id = ?', [id]);
+    const [rows] = await db.execute('SELECT id, status, song_id FROM song_stems WHERE id = ?', [id]);
     
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy job' });
@@ -178,19 +178,19 @@ exports.retryJob = async (req, res) => {
 
     const job = rows[0];
 
-    if (job.status !== 'failed') {
-      return res.status(400).json({ success: false, message: 'Chỉ có thể retry các job bị lỗi (failed)' });
+    if (job.status !== 'failed' && job.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Chỉ có thể retry các job bị lỗi hoặc pending' });
     }
 
-    // Update status to pending and clear errors/processed_at
-    await db.execute(`
-      UPDATE song_stems 
-      SET status = 'pending', 
-          error_message = NULL, 
-          processed_at = NULL,
-          updated_at = NOW()
-      WHERE id = ?
-    `, [id]);
+    // We want to force a retry. requestSeparation ignores if status is pending/processing.
+    // So we temporarily set it to failed to force a new job creation.
+    await db.execute('UPDATE song_stems SET status = ? WHERE id = ?', ['failed', id]);
+
+    // Call stemService to handle the rest!
+    const stemService = require('../services/stem.service');
+    // We need a user to pass to requestSeparation. req.user should be available for admin endpoints.
+    // Ensure we await the response so the job is actually created and triggered
+    await stemService.requestSeparation(req.user, job.song_id);
 
     res.json({
       success: true,

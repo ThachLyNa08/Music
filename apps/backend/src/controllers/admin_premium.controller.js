@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 // Helper to determine if user is currently premium
 const getPremiumStatus = (expiresAt) => {
@@ -324,5 +325,110 @@ exports.cancelPremium = async (req, res, next) => {
     next(error);
   } finally {
     if (conn) conn.release();
+  }
+};
+
+exports.exportPremium = async (req, res, next) => {
+  try {
+    const { q = '', status = '', plan = '', expiresFrom = '', expiresTo = '' } = req.query;
+    
+    let whereClause = '1=1';
+    const params = [];
+    
+    if (q) {
+      whereClause += ' AND (u.display_name LIKE ? OR u.email LIKE ? OR u.id = ?)';
+      params.push(`%${q}%`, `%${q}%`, q);
+    }
+    
+    if (plan && plan !== 'Tất cả') {
+      whereClause += ' AND p.name = ?';
+      params.push(plan);
+    }
+    
+    const statusVal = status || 'Tất cả Premium';
+    if (statusVal === 'Tất cả Premium') {
+      whereClause += " AND (u.premium_expires_at IS NOT NULL OR EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid'))";
+    } else if (statusVal === 'Đang hoạt động') {
+      whereClause += ' AND u.premium_expires_at > NOW()';
+    } else if (statusVal === 'Sắp hết hạn') {
+      whereClause += ' AND u.premium_expires_at > NOW() AND u.premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)';
+    } else if (statusVal === 'Đã hết hạn') {
+      whereClause += ' AND (u.premium_expires_at IS NOT NULL AND u.premium_expires_at <= NOW())';
+    } else if (statusVal === 'Chưa Premium') {
+      whereClause += " AND u.premium_expires_at IS NULL AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid')";
+    }
+    
+    if (expiresFrom) {
+      whereClause += ' AND u.premium_expires_at >= ?';
+      params.push(expiresFrom + ' 00:00:00');
+    }
+    
+    if (expiresTo) {
+      whereClause += ' AND u.premium_expires_at <= ?';
+      params.push(expiresTo + ' 23:59:59');
+    }
+
+    const queryStr = `
+      SELECT 
+        u.id as user_id, 
+        u.display_name as name, 
+        u.email,
+        u.premium_expires_at,
+        p.name as plan_name,
+        MAX(pt.created_at) as last_transaction_date
+      FROM users u
+      LEFT JOIN payment_transactions pt ON pt.user_id = u.id AND pt.status = 'paid'
+      LEFT JOIN premium_plans p ON pt.plan_id = p.id
+      WHERE ${whereClause}
+      GROUP BY u.id
+      ORDER BY u.premium_expires_at DESC
+      LIMIT 10000
+    `;
+
+    const [rows] = await pool.query(queryStr, params);
+
+    const formattedRows = rows.map(row => {
+      const pStatus = getPremiumStatus(row.premium_expires_at);
+      let statusStr = 'Không có';
+      if (pStatus === 'active') statusStr = 'Đang hoạt động';
+      else if (pStatus === 'expiring_soon') statusStr = 'Sắp hết hạn';
+      else if (pStatus === 'expired') statusStr = 'Đã hết hạn';
+
+      const now = new Date();
+      const expiry = row.premium_expires_at ? new Date(row.premium_expires_at) : null;
+      let daysRemaining = 0;
+      if (expiry && expiry > now) {
+        daysRemaining = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+      }
+
+      return {
+        user_id: row.user_id,
+        name: row.name,
+        email: row.email,
+        plan_name: row.plan_name || 'Không xác định',
+        status: statusStr,
+        start_date: row.last_transaction_date,
+        end_date: row.premium_expires_at,
+        days_remaining: daysRemaining
+      };
+    });
+
+    const columns = [
+      { header: 'User ID', key: 'user_id' },
+      { header: 'Name', key: 'name' },
+      { header: 'Email', key: 'email' },
+      { header: 'Plan Name', key: 'plan_name' },
+      { header: 'Status', key: 'status' },
+      { header: 'Start Date', key: 'start_date' },
+      { header: 'End Date', key: 'end_date' },
+      { header: 'Days Remaining', key: 'days_remaining' }
+    ];
+
+    const csvContent = jsonToCsv(formattedRows, columns);
+    const filename = createCsvFilename('premium');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportPremium Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };

@@ -24,7 +24,7 @@
     </div>
 
     <!-- Table Content -->
-    <div v-show="!error && !empty" class="w-full relative rounded-2xl" :class="[maxHeight ? 'overflow-auto flex-1 min-h-0' : 'overflow-x-auto overflow-y-visible']">
+    <div v-show="!error && !empty" class="w-full relative rounded-2xl" :class="[maxHeight ? 'overflow-y-scroll overflow-x-auto flex-1 min-h-0' : 'overflow-x-auto overflow-y-visible']">
       <slot></slot>
     </div>
   </div>

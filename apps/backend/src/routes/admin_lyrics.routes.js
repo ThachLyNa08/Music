@@ -8,6 +8,7 @@ router.get('/backlog/export', adminLyricsController.exportBacklog);
 router.get('/audit/export', adminLyricsController.exportAudit);
 
 // General paths
+router.get('/export', adminLyricsController.exportLyrics);
 router.get('/', adminLyricsController.getList);
 
 // Parameterized paths

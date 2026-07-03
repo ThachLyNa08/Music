@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const fs = require('fs');
 const path = require('path');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 exports.getAllGenres = async (req, res, next) => {
   try {
@@ -747,5 +748,83 @@ exports.bulkActionGenres = async (req, res, next) => {
     res.json({ success: true, message: 'Thao tác hàng loạt thành công' });
   } catch (err) {
     next(err);
+  }
+};
+
+exports.exportGenres = async (req, res, next) => {
+  try {
+    const { search, status, featured, data_status, taxonomy_flag } = req.query;
+    
+    let whereClause = '1=1';
+    let params = [];
+    
+    if (search) {
+      whereClause += ' AND g.name LIKE ?';
+      params.push(`%${search}%`);
+    }
+    
+    if (status && status !== 'all') {
+      whereClause += ' AND g.status = ?';
+      params.push(status);
+    }
+    
+    if (featured !== undefined && featured !== 'all') {
+      whereClause += ' AND g.is_featured = ?';
+      params.push(featured === 'true' || featured === '1' ? 1 : 0);
+    }
+
+    if (data_status === 'has_data') {
+      whereClause += ' AND EXISTS (SELECT 1 FROM songs s WHERE s.genre_id = g.id)';
+    } else if (data_status === 'no_data') {
+      whereClause += ' AND NOT EXISTS (SELECT 1 FROM songs s WHERE s.genre_id = g.id)';
+    }
+
+    if (taxonomy_flag && taxonomy_flag !== 'all') {
+      if (taxonomy_flag === 'cold_start') whereClause += ' AND g.use_in_cold_start = 1';
+      else if (taxonomy_flag === 'recommendation') whereClause += ' AND g.use_in_recommendation = 1';
+      else if (taxonomy_flag === 'ai_playlist') whereClause += ' AND g.use_in_ai_playlist = 1';
+    }
+
+    const [rows] = await pool.query(`
+      SELECT g.id as genre_id, g.name, g.market, p.name as parent_name,
+        (SELECT COUNT(*) FROM songs s WHERE s.genre_id = g.id) as song_count,
+        (
+          SELECT COUNT(lh.id) 
+          FROM listening_history lh 
+          JOIN songs s ON lh.song_id = s.id 
+          WHERE s.genre_id = g.id AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ) as listens_7d,
+        CASE WHEN g.is_featured = 1 THEN 'Có' ELSE 'Không' END as is_featured,
+        CASE WHEN g.use_in_recommendation = 1 THEN 'Có' ELSE 'Không' END as use_in_recommendation,
+        CASE WHEN g.use_in_cold_start = 1 THEN 'Có' ELSE 'Không' END as use_in_cold_start,
+        CASE WHEN g.use_in_ai_playlist = 1 THEN 'Có' ELSE 'Không' END as use_in_ai_playlist,
+        g.status
+      FROM genres g
+      LEFT JOIN genres p ON g.parent_id = p.id
+      WHERE ${whereClause}
+      ORDER BY song_count DESC, listens_7d DESC, g.name ASC
+      LIMIT 10000
+    `, params);
+
+    const columns = [
+      { header: 'Genre ID', key: 'genre_id' },
+      { header: 'Name', key: 'name' },
+      { header: 'Market', key: 'market' },
+      { header: 'Parent Name', key: 'parent_name' },
+      { header: 'Song Count', key: 'song_count' },
+      { header: 'Listens 7D', key: 'listens_7d' },
+      { header: 'Featured', key: 'is_featured' },
+      { header: 'Recommendation', key: 'use_in_recommendation' },
+      { header: 'Cold Start', key: 'use_in_cold_start' },
+      { header: 'AI Playlist', key: 'use_in_ai_playlist' },
+      { header: 'Status', key: 'status' }
+    ];
+
+    const csvContent = jsonToCsv(rows, columns);
+    const filename = createCsvFilename('genres');
+    return sendCsv(res, filename, csvContent);
+  } catch (err) {
+    console.error('exportGenres Error:', err);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };

@@ -17,6 +17,7 @@
         </p>
       </div>
       <div class="relative z-10 flex gap-2">
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
         <AdminAddButton title="Thêm thể loại" @click="openCreateModal" />
       </div>
     </header>
@@ -95,18 +96,19 @@
     <!-- Filters & Bulk Actions -->
     <div class="flex flex-col xl:flex-row justify-between gap-3 mb-2">
       <AdminFilterBar class="flex-1 !mb-0">
-        <div class="relative flex-1 min-w-[200px]">
-          <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <input 
-            v-model="filters.search"
-            @input="handleSearchInput"
-            @keyup.enter="handleEnter"
-            @focus="showHistory = true"
-            @blur="handleBlur"
-            type="text" 
-            placeholder="Tìm kiếm thể loại..."
-            class="admin-input pl-9 pr-8"
-          >
+        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+          <div class="relative flex-1 min-w-[200px]">
+            <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <input 
+              v-model="filters.search"
+              @input="handleSearchInput"
+              @keyup.enter="handleEnter"
+              @focus="showHistory = true"
+              @blur="handleBlur"
+              type="text" 
+              placeholder="Tìm kiếm thể loại..."
+              class="admin-input pl-9 pr-8 w-full"
+            >
           <button v-if="filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
             <MfIcon name="close" size="14" />
           </button>
@@ -124,36 +126,37 @@
               </li>
             </ul>
           </div>
+          </div>
+          <select 
+            v-model="filters.data_status"
+            @change="fetchGenres"
+            class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer"
+          >
+            <option value="all">Tất cả dữ liệu</option>
+            <option value="has_data">Có dữ liệu</option>
+            <option value="no_data">Chưa có dữ liệu</option>
+          </select>
+          <select 
+            v-model="filters.taxonomy_flag"
+            @change="fetchGenres"
+            class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer"
+          >
+            <option value="all">Mọi cờ Taxonomy</option>
+            <option value="cold_start">Dùng Cold Start</option>
+            <option value="recommendation">Dùng Recommendation</option>
+            <option value="ai_playlist">Dùng AI Playlist</option>
+          </select>
+          <select 
+            v-model="filters.featured"
+            @change="fetchGenres"
+            class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer"
+          >
+            <option value="all">Tất cả Featured</option>
+            <option value="true">Được Featured</option>
+            <option value="false">Không Featured</option>
+          </select>
+          <AdminResetButton :disabled="isLoading" @click="resetFilters" class="xl:shrink-0" />
         </div>
-        <select 
-          v-model="filters.data_status"
-          @change="fetchGenres"
-          class="admin-input lg:w-40"
-        >
-          <option value="all">Tất cả dữ liệu</option>
-          <option value="has_data">Có dữ liệu</option>
-          <option value="no_data">Chưa có dữ liệu</option>
-        </select>
-        <select 
-          v-model="filters.taxonomy_flag"
-          @change="fetchGenres"
-          class="admin-input lg:w-48"
-        >
-          <option value="all">Mọi cờ Taxonomy</option>
-          <option value="cold_start">Dùng Cold Start</option>
-          <option value="recommendation">Dùng Recommendation</option>
-          <option value="ai_playlist">Dùng AI Playlist</option>
-        </select>
-        <select 
-          v-model="filters.status"
-          @change="fetchGenres"
-          class="admin-input lg:w-40"
-        >
-          <option value="all">Tất cả trạng thái</option>
-          <option value="active">Hoạt động</option>
-          <option value="hidden">Đã ẩn</option>
-        </select>
-        <AdminResetButton :disabled="loading" @click="fetchGenres" class="h-[38px] mt-[auto]" />
       </AdminFilterBar>
 
       <!-- Bulk Actions -->
@@ -356,19 +359,16 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '@/api/axios';
 import { useToastStore } from '@/stores/toast';
-import GenreFormModal from '@/components/admin/GenreFormModal.vue';
-import GenreMergeModal from '@/components/admin/GenreMergeModal.vue';
-import GenreSongsDrawer from '@/components/admin/GenreSongsDrawer.vue';
-import GenreDetailDrawer from '@/components/admin/GenreDetailDrawer.vue';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
-import AdminPagination from '@/components/admin/AdminPagination.vue';
-import MfIcon from '@/components/common/MfIcon.vue';
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
-import AdminTableShell from '@/components/admin/AdminTableShell.vue';
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
-import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
-import AdminResetButton from '@/components/admin/AdminResetButton.vue';
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue';
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
+import AdminExportButton from '@/components/admin/AdminExportButton.vue';
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob';
+import AdminTableShell from '@/components/admin/AdminTableShell.vue';
+import AdminPagination from '@/components/admin/AdminPagination.vue';
+import AdminResetButton from '@/components/admin/AdminResetButton.vue';
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
 
 const toast = useToastStore();
 
@@ -523,6 +523,34 @@ const fetchGenres = async () => {
     loading.value = false;
   }
 };
+
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/genres/export', {
+      params: {
+        search: filters.search,
+        status: filters.status,
+        featured: filters.featured,
+        data_status: filters.data_status,
+        taxonomy_flag: filters.taxonomy_flag
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-genres.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toast.showToast('Không thể xuất báo cáo. Vui lòng thử lại.', 'error')
+  } finally {
+    exportLoading.value = false
+  }
+}
 
 // Search & History
 const searchTimeout = ref(null);

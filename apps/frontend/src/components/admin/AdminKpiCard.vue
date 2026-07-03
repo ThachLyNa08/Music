@@ -1,6 +1,7 @@
 <template>
   <div 
-    class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    :class="compact && showIcon ? 'p-3.5' : 'p-5'"
   >
     <!-- Skeleton Loading -->
     <div v-if="loading" class="animate-pulse flex items-start justify-between gap-4">
@@ -24,20 +25,37 @@
         <div class="min-w-0 text-right flex-1">
           <p class="text-sm font-medium text-black truncate" :title="title">{{ title }}</p>
           <p class="mt-1 text-2xl font-bold tracking-tight" :class="valueClass">{{ formattedValue }}</p>
-          <p v-if="subtitle" class="mt-1 text-xs text-slate-400 truncate" :title="subtitle">{{ subtitle }}</p>
+          <p v-if="subtitle" class="mt-1 text-xs truncate" :class="subtitleColorClass" :title="subtitle">{{ subtitle }}</p>
         </div>
       </div>
 
-      <div v-else class="space-y-1">
-        <p class="text-sm font-semibold text-black line-clamp-1" :title="title">
-          {{ title }}
-        </p>
-        <p class="text-3xl font-bold tracking-tight" :class="valueClass">
-          {{ formattedValue }}
-        </p>
-        <p v-if="subtitle" class="text-xs text-slate-400 line-clamp-1" :title="subtitle">
-          {{ subtitle }}
-        </p>
+      <div v-else class="flex items-start justify-between gap-5">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-slate-700 line-clamp-1">
+            {{ title }}
+          </p>
+
+          <p class="mt-2 text-3xl font-bold tracking-tight" :class="valueClass">
+            {{ formattedValue }}
+          </p>
+
+          <p v-if="subtitle" class="mt-1 text-sm text-slate-400 line-clamp-1">
+            {{ subtitle }}
+          </p>
+        </div>
+
+        <div
+          v-if="meta"
+          class="shrink-0 rounded-2xl px-4 py-3 text-right"
+          :class="metaBoxClass"
+        >
+          <p class="text-[11px] font-bold uppercase tracking-wide opacity-70">
+            Tỷ lệ
+          </p>
+          <p class="mt-1 text-xl font-black tracking-tight">
+            {{ meta }}
+          </p>
+        </div>
       </div>
     </template>
   </div>
@@ -50,6 +68,10 @@ const props = defineProps({
   title: String,
   value: [String, Number],
   subtitle: String,
+  meta: {
+    type: String,
+    default: ''
+  },
   icon: String,
   tone: {
     type: String,
@@ -66,46 +88,62 @@ const props = defineProps({
   }
 })
 
+const subtitleColorClass = computed(() => {
+  if (!props.subtitle) return 'text-slate-400'
+  const text = props.subtitle.trim()
+  if (text.startsWith('↑') || text.startsWith('+')) return 'text-emerald-500 font-medium'
+  if (text.startsWith('↓') || text.startsWith('-')) return 'text-rose-500 font-medium'
+  return 'text-slate-400'
+})
+
 const toneClassMap = {
   blue: {
     accent: 'from-blue-500 to-blue-400',
     icon: 'bg-blue-50 text-blue-600',
-    value: 'text-slate-900'
+    value: 'text-slate-900',
+    metaBox: 'bg-blue-50 text-blue-700'
   },
   green: {
     accent: 'from-emerald-500 to-teal-400',
     icon: 'bg-emerald-50 text-emerald-600',
-    value: 'text-emerald-600'
+    value: 'text-emerald-600',
+    metaBox: 'bg-emerald-50 text-emerald-700'
   },
   purple: {
     accent: 'from-violet-500 to-purple-400',
     icon: 'bg-violet-50 text-violet-600',
-    value: 'text-violet-600'
+    value: 'text-violet-600',
+    metaBox: 'bg-violet-50 text-violet-700'
   },
   amber: {
     accent: 'from-amber-500 to-yellow-400',
     icon: 'bg-amber-50 text-amber-600',
-    value: 'text-amber-600'
+    value: 'text-amber-600',
+    metaBox: 'bg-amber-50 text-amber-700'
   },
   cyan: {
     accent: 'from-cyan-500 to-sky-400',
     icon: 'bg-cyan-50 text-cyan-600',
-    value: 'text-cyan-600'
+    value: 'text-cyan-600',
+    metaBox: 'bg-cyan-50 text-cyan-700'
   },
   rose: {
     accent: 'from-rose-500 to-pink-400',
     icon: 'bg-rose-50 text-rose-600',
-    value: 'text-rose-600'
+    value: 'text-rose-600',
+    metaBox: 'bg-rose-50 text-rose-700'
   },
   red: {
     accent: 'from-red-500 to-rose-400',
     icon: 'bg-red-50 text-red-600',
-    value: 'text-red-600'
+    value: 'text-red-600',
+    metaBox: 'bg-red-50 text-red-700'
   },
   slate: {
     accent: 'from-slate-400 to-slate-300',
     icon: 'bg-slate-100 text-slate-600',
-    value: 'text-slate-900'
+    value: 'text-slate-900',
+    metaBox: 'bg-slate-100 text-slate-600'
   }
 }
 
@@ -113,6 +151,7 @@ const currentTone = computed(() => toneClassMap[props.tone] || toneClassMap.blue
 const accentClass = computed(() => currentTone.value.accent)
 const iconClass = computed(() => currentTone.value.icon)
 const valueClass = computed(() => currentTone.value.value)
+const metaBoxClass = computed(() => currentTone.value.metaBox || 'bg-slate-100 text-slate-600')
 
 const formattedValue = computed(() => {
   if (typeof props.value === 'number') {

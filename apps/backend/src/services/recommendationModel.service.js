@@ -21,9 +21,40 @@ function clearCache() {
   loadStatus = { ok: false, error: null, loadedAt: null, path: null };
 }
 
+function findLatestFileByPrefix(dir, prefix, ext = '.json') {
+  if (!fs.existsSync(dir)) return null;
+
+  const files = fs.readdirSync(dir)
+    .filter((file) => file.startsWith(prefix) && file.endsWith(ext))
+    .map((file) => {
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+      return {
+        file,
+        fullPath,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size
+      };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  return files[0] ? files[0].fullPath : null;
+}
+
+const recommendationFinalDir = path.resolve(
+  __dirname,
+  '../../../../datasets/processed/recommendation/final'
+);
+
 function resolveModelPath(overridePath) {
   if (overridePath) return path.isAbsolute(overridePath) ? overridePath : path.resolve(__dirname, '../../../', overridePath);
   if (process.env.BPR_MF_MODEL_PATH) return path.isAbsolute(process.env.BPR_MF_MODEL_PATH) ? process.env.BPR_MF_MODEL_PATH : path.resolve(__dirname, '../../../', process.env.BPR_MF_MODEL_PATH);
+  
+  const latestModelPath = findLatestFileByPrefix(recommendationFinalDir, 'recommendation_bpr_model_final_', '.json');
+  if (latestModelPath) {
+    console.log(`[BPR-MF] Found latest model artifact: ${latestModelPath}`);
+    return latestModelPath;
+  }
   
   if (fs.existsSync(NEW_MODEL_PATH)) {
     return NEW_MODEL_PATH;

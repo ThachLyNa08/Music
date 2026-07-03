@@ -7,6 +7,8 @@ import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 
 const router = useRouter()
 
@@ -230,6 +232,32 @@ const exportAudit = async () => {
   }
 }
 
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/lyrics/export', {
+      params: {
+        q: filters.value.q,
+        status: filters.value.status,
+        provider: filters.value.provider
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-lyrics.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    console.error('Không thể xuất báo cáo:', error)
+  } finally {
+    exportLoading.value = false
+  }
+}
+
 const calculatePercentage = (value, total) => {
   if (!total) return 0
   return ((value / total) * 100).toFixed(1)
@@ -262,6 +290,7 @@ onMounted(() => {
           <MfIcon name="policy" size="18" class="mr-2" />
           Export Audit
         </button>
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>
 
@@ -282,9 +311,9 @@ onMounted(() => {
 
       <!-- Filters -->
       <AdminFilterBar>
-        <div class="flex-1 min-w-[200px] relative">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Tìm kiếm</label>
-          <div class="relative">
+        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+          <div class="relative min-w-[280px] flex-1">
+            <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input 
               v-model="searchInput" 
               @input="handleSearchInput"
@@ -292,45 +321,40 @@ onMounted(() => {
               @focus="showHistory = true"
               @blur="handleBlur"
               type="text" 
-              placeholder="Nhập tên bài hát, nghệ sĩ để tìm kiếm. " 
-              class="w-full pl-3 pr-8 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <button v-if="searchInput" @click="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-              <MfIcon name="close" size="16" />
+              placeholder="Nhập tên bài hát, nghệ sĩ để tìm kiếm..." 
+              class="admin-input pl-9 pr-8 w-full"
+            >
+            <button v-if="searchInput" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+              <MfIcon name="close" size="14" />
             </button>
-          </div>
-          <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-            <div class="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-slate-100 flex justify-between">
-              Lịch sử tìm kiếm
+            <div v-if="showHistory && searchHistory.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+              <div class="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-slate-100 flex justify-between">
+                Lịch sử tìm kiếm
+              </div>
+              <ul>
+                <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
+                  <span class="text-sm text-slate-700 flex-1 truncate"><MfIcon name="history" size="14" class="inline align-middle mr-1 text-slate-400" /> {{ item }}</span>
+                  <button @mousedown.prevent.stop="removeHistoryItem(item)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500">
+                    <MfIcon name="close" size="14" />
+                  </button>
+                </li>
+              </ul>
             </div>
-            <ul>
-              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer group" @mousedown.prevent="selectHistoryItem(item)">
-                <span class="text-sm text-slate-700 flex-1 truncate"><MfIcon name="history" size="14" class="inline align-middle mr-1 text-slate-400" /> {{ item }}</span>
-                <button @mousedown.prevent.stop="removeHistoryItem(item)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500">
-                  <MfIcon name="close" size="14" />
-                </button>
-              </li>
-            </ul>
           </div>
-        </div>
-        <div class="w-40">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Trạng thái</label>
-          <select v-model="filters.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="all">Tất cả</option>
+          <select v-model="filters.status" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+            <option value="all">Tất cả trạng thái</option>
             <option value="missing">Thiếu lyrics</option>
             <option value="has_lyrics">Có lyrics</option>
             <option value="synced">Lyrics đồng bộ</option>
             <option value="plain">Lyrics thường</option>
           </select>
-        </div>
-        <div class="w-40">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Provider</label>
-          <select v-model="filters.provider" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="all">Tất cả</option>
+          <select v-model="filters.provider" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+            <option value="all">Tất cả provider</option>
             <option value="LRCLIB">LRCLIB</option>
             <option value="MANUAL">Manual</option>
           </select>
+          <AdminResetButton @click="resetFilters" class="xl:shrink-0" />
         </div>
-        <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
       </AdminFilterBar>
 
       <!-- Table -->

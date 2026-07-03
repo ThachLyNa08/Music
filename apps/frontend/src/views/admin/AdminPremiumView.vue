@@ -1,12 +1,17 @@
 <template>
-  <div class="space-y-6 pb-10">
-    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
+  <div class="-mt-6">
+    <header class="sticky -top-6 z-40 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border -mx-6 px-6 pt-6 pb-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Premium</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
       </div>
+      <div class="mt-4 md:mt-0 flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar pb-2 md:pb-0">
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
+      </div>
     </header>
-    <!-- Overview Stats Cards -->
+
+    <div class="space-y-6 pb-10">
+      <!-- Overview Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <AdminKpiCard 
         title="Người dùng Premium" 
@@ -64,42 +69,38 @@
 
     <!-- Filters & Search -->
     <AdminFilterBar>
-      <div class="relative flex-1 min-w-[200px]">
-        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input 
-          v-model="filterForm.q" 
-          @keyup.enter="handleFilterChange" 
-          type="text" 
-          placeholder="Tìm theo tên, email hoặc ID..." 
-          class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" 
-          :disabled="isInitialLoading"
-        />
-      </div>
-      <div class="w-48">
-        <select v-model="filterForm.status" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isInitialLoading">
+      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="relative min-w-[280px] flex-1">
+          <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input 
+            v-model="filterForm.q" 
+            @keyup.enter="handleFilterChange" 
+            type="text" 
+            placeholder="Tìm theo tên, email hoặc ID..." 
+            class="admin-input pl-9 w-full" 
+            :disabled="isInitialLoading"
+          />
+        </div>
+        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isPlansLoading">
+          <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
+          <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
+        </select>
+        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="Tất cả Premium">Tất cả Premium</option>
           <option value="Đang hoạt động">Đang hoạt động</option>
           <option value="Sắp hết hạn">Sắp hết hạn</option>
           <option value="Đã hết hạn">Đã hết hạn</option>
           <option value="Chưa Premium">Chưa Premium</option>
         </select>
-      </div>
-      <div class="w-48">
-        <select v-model="filterForm.plan" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isPlansLoading">
-          <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
-          <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
-        </select>
-      </div>
-      <div class="w-48">
-        <select v-model="filterForm.sort" @change="handleFilterChange" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" :disabled="isInitialLoading">
+        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="">Sắp xếp mặc định</option>
           <option value="Hết hạn gần nhất">Hết hạn gần nhất</option>
           <option value="Mới nâng cấp gần đây">Mới nâng cấp gần đây</option>
           <option value="Chi tiêu cao nhất">Chi tiêu cao nhất</option>
           <option value="Tên A-Z">Tên A-Z</option>
         </select>
+        <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="xl:shrink-0" />
       </div>
-      <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="h-[38px] mt-[auto]" />
     </AdminFilterBar>
 
     <!-- Main Content -->
@@ -181,6 +182,7 @@
         <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
       </div>
     </div>
+    </div>
 
     <!-- Modals -->
     <PremiumManageModal 
@@ -221,6 +223,8 @@ import { normalizeImageUrl } from '@/utils/imageUrl'
 import MfIcon from '@/components/common/MfIcon.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import PremiumManageModal from '@/components/admin/PremiumManageModal.vue'
 import PremiumDetailModal from '@/components/admin/PremiumDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -345,6 +349,33 @@ async function fetchUsers() {
     if (isInitialLoading.value) users.value = []
   } finally {
     isTableLoading.value = false
+  }
+}
+
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/premium/export', {
+      params: {
+        q: filterForm.value.q,
+        status: filterForm.value.status,
+        plan: filterForm.value.plan,
+        sort: filterForm.value.sort
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-premium.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toast.showToast('Không thể xuất báo cáo. Vui lòng thử lại.', 'error')
+  } finally {
+    exportLoading.value = false
   }
 }
 

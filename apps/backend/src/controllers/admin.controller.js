@@ -23,6 +23,7 @@ const {
   buildInsertParts,
 } = require('../utils/public.utils');
 const recommendationService = require('../services/recommendation.service');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 const schemaCache = new Map();
 
@@ -4122,5 +4123,354 @@ exports.getUserRecommendations = async (req, res, next) => {
   } catch (error) {
     console.error('getUserRecommendations error:', error);
     next(error);
+  }
+};
+
+exports.exportSongs = async (req, res, next) => {
+  try {
+    const { group, search, sortBy = 'created_at', sortOrder = 'DESC', genreId, artistId, status, releaseStatus } = req.query;
+    
+    let query = `
+      SELECT s.id
+      FROM songs s
+      JOIN artists a ON s.artist_id = a.id
+      LEFT JOIN albums al ON s.album_id = al.id
+      LEFT JOIN genres g ON s.genre_id = g.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (group && group !== 'ALL') {
+      if (group === 'KPOP') {
+        query += ` AND UPPER(g.name) LIKE 'KPOP%'`;
+      } else if (group === 'VPOP') {
+        query += ` AND UPPER(g.name) LIKE 'VPOP%'`;
+      } else if (group === 'USUK') {
+        query += ` AND (UPPER(g.name) LIKE 'USUK%' OR UPPER(g.name) LIKE 'US-UK%')`;
+      }
+    }
+    if (search) {
+      query += ` AND (s.title LIKE ? OR a.name LIKE ? OR al.title LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (genreId) {
+      query += ` AND s.genre_id = ?`;
+      params.push(genreId);
+    }
+    if (artistId) {
+      query += ` AND s.artist_id = ?`;
+      params.push(artistId);
+    }
+    if (status) {
+      query += ` AND s.is_active = ?`;
+      params.push(status === 'active' ? 1 : 0);
+    }
+    if (releaseStatus) {
+      query += ` AND s.release_status = ?`;
+      params.push(releaseStatus);
+    }
+
+    const validSortCols = ['created_at', 'title', 'play_count', 'duration_sec'];
+    const sortCol = validSortCols.includes(sortBy) ? sortBy : 'created_at';
+    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const sortExpression = sortCol === 'play_count' ? 's.play_count' : `s.${sortCol}`;
+    query += ` ORDER BY ${sortExpression} ${sortDir} LIMIT 10000`;
+
+    const [idRows] = await pool.query(query, params);
+    const songIds = idRows.map(row => row.id);
+    let songs = [];
+
+    if (songIds.length > 0) {
+      const [detailedSongs] = await pool.query(`
+        SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name, g.name as genre_name, s.market,
+               CASE WHEN s.audio_url IS NOT NULL THEN 'Có' ELSE 'Không' END as has_audio,
+               CASE WHEN s.cover_url IS NOT NULL THEN 'Có' ELSE 'Không' END as has_cover,
+               CASE WHEN s.lyrics IS NOT NULL OR EXISTS (SELECT 1 FROM song_lyrics sl WHERE sl.song_id = s.id LIMIT 1) THEN 'Có' ELSE 'Không' END as has_lyrics,
+               COALESCE(s.play_count, 0) AS play_count,
+               0 AS like_count,
+               s.created_at
+        FROM songs s
+        JOIN artists a ON s.artist_id = a.id
+        LEFT JOIN albums al ON s.album_id = al.id
+        LEFT JOIN genres g ON s.genre_id = g.id
+        WHERE s.id IN (?)
+        ORDER BY FIELD(s.id, ?)
+      `, [songIds, songIds]);
+      songs = detailedSongs;
+    }
+
+    const columns = [
+      { header: 'Song ID', key: 'song_id' },
+      { header: 'Title', key: 'title' },
+      { header: 'Artist', key: 'artist_name' },
+      { header: 'Album', key: 'album_name' },
+      { header: 'Genre', key: 'genre_name' },
+      { header: 'Market', key: 'market' },
+      { header: 'Audio', key: 'has_audio' },
+      { header: 'Cover', key: 'has_cover' },
+      { header: 'Lyrics', key: 'has_lyrics' },
+      { header: 'Play Count', key: 'play_count' },
+      { header: 'Like Count', key: 'like_count' },
+      { header: 'Created At', key: 'created_at' }
+    ];
+
+    const csvContent = jsonToCsv(songs, columns);
+    const filename = createCsvFilename('songs');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportSongs Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.exportAlbums = async (req, res, next) => {
+  try {
+    const { search = '', genreId = '', releaseYear = '', market = '', sortPlays = '', releaseStatus = '' } = req.query;
+    const { albumColumns, marketColumn } = await getAlbumSchemaInfo();
+
+    const hasAlbumType = albumColumns.has('album_type');
+    const hasTotalTracks = albumColumns.has('total_tracks');
+    const albumTypeSelect = hasAlbumType ? 'al.album_type' : 'NULL AS album_type';
+    const totalTracksSelect = hasTotalTracks
+      ? 'GREATEST(COALESCE(al.total_tracks, 0), COUNT(DISTINCT s.id)) AS total_tracks'
+      : 'COUNT(DISTINCT s.id) AS total_tracks';
+    const marketSelect = marketColumn
+      ? `GROUP_CONCAT(DISTINCT NULLIF(s.\`${marketColumn}\`, '') ORDER BY s.\`${marketColumn}\` SEPARATOR ', ') AS market`
+      : 'NULL AS market';
+
+    const where = [];
+    const params = [];
+
+    if (search.trim()) {
+      where.push('(al.title LIKE ? OR a.name LIKE ?)');
+      params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+    }
+    if (genreId) {
+      where.push('al.genre_id = ?');
+      params.push(genreId);
+    }
+    if (releaseYear) {
+      where.push('YEAR(al.release_date) = ?');
+      params.push(releaseYear);
+    }
+    if (market) {
+      if (marketColumn) {
+        where.push(`(
+          EXISTS (SELECT 1 FROM songs sm WHERE sm.album_id = al.id AND sm.\`${marketColumn}\` = ?)
+          OR g.name LIKE ?
+        )`);
+        params.push(market, `${market}%`);
+      } else {
+        where.push(`g.name LIKE ?`);
+        params.push(`${market}%`);
+      }
+    }
+    if (releaseStatus) {
+      where.push('al.release_status = ?');
+      params.push(releaseStatus);
+    }
+
+    const idWhereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    let orderSql = 'ORDER BY al.release_date DESC, al.created_at DESC, al.id DESC';
+    if (sortPlays === 'asc') {
+      orderSql = 'ORDER BY (SELECT COALESCE(SUM(play_count), 0) FROM songs WHERE album_id = al.id AND is_active = TRUE) ASC, al.release_date DESC, al.created_at DESC, al.id DESC';
+    } else if (sortPlays === 'desc') {
+      orderSql = 'ORDER BY (SELECT COALESCE(SUM(play_count), 0) FROM songs WHERE album_id = al.id AND is_active = TRUE) DESC, al.release_date DESC, al.created_at DESC, al.id DESC';
+    }
+
+    const [idRows] = await pool.query(`
+      SELECT al.id 
+      FROM albums al
+      JOIN artists a ON a.id = al.artist_id
+      LEFT JOIN genres g ON g.id = al.genre_id
+      ${idWhereSql}
+      ${orderSql}
+      LIMIT 10000
+    `, params);
+
+    const albumIds = idRows.map(row => row.id);
+    let finalAlbums = [];
+
+    if (albumIds.length > 0) {
+      const groupFields = [
+        'al.id', 'al.title', 'al.artist_id', 'a.name', 'al.cover_url', 'al.release_date',
+        'al.genre_id', 'g.name', 'al.created_at', 'al.release_status', 'al.release_at', 'al.published_at'
+      ];
+      if (hasAlbumType) groupFields.push('al.album_type');
+      if (hasTotalTracks) groupFields.push('al.total_tracks');
+
+      const [albums] = await pool.query(`
+        SELECT
+          al.id as album_id,
+          al.title,
+          a.name AS artist_name,
+          COALESCE(g.name, GROUP_CONCAT(DISTINCT sg.name ORDER BY sg.name SEPARATOR ', ')) AS genre_name,
+          al.release_status,
+          ${effectiveReleaseStatusExpression('al')} AS effective_release_status,
+          YEAR(al.release_date) AS release_year,
+          COUNT(DISTINCT s.id) AS song_count,
+          COALESCE(SUM(CASE WHEN s.id IS NOT NULL THEN s.play_count ELSE 0 END), 0) AS total_plays,
+          ${marketSelect},
+          al.created_at
+        FROM albums al
+        JOIN artists a ON a.id = al.artist_id
+        LEFT JOIN genres g ON g.id = al.genre_id
+        LEFT JOIN songs s ON s.album_id = al.id AND s.is_active = TRUE
+        LEFT JOIN genres sg ON sg.id = s.genre_id
+        WHERE al.id IN (?)
+        GROUP BY ${groupFields.join(', ')}
+        ORDER BY FIELD(al.id, ?)
+      `, [albumIds, albumIds]);
+
+      finalAlbums = albums;
+    }
+
+    const columns = [
+      { header: 'Album ID', key: 'album_id' },
+      { header: 'Title', key: 'title' },
+      { header: 'Artist', key: 'artist_name' },
+      { header: 'Genre', key: 'genre_name' },
+      { header: 'Release Year', key: 'release_year' },
+      { header: 'Market', key: 'market' },
+      { header: 'Release Status', key: 'effective_release_status' },
+      { header: 'Song Count', key: 'song_count' },
+      { header: 'Total Plays', key: 'total_plays' },
+      { header: 'Created At', key: 'created_at' }
+    ];
+
+    const csvContent = jsonToCsv(finalAlbums, columns);
+    const filename = createCsvFilename('albums');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportAlbums Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.exportArtists = async (req, res, next) => {
+  try {
+    const { search, region, missingAvatar, missingBio, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
+
+    let query = `
+      SELECT a.id as artist_id, a.name, a.region,
+             CASE WHEN a.avatar_url IS NOT NULL THEN 'Có' ELSE 'Không' END as has_image,
+             CASE WHEN a.bio IS NOT NULL OR a.short_bio IS NOT NULL THEN 'Có' ELSE 'Không' END as has_bio,
+             COUNT(DISTINCT s.id) as song_count,
+             COUNT(DISTINCT al.id) as album_count,
+             a.created_at
+      FROM artists a
+      LEFT JOIN songs s ON s.artist_id = a.id
+      LEFT JOIN albums al ON al.artist_id = a.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (search) {
+      query += ` AND a.name LIKE ?`;
+      params.push(`%${search}%`);
+    }
+    if (region) {
+      if (region === 'vn') {
+        query += ` AND (a.region = 'vn' OR a.country = 'VN')`;
+      } else if (region === 'us_uk') {
+        query += ` AND (a.region = 'us_uk' OR a.country IN ('US', 'UK', 'GB'))`;
+      } else if (region === 'kr') {
+        query += ` AND (a.region = 'kr' OR a.country = 'KR')`;
+      } else if (region === 'others') {
+        query += ` AND (a.region = 'others' OR (a.country NOT IN ('VN', 'US', 'UK', 'GB', 'KR') AND a.country IS NOT NULL))`;
+      } else if (region === 'unknown') {
+        query += ` AND (a.region IS NULL AND a.country IS NULL)`;
+      } else {
+        query += ` AND a.region = ?`;
+        params.push(region);
+      }
+    }
+    if (missingAvatar === 'true') {
+      query += ` AND (a.avatar_url IS NULL OR a.avatar_url = '')`;
+    }
+    if (missingBio === 'true') {
+      query += ` AND (a.bio IS NULL OR a.bio = '') AND (a.short_bio IS NULL OR a.short_bio = '')`;
+    }
+
+    const validSortCols = ['created_at', 'name', 'song_count', 'total_plays', 'popularity'];
+    const sortCol = validSortCols.includes(sortBy) ? sortBy : 'created_at';
+    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    
+    query += ` GROUP BY a.id ORDER BY ${sortCol} ${sortDir} LIMIT 10000`;
+
+    const [artists] = await pool.query(query, params);
+
+    const columns = [
+      { header: 'Artist ID', key: 'artist_id' },
+      { header: 'Name', key: 'name' },
+      { header: 'Region', key: 'region' },
+      { header: 'Image', key: 'has_image' },
+      { header: 'Bio', key: 'has_bio' },
+      { header: 'Song Count', key: 'song_count' },
+      { header: 'Album Count', key: 'album_count' },
+      { header: 'Created At', key: 'created_at' }
+    ];
+
+    const csvContent = jsonToCsv(artists, columns);
+    const filename = createCsvFilename('artists');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportArtists Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.exportUsers = async (req, res, next) => {
+  try {
+    const { search, role, status, premium } = req.query;
+
+    let query = `
+      SELECT u.id as user_id, u.display_name as name, u.email, u.role,
+             CASE WHEN u.is_active = 1 THEN 'Active' ELSE 'Inactive' END as status,
+             CASE WHEN u.is_premium = 1 THEN 'Premium' ELSE 'Free' END as is_premium,
+             u.created_at, u.last_login_at
+      FROM users u
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (search) {
+      query += ` AND (u.display_name LIKE ? OR u.email LIKE ? OR u.id = ?)`;
+      params.push(`%${search}%`, `%${search}%`, search);
+    }
+    if (role) {
+      query += ` AND u.role = ?`;
+      params.push(role);
+    }
+    if (status) {
+      query += ` AND u.is_active = ?`;
+      params.push(status === 'active' ? 1 : 0);
+    }
+    if (premium) {
+      query += ` AND u.is_premium = ?`;
+      params.push(premium === 'premium' ? 1 : 0);
+    }
+
+    query += ` ORDER BY u.created_at DESC LIMIT 10000`;
+
+    const [users] = await pool.query(query, params);
+
+    const columns = [
+      { header: 'User ID', key: 'user_id' },
+      { header: 'Name', key: 'name' },
+      { header: 'Email', key: 'email' },
+      { header: 'Role', key: 'role' },
+      { header: 'Status', key: 'status' },
+      { header: 'Premium', key: 'is_premium' },
+      { header: 'Created At', key: 'created_at' },
+      { header: 'Last Login', key: 'last_login_at' }
+    ];
+
+    const csvContent = jsonToCsv(users, columns);
+    const filename = createCsvFilename('users');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('exportUsers Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };

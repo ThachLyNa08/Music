@@ -45,7 +45,7 @@ export const adminMenu = [
     role: 'admin',
     children: [
       { key: 'system-playlists', label: 'Giám sát playlist hệ thống', icon: 'queue_music', route: { name: 'AdminSystemPlaylists' }, role: 'admin' },
-      { key: 'import-csv', label: 'Import CSV', icon: 'upload_file', route: { name: 'AdminImport' }, role: 'admin' },
+      { key: 'import-csv', label: 'Import CSV', icon: 'upload_file', route: { name: 'AdminImport' }, role: 'admin', hidden: true },
       { key: 'music-data-tools', label: 'Music Data Tools', icon: 'build_circle', route: { name: 'AdminMusicDataTools' }, role: 'admin' },
       { key: 'export-report', label: 'Export report', icon: 'download', route: { name: 'AdminExportReport' }, role: 'admin', hidden: true },
     ],

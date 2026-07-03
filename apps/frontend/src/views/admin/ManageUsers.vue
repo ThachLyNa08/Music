@@ -1,34 +1,40 @@
 <template>
-  <div class="space-y-6 pb-10">
-    <header class="flex flex-col md:flex-row items-start md:items-center justify-between">
+  <div class="-mt-6">
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between sticky -top-6 z-40 bg-white border-b border-gray-200 -mx-6 px-6 pt-6 pb-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
       </div>
-    </header>
-    <!-- Filters & Search -->
-    <AdminFilterBar>
-      <div class="relative flex-1 min-w-[200px]">
-        <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
+      <div class="flex items-center gap-3 mt-4 md:mt-0">
+        <AdminExportButton :loading="exportLoading" @click="handleExport" />
+        <AdminAddButton title="Thêm thành viên" @click="showAddUserModal = true" />
       </div>
-      <div class="w-48">
-        <select v-model="filterRole" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+    </header>
+
+    <div class="space-y-6 pb-10">
+      <!-- Filters & Search -->
+    <AdminFilterBar>
+      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="relative min-w-[280px] flex-1">
+          <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9 w-full" />
+        </div>
+        <select v-model="filterRole" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả vai trò</option>
           <option value="user">Người dùng thường</option>
           <option value="admin">Quản trị viên (Admin)</option>
         </select>
-      </div>
-      <div class="w-48">
-        <select v-model="filterStatus" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+        <select v-model="filterStatus" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
           <option value="locked">Bị khóa</option>
         </select>
-      </div>
-      <AdminResetButton :disabled="loading" @click="resetFilters" class="h-[38px] mt-[auto]" />
-      <div class="ml-auto mt-3 md:mt-0">
-        <AdminAddButton title="Thêm thành viên" @click="showAddUserModal = true" />
+        <select v-model="filterPremium" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+          <option value="">Tất cả Premium</option>
+          <option value="active">Đang có Premium</option>
+          <option value="inactive">Không có Premium</option>
+        </select>
+        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
       </div>
     </AdminFilterBar>
 
@@ -39,23 +45,24 @@
         :empty="!loading && filteredUsers.length === 0" 
         emptyTitle="Không tìm thấy người dùng" 
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
+        maxHeight="420px"
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
+        <table class="w-full text-center border-collapse text-sm whitespace-nowrap table-fixed">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[25%]">Thành viên</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[12%]">Vai trò</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[12%]">Trạng thái</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Hạn Premium</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[10%] text-right">Lượt tạo Playlist</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Hoạt động gần nhất</th>
-              <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[11%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[22%] text-left">Thành viên</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[11%]">Vai trò</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[10%]">Trạng thái</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[14%]">Hạn Premium</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[16%]">Lượt tạo Playlist</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[15%]">Hoạt động gần nhất</th>
+              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[12%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-for="u in paginatedUsers" :key="u.id" class="hover:bg-slate-50 transition group cursor-pointer" @click="goToDetail(u.id)">
-              <td class="px-4 py-3 truncate">
-                <div class="flex items-center gap-3">
+              <td class="px-4 py-3 truncate text-left">
+                <div class="flex items-center justify-start gap-3">
                   <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover shrink-0" :alt="u.display_name" />
                   <div v-else class="w-10 h-10 shrink-0 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
                     {{ u.display_name?.charAt(0).toUpperCase() }}
@@ -72,23 +79,23 @@
                 </span>
               </td>
               <td class="px-4 py-3">
-                <div class="flex items-center gap-2" @click.stop="toggleStatus(u)" :title="u.status === 'locked' ? 'Bị khóa' : 'Hoạt động'">
+                <div class="flex items-center justify-center gap-2" @click.stop="toggleStatus(u)" :title="u.status === 'locked' ? 'Bị khóa' : 'Hoạt động'">
                   <div class="w-10 h-5 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out shadow-inner" :class="u.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'">
                     <div class="bg-white w-3 h-3 rounded-full shadow-md transform duration-300 ease-in-out" :class="{ 'translate-x-5': u.status === 'active' }"></div>
                   </div>
                 </div>
               </td>
               <td class="px-4 py-3 truncate">
-                <div class="flex flex-col gap-1 items-start">
+                <div class="flex flex-col gap-1 items-center justify-center">
                   <span class="inline-flex px-2 py-1 rounded text-[11px] font-bold tracking-wider" :class="isPremiumActive(u.premium_expires_at) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'">
                     {{ formatPremiumDate(u.premium_expires_at) }}
                   </span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-right text-sm font-medium text-gray-600">{{ u.playlistCount || 0 }}</td>
+              <td class="px-4 py-3 text-sm font-medium text-gray-600">{{ u.playlistCount || 0 }}</td>
               <td class="px-4 py-3 text-xs font-medium text-gray-500 truncate">{{ formatLastActive(u.last_listened_at) }}</td>
-              <td class="px-4 py-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10" @click.stop>
-                <div class="flex justify-end">
+              <td class="px-4 py-3 sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10" @click.stop>
+                <div class="flex justify-center">
                   <AdminActionMenu :actions="getUserActions(u)" />
                 </div>
               </td>
@@ -114,6 +121,7 @@
           :totalPages="totalPages" 
         />
       </div>
+    </div>
     </div>
 
     <!-- Edit User Modal -->
@@ -249,12 +257,14 @@ import { normalizeImageUrl } from '@/utils/imageUrl'
 import { useToastStore } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
+import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+import AdminTableShell from '@/components/admin/AdminTableShell.vue'
+import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
+import AdminExportButton from '@/components/admin/AdminExportButton.vue'
+import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
-import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import MfIcon from '@/components/common/MfIcon.vue'
 
 const router = useRouter()
@@ -265,6 +275,7 @@ const users = ref([])
 const searchQuery = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
+const filterPremium = ref('')
 
 // Dropdown state logic removed since AdminActionMenu handles it
 
@@ -397,6 +408,32 @@ async function submitEditUser() {
   }
 }
 
+const exportLoading = ref(false)
+
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/users/export', {
+      params: {
+        search: searchQuery.value,
+        role: filterRole.value,
+        status: filterStatus.value
+      },
+      responseType: 'blob'
+    })
+    
+    const filename = getFilenameFromDisposition(
+      response.headers?.['content-disposition'],
+      'musicflow-users.csv'
+    )
+    downloadBlob(response.data, filename)
+  } catch (error) {
+    toast.error('Không thể xuất báo cáo. Vui lòng thử lại.')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
 async function fetchUsers() {
   loading.value = true
   try {
@@ -417,15 +454,22 @@ const filteredUsers = computed(() => {
 
     const matchRole = !filterRole.value || u.role === filterRole.value
     const matchStatus = !filterStatus.value || u.status === filterStatus.value
+    
+    let matchPremium = true
+    if (filterPremium.value === 'active') {
+      matchPremium = isPremiumActive(u.premium_expires_at)
+    } else if (filterPremium.value === 'inactive') {
+      matchPremium = !isPremiumActive(u.premium_expires_at)
+    }
 
-    return matchSearch && matchRole && matchStatus
+    return matchSearch && matchRole && matchStatus && matchPremium
   })
 })
 
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-watch([searchQuery, filterRole, filterStatus], () => {
+watch([searchQuery, filterRole, filterStatus, filterPremium], () => {
   currentPage.value = 1
 })
 
@@ -433,6 +477,7 @@ function resetFilters() {
   searchQuery.value = ''
   filterRole.value = ''
   filterStatus.value = ''
+  filterPremium.value = ''
   currentPage.value = 1
 }
 

@@ -67,13 +67,15 @@
           :subtitle="summary.trends?.totalListens?.text || 'Tổng hiện tại'"
           icon="play_arrow"
           tone="purple"
+          :show-icon="false"
         />
         <AdminKpiCard
           title="Thời gian nghe"
-          :value="summary.totalListeningMinutes !== undefined && summary.totalListeningMinutes !== null ? `${summary.totalListeningMinutes} phút` : '--'"
+          :value="formatListeningTime(summary.totalListeningMinutes)"
           :subtitle="summary.trends?.totalListeningMinutes?.text || 'Tổng hiện tại'"
           icon="timer"
           tone="cyan"
+          :show-icon="false"
         />
         <AdminKpiCard
           title="Bài hát yêu thích"
@@ -81,6 +83,7 @@
           :subtitle="summary.trends?.likedSongs?.text || 'Tổng hiện tại'"
           icon="favorite"
           tone="rose"
+          :show-icon="false"
         />
         <AdminKpiCard
           title="Playlist tự tạo"
@@ -88,6 +91,7 @@
           :subtitle="summary.trends?.createdPlaylists?.text || 'Tổng hiện tại'"
           icon="queue_music"
           tone="pink"
+          :show-icon="false"
         />
         <AdminKpiCard
           title="Đang theo dõi"
@@ -95,6 +99,7 @@
           :subtitle="summary.trends?.followedArtists?.text || 'Tổng hiện tại'"
           icon="person_add"
           tone="emerald"
+          :show-icon="false"
         />
         <AdminKpiCard
           title="Chi tiêu"
@@ -102,6 +107,7 @@
           :subtitle="summary.trends?.totalSpent?.text || 'Chưa có giao dịch tuần này'"
           icon="payment"
           tone="amber"
+          :show-icon="false"
         />
       </div>
 
@@ -219,7 +225,7 @@
             />
           </div>
 
-          <div class="section-grid">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="card">
               <h3>Top Bài Hát Nghe Nhiều</h3>
               <ul v-if="musicTaste.topSongs.length" class="simple-list">
@@ -269,59 +275,101 @@
             Lỗi backend: {{ userPlaylistsError }}
           </div>
           <div v-else>
-            <!-- 1. Stats Row -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div class="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-4 shadow-sm">
-                <div class="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-violet-500 text-xl shrink-0">
-                  <MfIcon name="queue_music" size="24" />
-                </div>
-                <div class="flex-1">
-                  <p class="text-2xl font-bold text-slate-800">{{ userPlaylists.created?.length || 0 }}</p>
-                  <p class="text-xs text-slate-500">Playlist tự tạo</p>
-                </div>
-                <div class="ml-auto shrink-0">
-                  <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
-                    <path class="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                    <path class="text-violet-500 transition-all duration-500" :stroke-dasharray="`${Math.min(((userPlaylists.created?.length || 0) / 20) * 100, 100)}, 100`" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                  </svg>
-                </div>
-              </div>
-              
-              <div class="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-4 shadow-sm">
-                <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-500 text-xl shrink-0">
-                  <MfIcon name="server" size="24" />
-                </div>
-                <div class="flex-1">
-                  <p class="text-2xl font-bold text-slate-800">{{ userPlaylists.system?.length || 0 }}</p>
-                  <p class="text-xs text-slate-500">Playlist hệ thống</p>
-                </div>
-                <div class="ml-auto shrink-0">
-                  <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
-                    <path class="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                    <path class="text-blue-500 transition-all duration-500" :stroke-dasharray="`${Math.min(((userPlaylists.system?.length || 0) / 20) * 100, 100)}, 100`" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                  </svg>
-                </div>
+            <!-- 1. Danh sách Playlist (3 cột) -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mb-8">
+              <!-- Manual List -->
+              <div class="bg-white border border-slate-200 rounded-xl shadow-sm relative">
+                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors rounded-xl" @click="showFullList.manual = !showFullList.manual">
+                  <div class="flex items-center gap-2 font-bold text-slate-700">
+                    <MfIcon name="queue_music" size="20" class="text-violet-500" /> Danh sách Playlist Tự tạo ({{ userPlaylists.created?.length || 0 }})
+                  </div>
+                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.manual }" />
+                </button>
+                <transition name="fade-up">
+                  <div v-show="showFullList.manual" class="absolute z-20 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl p-4 origin-top">
+                    <div v-if="userPlaylists.created?.length" class="flex flex-col gap-3 max-h-[290px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-for="pl in userPlaylists.created" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="library_music"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
+                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
+                      </div>
+                    </div>
+                  </div>
+                    <p v-else class="text-center text-slate-500 py-4">Trống</p>
+                  </div>
+                </transition>
               </div>
 
-              <div class="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-4 shadow-sm">
-                <div class="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center text-cyan-500 text-xl shrink-0">
-                  <MfIcon name="auto_awesome" size="24" />
-                </div>
-                <div class="flex-1">
-                  <p class="text-2xl font-bold text-slate-800">{{ userPlaylists.ai?.length || 0 }}</p>
-                  <p class="text-xs text-slate-500">Playlist AI</p>
-                </div>
-                <div class="ml-auto shrink-0">
-                  <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
-                    <path class="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                    <path class="text-cyan-500 transition-all duration-500" :stroke-dasharray="`${Math.min(((userPlaylists.ai?.length || 0) / 10) * 100, 100)}, 100`" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"/>
-                  </svg>
-                </div>
+              <!-- System List -->
+              <div class="bg-white border border-slate-200 rounded-xl shadow-sm relative">
+                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors rounded-xl" @click="showFullList.system = !showFullList.system">
+                  <div class="flex items-center gap-2 font-bold text-slate-700">
+                    <MfIcon name="server" size="20" class="text-blue-500" /> Danh sách Playlist Hệ thống ({{ userPlaylists.system?.length || 0 }})
+                  </div>
+                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.system }" />
+                </button>
+                <transition name="fade-up">
+                  <div v-show="showFullList.system" class="absolute z-20 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl p-4 origin-top">
+                    <div v-if="userPlaylists.system?.length" class="flex flex-col gap-3 max-h-[290px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-for="pl in userPlaylists.system" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="server"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
+                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
+                      </div>
+                    </div>
+                  </div>
+                    <p v-else class="text-center text-slate-500 py-4">Trống</p>
+                  </div>
+                </transition>
+              </div>
+
+              <!-- AI List -->
+              <div class="bg-white border border-slate-200 rounded-xl shadow-sm relative">
+                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors rounded-xl" @click="showFullList.ai = !showFullList.ai">
+                  <div class="flex items-center gap-2 font-bold text-slate-700">
+                    <MfIcon name="auto_awesome" size="20" class="text-cyan-500" /> Danh sách Playlist AI ({{ userPlaylists.ai?.length || 0 }})
+                  </div>
+                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.ai }" />
+                </button>
+                <transition name="fade-up">
+                  <div v-show="showFullList.ai" class="absolute z-20 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl p-4 origin-top">
+                    <div v-if="userPlaylists.ai?.length" class="flex flex-col gap-3 max-h-[290px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-for="pl in userPlaylists.ai" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
+                      <AdminCoverThumb
+                        :src="getPlaylistCover(pl)"
+                        size="lg"
+                        icon="auto_awesome"
+                        iconClass="text-slate-400"
+                        class="mr-3"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
+                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
+                      </div>
+                    </div>
+                  </div>
+                    <p v-else class="text-center text-slate-500 py-4">Trống</p>
+                  </div>
+                </transition>
               </div>
             </div>
 
             <!-- 2. Highlight Cards -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 items-start">
               <!-- Manual Highlight -->
               <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden transition-all duration-300 shadow-sm" :class="{ 'scale-[1.02] shadow-xl border-violet-200': expandedTracklist === 'manual', 'hover:-translate-y-1 hover:shadow-xl': expandedTracklist !== 'manual' }">
                 <div v-if="highlightPlaylists.manual" class="h-full flex flex-col">
@@ -358,9 +406,9 @@
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.manual.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.manual.updated_at ? new Date(highlightPlaylists.manual.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
-                    <p class="text-sm text-slate-600 mb-4 line-clamp-2 min-h-[40px]">{{ highlightPlaylists.manual.description || 'Không có mô tả' }}</p>
+                    <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.manual.description || 'Không có mô tả' }}</p>
                     
-                    <div class="flex items-center justify-between mt-auto">
+                    <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-violet-50 hover:text-violet-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.manual)">Xem chi tiết</button>
                     </div>
                   </div>
@@ -429,9 +477,9 @@
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.system.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.system.updated_at ? new Date(highlightPlaylists.system.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
-                    <p class="text-sm text-slate-600 mb-4 line-clamp-2 min-h-[40px]">{{ highlightPlaylists.system.description || 'Không có mô tả' }}</p>
+                    <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.system.description || 'Không có mô tả' }}</p>
                     
-                    <div class="flex items-center justify-between mt-auto">
+                    <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.system)">Chi tiết</button>
                       <button class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-blue-500 hover:text-white rounded-lg text-slate-600 transition-colors" title="Làm mới" @click.stop="regenerateUserPlaylist(highlightPlaylists.system)">
                         <MfIcon name="sync" size="16" />
@@ -503,9 +551,9 @@
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.ai.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.ai.updated_at ? new Date(highlightPlaylists.ai.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
-                    <p class="text-sm text-slate-600 mb-4 line-clamp-2 min-h-[40px]">{{ highlightPlaylists.ai.description || 'Gợi ý tự động từ AI' }}</p>
+                    <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.ai.description || 'Gợi ý tự động từ AI' }}</p>
                     
-                    <div class="flex items-center justify-between mt-auto">
+                    <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-cyan-50 hover:text-cyan-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.ai)">Chi tiết</button>
                       <button class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-cyan-500 hover:text-white rounded-lg text-slate-600 transition-colors" title="Làm mới" @click.stop="regenerateUserPlaylist(highlightPlaylists.ai)">
                         <MfIcon name="sync" size="16" />
@@ -577,102 +625,17 @@
                 </div>
                 <div class="flex items-center gap-4 p-4 rounded-xl bg-slate-50">
                   <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-500 text-lg shrink-0">
-                    <MfIcon name="music" />
+                    <MfIcon name="equalizer" />
                   </div>
                   <div>
-                    <p class="text-lg font-bold text-slate-800">--</p>
-                    <p class="text-xs text-slate-500">Lượt nghe playlist</p>
+                    <p class="text-lg font-bold text-slate-800">{{ totalPlaylistsCount ? Math.round(totalSongsInPlaylists / totalPlaylistsCount) : 0 }} bài</p>
+                    <p class="text-xs text-slate-500">Trung bình mỗi playlist</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 4. Full List -->
-            <div class="space-y-4">
-              <!-- Manual List -->
-              <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors" @click="showFullList.manual = !showFullList.manual">
-                  <div class="flex items-center gap-2 font-bold text-slate-700">
-                    <MfIcon name="queue_music" size="20" class="text-violet-500" /> Danh sách Playlist Tự tạo ({{ userPlaylists.created?.length || 0 }})
-                  </div>
-                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.manual }" />
-                </button>
-                <div v-show="showFullList.manual" class="p-4 border-t border-slate-200">
-                  <div v-if="userPlaylists.created?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <div v-for="pl in userPlaylists.created" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <AdminCoverThumb
-                        :src="getPlaylistCover(pl)"
-                        size="lg"
-                        icon="library_music"
-                        iconClass="text-slate-400"
-                        class="mr-3"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
-                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="text-center text-slate-500 py-4">Trống</p>
-                </div>
-              </div>
 
-              <!-- System List -->
-              <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors" @click="showFullList.system = !showFullList.system">
-                  <div class="flex items-center gap-2 font-bold text-slate-700">
-                    <MfIcon name="server" size="20" class="text-blue-500" /> Danh sách Playlist Hệ thống ({{ userPlaylists.system?.length || 0 }})
-                  </div>
-                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.system }" />
-                </button>
-                <div v-show="showFullList.system" class="p-4 border-t border-slate-200">
-                  <div v-if="userPlaylists.system?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <div v-for="pl in userPlaylists.system" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <AdminCoverThumb
-                        :src="getPlaylistCover(pl)"
-                        size="lg"
-                        icon="server"
-                        iconClass="text-slate-400"
-                        class="mr-3"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
-                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="text-center text-slate-500 py-4">Trống</p>
-                </div>
-              </div>
-
-              <!-- AI List -->
-              <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <button class="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors" @click="showFullList.ai = !showFullList.ai">
-                  <div class="flex items-center gap-2 font-bold text-slate-700">
-                    <MfIcon name="auto_awesome" size="20" class="text-cyan-500" /> Danh sách Playlist AI ({{ userPlaylists.ai?.length || 0 }})
-                  </div>
-                  <MfIcon name="chevron_right" class="text-slate-400 transition-transform duration-200" :class="{ 'rotate-90': showFullList.ai }" />
-                </button>
-                <div v-show="showFullList.ai" class="p-4 border-t border-slate-200">
-                  <div v-if="userPlaylists.ai?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <div v-for="pl in userPlaylists.ai" :key="pl.id" class="flex items-center gap-3 p-3 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white cursor-pointer" @click="viewPlaylistDetail(pl)">
-                      <AdminCoverThumb
-                        :src="getPlaylistCover(pl)"
-                        size="lg"
-                        icon="auto_awesome"
-                        iconClass="text-slate-400"
-                        class="mr-3"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold truncate text-slate-800">{{ pl.name }}</p>
-                        <p class="text-xs text-slate-500">{{ pl.song_count || pl.songs?.length || 0 }} bài hát</p>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="text-center text-slate-500 py-4">Trống</p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -739,7 +702,7 @@
             </p>
           </div>
 
-          <div class="section-grid mb-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
             <div class="card">
               <h3>Sở thích khi đăng ký (Cold Start)</h3>
               <div class="mb-4">
@@ -781,7 +744,7 @@
             </div>
           </div>
 
-          <div class="section-grid">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="card playlist-ai-card">
               <div class="flex justify-between items-center mb-4">
                 <h3 style="margin: 0;">Playlist Tự động & AI</h3>
@@ -1102,6 +1065,15 @@ const summary = ref({})
 const listeningTrends = ref({ byDay: [] })
 const musicTaste = ref({ topSongs: [], topArtists: [], recentLikedSongs: [], favoriteGenres: [] })
 const userPlaylistsLoading = ref(true)
+
+const formatListeningTime = (minutes) => {
+  if (minutes === undefined || minutes === null) return '--'
+  if (minutes < 60) return `${minutes}p`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m > 0 ? `${h}h${m}p` : `${h}h`
+}
+
 const userPlaylists = ref({ created: [], system: [], ai: [], summary: {} })
 const drawerPlaylist = ref(null)
 const drawerSongs = ref([])
@@ -1743,9 +1715,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .chart-grid { grid-template-columns: 1fr; }
 }
-.section-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
-}
+
 .card {
   background: white; border-radius: 20px; padding: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); border: 1px solid #f0f2f5;
 }

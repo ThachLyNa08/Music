@@ -1,12 +1,12 @@
 <template>
-  <div class="maintenance-dashboard">
-    <header class="dashboard-header">
+  <div class="flex-1 flex flex-col relative full-bleed min-h-0 pb-10 bg-slate-50">
+    <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm mb-6">
       <div>
-        <h1 class="page-title">Giám sát Playlist Hệ thống</h1>
-        <p class="page-subtitle">Theo dõi trạng thái và bảo trì dữ liệu các playlist hệ thống / tự động</p>
+        <h1 class="text-2xl font-extrabold text-gray-900 tracking-tight">Giám sát Playlist Hệ thống</h1>
+        <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi trạng thái và bảo trì dữ liệu các playlist hệ thống / tự động</p>
       </div>
-      <div class="header-actions">
-        <button class="btn-action primary" @click="confirmRegenerateAll" :disabled="isRegeneratingAll">
+      <div class="flex gap-2 mt-4 md:mt-0">
+        <button class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60" @click="confirmRegenerateAll" :disabled="isRegeneratingAll">
           <MfIcon v-if="isRegeneratingAll" name="sync" class="spinning" size="18" />
           <MfIcon v-else name="auto_fix_high" size="18" />
           {{ isRegeneratingAll ? 'Đang xử lý...' : 'Tạo lại tất cả' }}
@@ -14,53 +14,64 @@
       </div>
     </header>
 
-    <!-- Thống kê tổng quan -->
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 mt-6">
+    <div class="px-6 flex flex-col space-y-6">
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <AdminKpiCard
         v-for="item in kpiCards"
         :key="item.title"
         v-bind="item"
         :loading="loading && !summary"
+        :showIcon="false"
+        compact
         :class="{'cursor-pointer hover:bg-slate-50 transition': !!item.onClick}"
       />
     </div>
 
-    <!-- Tra cứu nâng cao -->
-    <div class="mb-6 space-y-4">
-      <AdminFilterBar>
-        <div class="flex-1 min-w-[200px]">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Từ khóa (Tên / System Key)</label>
-          <input type="text" v-model="filters.q" placeholder="Nhập từ khóa..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="handleSearch">
-        </div>
-        
-        <div class="flex-1 min-w-[200px]">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Người dùng</label>
-          <input type="text" v-model="filters.owner" placeholder="Nhập tên, email hoặc ID..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" @keyup.enter="handleSearch">
-        </div>
+    <!-- Main Content Group (Filter, Table, Pagination) -->
+    <div class="flex flex-col gap-3">
+      <!-- Tra cứu nâng cao -->
+      <div>
+        <AdminFilterBar class="!mb-0">
+        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+          <AdminSearchInput
+            v-model="filters.q"
+            placeholder="Từ khóa (Tên / System Key)..."
+            icon="search"
+            historyKey="admin-playlist-q-history"
+            @search="handleSearch"
+          />
+          
+          <AdminSearchInput
+            v-model="filters.owner"
+            placeholder="Người dùng (Tên, email, ID)..."
+            icon="person"
+            historyKey="admin-playlist-owner-history"
+            @search="handleSearch"
+          />
 
-        <div class="w-48">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Trạng thái</label>
-          <select v-model="filters.status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <SearchableCombobox
+            v-model="filters.system_key"
+            :options="[{ key: 'all', label: 'Tất cả Loại System Key' }, ...systemKeysOptions]"
+            valueKey="key"
+            labelKey="label"
+            placeholder="Tất cả Loại System Key"
+            maxHeightClass="max-h-[128px]"
+            compact
+            class="w-full xl:w-56 xl:shrink-0"
+            @change="handleSearch"
+          />
+
+          <select v-model="filters.status" class="admin-input !h-10 text-sm w-full xl:w-44 xl:shrink-0 cursor-pointer" @change="handleSearch">
+            <option value="all">Tất cả trạng thái</option>
             <option value="need_update">Cần xử lý</option>
-            <option value="all">Tất cả</option>
             <option value="active">Bình thường</option>
             <option value="empty">Trống bài hát</option>
             <option value="missing_cover">Thiếu ảnh bìa</option>
           </select>
-        </div>
 
-        <div class="w-48">
-          <label class="block text-xs font-medium text-slate-500 mb-1.5">Loại System Key</label>
-          <select v-model="filters.system_key" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="all">Tất cả</option>
-            <option v-for="opt in systemKeysOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
-          </select>
+          <AdminResetButton @click="resetFilters" class="xl:shrink-0 !h-10 !w-10" />
         </div>
-
-        <button @click="handleSearch" class="px-4 py-2 h-[38px] mt-[auto] text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm">
-          Lọc
-        </button>
-        <AdminResetButton @click="resetFilters" class="h-[38px] mt-[auto]" />
       </AdminFilterBar>
       <div v-if="searchWarning" class="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm flex items-center gap-2 border border-rose-100">
         <MfIcon name="warning" size="18" />
@@ -69,17 +80,17 @@
     </div>
 
     <!-- Bảng danh sách cần xử lý -->
-    <AdminTableShell :loading="loading" :empty="!loading && playlists.length === 0" emptyTitle="Không tìm thấy playlist" emptyDescription="Thử thay đổi bộ lọc.">
+    <AdminTableShell :loading="loading" :empty="!loading && playlists.length === 0" emptyTitle="Không tìm thấy playlist" emptyDescription="Thử thay đổi bộ lọc." maxHeight="375px">
       <table class="w-full text-left text-sm whitespace-nowrap table-fixed">
         <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
           <tr>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[25%]">Playlist</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Người Dùng</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Loại / System Key</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[10%]">Số bài</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[15%]">Trạng thái</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs w-[10%]">Cập nhật</th>
-            <th class="px-4 py-3 font-semibold text-slate-900 uppercase text-xs text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[25%]">Playlist</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Người Dùng</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Loại / System Key</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs text-right w-[10%]">Số bài</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Trạng thái</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[10%]">Cập nhật</th>
+            <th class="px-4 py-3 font-semibold text-black uppercase text-xs text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -118,7 +129,7 @@
     </AdminTableShell>
 
     <!-- Pagination -->
-    <div v-if="totalPages > 1 || playlists.length > 0" class="flex items-center justify-between mt-4">
+    <div v-if="totalPages > 1 || playlists.length > 0" class="flex items-center justify-between mt-1">
       <div class="flex items-center gap-2 text-sm text-slate-500">
         <label>Hiển thị:</label>
         <select v-model="filters.limit" @change="handleLimitChange" class="px-2 py-1 text-sm border border-slate-300 rounded-lg focus:outline-none">
@@ -137,6 +148,8 @@
       />
     </div>
 
+    </div> <!-- End Main Content Group -->
+
     <!-- Modals & Drawers -->
     <ConfirmDialog
       :open="showConfirmModal"
@@ -147,6 +160,8 @@
       @confirm="executeRegenerateAll"
       @cancel="showConfirmModal = false"
     />
+
+    </div> <!-- End px-6 wrapper -->
 
     <!-- Regenerate Result Modal -->
     <div class="modal-backdrop" v-if="regenerateResult">
@@ -246,6 +261,7 @@ import AdminCoverThumb from '@/components/admin/AdminCoverThumb.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
 import SearchableCombobox from '@/components/common/SearchableCombobox.vue'
+import AdminSearchInput from '@/components/admin/AdminSearchInput.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
@@ -295,14 +311,48 @@ const hasActiveFilters = computed(() => {
   return filters.q || filters.owner || filters.system_key !== 'all' || filters.status !== 'need_update'
 })
 
+function percent(value, total) {
+  if (!total) return '0%'
+  return `${((Number(value || 0) / Number(total)) * 100).toFixed(1)}%`
+}
+
 const kpiCards = computed(() => {
   if (!summary.value) return Array(4).fill({})
   const s = summary.value
+  const total = s.total_playlists || 0
+  const activePlaylists = total - s.empty_playlists - s.missing_cover_playlists
+
   return [
-    { title: 'Tổng Playlist', value: formatNumber(s.total_playlists), subtitle: 'Hệ thống', icon: 'library_music', tone: 'blue' },
-    { title: 'Đang Hoạt Động', value: formatNumber(s.total_playlists - s.empty_playlists - s.missing_cover_playlists), subtitle: 'Trạng thái bình thường', icon: 'check_circle', tone: 'emerald' },
-    { title: 'Playlist Trống', value: formatNumber(s.empty_playlists), subtitle: '0 bài hát', icon: 'hourglass_empty', tone: 'amber', onClick: () => setFilter('empty') },
-    { title: 'Thiếu Ảnh Bìa', value: formatNumber(s.missing_cover_playlists), subtitle: 'Cần cập nhật cover', icon: 'image_not_supported', tone: 'orange', onClick: () => setFilter('missing_cover') },
+    { 
+      title: 'Tổng Playlist', 
+      value: formatNumber(total), 
+      subtitle: 'Hệ thống', 
+      tone: 'purple',
+      meta: '100%' 
+    },
+    { 
+      title: 'Đang Hoạt Động', 
+      value: formatNumber(activePlaylists), 
+      subtitle: 'Trạng thái bình thường', 
+      tone: 'green',
+      meta: percent(activePlaylists, total)
+    },
+    { 
+      title: 'Playlist Trống', 
+      value: formatNumber(s.empty_playlists), 
+      subtitle: '0 bài hát', 
+      tone: 'amber', 
+      meta: percent(s.empty_playlists, total),
+      onClick: () => setFilter('empty') 
+    },
+    { 
+      title: 'Thiếu Ảnh Bìa', 
+      value: formatNumber(s.missing_cover_playlists), 
+      subtitle: 'Cần cập nhật cover', 
+      tone: 'rose', 
+      meta: percent(s.missing_cover_playlists, total),
+      onClick: () => setFilter('missing_cover') 
+    },
   ]
 })
 
@@ -366,6 +416,14 @@ async function fetchPlaylists(page = 1) {
 }
 
 // Actions
+let searchTimeout = null
+function debounceSearch() {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    handleSearch()
+  }, 400)
+}
+
 function handleSearch() {
   fetchPlaylists(1)
 }
@@ -515,17 +573,9 @@ onUnmounted(() => {
 
 <style scoped>
 .maintenance-dashboard {
-  padding: 24px;
   background-color: #f8fafc;
   min-height: 100vh;
   color: #0f172a;
-}
-
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
 }
 .page-title {
   font-size: 24px;

@@ -46,6 +46,7 @@ router.get('/ai-status', adminController.getAiStatus);
 // Quản lý Recommendation
 router.get('/recommendation/summary', adminRecommendationController.getSummary);
 router.get('/recommendation/metrics', adminRecommendationController.getMetrics);
+router.get('/recommendation/export', adminRecommendationController.exportReport);
 router.get('/recommendation/users/:id/preview', adminRecommendationController.previewRecommendations);
 
 // AI Playlist Test
@@ -57,6 +58,7 @@ router.get('/stem-jobs', adminStemJobsController.getJobs);
 router.post('/stem-jobs/:id/retry', adminStemJobsController.retryJob);
 
 // Quản lý người dùng
+router.get('/users/export', adminController.exportUsers);
 router.get('/users', adminController.getAllUsers);
 router.post('/users', adminController.createUser);
 router.get('/users/:id/playlists', adminController.getUserPlaylists);
@@ -71,6 +73,7 @@ router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 
 // Quản lý Premium
+router.get('/premium/export', adminPremiumController.exportPremium);
 router.get('/premium/summary', adminPremiumController.getPremiumSummary);
 router.get('/premium/users', adminPremiumController.getPremiumUsers);
 router.get('/premium/plans', adminPremiumController.getPremiumPlans);
@@ -83,6 +86,7 @@ router.get('/songs/statistics', adminController.getSongStatistics);
 router.patch('/songs/bulk-status', adminController.bulkUpdateSongsStatus);
 router.patch('/songs/bulk-market', adminController.bulkUpdateSongsMarket);
 router.get('/songs/metadata-issues', adminController.getMetadataIssues);
+router.get('/songs/export', adminController.exportSongs);
 router.get('/songs', adminController.getAllSongs);
 router.get('/songs/:id/detail', adminController.getSongDetail);
 router.put(
@@ -94,6 +98,7 @@ router.delete('/songs/:id', adminController.deleteSong);
 
 // Quản lý giao dịch (Payments)
 router.get('/payments/summary', adminPaymentsController.getPaymentSummary);
+router.get('/payments/export', adminPaymentsController.exportPayments);
 router.get('/payments', adminPaymentsController.getPayments);
 router.get('/payments/:id', adminPaymentsController.getPaymentDetail);
 router.post('/payments/:id/cancel', adminPaymentsController.cancelPayment);
@@ -105,6 +110,7 @@ router.get('/form-data', adminController.getFormData);
 
 // Quản lý nghệ sĩ
 // Quan ly album
+router.get('/albums/export', adminController.exportAlbums);
 router.get('/albums/form-data', adminController.getAdminAlbumFormData);
 router.get('/albums/available-songs', adminController.getAvailableSongsForAlbum);
 router.get('/albums/stats', adminController.getAdminAlbumsStats);
@@ -117,6 +123,7 @@ router.delete('/albums/:id', adminController.deleteAdminAlbum);
 
 // Quan ly nghe si
 router.get('/artists/summary', adminController.getArtistSummary);
+router.get('/artists/export', adminController.exportArtists);
 router.get('/artists', adminController.getAllArtists);
 router.post('/artists/sync-missing-metadata', adminController.syncMissingArtistMetadata);
 router.post('/artists/sync-missing-bio', adminController.syncMissingArtistBio);
@@ -145,6 +152,7 @@ router.get('/genres/insights', adminGenreController.getGenresInsights);
 router.patch('/genres/bulk-action', adminGenreController.bulkActionGenres);
 router.post('/genres/merge', adminGenreController.mergeGenres);
 router.post('/genres/bulk-assign', adminGenreController.bulkAssignGenre);
+router.get('/genres/export', adminGenreController.exportGenres);
 router.get('/genres/:id/songs', adminGenreController.getGenreSongs);
 router.get('/genres/:id/detail', adminGenreController.getGenreDetailFull);
 router.patch('/genres/:id/taxonomy-flags', adminGenreController.updateTaxonomyFlags);
