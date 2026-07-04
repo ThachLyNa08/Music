@@ -19,7 +19,7 @@
           <span>Chào {{ timeOfDay }}, {{ displayName }}</span>
         </div>
 
-        <h1 class="hero-title">
+        <h1 class="hero-title" :class="{ 'home-hero-lobster-title': greetingTitle === 'Chiều nay nghe gì?' }">
           {{ greetingTitle }}
         </h1>
 
@@ -78,6 +78,15 @@ const greetingSubtitle = computed(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Lobster&display=swap');
+
+.home-hero-lobster-title {
+  font-family: 'Lobster', cursive !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+
 .home-hero {
   position: relative;
   width: 100%;
@@ -251,6 +260,11 @@ const greetingSubtitle = computed(() => {
 
   .hero-title {
     font-size: 42px;
+  }
+
+  .home-hero-lobster-title {
+    line-height: 1.1;
+    letter-spacing: 0;
   }
 
   .hero-subtitle {

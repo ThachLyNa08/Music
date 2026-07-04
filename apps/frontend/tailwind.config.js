@@ -29,8 +29,9 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
-        display: ['"Playfair Display"', 'serif'],
+        display: ['Montserrat', 'sans-serif'],
         body: ['Inter', 'sans-serif'],
+        heading: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         soft: '0 8px 32px 0 rgba(31, 38, 135, 0.07)',

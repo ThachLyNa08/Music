@@ -6,7 +6,8 @@
       type="text" 
       v-model="internalValue"
       :placeholder="placeholder" 
-      class="admin-input !h-10 text-sm pl-9 pr-8 w-full"
+      class="admin-input pl-9 pr-8 w-full"
+      :class="[compact ? '!h-9 text-xs' : '!h-10 text-sm']"
       @input="onInput"
       @focus="onFocus"
       @keydown.enter="saveToHistoryAndSearch"
@@ -62,7 +63,8 @@ const props = defineProps({
   placeholder: { type: String, default: 'Tìm kiếm...' },
   icon: { type: String, default: 'search' },
   historyKey: { type: String, default: 'admin-search-history' },
-  maxHistory: { type: Number, default: 5 }
+  maxHistory: { type: Number, default: 5 },
+  compact: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue', 'search', 'input'])

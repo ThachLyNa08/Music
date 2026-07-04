@@ -7,7 +7,7 @@
     <div 
       class="relative flex items-center w-full bg-gray-50 dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl focus-within:bg-white dark:focus-within:bg-bg-surface focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all shadow-sm"
       :class="[
-        compact ? 'h-10 px-3' : 'px-4 py-3',
+        compact ? 'h-9 px-3 text-xs' : 'min-h-[44px] px-4 py-2 text-sm',
         { 'opacity-60 cursor-not-allowed': disabled }
       ]"
     >
@@ -17,7 +17,7 @@
         v-model="searchQuery"
         :placeholder="placeholder"
         :disabled="disabled"
-        class="w-full bg-transparent text-sm font-semibold text-gray-900 dark:text-white outline-none placeholder-gray-400 dark:placeholder-gray-500 disabled:cursor-not-allowed"
+        class="w-full bg-transparent font-semibold text-gray-900 dark:text-white outline-none placeholder-gray-400 dark:placeholder-gray-500 disabled:cursor-not-allowed"
         @focus="openDropdown"
         @input="onInput"
         @keydown.down.prevent="navigateDropdown(1)"

@@ -223,14 +223,14 @@ h1, h2,
 .page-title, .section-title, .user-section-title, .home-section-title,
 .playlist-title, .artist-name, .karaoke-title, .song-title, .mf-title,
 .hero-title, .library-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Montserrat', sans-serif;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 @layer utilities {
   .font-display {
-    font-family: 'Playfair Display', serif !important;
+    font-family: 'Montserrat', sans-serif !important;
   }
   .font-body {
     font-family: 'Inter', sans-serif !important;
@@ -286,11 +286,11 @@ h1, h2,
 }
 
   .mf-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Montserrat', sans-serif;
     font-weight: 700;
   }
   .mf-section-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Montserrat', sans-serif;
     font-weight: 700;
   }
 }

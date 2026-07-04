@@ -2,7 +2,7 @@
   <div class="flex-1 flex flex-col relative full-bleed min-h-0 pb-10 bg-slate-50">
     <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm mb-6">
       <div>
-        <h1 class="text-2xl font-extrabold text-gray-900 tracking-tight">Giám sát Playlist Hệ thống</h1>
+        <h1 class="text-2xl !font-heading font-bold tracking-tight leading-[1.15] text-gray-900">Giám sát Playlist Hệ thống</h1>
         <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi trạng thái và bảo trì dữ liệu các playlist hệ thống / tự động</p>
       </div>
       <div class="flex gap-2 mt-4 md:mt-0">
@@ -28,14 +28,291 @@
       />
     </div>
 
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-2">
+      <!-- Tỷ Lệ Lỗi -->
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 to-sky-400"></div>
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Tỷ Lệ Lỗi Tạo Playlist</p>
+            <p class="mt-2 font-bold tracking-tight text-cyan-600" :class="operationSummary?.errorRate24h != null ? 'text-3xl' : 'text-2xl'">
+              {{ operationSummary?.errorRate24h != null ? operationSummary.errorRate24h + '%' : 'Chưa có dữ liệu' }}
+            </p>
+            <p class="mt-1 text-sm font-medium line-clamp-1" :class="operationSummary?.errorRate24h != null ? 'text-emerald-500' : 'text-slate-400'">
+              {{ operationSummary?.errorRate24h != null ? '↓ 1.2% so với hôm qua' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+            </p>
+          </div>
+          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-cyan-50 text-cyan-700">24H</div>
+        </div>
+      </div>
+
+      <!-- Thời Gian Tạo -->
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 to-purple-400"></div>
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Thời Gian Tạo TB</p>
+            <p class="mt-2 text-3xl font-bold tracking-tight text-violet-600">
+              {{ operationSummary?.avgGenerationTimeMs != null ? operationSummary.avgGenerationTimeMs + 's' : '—' }}
+            </p>
+            <p class="mt-1 text-sm font-medium line-clamp-1" :class="operationSummary?.avgGenerationTimeMs != null ? 'text-emerald-500' : 'text-slate-400'">
+              {{ operationSummary?.avgGenerationTimeMs != null ? '↓ 0.3s nhanh hơn trung bình' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+            </p>
+          </div>
+          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700">MS</div>
+        </div>
+      </div>
+
+      <!-- Đang Xử Lý -->
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-amber-400"></div>
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Đang Xử Lý</p>
+            <p class="mt-2 text-3xl font-bold tracking-tight text-orange-600">
+              {{ operationSummary?.processingCount || 0 }}
+            </p>
+            <div class="mt-3 mb-1.5 flex items-center gap-2">
+              <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-orange-500 rounded-full" :style="{ width: (operationSummary?.processingCount > 0 ? '50%' : '0%') }"></div>
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-400 line-clamp-1">
+              {{ operationSummary?.processingCount > 0 ? 'Ước tính 3 phút nữa xong' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+            </p>
+          </div>
+          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700">QUEUE</div>
+        </div>
+      </div>
+
+      <!-- Tạo Lại Gần Nhất -->
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-400 to-slate-300"></div>
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Tạo Lại Gần Nhất</p>
+            <p class="mt-2 font-bold tracking-tight text-slate-800" :class="operationSummary?.latestRunAt ? 'text-xl' : 'text-2xl'">
+              {{ operationSummary?.latestRunAt || 'Chưa ghi nhận' }}
+            </p>
+            <p class="mt-1 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+              <template v-if="operationSummary?.latestRunAt">
+                <span class="text-slate-500">Bởi:</span> <span class="text-violet-600 font-medium">System Cron</span><br>
+                Lần tới: 04:00 sáng mai
+              </template>
+              <template v-else>
+                {{ operationSummary?.message || 'Chưa có dữ liệu vận hành' }}
+              </template>
+            </p>
+          </div>
+          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">AUTO</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribution & Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
+      <!-- Chart -->
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex flex-col lg:col-span-2">
+        <h3 class="text-lg text-slate-800 !font-heading font-bold mb-1">Phân bố loại playlist</h3>
+        <p class="text-xs text-slate-500 mb-4">Số lượng playlist theo từng system key (Theo toàn bộ dữ liệu)</p>
+        <div v-if="distributionChartItems.length > 0" class="playlist-distribution-chart mt-4">
+          <div
+            v-for="item in distributionChartItems"
+            :key="item.system_key"
+            class="distribution-bar-item group"
+            :title="`${item.system_key}: ${item.count}`"
+          >
+            <div class="distribution-bar-value opacity-0 group-hover:opacity-100 transition-opacity">
+              {{ formatNumber(item.count) }}
+            </div>
+
+            <div class="distribution-bar-stage">
+              <div
+                class="distribution-bar-flat"
+                :class="item.colorClass"
+                :style="{ height: `${item.percent}%` }"
+              >
+              </div>
+            </div>
+
+            <div class="distribution-bar-label">
+              {{ item.label }}
+            </div>
+          </div>
+        </div>
+        <div v-else class="flex h-[240px] items-center justify-center text-sm text-slate-500">
+          Chưa có dữ liệu phân bố playlist hệ thống.
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex flex-col lg:col-span-1">
+        <h3 class="text-lg text-slate-800 !font-heading font-bold mb-1">Lịch sử hoạt động</h3>
+        <div class="flex-1 overflow-y-auto max-h-[250px] custom-scrollbar">
+          <div v-if="loadingActivity" class="text-sm text-slate-500 py-4 text-center">Đang tải...</div>
+          <div v-else-if="!activityLogs || activityLogs.length === 0" class="text-sm text-slate-500 py-8 text-center flex flex-col items-center justify-center h-full">
+            <MfIcon name="history" size="32" class="text-slate-300 mb-2" />
+            <span>Chưa có lịch sử hoạt động.<br>Các lần tạo lại playlist sẽ xuất hiện tại đây sau khi hệ thống ghi log.</span>
+          </div>
+          <div v-else class="space-y-4 pr-2">
+            <div v-for="(log, idx) in activityLogs" :key="idx" class="flex gap-3 text-sm">
+              <div class="w-2 h-2 mt-1.5 rounded-full bg-slate-300 shrink-0"></div>
+              <div>
+                <div class="font-medium text-slate-800">{{ log.message }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">{{ log.created_at }} - bởi {{ log.actor }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chất lượng Playlist Hệ thống -->
+    <div class="panel border-t-4 border-t-indigo-500 shadow-sm mt-6 mb-2" v-if="qualityReport">
+      <div class="panel-header flex-col items-start gap-2 sm:flex-row sm:items-center">
+        <div>
+          <h2 class="text-lg text-slate-800 !font-heading font-bold tracking-tight flex items-center gap-2">
+            <MfIcon name="analytics" size="20" class="text-indigo-600" />
+            Báo cáo chất lượng theo loại playlist
+            <span class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] uppercase tracking-wide font-bold">Báo cáo tổng hợp</span>
+          </h2>
+          <p class="text-xs text-slate-500 font-normal mt-1">Mỗi dòng là một loại playlist hệ thống (system key), dùng để đánh giá thuật toán tạo playlist: số bài ứng viên, độ trùng lặp, độ đa dạng nghệ sĩ/thể loại và độ phủ audio features.</p>
+        </div>
+        <div v-if="qualityReport.rows && qualityReport.rows.length === 0 && qualityReport.message" class="text-xs text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-200">
+          {{ qualityReport.message }}
+        </div>
+      </div>
+      <div class="panel-body bg-slate-50/50 p-5">
+
+        <!-- Quick Filters -->
+        <div class="flex gap-2 mb-4" v-if="qualityReport.rows && qualityReport.rows.length > 0">
+          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+            :class="qualityFilter === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            @click="qualityFilter = 'all'">
+            Tất cả ({{ qualityReport.summary.total }})
+          </button>
+          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+            :class="qualityFilter === 'good' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            @click="qualityFilter = 'good'">
+            Good ({{ qualityReport.summary.good }})
+          </button>
+          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+            :class="qualityFilter === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            @click="qualityFilter = 'warning'">
+            Warning ({{ qualityReport.summary.warning }})
+          </button>
+          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+            :class="qualityFilter === 'bad' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            @click="qualityFilter = 'bad'">
+            Bad ({{ qualityReport.summary.bad }})
+          </button>
+        </div>
+
+        <div v-if="qualityReport.rows && qualityReport.rows.length > 0" class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+          <div class="overflow-x-auto overflow-y-auto max-h-[300px] custom-scrollbar relative border-b border-slate-200">
+            <table class="w-full text-left text-xs whitespace-nowrap table-fixed min-w-[900px]">
+              <thead class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-900 uppercase font-bold sticky top-0 z-20">
+                <tr>
+                  <th class="px-2 py-2 w-[12%]">Playlist</th>
+                  <th class="px-2 py-2 w-[8%]">Trạng thái</th>
+                  <th class="px-2 py-2 text-right w-[9%]" title="Số bài cuối cùng được chọn vào playlist so với số bài mục tiêu.">Kết quả chọn</th>
+                  <th class="px-2 py-2 text-right w-[8%]" title="Số bài hát hệ thống tìm được trước khi lọc và chọn ra playlist cuối cùng. Ví dụ 566 bài ứng viên được lọc còn 25 bài chính thức.">Bài ứng viên</th>
+                  <th class="px-2 py-2 text-right w-[9%]" title="Tỷ lệ bài trong playlist mới trùng với phiên bản trước đó. Càng thấp thì playlist càng mới.">Trùng bản cũ</th>
+                  <th class="px-2 py-2 text-right w-[11%]" title="Tỷ lệ cao nhất của một nghệ sĩ trong playlist. Ví dụ 28% nghĩa là nghệ sĩ xuất hiện nhiều nhất chiếm 28% số bài.">Tối đa cùng nghệ sĩ</th>
+                  <th class="px-2 py-2 text-right w-[11%]" title="Tỷ lệ cao nhất của một thể loại trong playlist. Ví dụ 72% nghĩa là thể loại chiếm nhiều nhất có 72% số bài.">Tối đa cùng thể loại</th>
+                  <th class="px-2 py-2 text-right w-[10%]">Audio coverage</th>
+                  <th class="px-2 py-2 w-[16%]">Cảnh báo</th>
+                  <th class="px-2 py-2 text-right w-[6%]">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-for="row in filteredQualityRows" :key="row.system_key" class="transition group hover:bg-slate-50">
+                  <td class="px-2 py-2 font-semibold text-slate-800">{{ row.system_key }}</td>
+                  <td class="px-2 py-2">
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold" 
+                          :class="{'bg-green-100 text-green-700': row.status === 'GOOD', 'bg-amber-100 text-amber-700': row.status === 'WARNING', 'bg-rose-100 text-rose-700': row.status === 'BAD'}">
+                      {{ row.status === 'GOOD' ? 'Đạt' : row.status === 'WARNING' ? 'Cảnh báo' : row.status === 'BAD' ? 'Lỗi' : row.status }}
+                    </span>
+                  </td>
+                  <td class="px-2 py-2 text-right font-mono text-[11px]">{{ row.actual_songs }} / {{ row.target_size }} bài</td>
+                  <td class="px-2 py-2 text-right font-mono text-[11px] text-slate-500">{{ row.candidate_count || 'N/A' }}</td>
+                  <td class="px-2 py-2 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <span class="font-mono text-[11px]" :class="{'text-amber-600 font-bold': row.overlap_ratio >= 0.7}">{{ formatQualityPercent(row.overlap_ratio) }}</span>
+                      <div class="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full" :class="row.overlap_ratio >= 0.7 ? 'bg-amber-500' : 'bg-slate-400'" :style="`width: ${Math.min((row.overlap_ratio || 0) * 100, 100)}%`"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-2 py-2 text-right">
+                    <div class="flex items-center justify-end gap-1.5" :title="`Max Same Artist Ratio: ${formatQualityPercent(row.max_same_artist_ratio)}`">
+                      <span class="font-mono text-[11px]" :class="{'text-amber-600 font-bold': row.max_same_artist_ratio > 0.3}">{{ formatQualityPercent(row.max_same_artist_ratio) }}</span>
+                      <div class="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full" :class="row.max_same_artist_ratio > 0.3 ? 'bg-amber-500' : 'bg-slate-400'" :style="`width: ${Math.min((row.max_same_artist_ratio || 0) * 100, 100)}%`"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-2 py-2 text-right">
+                    <div class="flex items-center justify-end gap-1.5" :title="`Max Same Genre Ratio: ${formatQualityPercent(row.max_same_genre_ratio)}`">
+                      <span class="font-mono text-[11px]" :class="{'text-amber-600 font-bold': row.max_same_genre_ratio > 0.75}">{{ formatQualityPercent(row.max_same_genre_ratio) }}</span>
+                      <div class="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full" :class="row.max_same_genre_ratio > 0.75 ? 'bg-amber-500' : 'bg-slate-400'" :style="`width: ${Math.min((row.max_same_genre_ratio || 0) * 100, 100)}%`"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-2 py-2 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <span class="font-mono text-[11px]" :class="{'text-amber-600 font-bold': row.audio_feature_coverage < 0.95}">{{ formatQualityPercent(row.audio_feature_coverage) }}</span>
+                      <div class="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                        <div class="h-full rounded-full" :class="row.audio_feature_coverage < 0.95 ? 'bg-amber-500' : 'bg-green-500'" :style="`width: ${Math.min((row.audio_feature_coverage || 0) * 100, 100)}%`"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-2 py-2 text-[11px] text-amber-600 truncate" :title="row.warnings">{{ row.warnings }}</td>
+                  <td class="px-2 py-2 text-right">
+                    <button class="text-indigo-600 hover:text-indigo-800 font-semibold text-[10px] bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md transition" @click="openQualityDetail(row)">
+                      Chi tiết
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div v-else-if="!qualityReport.message && loadingQuality" class="text-center p-6 text-slate-500">
+          Đang tải dữ liệu chất lượng...
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content Group (Filter, Table, Pagination) -->
     <div class="flex flex-col gap-3">
+      <!-- Khối giải thích -->
+      <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-900 leading-relaxed">
+        <strong>Phân biệt nhanh:</strong>
+        <ul class="list-disc pl-5 mt-1 space-y-1">
+          <li><strong>Bảng chất lượng:</strong> đánh giá thuật toán theo system key.</li>
+          <li><strong>Bảng dữ liệu:</strong> quản lý từng playlist thật trong database.</li>
+        </ul>
+        <p class="mt-2 text-xs opacity-80 italic">Ví dụ: weekly_mix ở bảng trên là kết quả tổng hợp của toàn bộ Weekly Mix; còn các dòng Weekly Mix bên dưới là playlist cụ thể của từng người dùng.</p>
+      </div>
+
+      <div class="mt-2">
+        <h2 class="text-lg text-slate-800 !font-heading font-bold tracking-tight flex items-center gap-2">
+          <MfIcon name="list_alt" size="20" class="text-indigo-600" />
+          Danh sách playlist hệ thống trong dữ liệu
+          <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] uppercase tracking-wide font-bold">Dữ liệu thực tế</span>
+        </h2>
+        <p class="text-xs text-slate-500 font-normal mt-1">Mỗi dòng là một playlist cụ thể trong database, thường gắn với một người dùng. Bảng này dùng để kiểm tra trạng thái dữ liệu như thiếu ảnh bìa, thiếu bài hát hoặc thao tác quản trị.</p>
+      </div>
+
       <!-- Tra cứu nâng cao -->
       <div>
         <AdminFilterBar class="!mb-0">
-        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
           <AdminSearchInput
             v-model="filters.q"
+            compact
             placeholder="Từ khóa (Tên / System Key)..."
             icon="search"
             historyKey="admin-playlist-q-history"
@@ -44,6 +321,7 @@
           
           <AdminSearchInput
             v-model="filters.owner"
+            compact
             placeholder="Người dùng (Tên, email, ID)..."
             icon="person"
             historyKey="admin-playlist-owner-history"
@@ -62,7 +340,7 @@
             @change="handleSearch"
           />
 
-          <select v-model="filters.status" class="admin-input !h-10 text-sm w-full xl:w-44 xl:shrink-0 cursor-pointer" @change="handleSearch">
+          <select v-model="filters.status" class="admin-input !h-9 text-xs w-full xl:w-44 xl:shrink-0 cursor-pointer" @change="handleSearch">
             <option value="all">Tất cả trạng thái</option>
             <option value="need_update">Cần xử lý</option>
             <option value="active">Bình thường</option>
@@ -70,57 +348,70 @@
             <option value="missing_cover">Thiếu ảnh bìa</option>
           </select>
 
-          <AdminResetButton @click="resetFilters" class="xl:shrink-0 !h-10 !w-10" />
+          <AdminResetButton @click="resetFilters" class="xl:shrink-0 !h-9 !w-9" />
         </div>
       </AdminFilterBar>
-      <div v-if="searchWarning" class="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm flex items-center gap-2 border border-rose-100">
-        <MfIcon name="warning" size="18" />
-        {{ searchWarning }}
+    </div>
+
+    <!-- Bulk Action Bar -->
+    <div v-if="selectedPlaylists.length > 0" class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between mb-3 shadow-sm">
+      <div class="flex items-center gap-2 mb-2 sm:mb-0">
+        <div class="bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{{ selectedPlaylists.length }}</div>
+        <span class="text-sm font-semibold text-indigo-900">playlist đã chọn</span>
+      </div>
+      <div class="flex gap-2">
+        <button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Tạo lại</button>
+        <button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Cập nhật ảnh bìa</button>
+        <button class="px-3 py-1.5 bg-white border border-rose-100 rounded-lg text-sm font-medium text-rose-300 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Xóa</button>
       </div>
     </div>
 
     <!-- Bảng danh sách cần xử lý -->
     <AdminTableShell :loading="loading" :empty="!loading && playlists.length === 0" emptyTitle="Không tìm thấy playlist" emptyDescription="Thử thay đổi bộ lọc." maxHeight="375px">
-      <table class="w-full text-left text-sm whitespace-nowrap table-fixed">
+      <table class="w-full text-left text-xs whitespace-nowrap table-fixed">
         <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
           <tr>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[25%]">Playlist</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Người Dùng</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Loại / System Key</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs text-right w-[10%]">Số bài</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[15%]">Trạng thái</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-[10%]">Cập nhật</th>
-            <th class="px-4 py-3 font-semibold text-black uppercase text-xs text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
+            <th class="px-3 py-2.5 w-[36px] text-center"><input type="checkbox" v-model="selectAll" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5"></th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[25%]">Playlist</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[15%]">Người Dùng</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[15%]">Loại / System Key</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] text-right w-[10%]">Số bài</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[15%]">Trạng thái</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[10%]">Cập nhật</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-for="item in playlists" :key="item.id" class="hover:bg-slate-50 transition group">
-            <td class="px-4 py-3 truncate">
+            <td class="px-3 py-2 text-center"><input type="checkbox" :value="item.id" v-model="selectedPlaylists" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5"></td>
+            <td class="px-3 py-2 truncate">
               <div class="flex items-center gap-3">
-                <AdminCoverThumb :src="getPlaylistCover(item)" size="custom" class="w-10 h-10 shrink-0" rounded="lg" />
+                <AdminCoverThumb :src="getPlaylistCover(item)" size="custom" class="w-8 h-8 shrink-0" rounded="lg" />
                 <span class="font-semibold text-slate-900 truncate" :title="item.name">{{ item.name }}</span>
               </div>
             </td>
-            <td class="px-4 py-3 truncate">
+            <td class="px-3 py-2 truncate">
               <router-link v-if="item.user_id" :to="`/admin/users/${item.user_id}`" class="text-primary hover:underline font-medium">
                 {{ item.owner_name || 'User #' + item.user_id }}
               </router-link>
               <span v-else class="text-slate-400">Hệ thống</span>
             </td>
-            <td class="px-4 py-3">
-              <div class="inline-block px-1.5 py-0.5 rounded text-xs font-mono bg-slate-100 border text-slate-600 mb-1" v-if="item.system_key">{{ item.system_key }}</div>
-              <div class="text-[11px] text-slate-500 uppercase font-semibold">{{ item.type }}</div>
+            <td class="px-3 py-2">
+              <div class="flex items-center gap-2">
+                <div class="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 border text-slate-600" v-if="item.system_key">{{ item.system_key }}</div>
+                <div class="text-[10px] text-slate-500 uppercase font-semibold">{{ item.type }}</div>
+              </div>
             </td>
-            <td class="px-4 py-3 text-right" :class="{'text-rose-600 font-bold': item.song_count === 0, 'text-slate-700 font-medium': item.song_count > 0}">
+            <td class="px-3 py-2 text-right" :class="{'text-rose-600 font-bold': item.song_count === 0, 'text-slate-700 font-medium': item.song_count > 0}">
               {{ item.song_count }}
             </td>
-            <td class="px-4 py-3">
+            <td class="px-3 py-2">
               <span class="status-badge" :class="item.status">{{ formatStatus(item.status) }}</span>
             </td>
-            <td class="px-4 py-3 text-xs text-slate-500">
+            <td class="px-3 py-2 text-[11px] text-slate-500">
               {{ item.updated_at ? new Date(item.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}
             </td>
-            <td class="px-4 py-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
+            <td class="px-3 py-2 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
               <AdminActionMenu :actions="getToolsActions(item)" />
             </td>
           </tr>
@@ -249,11 +540,118 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Modal Chi tiết Chất lượng -->
+    <Teleport to="body">
+      <div v-if="qualityDetailItem" class="detail-modal-overlay flex items-center justify-center p-4 z-[9999]" @click="closeQualityDetail">
+        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative" @click.stop>
+          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <MfIcon name="analytics" class="text-indigo-600" />
+              Chi tiết Đánh giá: <span class="text-indigo-600 font-mono">{{ qualityDetailItem.system_key }}</span>
+            </h3>
+            <button class="btn-icon" @click="closeQualityDetail">
+              <MfIcon name="close" size="24" />
+            </button>
+          </div>
+          
+          <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
+            <div class="flex items-center gap-4 mb-6">
+              <div class="px-4 py-2 rounded-lg font-bold text-sm"
+                   :class="{'bg-green-100 text-green-800': qualityDetailItem.status === 'GOOD', 'bg-amber-100 text-amber-800': qualityDetailItem.status === 'WARNING', 'bg-rose-100 text-rose-800': qualityDetailItem.status === 'BAD'}">
+                Trạng thái: {{ qualityDetailItem.status === 'GOOD' ? 'Đạt' : qualityDetailItem.status === 'WARNING' ? 'Cảnh báo' : qualityDetailItem.status === 'BAD' ? 'Lỗi' : qualityDetailItem.status }}
+              </div>
+              <div class="text-sm text-slate-500" v-if="qualityDetailItem.warnings">
+                <strong class="text-amber-600">Cảnh báo:</strong> {{ qualityDetailItem.warnings }}
+              </div>
+            </div>
+
+            <!-- Ngưỡng áp dụng -->
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-sm">
+              <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">Ngưỡng áp dụng</h4>
+              <ul class="list-disc pl-5 text-slate-600 space-y-1">
+                <li>Nghệ sĩ tối đa: <strong>30%</strong> (ổn)</li>
+                <li>Thể loại tối đa: <strong>65% hoặc 75%</strong> tùy loại playlist</li>
+                <li>Overlap cảnh báo: <strong>70%</strong></li>
+                <li>Audio feature coverage cảnh báo: <strong>dưới 95%</strong></li>
+              </ul>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 text-sm mb-6">
+              <div class="border rounded-xl p-4 bg-white shadow-sm">
+                <div class="text-slate-500 mb-1">Số bài / Mục tiêu</div>
+                <div class="font-mono text-lg font-semibold">{{ qualityDetailItem.actual_songs }} / {{ qualityDetailItem.target_size }}</div>
+              </div>
+              <div class="border rounded-xl p-4 bg-white shadow-sm">
+                <div class="text-slate-500 mb-1">Số bài ứng viên</div>
+                <div class="font-mono text-lg font-semibold">{{ qualityDetailItem.candidate_count || 'N/A' }}</div>
+              </div>
+              <div class="border rounded-xl p-4 bg-white shadow-sm">
+                <div class="text-slate-500 mb-1">Đã thêm / Đã xóa</div>
+                <div class="font-mono text-lg font-semibold text-green-600">{{ qualityDetailItem.added_songs }} <span class="text-slate-300">/</span> <span class="text-rose-500">{{ qualityDetailItem.removed_songs }}</span></div>
+              </div>
+              <div class="border rounded-xl p-4 bg-white shadow-sm">
+                <div class="text-slate-500 mb-1">Số nghệ sĩ / Thể loại</div>
+                <div class="font-mono text-lg font-semibold text-indigo-600">{{ qualityDetailItem.artist_count }} <span class="text-slate-300">/</span> <span class="text-pink-600">{{ qualityDetailItem.genre_count }}</span></div>
+              </div>
+            </div>
+
+            <h4 class="font-bold text-slate-800 mb-3">Chỉ số chi tiết</h4>
+            <div class="overflow-x-auto border border-slate-200 rounded-xl mb-6">
+              <table class="w-full text-left text-sm table-fixed">
+                <tbody class="divide-y divide-slate-100">
+                  <tr>
+                    <td class="px-4 py-3 bg-slate-50 font-semibold w-1/2">Tỷ lệ trùng lặp (Overlap)</td>
+                    <td class="px-4 py-3 font-mono font-bold">{{ formatQualityPercent(qualityDetailItem.overlap_ratio) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Tỷ lệ nghệ sĩ cao nhất (Max)</td>
+                    <td class="px-4 py-3 font-mono font-bold">{{ formatQualityPercent(qualityDetailItem.max_same_artist_ratio) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Tỷ lệ thể loại cao nhất (Max)</td>
+                    <td class="px-4 py-3 font-mono font-bold">{{ formatQualityPercent(qualityDetailItem.max_same_genre_ratio) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Độ phủ Audio Feature</td>
+                    <td class="px-4 py-3 font-mono font-bold">{{ formatQualityPercent(qualityDetailItem.audio_feature_coverage) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Playlist Instance vi phạm đa dạng</td>
+                    <td class="px-4 py-3 font-mono font-bold text-rose-600">{{ qualityDetailItem.failed_diversity_playlists || 0 }}</td>
+                  </tr>
+                  <tr v-if="qualityDetailItem.avg_max_same_artist_ratio">
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Trung bình % nghệ sĩ / Worst</td>
+                    <td class="px-4 py-3 font-mono">{{ formatQualityPercent(qualityDetailItem.avg_max_same_artist_ratio) }} / <span class="font-bold text-amber-600">{{ formatQualityPercent(qualityDetailItem.worst_max_same_artist_ratio) }}</span></td>
+                  </tr>
+                  <tr v-if="qualityDetailItem.avg_max_same_genre_ratio">
+                    <td class="px-4 py-3 bg-slate-50 font-semibold">Trung bình % thể loại / Worst</td>
+                    <td class="px-4 py-3 font-mono">{{ formatQualityPercent(qualityDetailItem.avg_max_same_genre_ratio) }} / <span class="font-bold text-amber-600">{{ formatQualityPercent(qualityDetailItem.worst_max_same_genre_ratio) }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Công thức chứng minh -->
+            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm">
+              <h4 class="font-bold text-indigo-900 mb-2">Công thức chứng minh</h4>
+              <ul class="list-disc pl-5 text-indigo-800 space-y-1">
+                <li><strong>Tỷ lệ trùng lặp</strong> = số bài trùng playlist cũ / target_size</li>
+                <li><strong>Tỷ lệ nghệ sĩ cao nhất</strong> = số bài của nghệ sĩ xuất hiện nhiều nhất / actual_songs</li>
+                <li><strong>Tỷ lệ thể loại cao nhất</strong> = số bài của thể loại xuất hiện nhiều nhất / actual_songs</li>
+                <li><strong>Độ phủ audio feature</strong> = số bài có audio feature / actual_songs</li>
+                <li><strong>Failed diversity</strong> = số playlist instance vượt quota artist/genre</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { useToastStore } from '@/stores/toast'
@@ -281,17 +679,93 @@ const totalPages = ref(1)
 const currentPage = ref(1)
 
 const showAdvancedSearch = ref(false)
-const searchWarning = ref('')
+
 
 const filters = reactive({
   q: '',
   owner: '',
   system_key: 'all',
-  status: 'need_update', // Mặc định là cần xử lý
+  status: 'all', // Mặc định là tất cả
   limit: 20
 })
 
 const systemKeysOptions = ref([])
+
+const allowedDistributionKeys = [
+  'weekly_mix',
+  'moodmix',
+  'morning_vibes',
+  'afternoon_vibes',
+  'evening_vibes',
+  'night_vibes',
+  'trending_now'
+]
+
+const excludedDistributionKeys = [
+  'favorite',
+  'favorites',
+  'favorite_songs',
+  'fav',
+  'recent',
+  'recently_played',
+  'top_tracks'
+]
+
+const distributionLabelMap = {
+  weekly_mix: 'Weekly',
+  moodmix: 'Mood',
+  morning_vibes: 'Morning',
+  afternoon_vibes: 'Afternoon',
+  evening_vibes: 'Evening',
+  night_vibes: 'Night',
+  trending_now: 'Trending'
+}
+
+const distributionColorMap = {
+  weekly_mix: 'bar-purple',
+  moodmix: 'bar-violet',
+  morning_vibes: 'bar-emerald',
+  afternoon_vibes: 'bar-teal',
+  evening_vibes: 'bar-green',
+  night_vibes: 'bar-amber',
+  trending_now: 'bar-rose'
+}
+
+function normalizeDistributionKey(key) {
+  if (key === 'weeklymix') return 'weekly_mix'
+  return key
+}
+
+const distributionChartItems = computed(() => {
+  const counts = new Map()
+
+  systemKeysOptions.value.forEach((row) => {
+    const normalizedKey = normalizeDistributionKey(row.key)
+
+    if (!normalizedKey) return
+    if (excludedDistributionKeys.includes(normalizedKey)) return
+    if (!allowedDistributionKeys.includes(normalizedKey)) return
+
+    const current = counts.get(normalizedKey) || 0
+    counts.set(normalizedKey, current + Number(row.count || 0))
+  })
+
+  const items = allowedDistributionKeys
+    .map((key) => ({
+      system_key: key,
+      label: distributionLabelMap[key],
+      count: counts.get(key) || 0,
+      colorClass: distributionColorMap[key]
+    }))
+    .filter((item) => item.count > 0)
+
+  const maxCount = Math.max(...items.map((item) => item.count), 1)
+
+  return items.map((item) => ({
+    ...item,
+    percent: Math.max(8, Math.round((item.count / maxCount) * 100))
+  }))
+})
 
 const isRegeneratingAll = ref(false)
 const showConfirmModal = ref(false)
@@ -301,6 +775,86 @@ const openActionMenuId = ref(null)
 const drawerItem = ref(null)
 const isRegeneratingSingle = ref(false)
 
+const qualityReport = ref(null)
+const loadingQuality = ref(false)
+const qualityDetailItem = ref(null)
+
+const operationSummary = ref(null)
+const activityLogs = ref([])
+const loadingOperation = ref(false)
+const loadingActivity = ref(false)
+
+const qualityFilter = ref('all')
+const selectedPlaylists = ref([])
+const selectAll = ref(false)
+
+const filteredQualityRows = computed(() => {
+  if (!qualityReport.value?.rows) return []
+  if (qualityFilter.value === 'all') return qualityReport.value.rows
+  return qualityReport.value.rows.filter(row => row.status.toLowerCase() === qualityFilter.value)
+})
+
+watch(selectAll, (newVal) => {
+  if (newVal) {
+    selectedPlaylists.value = playlists.value.map(p => p.id)
+  } else {
+    selectedPlaylists.value = []
+  }
+})
+
+async function fetchOperationSummary() {
+  loadingOperation.value = true
+  try {
+    const res = await api.get('/admin/system-playlists/operation-summary')
+    operationSummary.value = res.data?.data || null
+  } catch (err) {
+    console.error('Lỗi lấy operation summary:', err)
+  } finally {
+    loadingOperation.value = false
+  }
+}
+
+async function fetchActivityLogs() {
+  loadingActivity.value = true
+  try {
+    const res = await api.get('/admin/system-playlists/activity-log')
+    activityLogs.value = res.data?.data || []
+  } catch (err) {
+    console.error('Lỗi lấy activity logs:', err)
+  } finally {
+    loadingActivity.value = false
+  }
+}
+
+async function fetchQualityReport() {
+  loadingQuality.value = true
+  try {
+    const res = await api.get('/admin/system-playlists/quality-report')
+    qualityReport.value = res.data?.data || null
+  } catch (err) {
+    console.error('Lỗi lấy quality report:', err)
+  } finally {
+    loadingQuality.value = false
+  }
+}
+
+function formatQualityPercent(val) {
+  if (val === null || val === undefined) return 'N/A'
+  return `${(Number(val) * 100).toFixed(1).replace(/\.0$/, '')}%`
+}
+
+function openQualityDetail(row) {
+  qualityDetailItem.value = row
+  document.body.style.overflow = 'hidden'
+}
+
+function closeQualityDetail() {
+  qualityDetailItem.value = null
+  if (!drawerItem.value) {
+    document.body.style.overflow = ''
+  }
+}
+
 function closeDetailModal() {
   if (isRegeneratingSingle.value) return;
   drawerItem.value = null;
@@ -308,7 +862,7 @@ function closeDetailModal() {
 }
 
 const hasActiveFilters = computed(() => {
-  return filters.q || filters.owner || filters.system_key !== 'all' || filters.status !== 'need_update'
+  return filters.q || filters.owner || filters.system_key !== 'all' || filters.status !== 'all'
 })
 
 function percent(value, total) {
@@ -391,14 +945,6 @@ async function fetchSystemKeys() {
 }
 
 async function fetchPlaylists(page = 1) {
-  // Validate if status is 'all' and no filter
-  if (filters.status === 'all' && !filters.q && !filters.owner && filters.system_key === 'all') {
-    searchWarning.value = 'Vui lòng nhập từ khóa, chọn người dùng hoặc chọn system key trước khi tra cứu toàn bộ.'
-    playlists.value = []
-    return
-  }
-
-  searchWarning.value = ''
   loading.value = true
   try {
     const res = await api.get('/admin/system-playlists', {
@@ -432,7 +978,7 @@ function resetFilters() {
   filters.q = ''
   filters.owner = ''
   filters.system_key = 'all'
-  filters.status = 'need_update'
+  filters.status = 'all'
   fetchPlaylists(1)
 }
 
@@ -553,8 +1099,9 @@ function formatNumber(num) {
 }
 
 const handleKeydown = (e) => {
-  if (e.key === 'Escape' && drawerItem.value) {
-    closeDetailModal();
+  if (e.key === 'Escape') {
+    if (drawerItem.value) closeDetailModal();
+    if (qualityDetailItem.value) closeQualityDetail();
   }
 }
 
@@ -562,6 +1109,9 @@ onMounted(() => {
   fetchSummary()
   fetchSystemKeys()
   fetchPlaylists(1)
+  fetchQualityReport()
+  fetchOperationSummary()
+  fetchActivityLogs()
   document.addEventListener('keydown', handleKeydown)
 })
 
@@ -945,4 +1495,74 @@ onUnmounted(() => {
 }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Flat Bar Chart CSS */
+.playlist-distribution-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  height: 240px;
+  padding: 1rem 0.5rem 0;
+  overflow-x: auto;
+}
+
+.distribution-bar-item {
+  min-width: 72px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.distribution-bar-value {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #334155;
+  margin-bottom: 0.5rem;
+}
+
+.distribution-bar-stage {
+  position: relative;
+  height: 190px;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.distribution-bar-flat {
+  position: relative;
+  width: 48px;
+  min-height: 8px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(var(--bar-color), 0.7) 0%, rgba(var(--bar-color), 0.4) 50%, rgba(var(--bar-color), 0.15) 100%);
+  transition: height 0.5s ease, transform 0.2s ease, filter 0.2s ease;
+}
+
+.distribution-bar-flat:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  background: linear-gradient(180deg, rgba(var(--bar-color), 0.8) 0%, rgba(var(--bar-color), 0.5) 50%, rgba(var(--bar-color), 0.2) 100%);
+}
+
+.distribution-bar-label {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.15;
+  max-width: 82px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-purple { --bar-color: 139, 92, 246; }
+.bar-violet { --bar-color: 167, 139, 250; }
+.bar-emerald { --bar-color: 52, 211, 153; }
+.bar-teal { --bar-color: 45, 212, 191; }
+.bar-green { --bar-color: 74, 222, 128; }
+.bar-amber { --bar-color: 251, 191, 36; }
+.bar-rose { --bar-color: 251, 113, 133; }
 </style>

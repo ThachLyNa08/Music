@@ -4,10 +4,10 @@
     <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border flex flex-col lg:flex-row lg:items-center justify-between px-6 shrink-0 gap-4 z-40 shadow-sm">
       <div>
         <div class="flex items-center gap-2 mb-1">
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Music Data Tools</h1>
-          <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">BETA</span>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Music Data Tools</h1>
+          <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-semibold rounded-full">BETA</span>
         </div>
-        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý, bổ sung và bảo trì dữ liệu thư viện nhạc.</p>
+        <p class="text-gray-500 dark:text-text-secondary text-xs font-medium">Quản lý, bổ sung và bảo trì dữ liệu thư viện nhạc.</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="text-right mr-2 hidden md:block">
@@ -32,45 +32,47 @@
 
     <div class="p-4 md:p-6 flex flex-col space-y-6">
     <!-- 2. KPI Cards -->
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-6 mt-6">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-4 mt-4">
       <AdminKpiCard
         v-for="item in kpiCards"
         :key="item.title"
         v-bind="item"
         :loading="loading && !summary"
         :showIcon="false"
+        compact
       />
     </div>
 
     <!-- Main Content Group (Filter & Table) -->
     <div class="flex flex-col gap-3">
       <!-- 3. Filter Bar -->
-      <AdminFilterBar class="!mb-0">
-        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+      <AdminFilterBar class="!mb-0 !py-2">
+        <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
           <!-- Search -->
           <AdminSearchInput
             v-model="filters.search"
+            compact
             placeholder="Tìm kiếm bài hát, nghệ sĩ..."
             icon="search"
             historyKey="admin-music-data-tools-search"
           />
 
           <!-- Filters -->
-          <select v-model="filters.missing" @change="applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
+          <select v-model="filters.missing" @change="applyFilters" class="admin-input !h-9 text-xs w-full xl:w-48 xl:shrink-0 cursor-pointer">
             <option value="">Tất cả trạng thái</option>
             <option value="cover">Thiếu Cover</option>
             <option value="lyrics">Thiếu Lyrics</option>
             <option value="features">Thiếu Audio Features</option>
           </select>
           
-          <AdminResetButton @click="resetFilters" class="xl:shrink-0" />
+          <AdminResetButton @click="resetFilters" class="xl:shrink-0 !h-9 !w-9" />
         </div>
       </AdminFilterBar>
 
       <!-- 4. Data Table -->
       <div class="flex flex-col">
       <AdminTableShell 
-        maxHeight="375px"
+        maxHeight="450px"
         :loading="loading" 
         :empty="!loading && songs.length === 0" 
         emptyTitle="Chưa có bài hát nào" 
@@ -85,64 +87,64 @@
             </div>
           </div>
         </template>
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
           <thead>
-            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 w-[50px]"></th>
-              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300">Cover</th>
-              <th class="py-3 px-4 min-w-[250px] font-bold text-black dark:text-gray-300">Bài hát</th>
-              <th class="py-3 px-4 min-w-[150px] font-bold text-black dark:text-gray-300">Nghệ sĩ</th>
-              <th class="py-3 px-4 min-w-[150px] font-bold text-black dark:text-gray-300">Album</th>
-              <th class="py-3 px-4 w-[100px] font-bold text-black dark:text-gray-300 text-center">Health</th>
-              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Cover</th>
-              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Lyrics</th>
-              <th class="py-3 px-4 w-[80px] font-bold text-black dark:text-gray-300 text-center">Audio</th>
-              <th class="py-3 px-4 w-[120px] font-bold text-black dark:text-gray-300">Updated</th>
-              <th class="py-3 px-4 w-[100px] font-bold text-black dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card">Actions</th>
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155] text-[10px] uppercase">
+              <th class="py-2 px-3 w-[40px]"></th>
+              <th class="py-2 px-3 w-[60px] font-bold text-black dark:text-gray-300">Cover</th>
+              <th class="py-2 px-3 min-w-[200px] font-bold text-black dark:text-gray-300">Bài hát</th>
+              <th class="py-2 px-3 min-w-[120px] font-bold text-black dark:text-gray-300">Nghệ sĩ</th>
+              <th class="py-2 px-3 min-w-[120px] font-bold text-black dark:text-gray-300">Album</th>
+              <th class="py-2 px-3 w-[80px] font-bold text-black dark:text-gray-300 text-center">Health</th>
+              <th class="py-2 px-3 w-[60px] font-bold text-black dark:text-gray-300 text-center">Cover</th>
+              <th class="py-2 px-3 w-[60px] font-bold text-black dark:text-gray-300 text-center">Lyrics</th>
+              <th class="py-2 px-3 w-[60px] font-bold text-black dark:text-gray-300 text-center">Audio</th>
+              <th class="py-2 px-3 w-[100px] font-bold text-black dark:text-gray-300">Updated</th>
+              <th class="py-2 px-3 w-[80px] font-bold text-black dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
             <tr v-for="(song, index) in songs" :key="song.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group cursor-pointer" @click="openDetail(song.id)">
-              <td class="py-3 px-4" @click.stop>
+              <td class="py-2 px-3" @click.stop>
                 <input type="checkbox" :value="song.id" v-model="selectedIds" class="w-4 h-4 rounded border-gray-300 text-indigo-600 bg-white dark:bg-bg-card">
               </td>
-              <td class="py-3 px-4" @click.stop="openDetail(song.id)">
-                <div class="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-bg-card border border-gray-100 dark:border-bg-border group-hover:ring-2 group-hover:ring-indigo-500/30 transition-all">
+              <td class="py-2 px-3" @click.stop="openDetail(song.id)">
+                <div class="relative w-8 h-8 rounded-lg overflow-hidden bg-gray-100 dark:bg-bg-card border border-gray-100 dark:border-bg-border group-hover:ring-2 group-hover:ring-indigo-500/30 transition-all">
                   <AdminCoverThumb :src="song.cover_url" size="custom" class="w-full h-full" rounded="none" />
                 </div>
               </td>
-              <td class="py-3 px-4" @click.stop="openDetail(song.id)">
+              <td class="py-2 px-3" @click.stop="openDetail(song.id)">
                 <div class="font-bold text-gray-900 dark:text-white truncate max-w-[200px]">{{ song.title }}</div>
               </td>
-              <td class="py-3 px-4">
-                <div class="text-xs text-gray-700 dark:text-gray-300 truncate max-w-[150px]">{{ song.artist_name || 'Unknown' }}</div>
+              <td class="py-2 px-3">
+                <div class="text-[11px] text-gray-700 dark:text-gray-300 truncate max-w-[150px]">{{ song.artist_name || 'Unknown' }}</div>
               </td>
-              <td class="py-3 px-4">
-                <div class="text-xs text-gray-500 truncate max-w-[120px]">{{ song.album_title || 'N/A' }}</div>
+              <td class="py-2 px-3">
+                <div class="text-[11px] text-gray-500 truncate max-w-[120px]">{{ song.album_title || 'N/A' }}</div>
               </td>
-              <td class="py-3 px-4 text-center">
-                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap" :class="getSongHealthBadgeClass(song)">
+              <td class="py-2 px-3 text-center">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap" :class="getSongHealthBadgeClass(song)">
                   <span class="w-1.5 h-1.5 rounded-full" :class="getSongHealthDotClass(song)"></span>
                   {{ getSongHealthScore(song) }}%
                 </span>
               </td>
-              <td class="py-3 px-4 text-center">
-                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full" :class="song.has_cover ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
-                  <MfIcon :name="song.has_cover ? 'check' : 'close'" size="14" />
+              <td class="py-2 px-3 text-center">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full" :class="song.has_cover ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
+                  <MfIcon :name="song.has_cover ? 'check' : 'close'" size="12" />
                 </span>
               </td>
-              <td class="py-3 px-4 text-center">
-                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full" :class="song.has_lyrics ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
-                  <MfIcon :name="song.has_lyrics ? 'check' : 'close'" size="14" />
+              <td class="py-2 px-3 text-center">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full" :class="song.has_lyrics ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
+                  <MfIcon :name="song.has_lyrics ? 'check' : 'close'" size="12" />
                 </span>
               </td>
-              <td class="py-3 px-4 text-center">
-                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full" :class="song.has_features ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
-                  <MfIcon :name="song.has_features ? 'check' : 'close'" size="14" />
+              <td class="py-2 px-3 text-center">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full" :class="song.has_features ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'">
+                  <MfIcon :name="song.has_features ? 'check' : 'close'" size="12" />
                 </span>
               </td>
-              <td class="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(song.updated_at) }}</td>
-              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+              <td class="py-2 px-3 text-[11px] text-gray-500 whitespace-nowrap">{{ formatDate(song.updated_at) }}</td>
+              <td class="py-2 px-3 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
                 <div class="flex justify-end">
                   <AdminActionMenu :actions="getToolsActions(song)" />
                 </div>
@@ -165,73 +167,73 @@
     <section class="mb-8" v-if="summary && summary.healthDistribution">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Health Distribution -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-6">
-            <h3 class="font-semibold text-slate-900 flex items-center gap-2">
-              <MfIcon name="activity" class="text-indigo-500" size="20" />
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <MfIcon name="activity" class="text-indigo-500" size="18" />
               Health Distribution
             </h3>
-            <button class="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Xem chi tiết</button>
+            <button class="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium">Xem chi tiết</button>
           </div>
-          <div class="space-y-5">
+          <div class="space-y-4">
             <div>
-              <div class="flex justify-between text-sm mb-1.5">
+              <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-600">Excellent (90-100%)</span>
                 <span class="font-semibold text-slate-900">{{ summary.healthDistribution.excellent.toLocaleString() }} <span class="text-slate-400 font-normal">({{ getPercent(summary.healthDistribution.excellent, summary.totalSongs) }}%)</span></span>
               </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div class="bg-emerald-500 h-2 rounded-full" :style="{ width: getPercent(summary.healthDistribution.excellent, summary.totalSongs) + '%' }"></div>
+              <div class="w-full bg-slate-100 rounded-full h-1.5">
+                <div class="bg-emerald-500 h-1.5 rounded-full" :style="{ width: getPercent(summary.healthDistribution.excellent, summary.totalSongs) + '%' }"></div>
               </div>
             </div>
             <div>
-              <div class="flex justify-between text-sm mb-1.5">
+              <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-600">Good (70-89%)</span>
                 <span class="font-semibold text-slate-900">{{ summary.healthDistribution.good.toLocaleString() }} <span class="text-slate-400 font-normal">({{ getPercent(summary.healthDistribution.good, summary.totalSongs) }}%)</span></span>
               </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div class="bg-cyan-500 h-2 rounded-full" :style="{ width: getPercent(summary.healthDistribution.good, summary.totalSongs) + '%' }"></div>
+              <div class="w-full bg-slate-100 rounded-full h-1.5">
+                <div class="bg-cyan-500 h-1.5 rounded-full" :style="{ width: getPercent(summary.healthDistribution.good, summary.totalSongs) + '%' }"></div>
               </div>
             </div>
             <div>
-              <div class="flex justify-between text-sm mb-1.5">
+              <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-600">Fair (50-69%)</span>
                 <span class="font-semibold text-slate-900">{{ summary.healthDistribution.fair.toLocaleString() }} <span class="text-slate-400 font-normal">({{ getPercent(summary.healthDistribution.fair, summary.totalSongs) }}%)</span></span>
               </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div class="bg-amber-500 h-2 rounded-full" :style="{ width: getPercent(summary.healthDistribution.fair, summary.totalSongs) + '%' }"></div>
+              <div class="w-full bg-slate-100 rounded-full h-1.5">
+                <div class="bg-amber-500 h-1.5 rounded-full" :style="{ width: getPercent(summary.healthDistribution.fair, summary.totalSongs) + '%' }"></div>
               </div>
             </div>
             <div>
-              <div class="flex justify-between text-sm mb-1.5">
+              <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-600">Poor (&lt;50%)</span>
                 <span class="font-semibold text-slate-900">{{ summary.healthDistribution.poor.toLocaleString() }} <span class="text-slate-400 font-normal">({{ getPercent(summary.healthDistribution.poor, summary.totalSongs) }}%)</span></span>
               </div>
-              <div class="w-full bg-slate-100 rounded-full h-2">
-                <div class="bg-red-500 h-2 rounded-full" :style="{ width: getPercent(summary.healthDistribution.poor, summary.totalSongs) + '%' }"></div>
+              <div class="w-full bg-slate-100 rounded-full h-1.5">
+                <div class="bg-red-500 h-1.5 rounded-full" :style="{ width: getPercent(summary.healthDistribution.poor, summary.totalSongs) + '%' }"></div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Top Missing Metadata -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-6">
-            <h3 class="font-semibold text-slate-900 flex items-center gap-2">
-              <MfIcon name="warning" class="text-amber-500" size="20" />
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <MfIcon name="warning" class="text-amber-500" size="18" />
               Top Missing Metadata
             </h3>
-            <button class="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Xem tất cả</button>
+            <button class="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium">Xem tất cả</button>
           </div>
-          <div class="space-y-3">
-            <div v-for="(item, index) in topMissing" :key="item.id" class="flex items-center justify-between p-3 rounded-xl border" :class="item.bgColorClass">
+          <div class="space-y-2.5">
+            <div v-for="(item, index) in topMissing" :key="item.id" class="flex items-center justify-between p-2.5 rounded-xl border" :class="item.bgColorClass">
               <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" :class="item.iconBgClass">{{ index + 1 }}</div>
+                <div class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold" :class="item.iconBgClass">{{ index + 1 }}</div>
                 <div>
-                  <div class="text-sm font-medium text-slate-900">{{ item.title }}</div>
-                  <div class="text-xs opacity-70">{{ item.count.toLocaleString() }} {{ item.desc }}</div>
+                  <div class="text-xs font-semibold text-slate-900">{{ item.title }}</div>
+                  <div class="text-[10px] opacity-70 mt-0.5">{{ item.count.toLocaleString() }} {{ item.desc }}</div>
                 </div>
               </div>
-              <button class="px-3 py-1.5 bg-white border rounded-lg text-xs font-medium transition-colors shadow-sm" :class="item.btnClass" :disabled="item.disabled" :title="item.disabled ? (item.id === 'embedding' ? 'Embedding vectors được tạo bằng pipeline recommendation riêng, chưa chạy trực tiếp từ Music Data Tools.' : 'Vui lòng chọn bài hát ở table để thao tác hàng loạt (Bulk).') : ''" @click="handleMissingAction(item.id)">
+              <button class="px-2.5 py-1 bg-white border rounded-lg text-[11px] font-medium transition-colors shadow-sm" :class="item.btnClass" :disabled="item.disabled" :title="item.disabled ? (item.id === 'embedding' ? 'Embedding vectors được tạo bằng pipeline recommendation riêng, chưa chạy trực tiếp từ Music Data Tools.' : 'Vui lòng chọn bài hát ở table để thao tác hàng loạt (Bulk).') : ''" @click="handleMissingAction(item.id)">
                 {{ item.actionText }}
               </button>
             </div>

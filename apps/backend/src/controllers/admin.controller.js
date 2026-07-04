@@ -1,6 +1,8 @@
 const { pool } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
+const csv = require('csv-parser');
 const {
   syncArtistMetadata,
   syncMissingArtistMetadata,
@@ -4485,5 +4487,122 @@ exports.exportUsers = async (req, res, next) => {
   } catch (error) {
     console.error('exportUsers Error:', error);
     res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.getSystemPlaylistsQualityReport = async (req, res, next) => {
+  try {
+    const projectRoot = path.resolve(__dirname, '../../../..');
+    const reportPath = path.join(projectRoot, 'datasets', 'processed', 'system_playlist_evaluation_report.csv');
+    
+    if (!fs.existsSync(reportPath)) {
+      return res.json({
+        success: true,
+        data: {
+          summary: { total: 0, good: 0, warning: 0, bad: 0 },
+          rows: [],
+          message: "Chưa có báo cáo đánh giá. Vui lòng chạy evaluateSystemPlaylists.js --all --export."
+        }
+      });
+    }
+
+    const results = [];
+    fs.createReadStream(reportPath)
+      .pipe(csv())
+      .on('data', (data) => results.push(data))
+      .on('end', () => {
+        let good = 0;
+        let warning = 0;
+        let bad = 0;
+
+        const rows = results.map(r => {
+          const status = r.status || '';
+          if (status === 'GOOD') good++;
+          else if (status === 'WARNING') warning++;
+          else if (status === 'BAD') bad++;
+
+          const parseNum = (val) => {
+            if (val === undefined || val === null || val === '' || val === 'N/A') return null;
+            const parsed = Number(val);
+            return isNaN(parsed) ? null : parsed;
+          };
+
+          return {
+            system_key: r.system_key,
+            status: r.status,
+            actual_songs: parseNum(r.actual_songs),
+            target_size: parseNum(r.target_size),
+            candidate_count: parseNum(r.candidate_count),
+            overlap_ratio: parseNum(r.overlap_ratio),
+            added_songs: parseNum(r.added_songs),
+            removed_songs: parseNum(r.removed_songs),
+            artist_count: parseNum(r.artist_count),
+            genre_count: parseNum(r.genre_count),
+            max_same_artist_ratio: parseNum(r.max_same_artist_ratio),
+            max_same_genre_ratio: parseNum(r.max_same_genre_ratio),
+            failed_diversity_playlists: parseNum(r.failed_diversity_playlists),
+            avg_max_same_artist_ratio: parseNum(r.avg_max_same_artist_ratio),
+            worst_max_same_artist_ratio: parseNum(r.worst_max_same_artist_ratio),
+            avg_max_same_genre_ratio: parseNum(r.avg_max_same_genre_ratio),
+            worst_max_same_genre_ratio: parseNum(r.worst_max_same_genre_ratio),
+            audio_feature_coverage: parseNum(r.audio_feature_coverage),
+            warnings: r.warnings
+          };
+        });
+
+        res.json({
+          success: true,
+          data: {
+            summary: {
+              total: rows.length,
+              good,
+              warning,
+              bad,
+              sourceFile: reportPath
+            },
+            rows
+          }
+        });
+      })
+      .on('error', (error) => {
+        console.error('Error parsing CSV:', error);
+        res.status(500).json({ success: false, message: 'Không đọc được báo cáo chất lượng playlist.', error: error.message, sourceFile: reportPath });
+      });
+  } catch (error) {
+    console.error('getSystemPlaylistsQualityReport Error:', error);
+    next(error);
+  }
+};
+
+exports.getSystemPlaylistsOperationSummary = async (req, res, next) => {
+  try {
+    // Currently placeholders as there are no run logs
+    res.json({
+      success: true,
+      data: {
+        hasData: false,
+        errorRate24h: null,
+        avgGenerationTimeMs: null,
+        processingCount: 0,
+        latestRunAt: null,
+        latestRunBy: null,
+        nextRunAt: null,
+        message: 'Chưa có dữ liệu vận hành'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getSystemPlaylistsActivityLog = async (req, res, next) => {
+  try {
+    // Return empty array as there are no logs yet
+    res.json({
+      success: true,
+      data: []
+    });
+  } catch (error) {
+    next(error);
   }
 };
