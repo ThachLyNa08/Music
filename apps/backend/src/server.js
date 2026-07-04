@@ -16,7 +16,8 @@ async function bootstrap() {
 
   await connectRedis();
 
-  // DB should be initialized
+  const { ensureLogTableExists } = require('./services/systemPlaylistRunLog.service');
+  await ensureLogTableExists();
 
   // 2. Tạo HTTP server
   const server = http.createServer(app);
@@ -34,6 +35,9 @@ async function bootstrap() {
 
   // 4. Khởi chạy scheduled jobs (cron)
   require('./services/scheduler.service');
+  
+  const { startSystemPlaylistScheduler } = require('./schedulers/systemPlaylistScheduler');
+  startSystemPlaylistScheduler();
 
   // Khởi chạy pending poller cho SePay
   const { startSepayPendingPoller } = require('./services/sepayPoller.service');

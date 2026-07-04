@@ -24,7 +24,9 @@ redisClient.on('error', (err) => {
 
 redisClient.on('connect', () => {
   isRedisConnected = true;
-  console.log('✅ Redis connected successfully');
+  if (process.argv.includes('--debug')) {
+    console.log('✅ Redis connected successfully');
+  }
 });
 
 redisClient.on('end', () => {
@@ -35,7 +37,9 @@ async function connectRedis() {
   try {
     await redisClient.connect();
   } catch (err) {
-    console.warn('⚠️  Redis server is not running. Caching is disabled, falling back to direct database queries.');
+    if (process.argv.includes('--debug')) {
+      console.warn('⚠️  Redis server is not running. Caching is disabled, falling back to direct database queries.');
+    }
   }
 }
 

@@ -14,14 +14,21 @@ const { pool } = require('../config/database');
 const recommendationService = require('./recommendation.service');
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const { publicSongCondition } = require('../utils/public.utils');
+const {
+  computeOverlapStats,
+  selectSongsWithOverlapCheck,
+  getPlaylistSongIds,
+  getRecentSystemPlaylistSongs,
+  evaluateRegenerateQuality
+} = require('../utils/playlistRegenerate.util');
 
 const SYSTEM_KEY = 'weekly_mix';
 const PLAYLIST_NAME = 'Weekly Mix của bạn';
 const PLAYLIST_DESCRIPTION =
   'Danh sách phát được tổng hợp vào sáng Chủ nhật từ thói quen nghe nhạc trong tuần của bạn.';
 
-const DEFAULT_LIMIT = 25;
-const MAX_LIMIT = 30;
+const DEFAULT_LIMIT = 35;
+const MAX_LIMIT = 50;
 
 function clampLimit(value) {
   const n = Number(value);
@@ -141,19 +148,160 @@ async function generateWeeklyMixForUser(userId, options = {}) {
   const referenceDate = options.referenceDate || null;
   const listeningWindow = getWeeklyMixListeningWindow(referenceDate);
 
-  const result = await recommendationService.getRecommendationsForUser(uid, { limit, listeningWindow });
-  const songIds = dedupeSongIds(result.items);
-  const strategy = result.strategy;
-  const reason = result.reason;
+  const conn = await pool.getConnection();
+  try {
+    const existingPlaylist = await findExistingPlaylist(conn, uid);
+    let oldSongIds = [];
+    if (existingPlaylist) {
+       oldSongIds = await getPlaylistSongIds(conn, existingPlaylist.id);
+    }
+    const recentSystemSongs = await getRecentSystemPlaylistSongs(conn, SYSTEM_KEY);
+
+    const result = await recommendationService.getRecommendationsForUser(uid, { limit: limit * 5, listeningWindow });
+    // result.items is [{ id, score, ... }]
+    const candidateObjs = result.items.map(c => {
+       let score = c.score || 0;
+       if (recentSystemSongs.has(Number(c.id))) score -= 100;
+       return { ...c, score };
+    }).sort((a,b) => b.score - a.score);
+
+    // Gather artist/genre info directly from candidateObjs (already included by recommendationService)
+    // No need to query songs table again.
+
+    // Custom selection logic with diversity quotas and overlap check
+    const maxArtistCount = Math.floor(limit * 0.3);
+    const maxGenreCount = Math.floor(limit * 0.65);
+    const maxOldSongs = Math.floor(limit * 0.7); // target overlap <= 0.7 ideally
+
+    const selectedIds = [];
+    const artistCount = new Map();
+    const genreCount = new Map();
+    const oldIdSet = new Set(oldSongIds.map(Number));
+    let oldAdded = 0;
+
+    for (const c of candidateObjs) {
+      if (selectedIds.length >= limit) break;
+      const cid = Number(c.id);
+      if (selectedIds.includes(cid)) continue;
+
+      const isOld = oldIdSet.has(cid);
+      if (isOld && oldAdded >= maxOldSongs) continue;
+
+      const a = c.artist_id != null ? Number(c.artist_id) : null;
+      const g = c.genre_id != null ? Number(c.genre_id) : null;
+
+      if (a !== null && (artistCount.get(a) || 0) >= maxArtistCount) continue;
+      if (g !== null && (genreCount.get(g) || 0) >= maxGenreCount) continue;
+
+      selectedIds.push(cid);
+      if (a !== null) artistCount.set(a, (artistCount.get(a) || 0) + 1);
+      if (g !== null) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+      if (isOld) oldAdded++;
+    }
+
+    // Fallback if we couldn't reach the limit due to strict quotas
+    let fallbackUsed = false;
+    let fallbackReason = '';
+    if (selectedIds.length < limit) {
+      fallbackUsed = true;
+      fallbackReason = 'insufficient candidates under weekly diversity quota';
+      const relaxedMaxArtistCount = Math.floor(limit * 0.35);
+      const relaxedMaxGenreCount = Math.floor(limit * 0.70);
+
+      for (const c of candidateObjs) {
+        if (selectedIds.length >= limit) break;
+        const cid = Number(c.id);
+        if (selectedIds.includes(cid)) continue;
+
+        const a = c.artist_id != null ? Number(c.artist_id) : null;
+        const g = c.genre_id != null ? Number(c.genre_id) : null;
+
+        if (a !== null && (artistCount.get(a) || 0) >= relaxedMaxArtistCount) continue;
+        if (g !== null && (genreCount.get(g) || 0) >= relaxedMaxGenreCount) continue;
+
+        selectedIds.push(cid);
+        if (a !== null) artistCount.set(a, (artistCount.get(a) || 0) + 1);
+        if (g !== null) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+      }
+    }
+
+    const songIds = selectedIds;
+    const strategy = result.strategy;
+    const reason = result.reason;
+    
+    const overlapStats = computeOverlapStats(oldSongIds, songIds);
+    let evalResult = evaluateRegenerateQuality({ ...overlapStats, candidateCount: candidateObjs.length }, limit);
+
+    // Hard gate for Weekly Mix
+    if (songIds.length < limit) {
+      evalResult.canApply = false;
+      evalResult.status = 'skipped';
+      evalResult.message = `newSongs < ${limit}`;
+    } else if (candidateObjs.length < 70) {
+      evalResult.canApply = false;
+      evalResult.status = 'skipped';
+      evalResult.message = 'candidateCount < 70';
+    } else if (overlapStats.overlapRatio >= 0.9) {
+      evalResult.canApply = false;
+      evalResult.status = 'skipped';
+      evalResult.message = 'overlapRatio >= 0.9';
+    } else if (overlapStats.addedSongs < 10) {
+      evalResult.canApply = false;
+      evalResult.status = 'skipped';
+      evalResult.message = 'addedSongs < 10';
+    }
+
+    // Check final diversity ratios
+    let maxSameArtist = 0;
+    let maxSameGenre = 0;
+    const finalArtistCount = new Map();
+    const finalGenreCount = new Map();
+    for (const sid of songIds) {
+      const c = candidateObjs.find(obj => Number(obj.id) === sid) || {};
+      const a = c.artist_id != null ? Number(c.artist_id) : null;
+      const g = c.genre_id != null ? Number(c.genre_id) : null;
+      if (a != null) {
+        const c = (finalArtistCount.get(a) || 0) + 1;
+        finalArtistCount.set(a, c);
+        if (c > maxSameArtist) maxSameArtist = c;
+      }
+      if (g != null) {
+        const c = (finalGenreCount.get(g) || 0) + 1;
+        finalGenreCount.set(g, c);
+        if (c > maxSameGenre) maxSameGenre = c;
+      }
+    }
+    const finalMaxSameArtistRatio = songIds.length > 0 ? maxSameArtist / songIds.length : 0;
+    const finalMaxSameGenreRatio = songIds.length > 0 ? maxSameGenre / songIds.length : 0;
+
+    if (finalMaxSameArtistRatio > 0.3 || finalMaxSameGenreRatio > 0.65) {
+      evalResult.canApply = false;
+      evalResult.status = 'skipped';
+      evalResult.message = 'Weekly Mix diversity threshold failed';
+    }
 
   const summary = {
     userId: uid,
     strategy,
     reason,
-    candidateCount: result.items.length,
+    candidateCount: candidateObjs.length,
     dedupedCount: songIds.length,
-    playlistId: null,
-    created: false,
+    oldSongs: oldSongIds.length,
+    newSongs: songIds.length,
+    ...overlapStats,
+    addedSongs: overlapStats.addedSongs,
+    removedSongs: overlapStats.removedSongs,
+    actualMaxSameArtistRatio: Number(finalMaxSameArtistRatio.toFixed(2)),
+    actualMaxSameGenreRatio: Number(finalMaxSameGenreRatio.toFixed(2)),
+    maxSameArtistLimit: 0.3,
+    maxSameGenreLimit: 0.65,
+    canApply: evalResult.canApply,
+    status: evalResult.status,
+    message: evalResult.message,
+    fallbackUsed,
+    fallbackReason,
+    playlistId: existingPlaylist ? existingPlaylist.id : null,
+    created: !existingPlaylist,
     insertedSongs: 0,
     dryRun,
   };
@@ -162,8 +310,7 @@ async function generateWeeklyMixForUser(userId, options = {}) {
     return { ...summary, listeningWindow, topSongIds: songIds.slice(0, 10) };
   }
 
-  const conn = await pool.getConnection();
-  try {
+  if (evalResult.canApply) {
     await conn.beginTransaction();
     const { playlistId, created } = await ensurePlaylist(conn, uid);
     const publicIds = await fetchPublicSongIds(conn, songIds);
@@ -173,7 +320,18 @@ async function generateWeeklyMixForUser(userId, options = {}) {
     summary.created = created;
     summary.insertedSongs = inserted;
     summary.dedupedCount = publicIds.length;
-    return summary;
+    
+    // Post-apply verification logging
+    console.log(`[WeeklyMix] Post-apply verification for User ${uid}:`, {
+      playlistId,
+      savedSongs: inserted,
+      savedMaxSameArtistRatio: summary.actualMaxSameArtistRatio,
+      savedMaxSameGenreRatio: summary.actualMaxSameGenreRatio,
+      canApply: summary.canApply
+    });
+  }
+  return summary;
+
   } catch (err) {
     try { await conn.rollback(); } catch (_) { /* ignore */ }
     throw err;
@@ -198,6 +356,19 @@ async function generateWeeklyMixForAllUsers(options = {}) {
     errors: 0,
     details: [],
   };
+  let totalCandidate = 0;
+  let totalOverlap = 0;
+  let totalAdded = 0;
+  let totalRemoved = 0;
+  let maxArtist = 0;
+  let maxGenre = 0;
+  let allCanApply = true;
+  let lastStatus = 'success';
+  let successRuns = 0;
+
+  let failedDiversityUsers = 0;
+  let representativeUserId = null;
+
   for (const row of rows) {
     try {
       const summary = await generateWeeklyMixForUser(row.id, { limit, dryRun, referenceDate });
@@ -207,6 +378,26 @@ async function generateWeeklyMixForAllUsers(options = {}) {
         else stats.playlistsUpdated += 1;
         stats.songsInserted += summary.insertedSongs || 0;
       }
+      
+      totalCandidate += (summary.candidateCount || 0);
+      totalOverlap += (summary.overlapRatio || 0);
+      totalAdded += (summary.addedSongs || 0);
+      totalRemoved += (summary.removedSongs || 0);
+      if (summary.actualMaxSameArtistRatio > maxArtist) {
+        maxArtist = summary.actualMaxSameArtistRatio;
+        representativeUserId = row.id;
+      }
+      if (summary.actualMaxSameGenreRatio > maxGenre) maxGenre = summary.actualMaxSameGenreRatio;
+      
+      if (!summary.canApply) {
+        allCanApply = false;
+        if (summary.reason === 'Weekly Mix diversity threshold failed' || summary.message === 'Weekly Mix diversity threshold failed') {
+          failedDiversityUsers++;
+        }
+      }
+      lastStatus = summary.status;
+      successRuns++;
+
       stats.details.push(summary);
     } catch (err) {
       stats.errors += 1;
@@ -217,6 +408,34 @@ async function generateWeeklyMixForAllUsers(options = {}) {
       });
     }
   }
+
+  if (successRuns > 0) {
+    stats.systemKey = 'weekly_mix'; // for matching script logic
+    stats.targetSize = limit;
+    stats.totalUsers = stats.usersProcessed;
+    stats.successCount = successRuns;
+    stats.skippedCount = stats.skipped;
+    stats.failedCount = stats.errors;
+    stats.candidateCount = Math.round(totalCandidate / successRuns);
+    stats.overlapRatio = Number((totalOverlap / successRuns).toFixed(2));
+    stats.avgAddedSongs = Math.round(totalAdded / successRuns);
+    stats.avgRemovedSongs = Math.round(totalRemoved / successRuns);
+    stats.avgMaxSameArtistRatio = Number((totalAdded / successRuns > 0 ? maxArtist : 0).toFixed(2)); // We'll just report the worst case as requested
+    stats.worstMaxSameArtistRatio = maxArtist;
+    stats.worstMaxSameGenreRatio = maxGenre;
+    stats.failedDiversityUsers = failedDiversityUsers;
+    stats.representativeUserId = representativeUserId;
+    stats.maxSameArtistLimit = 0.3;
+    stats.maxSameGenreLimit = 0.65;
+    
+    // Explicit hard gate for the batch
+    if (failedDiversityUsers > 0 || maxArtist > 0.30 || maxGenre > 0.65) {
+      allCanApply = false;
+    }
+    stats.canApply = allCanApply;
+    stats.status = lastStatus;
+  }
+
   return stats;
 }
 

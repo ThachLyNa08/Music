@@ -63,7 +63,7 @@ async function attachSemanticProfiles(songs) {
                 song.semanticProfile = null;
             }
         }
-        if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_RECOMMENDATION) {
+        if (process.argv.includes('--debug')) {
             console.log(`[Recommendation] Semantic profiles attached: ${attachedCount}/${songs.length}`);
         }
     } catch (err) {
@@ -171,7 +171,7 @@ async function buildUserSemanticPreference(userId, options = {}) {
             profileCount: profileMap.size
         };
 
-        if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_RECOMMENDATION) {
+        if (process.argv.includes('--debug')) {
             console.log(`[Recommendation] Semantic preference profileCount: ${result.profileCount}`);
         }
 

@@ -5,7 +5,7 @@ const modelService = require('./recommendationModel.service');
 const semanticProfileService = require('./songSemanticProfile.service');
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 50;
+const MAX_LIMIT = 200;
 const RECENT_LISTEN_DAYS = 30;
 const MAX_CANDIDATES = 3000;
 const ARTIST_CAP_TOP10 = 2;

@@ -3493,6 +3493,8 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Chưa có hàm regenerate hỗ trợ cho type: ${systemKey}` });
     }
 
+    const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
+    await logSystemPlaylistRun({ system_key: systemKey, run_type: 'manual' });
     res.json({ success: true, message: 'Đã tạo lại playlist thành công' });
   } catch (error) {
     console.error('regenerateSystemPlaylist Error:', error);
@@ -3502,6 +3504,7 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
 
 exports.regenerateAllSystemPlaylists = async (req, res, next) => {
   try {
+    const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
     const results = {
       trending: 'pending',
       daily: 'pending',
@@ -3513,30 +3516,40 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
     try {
       const trendingService = require('../services/trendingPlaylist.service');
       await trendingService.generateTrendingPlaylist();
+      await logSystemPlaylistRun({ system_key: 'trending_now', run_type: 'admin_all' });
       results.trending = 'success';
     } catch(e) { results.trending = e.message; }
 
     try {
       const dailyMixService = require('../services/dailyMix.service');
       await dailyMixService.generateDailyMixesForAllUsers();
+      for (let i = 1; i <= 6; i++) {
+        await logSystemPlaylistRun({ system_key: `dailymix_0${i}`, run_type: 'admin_all' });
+      }
       results.daily = 'success';
     } catch(e) { results.daily = e.message; }
 
     try {
       const weeklyMixService = require('../services/weeklyMix.service');
       await weeklyMixService.generateWeeklyMixForAllUsers();
+      await logSystemPlaylistRun({ system_key: 'weeklymix', run_type: 'admin_all' });
       results.weekly = 'success';
     } catch(e) { results.weekly = e.message; }
 
     try {
       const moodMixService = require('../services/moodMix.service');
       await moodMixService.generateMoodMixForAllUsers();
+      await logSystemPlaylistRun({ system_key: 'moodmix', run_type: 'admin_all' });
       results.mood = 'success';
     } catch(e) { results.mood = e.message; }
 
     try {
       const contextualService = require('../services/contextualMoodPlaylist.service');
       await contextualService.generateContextualMoodPlaylistsForAllUsers();
+      await logSystemPlaylistRun({ system_key: 'morning_vibes', run_type: 'admin_all' });
+      await logSystemPlaylistRun({ system_key: 'afternoon_vibes', run_type: 'admin_all' });
+      await logSystemPlaylistRun({ system_key: 'evening_vibes', run_type: 'admin_all' });
+      await logSystemPlaylistRun({ system_key: 'night_vibes', run_type: 'admin_all' });
       results.contextual = 'success';
     } catch(e) { results.contextual = e.message; }
 

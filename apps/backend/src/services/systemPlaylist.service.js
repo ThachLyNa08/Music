@@ -117,7 +117,7 @@ const MADE_FOR_YOU_ORDER = [
   'dailymix_04',
   'dailymix_05',
   'dailymix_06',
-  'weeklymix'
+  'moodmix'
 ];
 
 const RECOMMENDED_TODAY_ORDER = [

@@ -58,36 +58,58 @@
               <MfIcon name="ai" size="18" class="text-cyan-500 shrink-0"/> 
               <span class="truncate">AI Recommendation</span>
             </h3>
-            <span class="px-1.5 py-0.5 rounded text-[9px] xl:text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiStatus?.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
-              {{ quickOperations?.aiStatus?.status || 'Đang tải...' }}
+            <span class="px-1.5 py-0.5 rounded text-[9px] xl:text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiRecommendation?.hasArtifact ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
+              {{ quickOperations?.aiRecommendation?.hasArtifact ? 'ACTIVE' : 'OFFLINE' }}
             </span>
           </div>
-          <div v-if="quickOperations?.aiStatus?.status === 'RUNNING'" class="flex-1 text-sm text-slate-600 space-y-2">
-            <p>Model: <strong>{{ quickOperations.aiStatus.version }}</strong></p>
-            <p v-if="quickOperations.aiStatus.lastTrained">Trained: {{ new Date(quickOperations.aiStatus.lastTrained).toLocaleDateString('vi-VN') }}</p>
-            <p v-if="quickOperations.aiStatus.metric">Metric: <strong>{{ quickOperations.aiStatus.metric.name }} ({{ (quickOperations.aiStatus.metric.value * 100).toFixed(1) }}%)</strong></p>
+          <div v-if="quickOperations?.aiRecommendation?.hasArtifact" class="flex-1 text-sm text-slate-600 space-y-2">
+            <p>Model: <strong>BPR-MF</strong></p>
+            <p>Đang phục vụ gợi ý</p>
+            <p class="text-xs text-slate-500 truncate" :title="quickOperations.aiRecommendation.artifactPath">Artifact đã sẵn sàng</p>
           </div>
           <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Chưa có dữ liệu mô hình
+            Chưa có artifact model
           </div>
         </div>
 
         <!-- 2. Playlist tự động -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
-          <div class="flex items-center gap-2 mb-4">
-            <MfIcon name="playlist" size="18" class="text-violet-500"/>
-            <h3 class="font-bold text-slate-700">Playlist tự động</h3>
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow col-span-1 md:col-span-2">
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <div class="flex items-center gap-2">
+              <MfIcon name="playlist" size="18" class="text-violet-500"/>
+              <h3 class="font-bold text-slate-700">Playlist tự động</h3>
+            </div>
+            <button @click="confirmRegeneratePlaylists" :disabled="isRegeneratingPlaylists" class="text-xs text-violet-600 hover:text-violet-700 font-medium px-2 py-1 rounded bg-violet-100 hover:bg-violet-200 transition-colors disabled:opacity-50" title="Tạo lại tất cả">
+              {{ isRegeneratingPlaylists ? 'Đang tạo...' : 'Tạo lại tất cả' }}
+            </button>
           </div>
           <div v-if="quickOperations?.systemPlaylists?.length" class="flex-1 flex flex-col gap-2 text-sm">
-            <div v-for="type in ['dailymix_01', 'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes']" :key="type" class="flex items-center justify-between">
-              <span class="text-slate-600 truncate max-w-[120px]" :title="type">{{ formatSystemKeyName(type) }}</span>
-              <span class="text-xs font-mono" :class="isPlaylistStale(type) ? 'text-amber-500 font-bold' : 'text-slate-500'">
-                {{ formatPlaylistDate(type) }}
+            <div v-for="type in ['dailymix_01', 'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes']" :key="type" class="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+              <span class="text-slate-600 truncate font-medium max-w-[120px]" :title="type">{{ formatSystemKeyName(type) }}</span>
+              <span class="text-[11px] px-1.5 py-0.5 rounded font-bold" :class="playlistStatusClass(type)">
+                {{ formatPlaylistStatus(type) }}
               </span>
             </div>
           </div>
           <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
             Chưa có dữ liệu
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 text-[11px] text-amber-600 leading-tight bg-amber-50/50 -mx-4 -mb-4 p-3 rounded-b-xl">
+            <span class="font-bold flex items-center gap-1 mb-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <span class="font-bold text-slate-800">
+                Lưu ý:
+              </span>
+            </span>
+            <span v-if="quickOperations?.playlistAutomation?.schedulerEnabled" class="text-emerald-700">
+              Lịch tự động đã bật. Backend sẽ kiểm tra và cập nhật playlist đến hạn.
+            </span>
+            <span v-else>
+              Chưa cấu hình lịch tự động. Hãy chạy script regenerate hoặc bấm <b class="font-bold">Tạo lại tất cả</b> mỗi ngày.
+            </span>
+            <div v-if="quickOperations?.playlistAutomation" class="text-[10px] text-slate-400 mt-1">
+              {{ quickOperations.playlistAutomation.scheduleDescription }} - {{ quickOperations.playlistAutomation.nextRunHint }}
+            </div>
           </div>
         </div>
 
@@ -106,30 +128,6 @@
           </div>
           <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
             Không có cảnh báo nội dung
-          </div>
-        </div>
-
-        <!-- 4. Thanh toán cần chú ý -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
-          <div class="flex items-center gap-2 mb-4">
-            <MfIcon name="transaction" size="18" class="text-rose-500"/>
-            <h3 class="font-bold text-slate-700">Thanh toán cần chú ý</h3>
-          </div>
-          <div v-if="quickOperations?.paymentAttention" class="flex-1 text-sm">
-            <div class="grid grid-cols-3 gap-2 text-center mb-3">
-              <div class="bg-rose-100 text-rose-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.failed24h) }}</div><div class="text-[10px]">Thất bại</div></div>
-              <div class="bg-amber-100 text-amber-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.pending) }}</div><div class="text-[10px]">Đang chờ</div></div>
-              <div class="bg-emerald-100 text-emerald-700 rounded p-1"><div class="font-bold">{{ formatNumber(quickOperations.paymentAttention.successToday) }}</div><div class="text-[10px]">T.công</div></div>
-            </div>
-            <div class="space-y-1">
-              <div v-for="issue in quickOperations.paymentAttention.recentIssues" :key="issue.id" class="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-100">
-                <span class="truncate w-24" :title="issue.email">{{ issue.display_name || issue.email?.split('@')[0] }}</span>
-                <span :class="issue.status === 'failed' ? 'text-rose-500' : 'text-amber-500'">{{ formatCurrency(issue.amount) }}</span>
-              </div>
-            </div>
-          </div>
-          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Chưa có dữ liệu
           </div>
         </div>
       </div>
@@ -419,6 +417,16 @@
         </div>
       </aside>
     </div>
+
+    <ConfirmDialog 
+      v-model="showRegenerateConfirm" 
+      title="Tạo lại Playlist tự động" 
+      message="Quá trình này có thể mất thời gian để AI tạo lại dữ liệu playlist (Daily Mix, Weekly Mix, v.v.) cho toàn bộ người dùng. Bạn có chắc chắn muốn chạy ngay bây giờ?" 
+      confirmText="Tạo lại tất cả" 
+      cancelText="Hủy" 
+      type="primary" 
+      @confirm="regenerateSystemPlaylists" 
+    />
   </section>
 </template>
 
@@ -443,6 +451,7 @@ import { Bar, Line } from 'vue-chartjs'
 import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Filler)
@@ -470,6 +479,30 @@ const trendRangeOptions = [
   { label: '7 ngày', value: '7d' },
   { label: '30 ngày', value: '30d' }
 ]
+
+const showRegenerateConfirm = ref(false)
+const isRegeneratingPlaylists = ref(false)
+
+function confirmRegeneratePlaylists() {
+  showRegenerateConfirm.value = true
+}
+
+async function regenerateSystemPlaylists() {
+  if (isRegeneratingPlaylists.value) return
+  isRegeneratingPlaylists.value = true
+  try {
+    const res = await api.post('/admin/system-playlists/regenerate-all')
+    if (res.data?.success) {
+      await fetchData()
+    } else {
+      alert(res.data?.message || 'Có lỗi xảy ra khi tạo lại playlist')
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'Không thể tạo lại playlist')
+  } finally {
+    isRegeneratingPlaylists.value = false
+  }
+}
 
 const totalListens = computed(() => {
   const allGroup = songGroups.value.find(group => group.key === 'ALL')
@@ -898,22 +931,33 @@ function formatSystemKeyName(key) {
 
 function formatPlaylistDate(key) {
   if (!quickOperations.value?.systemPlaylists) return '--'
-  const pl = quickOperations.value.systemPlaylists.find(p => p.system_key === key)
-  if (!pl || !pl.updated_at) return '--'
-  return new Date(pl.updated_at).toLocaleDateString('vi-VN')
+  const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
+  if (!pl || !pl.lastGeneratedAt) return '--'
+  return new Date(pl.lastGeneratedAt).toLocaleDateString('vi-VN')
 }
 
 function isPlaylistStale(key) {
   if (!quickOperations.value?.systemPlaylists) return false
-  const pl = quickOperations.value.systemPlaylists.find(p => p.system_key === key)
-  if (!pl || !pl.updated_at) return true
-  const diffHours = (new Date() - new Date(pl.updated_at)) / (1000 * 60 * 60)
-  if (key === 'weekly_mix' && diffHours > 24 * 7 + 12) return true
-  if (key.startsWith('dailymix') && diffHours > 24 * 7 + 12) return true
-  if (key === 'trending_now' && diffHours > 25) return true
-  if (key === 'moodmix' && diffHours > 25) return true
-  if (key.endsWith('_vibes') && diffHours > 25) return true
-  return false
+  const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
+  return pl?.isStale || false
+}
+
+function playlistStatusClass(key) {
+  if (!quickOperations.value?.systemPlaylists) return 'bg-slate-100 text-slate-500'
+  const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
+  if (!pl || !pl.lastGeneratedAt) return 'bg-slate-100 text-slate-500'
+  
+  if (pl.isStale) {
+    return 'bg-rose-100 text-rose-600'
+  }
+  return 'bg-emerald-100 text-emerald-600'
+}
+
+function formatPlaylistStatus(key) {
+  if (!quickOperations.value?.systemPlaylists) return 'Chưa có'
+  const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
+  if (!pl) return 'Chưa có'
+  return pl.statusLabel || pl.displayDate || 'Cần tạo lại'
 }
 
 function formatDateTime(value) {

@@ -110,80 +110,85 @@ function normalizeMetrics(raw) {
   return { metrics, metricsComparison };
 }
 
+exports.getSummaryData = () => {
+  console.log('[Recommendation Admin] recommendationRoot:', recommendationRoot);
+  console.log('[Recommendation Admin] candidateDirs:', candidateDirs);
+
+  const modelFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && (lower.includes('bpr_model') || lower.includes('model_final') || lower.includes('bpr_mf'));
+  });
+
+  const metricsFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
+  });
+
+  const trainingFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && (lower.includes('training_history') || lower.includes('train'));
+  });
+
+  const runFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && lower.includes('run_');
+  });
+
+  const sampleFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && lower.includes('sample_outputs');
+  });
+
+  console.log('[Recommendation Admin] modelFile:', modelFile?.fullPath);
+  console.log('[Recommendation Admin] metricsFile:', metricsFile?.fullPath);
+  console.log('[Recommendation Admin] trainingFile:', trainingFile?.fullPath);
+
+  const parsedMetricsData = safeReadJson(metricsFile?.fullPath);
+  const normalizedMetrics = normalizeMetrics(parsedMetricsData);
+
+  const parsedModel = safeReadJson(modelFile?.fullPath);
+  
+  let parsedTraining = null;
+  if (parsedModel) {
+    parsedTraining = {
+      epochs: parsedModel.hyperparameters?.epochs || null,
+      factors: parsedModel.factors || null,
+      trainedUsers: parsedModel.trained_users || parsedModel.users || null,
+      trainedItems: parsedModel.trained_items || parsedModel.items || null,
+      interactions: parsedModel.positive_pairs || parsedModel.interactions || null
+    };
+  }
+
+  return {
+    hasArtifact: Boolean(modelFile),
+    hasMetrics: Boolean(metricsFile),
+    strategy: modelFile ? 'bpr_mf_rerank' : 'content_based_fallback',
+    
+    artifactPath: modelFile ? path.relative(projectRoot, modelFile.fullPath).replace(/\\/g, '/') : null,
+    metricsPath: metricsFile ? path.relative(projectRoot, metricsFile.fullPath).replace(/\\/g, '/') : null,
+    trainingPath: trainingFile ? path.relative(projectRoot, trainingFile.fullPath).replace(/\\/g, '/') : null,
+    
+    updatedAt: modelFile?.updatedAt || metricsFile?.updatedAt || null,
+    
+    files: {
+      model: modelFile?.file || null,
+      metrics: metricsFile?.file || null,
+      training: trainingFile?.file || null,
+      runInfo: runFile?.file || null,
+      sampleOutputs: sampleFile?.file || null
+    },
+    metrics: normalizedMetrics.metrics,
+    metricsComparison: normalizedMetrics.metricsComparison,
+    training: parsedTraining
+  };
+};
+
 exports.getSummary = async (req, res) => {
   try {
-    console.log('[Recommendation Admin] recommendationRoot:', recommendationRoot);
-    console.log('[Recommendation Admin] candidateDirs:', candidateDirs);
-
-    const modelFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && (lower.includes('bpr_model') || lower.includes('model_final') || lower.includes('bpr_mf'));
-    });
-
-    const metricsFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
-    });
-
-    const trainingFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && (lower.includes('training_history') || lower.includes('train'));
-    });
-
-    const runFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && lower.includes('run_');
-    });
-
-    const sampleFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && lower.includes('sample_outputs');
-    });
-
-    console.log('[Recommendation Admin] modelFile:', modelFile?.fullPath);
-    console.log('[Recommendation Admin] metricsFile:', metricsFile?.fullPath);
-    console.log('[Recommendation Admin] trainingFile:', trainingFile?.fullPath);
-
-    const parsedMetricsData = safeReadJson(metricsFile?.fullPath);
-    const normalizedMetrics = normalizeMetrics(parsedMetricsData);
-
-    const parsedModel = safeReadJson(modelFile?.fullPath);
-    
-    let parsedTraining = null;
-    if (parsedModel) {
-      parsedTraining = {
-        epochs: parsedModel.hyperparameters?.epochs || null,
-        factors: parsedModel.factors || null,
-        trainedUsers: parsedModel.trained_users || parsedModel.users || null,
-        trainedItems: parsedModel.trained_items || parsedModel.items || null,
-        interactions: parsedModel.positive_pairs || parsedModel.interactions || null
-      };
-    }
-
+    const data = exports.getSummaryData();
     res.json({
       success: true,
-      data: {
-        hasArtifact: Boolean(modelFile),
-        hasMetrics: Boolean(metricsFile),
-        strategy: modelFile ? 'bpr_mf_rerank' : 'content_based_fallback',
-        
-        artifactPath: modelFile ? path.relative(projectRoot, modelFile.fullPath) : null,
-        metricsPath: metricsFile ? path.relative(projectRoot, metricsFile.fullPath) : null,
-        trainingPath: trainingFile ? path.relative(projectRoot, trainingFile.fullPath) : null,
-        
-        updatedAt: modelFile?.updatedAt || metricsFile?.updatedAt || null,
-        
-        files: {
-          model: modelFile?.file || null,
-          metrics: metricsFile?.file || null,
-          training: trainingFile?.file || null,
-          runInfo: runFile?.file || null,
-          sampleOutputs: sampleFile?.file || null
-        },
-        metrics: normalizedMetrics.metrics,
-        metricsComparison: normalizedMetrics.metricsComparison,
-        training: parsedTraining
-      }
+      data
     });
   } catch (error) {
     console.error('Error fetching admin recommendation summary:', error);

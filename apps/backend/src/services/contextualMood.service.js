@@ -17,12 +17,12 @@ const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const recommendationService = require('./recommendation.service');
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 40;
-const CANDIDATE_PULL = 120; // pull nhiều để rerank có dư
+const MAX_LIMIT = 150; // Increased to allow diversity quotas to work
+const CANDIDATE_PULL = 300; // Pull large amount
 const ARTIST_CAP_TOP10 = 2;
 const ARTIST_CAP_TOP20 = 4;
-// Nếu sau khi áp artist cap mà chưa đủ `limit`, nới lỏng cap (vẫn <= hard cap này).
-const ARTIST_CAP_HARD = 5;
+// Nới lỏng cap nếu chưa đủ candidate
+const ARTIST_CAP_HARD = 10;
 
 // ---------------------------------------------------------------------------
 // Time slot mapping (giờ Việt Nam / Asia/Ho_Chi_Minh = ICT, +07).
@@ -33,24 +33,27 @@ const ARTIST_CAP_HARD = 5;
 const TIME_SLOT_DEFS = {
   morning:   { from: 5,  to: 11, label: 'Khoi dong ngay moi',
                 subtitle: 'Goi y dua tren gu nghe va mood buoi sang',
-                vibes: ['chill', 'happy', 'acoustic', 'focus', 'light'],
-                energyMin: 0.25, energyMax: 0.70,
+                vibes: ['chill', 'fresh', 'acoustic'],
+                energyMin: 0.35, energyMax: 0.70,
+                brightnessMin: 0.45,
                 energySweet: 0.50, energyTolerance: 0.25 },
   afternoon: { from: 11, to: 17, label: 'Nhac cho buoi chieu',
                 subtitle: 'Nang luong vua du cho buoi chieu',
-                vibes: ['energetic', 'happy', 'pop', 'dance', 'focus'],
-                energyMin: 0.45, energyMax: 0.90,
-                energySweet: 0.65, energyTolerance: 0.25 },
+                vibes: ['energetic', 'focus', 'pop', 'dance'],
+                energyMin: 0.50, energyMax: 0.90,
+                danceabilityMin: 0.45,
+                energySweet: 0.70, energyTolerance: 0.25 },
   evening:   { from: 17, to: 22, label: 'Thu gian buoi toi',
                 subtitle: 'Nhe nhang hon cho khoang thoi gian cuoi ngay',
-                vibes: ['chill', 'romantic', 'happy', 'rnb', 'acoustic'],
-                energyMin: 0.20, energyMax: 0.65,
-                energySweet: 0.45, energyTolerance: 0.25 },
+                vibes: ['relaxed', 'romantic', 'mellow'],
+                energyMin: 0.30, energyMax: 0.70,
+                energySweet: 0.50, energyTolerance: 0.25 },
   night:     { from: 22, to: 29, label: 'Dem nay nghe gi',
                 subtitle: 'Nhung bai hat phu hop de nghe ve dem',
-                vibes: ['chill', 'sad', 'romantic', 'acoustic', 'calm'],
-                energyMin: 0.10, energyMax: 0.55,
-                energySweet: 0.30, energyTolerance: 0.20 },
+                vibes: ['chill', 'sad', 'rnb', 'acoustic'],
+                energyMin: 0.15, energyMax: 0.55,
+                acousticMin: 0.35,
+                energySweet: 0.35, energyTolerance: 0.20 },
 };
 
 // `night` slot wrap around midnight: 22-29 means hour >= 22 OR hour < 5.
@@ -423,35 +426,37 @@ async function getContextualMoodRecommendations(userId, options = {}) {
   const timeSlot = resolveTimeSlot(options.timeSlot, now);
   const slot = TIME_SLOT_DEFS[timeSlot];
 
-  // 1. Lấy candidate từ BPR-MF / fallback chain.
+  // 1. Lấy candidate từ BPR-MF / fallback chain. (Tier 1)
   const fromService = await fetchCandidatesFromService(userId);
   let candidates = fromService.items.map(shapeFromServiceItem);
   let candidateSource = fromService.strategy;
+  
+  const candidateCountByTier = { tier1: candidates.length, tier2: 0, tier3: 0, tier4: 0 };
   let usedFallback = false;
 
-  // 2. Luôn bổ sung popular có audio_features vào pool để rerank có dư.
-  // Lý do: warm user có thể chỉ nghe 3-5 artist, pool BPR-MF bị dominant
-  // bởi 1-2 artist -> sau artist cap chỉ còn < limit items.
-  // Popular pool giúp diversify và tăng cơ hội đạt limit.
-  try {
-    const popular = await fetchPopularCandidatesWithAudio(CANDIDATE_PULL);
-    if (popular.length) {
-      const seen = new Set(candidates.map((c) => Number(c.id)));
-      for (const row of popular) {
-        if (candidates.length >= CANDIDATE_PULL) break;
-        const id = Number(row.id);
-        if (seen.has(id)) continue;
-        seen.add(id);
-        candidates.push(shapeFromRow(row));
+  // 2. Bổ sung popular có audio_features vào pool (Tier 2)
+  if (candidates.length < CANDIDATE_PULL) {
+    try {
+      const popular = await fetchPopularCandidatesWithAudio(CANDIDATE_PULL);
+      if (popular.length) {
+        const seen = new Set(candidates.map((c) => Number(c.id)));
+        for (const row of popular) {
+          if (candidates.length >= CANDIDATE_PULL) break;
+          const id = Number(row.id);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          candidates.push(shapeFromRow(row));
+          candidateCountByTier.tier2++;
+        }
+        usedFallback = true;
       }
-      usedFallback = true;
+    } catch (err) {
+      console.warn('[contextualMood] merge popular pool failed:', err.message);
     }
-  } catch (err) {
-    console.warn('[contextualMood] merge popular pool failed:', err.message);
   }
 
-  // 3. Nếu vẫn ít (< 5) -> popular thuần (không filter audio_features).
-  if (candidates.length < 5) {
+  // 3. Nếu vẫn ít -> popular thuần (không filter audio_features) (Tier 3)
+  if (candidates.length < CANDIDATE_PULL) {
     const plainPopular = await fetchPopularCandidatesNoAudio(CANDIDATE_PULL);
     const seen = new Set(candidates.map((c) => Number(c.id)));
     for (const row of plainPopular) {
@@ -460,6 +465,7 @@ async function getContextualMoodRecommendations(userId, options = {}) {
       if (seen.has(id)) continue;
       seen.add(id);
       candidates.push(shapeFromRow(row));
+      candidateCountByTier.tier3++;
     }
     usedFallback = true;
   }
@@ -497,10 +503,11 @@ async function getContextualMoodRecommendations(userId, options = {}) {
   // Ghép: audio trước, no-audio sau (chỉ lấp nếu thiếu).
   const merged = [...rerankedWithAudio];
   for (const c of noAudioCandidates) {
-    if (merged.length >= limit) break;
+    // Only apply hard cap of MAX_LIMIT, do not restrict to options.limit for candidates!
+    if (merged.length >= MAX_LIMIT) break;
     merged.push(c);
   }
-  const finalReranked = merged.slice(0, limit);
+  const finalReranked = merged;
 
   return {
     strategy: 'contextual_mood',
@@ -516,6 +523,8 @@ async function getContextualMoodRecommendations(userId, options = {}) {
     },
     generatedAt: now.toISOString(),
     candidateCount: candidates.length,
+    candidateCountByTier,
+    missingAudioFeatureRatio: candidates.length > 0 ? withoutAudio.length / candidates.length : 0,
     withAudioFeaturesCount: withAudio.length,
     withoutAudioFeaturesCount: withoutAudio.length,
     items: finalReranked.map((s) => formatItem(s, slot, req)),

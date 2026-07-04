@@ -1,6 +1,12 @@
 const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
+const {
+  computeOverlapStats,
+  selectSongsWithOverlapCheck,
+  getPlaylistSongIds,
+  evaluateRegenerateQuality
+} = require('../utils/playlistRegenerate.util');
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -48,7 +54,7 @@ function dedupeRows(rows) {
   return out;
 }
 
-async function fetchRecentTrendingCandidates(limit) {
+async function fetchRecentTrendingCandidates(limit, days = 1) {
   const [rows] = await pool.query(
     `SELECT
         s.id,
@@ -67,7 +73,7 @@ async function fetchRecentTrendingCandidates(limit) {
           + COALESCE(likes.recent_likes, 0) * 2.0
           + AVG(COALESCE(lh.completion_rate, 0)) * 3.0
           - SUM(CASE WHEN COALESCE(lh.is_skipped, 0) = 1 THEN 1 ELSE 0 END) * 0.5
-        ) AS trending_score
+        ) AS score
      FROM listening_history lh
      JOIN songs s ON s.id = lh.song_id
      JOIN artists a ON a.id = s.artist_id
@@ -75,17 +81,17 @@ async function fetchRecentTrendingCandidates(limit) {
      LEFT JOIN (
        SELECT song_id, COUNT(*) AS recent_likes
        FROM song_likes
-       WHERE liked_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       WHERE liked_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        GROUP BY song_id
      ) likes ON likes.song_id = s.id
-     WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+     WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        AND ${publicSongCondition('s')}
        AND s.audio_url IS NOT NULL
        AND s.audio_url <> ''
      GROUP BY s.id, s.title, s.artist_id, a.name, s.genre_id, g.name, s.play_count, likes.recent_likes
-     ORDER BY trending_score DESC, recent_listens DESC, s.play_count DESC, s.id DESC
+     ORDER BY score DESC, recent_listens DESC, s.play_count DESC, s.id DESC
      LIMIT ?`,
-    [limit]
+    [days, days, limit]
   );
 
   return rows.map((row) => ({
@@ -95,8 +101,8 @@ async function fetchRecentTrendingCandidates(limit) {
     recent_likes: Number(row.recent_likes || 0),
     avg_completion_rate: Number(row.avg_completion_rate || 0),
     skip_count: Number(row.skip_count || 0),
-    trending_score: Number(row.trending_score || 0),
-    strategy: 'recent_7d'
+    score: Number(row.score || 0),
+    strategy: `recent_${days}d`
   }));
 }
 
@@ -133,38 +139,44 @@ async function fetchPopularFallbackCandidates(limit) {
     recent_likes: 0,
     avg_completion_rate: 0,
     skip_count: 0,
-    trending_score: Number(row.trending_score || 0),
+    score: Number(row.score || 0),
     strategy: 'popular_fallback'
   }));
 }
 
-async function getTrendingSongIds(options = {}) {
+async function getTrendingCandidates(options = {}) {
   const limit = clampLimit(options.limit);
-  const pullLimit = Math.max(limit, Math.min(MAX_LIMIT, limit * 2));
-  const recentRows = dedupeRows(await fetchRecentTrendingCandidates(pullLimit));
-  const hasRecentSignal = recentRows.filter((row) => Number(row.recent_listens || 0) > 0).length >= Math.min(10, limit);
+  const pullLimit = limit * 5;
+  
+  let candidates = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 1));
+  let hasRecentSignal = candidates.filter((row) => Number(row.recent_listens || 0) > 0).length >= Math.min(10, limit);
+  let strategy = 'recent_1d';
 
-  if (hasRecentSignal) {
-    const selected = recentRows.slice(0, limit);
+  if (!hasRecentSignal || candidates.length < limit * 3) {
+    const candidates7d = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 7));
+    if (candidates7d.filter((row) => Number(row.recent_listens || 0) > 0).length > candidates.length) {
+       candidates = candidates7d;
+       hasRecentSignal = true;
+       strategy = 'recent_7d';
+    }
+  }
+
+  if (hasRecentSignal && candidates.length >= limit) {
     return {
-      strategy: 'recent_7d',
-      formula: 'recent_listens * 1.0 + recent_likes * 2.0 + avg_completion_rate * 3.0 - skip_count * 0.5',
-      candidateCount: recentRows.length,
-      duplicateCount: duplicateCount(recentRows),
-      items: selected,
-      songIds: selected.map((row) => Number(row.id))
+      strategy,
+      candidates,
+      candidateCount: candidates.length,
+      fallbackUsed: false,
     };
   }
 
-  const popularRows = dedupeRows(await fetchPopularFallbackCandidates(pullLimit));
-  const selected = popularRows.slice(0, limit);
+  const fallback = dedupeRows(await fetchPopularFallbackCandidates(pullLimit));
   return {
     strategy: 'popular_fallback',
-    formula: 'songs.play_count DESC fallback',
-    candidateCount: popularRows.length,
-    duplicateCount: duplicateCount(popularRows),
-    items: selected,
-    songIds: selected.map((row) => Number(row.id))
+    candidates: fallback,
+    candidateCount: fallback.length,
+    fallbackUsed: true,
+    fallbackReason: 'Not enough recent history',
   };
 }
 
@@ -216,50 +228,58 @@ async function ensureTrendingPlaylist(conn, songIds) {
 async function generateTrendingPlaylist(options = {}) {
   const limit = clampLimit(options.limit);
   const dryRun = options.dryRun === true;
-  const selection = await getTrendingSongIds({ limit });
-  const topSongs = selection.items.slice(0, 10).map((item, index) => ({
-    position: index + 1,
-    id: Number(item.id),
-    title: item.title,
-    artist_name: item.artist_name,
-    trending_score: Number(item.trending_score || 0),
-    recent_listens: Number(item.recent_listens || 0),
-    recent_likes: Number(item.recent_likes || 0),
-    avg_completion_rate: Number(item.avg_completion_rate || 0),
-    skip_count: Number(item.skip_count || 0)
-  }));
-
-  const baseResult = {
-    systemKey: SYSTEM_KEY,
-    strategy: selection.strategy,
-    formula: selection.formula,
-    candidateCount: selection.candidateCount,
-    selectedCount: selection.songIds.length,
-    duplicateCount: selection.duplicateCount,
-    topSongs,
-    dryRun
-  };
-
-  if (dryRun) {
-    return {
-      ...baseResult,
-      playlistId: null,
-      created: false,
-      insertedSongs: 0,
-      updatedAt: null
-    };
-  }
 
   const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
-    const writeResult = await ensureTrendingPlaylist(conn, selection.songIds);
-    await conn.commit();
-    return {
-      ...baseResult,
-      ...writeResult,
-      updatedAt: new Date().toISOString()
+    const userId = await getGlobalSystemUserId(conn);
+    const [existingPlaylist] = await conn.query(
+        `SELECT id FROM playlists WHERE system_key = ? LIMIT 1`,
+        [SYSTEM_KEY]
+    );
+    let oldSongIds = [];
+    let playlistId = null;
+
+    if (existingPlaylist.length) {
+       playlistId = existingPlaylist[0].id;
+       oldSongIds = await getPlaylistSongIds(conn, playlistId);
+    }
+
+    const result = await getTrendingCandidates({ limit });
+    
+    const finalObjs = selectSongsWithOverlapCheck(result.candidates, oldSongIds, limit, 0.7);
+    const finalIds = finalObjs.map(c => Number(c.id));
+    const overlapStats = computeOverlapStats(oldSongIds, finalIds);
+    const evalResult = evaluateRegenerateQuality({ ...overlapStats, candidateCount: result.candidateCount }, limit);
+    
+    const summary = {
+      userId,
+      strategy: result.strategy,
+      candidateCount: result.candidateCount,
+      ...overlapStats,
+      fallbackUsed: result.fallbackUsed,
+      fallbackReason: result.fallbackReason,
+      status: evalResult.status,
+      message: evalResult.message,
+      playlistId,
+      created: false,
+      insertedSongs: 0,
+      dryRun,
     };
+
+    if (dryRun) {
+      return summary;
+    }
+
+    if (evalResult.canApply) {
+      await conn.beginTransaction();
+      const p = await ensureTrendingPlaylist(conn, finalIds);
+      summary.playlistId = p.playlistId;
+      summary.created = p.created;
+      summary.insertedSongs = p.insertedSongs;
+      await conn.commit();
+    }
+    
+    return summary;
   } catch (err) {
     try {
       await conn.rollback();
@@ -274,6 +294,5 @@ async function generateTrendingPlaylist(options = {}) {
 
 module.exports = {
   SYSTEM_KEY,
-  getTrendingSongIds,
   generateTrendingPlaylist
 };

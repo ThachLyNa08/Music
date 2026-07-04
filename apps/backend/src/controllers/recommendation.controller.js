@@ -386,7 +386,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
     const listMap = {};
     
     // Deduplicate Weekly Mixes
-    const weeklyMixes = playlists.filter(pl => pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix'));
+    const weeklyMixes = playlists.filter(pl => pl.system_key === 'weeklymix' || pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix'));
     let selectedWeeklyMixId = null;
     if (weeklyMixes.length > 0) {
       const best = weeklyMixes.sort((a, b) => {
@@ -401,7 +401,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
     const madeForYouPlaylists = [];
     playlists.forEach(pl => {
-      const isWeekly = pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix');
+      const isWeekly = pl.system_key === 'weeklymix' || pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix');
       if (isWeekly && pl.id !== selectedWeeklyMixId) return; // filter out duplicate Weekly Mix
 
       pl.cover_url = normalizeCoverUrl(pl.cover_url, req);

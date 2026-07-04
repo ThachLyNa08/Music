@@ -52,7 +52,9 @@ function resolveModelPath(overridePath) {
   
   const latestModelPath = findLatestFileByPrefix(recommendationFinalDir, 'recommendation_bpr_model_final_', '.json');
   if (latestModelPath) {
-    console.log(`[BPR-MF] Found latest model artifact: ${latestModelPath}`);
+    if (process.argv.includes('--debug')) {
+      console.log(`[BPR-MF] Found latest model artifact: ${latestModelPath}`);
+    }
     return latestModelPath;
   }
   
@@ -115,7 +117,9 @@ function load(overridePath) {
   cached = artifact;
   cachedAt = fs.statSync(modelPath).mtimeMs;
   loadStatus = { ok: true, error: null, loadedAt: new Date().toISOString(), path: modelPath };
-  console.log(`[BPR-MF] model loaded: ${artifact.trained_users} users, ${artifact.trained_items} items, factors=${artifact.user_factors[0].length}`);
+  if (process.argv.includes('--debug')) {
+    console.log(`[BPR-MF] model loaded: ${artifact.trained_users} users, ${artifact.trained_items} items, factors=${artifact.user_factors[0].length}`);
+  }
   return cached;
 }
 

@@ -23,6 +23,14 @@ const recommendationService = require('./recommendation.service');
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const { publicSongCondition } = require('../utils/public.utils');
 const { SYSTEM_PLAYLIST_BY_KEY } = require('./systemPlaylist.service');
+const {
+  computeOverlapStats,
+  selectSongsWithOverlapCheck,
+  getPlaylistSongIds,
+  getRecentSystemPlaylistSongs,
+  evaluateRegenerateQuality,
+  calculatePlaylistDiversity
+} = require('../utils/playlistRegenerate.util');
 
 const SYSTEM_KEYS = [
   'dailymix_01',
@@ -61,6 +69,16 @@ const HISTORY_LOOKBACK_DAYS = 3; // mở rộng profile nếu target range trố
 const RECOMMEND_PULL = 120;
 const FALLBACK_LISTENED_COUNT_FOR_ANCHOR = 8; // < 8 rows target range => fallback history
 const RECENTLY_PLAYED_RATIO_WARN = 0.5; // > 50% anchor/total => cảnh báo
+
+const DAILYMIX_LIMITS = {
+  targetSize: DEFAULT_PER_MIX,
+  maxSameArtistRatio: 0.30,
+  maxSameGenreRatio: 0.75,
+  minAddedSongs: 8,
+  crossPlaylistOverlapWarning: 0.70,
+  crossPlaylistOverlapBad: 0.90,
+  minCandidateCountMultiplier: 2
+};
 
 // ---------------------------------------------------------------------------
 // Helpers về playlist persistence (giữ nguyên từ version trước, đã pass test)
@@ -226,24 +244,122 @@ function fmtDate(d) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers về target range + listened rows
+// DAYOFWEEK mapping for MySQL (1=Sun, 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat)
+// ---------------------------------------------------------------------------
+
+const DAILY_MIX_MYSQL_DAYS = {
+  dailymix_01: [2],    // Thứ Hai
+  dailymix_02: [3],    // Thứ Ba
+  dailymix_03: [4],    // Thứ Tư
+  dailymix_04: [5],    // Thứ Năm
+  dailymix_05: [6],    // Thứ Sáu
+  dailymix_06: [7, 1]  // Thứ Bảy + Chủ Nhật
+};
+
+// ---------------------------------------------------------------------------
+// Helpers về target range + listened rows (DAYOFWEEK-based tiered fetch)
 // ---------------------------------------------------------------------------
 
 /**
- * Lấy tất cả listening rows của user trong target range, join với songs để
- * có đầy đủ thông tin genre/artist/market.
- *
- * Trả về:
- *   rows: array of listening rows
- *   totalCount: tổng rows (kể cả bài private)
- *   publicSongCount: số row có song public/audio-ok
+ * Tier 1: Lấy listening rows trên đúng DAYOFWEEK trong 4 tuần gần nhất.
+ * Tier 2: Mở rộng lên 8 tuần.
+ * Trả về { rows, tierUsed, candidateCountByTier }.
  */
+async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
+  const mysqlDays = DAILY_MIX_MYSQL_DAYS[systemKey];
+  if (!mysqlDays) throw new Error(`No DAYOFWEEK mapping for ${systemKey}`);
+
+  const dayPlaceholders = mysqlDays.map(() => '?').join(',');
+
+  const tierResults = { tier1: 0, tier2: 0, tier3: 0, tier4: 0 };
+
+  // Tier 1: same weekday within 4 weeks
+  const [tier1Rows] = await pool.query(
+    `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
+            s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
+            s.audio_url, s.is_active, s.release_status, s.play_count
+     FROM listening_history lh
+     JOIN songs s ON s.id = lh.song_id
+     WHERE lh.user_id = ?
+       AND DAYOFWEEK(lh.listened_at) IN (${dayPlaceholders})
+       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 28 DAY)
+       AND ${publicSongCondition('s')}
+       AND s.audio_url IS NOT NULL
+       AND s.audio_url <> ''
+     ORDER BY lh.listened_at DESC`,
+    [userId, ...mysqlDays]
+  );
+  tierResults.tier1 = tier1Rows.length;
+
+  if (tier1Rows.length >= FALLBACK_LISTENED_COUNT_FOR_ANCHOR) {
+    return { rows: tier1Rows, tierUsed: 'tier_1_same_weekday_4_weeks', tierResults };
+  }
+
+  // Tier 2: same weekday within 8 weeks
+  const [tier2Rows] = await pool.query(
+    `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
+            s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
+            s.audio_url, s.is_active, s.release_status, s.play_count
+     FROM listening_history lh
+     JOIN songs s ON s.id = lh.song_id
+     WHERE lh.user_id = ?
+       AND DAYOFWEEK(lh.listened_at) IN (${dayPlaceholders})
+       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 56 DAY)
+       AND ${publicSongCondition('s')}
+       AND s.audio_url IS NOT NULL
+       AND s.audio_url <> ''
+     ORDER BY lh.listened_at DESC`,
+    [userId, ...mysqlDays]
+  );
+  tierResults.tier2 = tier2Rows.length;
+
+  if (tier2Rows.length >= FALLBACK_LISTENED_COUNT_FOR_ANCHOR) {
+    return { rows: tier2Rows, tierUsed: 'tier_2_same_weekday_8_weeks', tierResults };
+  }
+
+  // Tier 3 will be handled in fetchDiscoveryCandidates (genre/artist match)
+  // Return whatever we have from tier 2
+  return {
+    rows: tier2Rows,
+    tierUsed: tier2Rows.length > 0 ? 'tier_2_same_weekday_8_weeks_partial' : 'tier_3_genre_artist_fallback',
+    tierResults
+  };
+}
+
+/**
+ * Lấy bài trong Daily Mix khác để tính cross-overlap penalty.
+ */
+async function getSongsInOtherDailyMixes(conn, systemKey) {
+  const [rows] = await conn.query(
+    `SELECT DISTINCT ps.song_id
+     FROM playlist_songs ps
+     JOIN playlists p ON p.id = ps.playlist_id
+     WHERE p.is_system = 1
+       AND p.system_key LIKE 'dailymix_%'
+       AND p.system_key <> ?`,
+    [systemKey]
+  );
+  return new Set(rows.map(r => Number(r.song_id)));
+}
+
+/**
+ * Tính cross-overlap ratio: bao nhiêu % bài trong finalIds trùng với Daily Mix khác.
+ */
+function calculateCrossOverlapRatio(finalIds, otherDailyMixSongs) {
+  if (!finalIds.length || !otherDailyMixSongs.size) return 0;
+  let overlap = 0;
+  for (const id of finalIds) {
+    if (otherDailyMixSongs.has(Number(id))) overlap++;
+  }
+  return overlap / finalIds.length;
+}
+
+// Legacy helpers kept for backward compat
 async function fetchListeningRowsInRange(conn, userId, start, end) {
   const startStr = fmtDate(start) + ' 00:00:00';
   const endStr = fmtDate(end) + ' 00:00:00';
   const [rows] = await pool.query(
-    `SELECT lh.id, lh.song_id, lh.listen_duration, lh.song_duration,
-            lh.completion_rate, lh.is_completed, lh.is_skipped, lh.implicit_rating,
+    `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
             s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
             s.audio_url, s.is_active, s.release_status, s.play_count
      FROM listening_history lh
@@ -256,34 +372,6 @@ async function fetchListeningRowsInRange(conn, userId, start, end) {
        AND s.audio_url <> ''
      ORDER BY lh.listened_at DESC`,
     [userId, startStr, endStr]
-  );
-  return rows;
-}
-
-async function fetchListeningRowsInRangeFallback(conn, userId, targetStart, lookbackDays) {
-  // Mở rộng thêm N ngày trước target range (chỉ dùng khi target range rỗng).
-  const startStr = fmtDate(targetStart) + ' 00:00:00';
-  const endStr = fmtDate(new Date(
-    targetStart.getFullYear(),
-    targetStart.getMonth(),
-    targetStart.getDate() + 1,
-  )) + ' 00:00:00';
-  const [rows] = await pool.query(
-    `SELECT lh.id, lh.song_id, lh.listen_duration, lh.song_duration,
-            lh.completion_rate, lh.is_completed, lh.is_skipped, lh.implicit_rating,
-            lh.listened_at,
-            s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
-            s.audio_url, s.is_active, s.release_status, s.play_count
-     FROM listening_history lh
-     JOIN songs s ON s.id = lh.song_id
-     WHERE lh.user_id = ?
-       AND lh.listened_at >= DATE_SUB(?, INTERVAL ? DAY)
-       AND lh.listened_at < ?
-       AND ${publicSongCondition('s')}
-       AND s.audio_url IS NOT NULL
-       AND s.audio_url <> ''
-     ORDER BY lh.listened_at DESC`,
-    [userId, startStr, lookbackDays, endStr]
   );
   return rows;
 }
@@ -451,7 +539,7 @@ async function fetchDiscoveryCandidates(conn, profile, excludeSet, limit) {
   }
 
   const sql = `
-    SELECT s.id, s.artist_id, s.play_count,
+    SELECT s.id, s.artist_id, s.genre_id, s.market, s.play_count,
            (CASE
              WHEN s.artist_id IN (${topArtists.length ? topArtists.map(() => '?').join(',') : 'NULL'}) THEN 3
              WHEN s.genre_id IN (${topGenres.length ? topGenres.map(() => '?').join(',') : 'NULL'}) THEN 2
@@ -492,8 +580,9 @@ async function fetchPopularCandidates(conn, excludeSet, limit) {
     params.push(...arr);
   }
   const sql = `
-    SELECT s.id, s.artist_id, s.play_count, 0 AS theme_score
+    SELECT s.id, s.artist_id, s.genre_id, s.market, s.play_count, 0 AS theme_score
     FROM songs s
+    JOIN song_audio_features saf ON saf.song_id = s.id
     WHERE ${parts.join(' AND ')}
     ORDER BY s.play_count DESC, s.id DESC
     LIMIT ?
@@ -507,6 +596,8 @@ function buildDiscoveryFromRecommendations(recItems) {
   return recItems.map((r) => ({
     id: Number(r.id),
     artist_id: r.artist_id !== undefined ? r.artist_id : null,
+    genre_id: r.genre_id !== undefined ? r.genre_id : null,
+    market: r.market || null,
     play_count: r.play_count || 0,
     theme_score: 0,
   }));
@@ -545,15 +636,11 @@ function interleaveAnchorDiscovery(anchorIds, discoveryIds) {
 
 /**
  * Tạo/cập nhật 1 Daily Mix playlist cho user, dựa trên hành vi nghe nhạc
- * trong target date (hoặc cả weekend nếu là Sat/Sun).
+ * theo DAYOFWEEK (multi-tier: 4w → 8w → genre/artist → popular).
  *
- * @param {number} userId
- * @param {Date|string} date  - Date object (ICT) hoặc string 'YYYY-MM-DD'
- * @param {object} options
- *   - perMix: 20-25 bài (default 25, max 30)
- *   - dryRun: bool
- *
- * @returns summary object
+ * Cross-playlist penalty: bài đã có trong Daily Mix khác bị giảm điểm.
+ * Diversity quotas: maxSameArtistRatio <= 30%, maxSameGenreRatio <= 60%.
+ * Cross-overlap gate: nếu after >= 90% thì không apply.
  */
 async function generateDailyMixForDate(userId, date, options = {}) {
   if (!Number.isInteger(Number(userId)) || Number(userId) <= 0) {
@@ -572,36 +659,42 @@ async function generateDailyMixForDate(userId, date, options = {}) {
 
   const conn = await pool.getConnection();
   try {
-  // 1) Lấy listening rows trong target range (chỉ range gốc, dùng để đếm
-  //    listenedFromTargetDateCount). Sau đó nếu rỗng thì mở rộng để build
-  //    profile (anchor + discovery).
-  const targetRows = await fetchListeningRowsInRange(conn, uid, start, end);
-  let rows = targetRows;
-  let usedFallbackHistory = false;
-  if (rows.length === 0) {
-    const expanded = await fetchListeningRowsInRangeFallback(
-      conn, uid, start, HISTORY_LOOKBACK_DAYS,
-    );
-    if (expanded.length > 0) {
-      rows = expanded;
-      usedFallbackHistory = true;
-    }
-  }
+    // 0) Initialize overlap tracking variables
+    const existingPlaylist = await findExistingPlaylist(conn, uid, systemKey);
+    const oldSongIds = existingPlaylist
+      ? await getPlaylistSongIds(conn, existingPlaylist.id)
+      : [];
+    const otherDailyMixSongs = await getSongsInOtherDailyMixes(conn, systemKey);
+    const recentSystemSongs = await getRecentSystemPlaylistSongs(conn, systemKey);
 
-  // 2) Build daily profile từ rows (range mở rộng nếu target rỗng)
-  const profile = buildDailyProfile(rows);
-  // Track set các bài đã nghe trong TARGET range gốc (không mở rộng) để
-  // tính listenedFromTargetDateCount chính xác.
-  const targetRangeSongIds = new Set();
-  for (const r of targetRows) targetRangeSongIds.add(Number(r.song_id));
-  const likedSet = await fetchLikedSongIdsInRange(conn, uid, start, end);
+    // Calculate cross-overlap BEFORE regenerate
+    const crossOverlapBefore = calculateCrossOverlapRatio(oldSongIds, otherDailyMixSongs);
+
+    // 1) Fetch listening rows using DAYOFWEEK-based tiered approach
+    const tieredResult = await fetchListeningRowsByDayOfWeek(conn, uid, systemKey);
+    let rows = tieredResult.rows;
+    const tierUsed = tieredResult.tierUsed;
+    const tierResults = tieredResult.tierResults;
+    let fallbackUsed = false;
+    let fallbackReason = null;
+
+    if (rows.length === 0) {
+      fallbackUsed = true;
+      fallbackReason = 'No listening data for this weekday in 8 weeks';
+    }
+
+    // 2) Build daily profile
+    const profile = buildDailyProfile(rows);
+    const targetRangeSongIds = new Set(rows.map(r => Number(r.song_id)));
+    const likedSet = await fetchLikedSongIdsInRange(conn, uid, start, end);
 
     // 3) Chọn anchor
     const anchorRatio = rows.length < FALLBACK_LISTENED_COUNT_FOR_ANCHOR
       ? ANCHOR_RATIO_FALLBACK
       : ANCHOR_RATIO;
     const anchorTarget = Math.max(2, Math.round(perMix * anchorRatio));
-    const anchorIds = selectAnchorSongs(profile, likedSet, anchorTarget);
+    const anchorIdsUnfiltered = selectAnchorSongs(profile, likedSet, anchorTarget * 3);
+    const anchorIds = selectSongsWithOverlapCheck(anchorIdsUnfiltered, oldSongIds, anchorTarget, 0.7);
     const anchorSet = new Set(anchorIds);
     const discoveryTarget = perMix - anchorIds.length;
 
@@ -612,7 +705,6 @@ async function generateDailyMixForDate(userId, date, options = {}) {
     let usedRecService = false;
     let discoveryCandidates = [];
     try {
-      // Dùng recommendation.service cho gợi ý (BPR-MF hoặc fallback).
       const rec = await recommendationService.getRecommendationsForUser(uid, {
         limit: RECOMMEND_PULL,
       });
@@ -625,15 +717,13 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       console.warn(`[dailyMix] recommendation.service failed for user ${uid}: ${err.message}`);
     }
 
-    // Bổ sung thêm từ DB pool theo profile. Loại trừ luôn các bài đã nghe
-    // trong target range để discovery không bị lẫn vào Recently Played.
     const dbDiscovery = await fetchDiscoveryCandidates(
-      conn,
-      profile,
-      new Set([...anchorSet, ...targetRangeSongIds]),
+      conn, profile,
+      new Set([...anchorSet, ...targetRangeSongIds, ...otherDailyMixSongs]),
       discoveryTarget * 4,
     );
-    // Gộp candidates (rec items trước, db sau, dedup theo id)
+
+    // Merge candidates (dedup)
     const seenCand = new Set();
     const mergedCandidates = [];
     for (const c of discoveryCandidates) {
@@ -647,94 +737,172 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       mergedCandidates.push({
         id: Number(c.id),
         artist_id: c.artist_id,
+        genre_id: c.genre_id || null,
         play_count: c.play_count || 0,
         theme_score: c.theme_score || 0,
       });
     }
 
-    // 5) Chọn discovery với artist cap dùng chung với anchor
+    // 5) Build large discovery pool with popular fallback (tier 4)
+    let largeDiscoveryPool = [];
+    const _aSet = new Set(anchorIds);
+    for (const c of mergedCandidates) {
+      if (!_aSet.has(Number(c.id))) largeDiscoveryPool.push(c);
+    }
+    tierResults.tier3 = largeDiscoveryPool.length;
+
+    const pop = await fetchPopularCandidates(
+      conn,
+      new Set([...anchorIds, ...largeDiscoveryPool.map(c => c.id)]),
+      Math.max(discoveryTarget * 20, perMix * 15)
+    );
+    const popularItems = pop.map(p => ({
+      id: Number(p.id), artist_id: p.artist_id, genre_id: p.genre_id || null, market: p.market || null,
+      play_count: p.play_count || 0, theme_score: 0,
+    }));
+    tierResults.tier4 = popularItems.length;
+    largeDiscoveryPool = [...largeDiscoveryPool, ...popularItems];
+
+    // 6) Apply cross-playlist penalty scoring (score normalized to ~0..4 range)
+    const maxPlayCount = Math.max(1, ...largeDiscoveryPool.map(c => c.play_count || 0));
+    const oldIdSet = new Set(oldSongIds.map(Number));
+    const candidateObjs = largeDiscoveryPool.map(c => {
+      const normalizedPlay = (c.play_count || 0) / maxPlayCount;
+      let score = (c.theme_score || 0) + normalizedPlay;
+
+      // Mạnh tay penalty nếu bài đã nằm trong Daily Mix khác
+      if (otherDailyMixSongs.has(c.id)) {
+        score -= 0.6;
+        score *= 0.35;
+      }
+      
+      if (recentSystemSongs.has(c.id)) score -= 0.3;
+      if (oldIdSet.has(c.id)) score -= 0.4;
+
+      return { id: c.id, artist_id: c.artist_id, genre_id: c.genre_id, score };
+    }).sort((a, b) => b.score - a.score);
+
+    // Track candidates cho metrics
+    let freshCandidateCount = 0;
+    let oldCandidateCount = 0;
+    let otherDailyCandidateCount = 0;
+    for (const c of candidateObjs) {
+      if (otherDailyMixSongs.has(c.id)) otherDailyCandidateCount++;
+      else if (oldIdSet.has(c.id)) oldCandidateCount++;
+      else freshCandidateCount++;
+    }
+
+    // 7) Select discovery with diversity quotas (Phase A & Phase B)
+    const maxArtistCount = Math.floor(perMix * DAILYMIX_LIMITS.maxSameArtistRatio);
+    const maxGenreCount = Math.floor(perMix * DAILYMIX_LIMITS.maxSameGenreRatio);
     const artistCount = new Map();
+    const genreCount = new Map();
+    const selectedDiscoverySet = new Set();
+    
+    // Base quota từ anchor
     for (const sid of anchorIds) {
       const stat = profile.songStats.get(sid);
-      if (stat && stat.artist_id !== null && stat.artist_id !== undefined) {
-        const a = Number(stat.artist_id);
-        artistCount.set(a, (artistCount.get(a) || 0) + 1);
+      if (stat && stat.artist_id != null) {
+        artistCount.set(Number(stat.artist_id), (artistCount.get(Number(stat.artist_id)) || 0) + 1);
+      }
+      if (stat && stat.genre_id != null) {
+        genreCount.set(Number(stat.genre_id), (genreCount.get(Number(stat.genre_id)) || 0) + 1);
       }
     }
-    // Discovery phase 1: loại trừ listened trong target range (tránh lẫn
-    // Recently Played). Phase 2: nếu thiếu thì cho phép lấy thêm từ listened
-    // trong target range (giữ cảm giác quen thuộc, không vượt quá 1/3
-    // discovery target).
+
     const discoveryIds = [];
-    const softAnchorCap = Math.ceil(discoveryTarget / 3);
-    let softAnchorUsed = 0;
+    
+    const freshCandidates = candidateObjs.filter(c => !oldIdSet.has(c.id) && !otherDailyMixSongs.has(c.id));
+    let freshAdded = 0;
+    // Bắt buộc lấy ít nhất một phần tư đến một nửa là bài hoàn toàn mới
+    const maxFreshInPhaseA = Math.ceil(discoveryTarget * 0.7);
 
-    // Phase 1: discovery "tinh khiết" (chưa nghe target range)
-    for (const c of mergedCandidates) {
-      if (discoveryIds.length >= discoveryTarget) break;
-      const id = Number(c.id);
-      if (anchorSet.has(id)) continue;
-      if (targetRangeSongIds.has(id)) continue; // skip
-      const a = c.artist_id !== null && c.artist_id !== undefined ? Number(c.artist_id) : null;
-      if (a !== null) {
-        const cur = artistCount.get(a) || 0;
-        if (cur >= ARTIST_CAP_HARD) continue;
-        artistCount.set(a, cur + 1);
-      }
-      discoveryIds.push(id);
+    function tryAddCandidate(c) {
+      const songId = Number(c.id);
+      if (anchorSet.has(songId) || selectedDiscoverySet.has(songId)) return false;
+      const a = c.artist_id != null ? Number(c.artist_id) : null;
+      if (a !== null && (artistCount.get(a) || 0) >= maxArtistCount) return false;
+      const g = c.genre_id != null ? Number(c.genre_id) : null;
+      if (g !== null && (genreCount.get(g) || 0) >= maxGenreCount) return false;
+      
+      if (a !== null) artistCount.set(a, (artistCount.get(a) || 0) + 1);
+      if (g !== null) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+      
+      selectedDiscoverySet.add(songId);
+      discoveryIds.push(songId);
+      return true;
     }
-    // Phase 2: nếu thiếu discovery target, lấy từ listened trong target range
-    // (vẫn theo theme, giới hạn softAnchorCap)
-    if (discoveryIds.length < discoveryTarget) {
-      for (const c of mergedCandidates) {
-        if (discoveryIds.length >= discoveryTarget) break;
-        if (softAnchorUsed >= softAnchorCap) break;
-        const id = Number(c.id);
-        if (anchorSet.has(id)) continue;
-        if (!targetRangeSongIds.has(id)) continue;
-        if (discoveryIds.includes(id)) continue;
-        const a = c.artist_id !== null && c.artist_id !== undefined ? Number(c.artist_id) : null;
-        if (a !== null) {
-          const cur = artistCount.get(a) || 0;
-          if (cur >= ARTIST_CAP_HARD) continue;
-          artistCount.set(a, cur + 1);
+
+    function pickBestCandidate(pool) {
+      let best = null;
+      let bestScore = -Infinity;
+      for (const c of pool) {
+        const songId = Number(c.id);
+        if (anchorSet.has(songId) || selectedDiscoverySet.has(songId)) continue;
+        const a = c.artist_id != null ? Number(c.artist_id) : null;
+        if (a !== null && (artistCount.get(a) || 0) >= maxArtistCount) continue;
+        const g = c.genre_id != null ? Number(c.genre_id) : null;
+        if (g !== null && (genreCount.get(g) || 0) >= maxGenreCount) continue;
+
+        const genreCurrentCount = g !== null ? (genreCount.get(g) || 0) : 0;
+        let adjustedScore = c.score || 0;
+        adjustedScore -= (genreCurrentCount / perMix) * 1.0;
+        if (oldIdSet.has(songId)) adjustedScore -= 0.8;
+        if (otherDailyMixSongs.has(songId)) adjustedScore -= 1.0;
+        if (g !== null && !genreCount.has(g)) adjustedScore += 0.35;
+
+        if (adjustedScore > bestScore) {
+          bestScore = adjustedScore;
+          best = c;
         }
-        discoveryIds.push(id);
-        softAnchorUsed += 1;
+      }
+      return best;
+    }
+    
+    // Phase A: Ưu tiên chọn bài fresh trước
+    while (discoveryIds.length < discoveryTarget && freshAdded < maxFreshInPhaseA) {
+      const c = pickBestCandidate(freshCandidates);
+      if (!c) break;
+      if (tryAddCandidate(c)) {
+        freshAdded++;
+      } else {
+        break;
       }
     }
+    
+    // Phase B: Bổ sung bằng bài quen thuộc / bài đã nghe để giữ gu
+    while (discoveryIds.length < discoveryTarget) {
+      const c = pickBestCandidate(candidateObjs);
+      if (!c) break;
+      if (!tryAddCandidate(c)) break;
+    }
 
-    // 6) Nếu discovery vẫn thiếu -> bổ sung từ popular pool
-    let popularAdded = 0;
-    if (discoveryIds.length < discoveryTarget) {
-      const used = new Set([...anchorIds, ...discoveryIds]);
-      const popular = await fetchPopularCandidates(conn, used, (discoveryTarget - discoveryIds.length) * 3);
-      for (const p of popular) {
+    let relaxedDiversityUsed = false;
+    if (discoveryIds.length < discoveryTarget && candidateObjs.length < perMix * 3) {
+      relaxedDiversityUsed = true;
+      const relaxedArtistLimit = maxArtistCount + 1;
+      const relaxedGenreLimit = maxGenreCount + 1;
+      for (const c of candidateObjs) {
         if (discoveryIds.length >= discoveryTarget) break;
-        const id = Number(p.id);
-        if (used.has(id)) continue;
-        const a = p.artist_id !== null && p.artist_id !== undefined ? Number(p.artist_id) : null;
-        if (a !== null) {
-          const cur = artistCount.get(a) || 0;
-          if (cur >= ARTIST_CAP_HARD) continue;
-          artistCount.set(a, cur + 1);
-        }
-        discoveryIds.push(id);
-        used.add(id);
-        popularAdded += 1;
+        const songId = Number(c.id);
+        if (anchorSet.has(songId) || selectedDiscoverySet.has(songId)) continue;
+        const a = c.artist_id != null ? Number(c.artist_id) : null;
+        if (a !== null && (artistCount.get(a) || 0) >= relaxedArtistLimit) continue;
+        const g = c.genre_id != null ? Number(c.genre_id) : null;
+        if (g !== null && (genreCount.get(g) || 0) >= relaxedGenreLimit) continue;
+        if (a !== null) artistCount.set(a, (artistCount.get(a) || 0) + 1);
+        if (g !== null) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+        selectedDiscoverySet.add(songId);
+        discoveryIds.push(songId);
       }
     }
 
-    // 7) Trộn thứ tự + tính chỉ số
+    // 8) Trộn thứ tự + tính chỉ số
     const finalIds = interleaveAnchorDiscovery(anchorIds, discoveryIds);
     const finalSet = new Set(finalIds);
     const duplicateCount = finalIds.length - finalSet.size;
-    const listenedFromTargetDateCount = finalIds.filter((id) =>
-      targetRangeSongIds.has(id),
-    ).length;
-    const actualAnchorRatio = finalIds.length
-      ? listenedFromTargetDateCount / finalIds.length
-      : 0;
+    const listenedFromTargetDateCount = finalIds.filter(id => targetRangeSongIds.has(id)).length;
+    const actualAnchorRatio = finalIds.length ? listenedFromTargetDateCount / finalIds.length : 0;
     const tooMuchLikeRecentlyPlayed = actualAnchorRatio > RECENTLY_PLAYED_RATIO_WARN;
     if (tooMuchLikeRecentlyPlayed) {
       console.warn(
@@ -742,9 +910,89 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       );
     }
 
+    // 9) Compute quality metrics
     const config = SYSTEM_PLAYLIST_BY_KEY[systemKey] || { name: `Daily Mix 0${Number(systemKey.slice(-2))}` };
     const name = config.name || systemKey;
     const description = PLAYLIST_DESCRIPTIONS[systemKey] || config.description || '';
+
+    const overlapStats = computeOverlapStats(oldSongIds, finalIds);
+    const crossOverlapAfter = calculateCrossOverlapRatio(finalIds, otherDailyMixSongs);
+    
+    const LIMITS = {
+      ...DAILYMIX_LIMITS,
+      overlapBad: DAILYMIX_LIMITS.crossPlaylistOverlapBad,
+      minCandidateCount: perMix * DAILYMIX_LIMITS.minCandidateCountMultiplier
+    };
+    
+    // Map finalObjs for calculatePlaylistDiversity
+    // Since finalIds are just numbers, we need full objects. We map them from anchor/discovery pool
+    const poolMap = new Map();
+    const allCands = [...rows.map(r => ({ ...r, id: r.song_id })), ...candidateObjs];
+    for (const c of allCands) {
+      if (!poolMap.has(Number(c.id || c.song_id))) {
+        poolMap.set(Number(c.id || c.song_id), c);
+      }
+    }
+    const finalObjsForDiv = finalIds.map(id => poolMap.get(id)).filter(Boolean);
+    const finalDiversity = calculatePlaylistDiversity(finalObjsForDiv);
+    const candidateGenreCount = new Set(candidateObjs.map(c => c.genre_id).filter(g => g !== null && g !== undefined)).size;
+    const finalGenreCount = new Set(finalObjsForDiv.map(c => c.genre_id).filter(g => g !== null && g !== undefined)).size;
+    const exactArtistPassed = finalDiversity.maxSameArtistCount <= maxArtistCount;
+    const exactGenrePassed = finalDiversity.maxSameGenreCount <= maxGenreCount;
+    const finalDiversityPassed = exactArtistPassed && exactGenrePassed;
+
+    const evalResult = evaluateRegenerateQuality(
+      { ...overlapStats, candidateCount: largeDiscoveryPool.length, finalDiversity, relaxedDiversityUsed }, perMix, LIMITS
+    );
+
+    // Hard gate: Không apply nếu quá giống playlist cũ hoặc quá trùng Daily Mix khác
+    const MIN_ADDED_SONGS = 8;
+    const MIN_FRESH_CANDIDATES = Math.ceil(perMix * 0.35);
+    let crossOverlapGateStatus = 'ok';
+    let gateReason = '';
+    
+    if (finalIds.length < perMix) {
+      evalResult.canApply = false;
+      gateReason = `finalSongCount < targetSize (${finalIds.length} < ${perMix})`;
+    } else if (!finalDiversityPassed) {
+      evalResult.canApply = false;
+      gateReason = `Final exact diversity quota failed (artist ${finalDiversity.maxSameArtistCount}/${maxArtistCount}, genre ${finalDiversity.maxSameGenreCount}/${maxGenreCount})`;
+    } else if (finalDiversity.maxSameGenreRatio >= 0.90) {
+      evalResult.canApply = false;
+      gateReason = 'maxSameGenreRatio >= 90%';
+    } else if (candidateGenreCount >= 2 && finalGenreCount < 2) {
+      evalResult.canApply = false;
+      gateReason = `finalGenreCount < 2 while candidateGenreCount=${candidateGenreCount}`;
+    } else if (candidateGenreCount >= 3 && finalGenreCount < 3) {
+      gateReason = `finalGenreCount < 3 while candidateGenreCount=${candidateGenreCount}`;
+      evalResult.status = 'warning';
+      evalResult.message = (evalResult.message || '') + `; ${gateReason}`;
+    } else if (overlapStats.overlapRatio >= 0.9) {
+      evalResult.canApply = false;
+      gateReason = 'overlapRatio >= 90%';
+    } else if (crossOverlapAfter > LIMITS.overlapBad) {
+      evalResult.canApply = false;
+      gateReason = `crossPlaylistOverlapRatioAfter >= ${LIMITS.overlapBad*100}%`;
+    } else if (freshCandidateCount < MIN_FRESH_CANDIDATES) {
+      gateReason = `freshCandidateCount < ${MIN_FRESH_CANDIDATES}`;
+      evalResult.status = 'warning';
+      evalResult.message = (evalResult.message || '') + `; ${gateReason}`;
+    } else if (overlapStats.addedSongs < MIN_ADDED_SONGS) {
+      if (freshCandidateCount > 50) {
+        evalResult.canApply = false;
+        gateReason = `addedSongs < ${MIN_ADDED_SONGS} despite large fresh pool`;
+      }
+    }
+
+    if (!evalResult.canApply) {
+      evalResult.status = 'skipped';
+      evalResult.message = `Playlist too similar or lacking fresh content: ${gateReason} ` + (evalResult.message || '');
+      crossOverlapGateStatus = 'blocked';
+    } else if (crossOverlapAfter > DAILYMIX_LIMITS.crossPlaylistOverlapWarning) {
+      crossOverlapGateStatus = 'warning';
+      evalResult.status = evalResult.status === 'success' ? 'warning' : evalResult.status;
+      evalResult.message = (evalResult.message || '') + `; crossDailyOverlapRatio > ${Math.round(DAILYMIX_LIMITS.crossPlaylistOverlapWarning * 100)}% (${Math.round(crossOverlapAfter * 100)}%)`;
+    }
 
     const summary = {
       userId: uid,
@@ -754,12 +1002,13 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       targetRangeStart: fmtDate(start),
       targetRangeEnd: fmtDate(end),
       isWeekendRange: isWeekend,
-      usedFallbackHistory,
+      tierUsed,
+      tierResults,
+      fallbackUsed,
+      fallbackReason,
       strategy: recStrategy,
       reason: recReason,
-      // historyCount = số rows trong TARGET range gốc (không mở rộng)
-      historyCount: targetRows.length,
-      // profileCount = số rows dùng để build profile (range mở rộng nếu target rỗng)
+      historyCount: rows.length,
       profileCount: rows.length,
       distinctListenedSongCount: profile.distinctSongIds.size,
       distinctTargetRangeSongCount: targetRangeSongIds.size,
@@ -768,25 +1017,50 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       anchorSelected: anchorIds.length,
       discoveryTarget,
       discoverySelected: discoveryIds.length,
-      popularAdded,
+      candidateCount: largeDiscoveryPool.length,
+      freshCandidateCount,
+      oldCandidateCount,
+      otherDailyCandidateCount,
+      ...overlapStats,
+      addedSongs: overlapStats.addedSongs,
+      removedSongs: overlapStats.removedSongs,
+      crossPlaylistOverlapRatioBefore: Number(crossOverlapBefore.toFixed(2)),
+      crossPlaylistOverlapRatioAfter: Number(crossOverlapAfter.toFixed(2)),
+      crossOverlapGateStatus,
+      actualMaxSameArtistRatio: finalDiversity.maxSameArtistRatio,
+      actualMaxSameGenreRatio: finalDiversity.maxSameGenreRatio,
+      actualMaxSameArtistCount: finalDiversity.maxSameArtistCount,
+      actualMaxSameGenreCount: finalDiversity.maxSameGenreCount,
+      maxArtistSongs: maxArtistCount,
+      maxGenreSongs: maxGenreCount,
+      finalDiversityPassed,
+      candidateGenreCount,
+      finalGenreCount,
+      maxSameArtistLimit: LIMITS.maxSameArtistRatio,
+      maxSameGenreLimit: LIMITS.maxSameGenreRatio,
+      relaxedDiversityUsed,
+      sampleSkipReasons: evalResult.sampleSkipReasons || [],
+      canApply: evalResult.canApply,
+      status: evalResult.status,
+      message: evalResult.message,
       finalSongCount: finalIds.length,
       duplicateCount,
       listenedFromTargetDateCount,
       anchorRatio: Number(actualAnchorRatio.toFixed(2)),
       recentlyPlayedWarning: tooMuchLikeRecentlyPlayed,
-      topGenres: topNFromMap(profile.genreCounts, 5).map((x) => x.id),
-      topArtists: topNFromMap(profile.artistCounts, 5).map((x) => x.id),
-      topMarkets: topNFromMap(profile.marketCounts, 5).map((x) => String(x.id)),
+      topGenres: topNFromMap(profile.genreCounts, 5).map(x => x.id),
+      topArtists: topNFromMap(profile.artistCounts, 5).map(x => x.id),
+      topMarkets: topNFromMap(profile.marketCounts, 5).map(x => String(x.id)),
       topSongIds: finalIds.slice(0, 10),
       recItemsCount: recCount,
       usedRecService,
-      playlistId: null,
-      created: false,
+      playlistId: existingPlaylist ? existingPlaylist.id : null,
+      created: !existingPlaylist,
       insertedSongs: 0,
       dryRun,
     };
 
-    if (!dryRun) {
+    if (!dryRun && evalResult.canApply) {
       await conn.beginTransaction();
       try {
         const { playlistId, created } = await ensurePlaylist(conn, uid, systemKey, name, description);
@@ -905,6 +1179,123 @@ async function generateDailyMixesForAllUsers(options = {}) {
   return stats;
 }
 
+async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
+  const perMix = clampPerMix(options.perMix);
+  const dryRun = Boolean(options.dryRun);
+  const [rows] = await pool.query(
+    `SELECT id FROM users WHERE status = 'active' AND role = 'user' ORDER BY id`
+  );
+  const stats = {
+    usersProcessed: 0,
+    playlistsCreated: 0,
+    playlistsUpdated: 0,
+    songsInserted: 0,
+    skipped: 0,
+    errors: 0,
+    details: [],
+  };
+
+  const today = new Date();
+  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dayOfWeek = today0.getDay();
+  const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const lastMonday = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate() - offsetToThisMonday - 7);
+  
+  let targetDate;
+  if (systemKey === 'dailymix_01') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate());
+  else if (systemKey === 'dailymix_02') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 1);
+  else if (systemKey === 'dailymix_03') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 2);
+  else if (systemKey === 'dailymix_04') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 3);
+  else if (systemKey === 'dailymix_05') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 4);
+  else if (systemKey === 'dailymix_06') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 6); // Sunday for weekend
+  else throw new Error('Invalid daily mix key');
+
+  let totalCandidateCount = 0;
+  let totalFreshCandidateCount = 0;
+  let totalOldCandidateCount = 0;
+  let totalOtherDailyCandidateCount = 0;
+  let totalOverlapRatio = 0;
+  let totalAddedSongs = 0;
+  let totalRemovedSongs = 0;
+  let totalCrossBefore = 0;
+  let totalCrossAfter = 0;
+  let totalArtistRatio = 0;
+  let totalGenreRatio = 0;
+  let worstArtistRatio = 0;
+  let worstGenreRatio = 0;
+  let failedDiversityPlaylists = 0;
+  let allCanApply = true;
+  let canApplyRuns = 0;
+  let lastStatus = 'success';
+  let successRuns = 0;
+
+  for (const row of rows) {
+    try {
+      const m = await generateDailyMixForDate(row.id, targetDate, { perMix, dryRun });
+      stats.usersProcessed += 1;
+      if (!dryRun) {
+        if (m.created) stats.playlistsCreated += 1;
+        else stats.playlistsUpdated += 1;
+        stats.songsInserted += m.insertedSongs || 0;
+      }
+      
+      // Aggregate metrics
+      if (m.candidateCount !== undefined) {
+        totalCandidateCount += m.candidateCount;
+        totalFreshCandidateCount += (m.freshCandidateCount || 0);
+        totalOldCandidateCount += (m.oldCandidateCount || 0);
+        totalOtherDailyCandidateCount += (m.otherDailyCandidateCount || 0);
+        totalOverlapRatio += (m.overlapRatio !== undefined ? m.overlapRatio : 0);
+        totalAddedSongs += (m.addedSongs !== undefined ? m.addedSongs : 0);
+        totalRemovedSongs += (m.removedSongs !== undefined ? m.removedSongs : 0);
+        totalCrossBefore += (m.crossPlaylistOverlapRatioBefore || 0);
+        totalCrossAfter += (m.crossPlaylistOverlapRatioAfter || 0);
+        totalArtistRatio += (m.actualMaxSameArtistRatio || 0);
+        totalGenreRatio += (m.actualMaxSameGenreRatio || 0);
+        worstArtistRatio = Math.max(worstArtistRatio, m.actualMaxSameArtistRatio || 0);
+        worstGenreRatio = Math.max(worstGenreRatio, m.actualMaxSameGenreRatio || 0);
+        if (!m.finalDiversityPassed) failedDiversityPlaylists++;
+        if (m.canApply) canApplyRuns++;
+        else allCanApply = false;
+        lastStatus = m.status;
+        successRuns += 1;
+      }
+      
+      stats.details.push({ userId: row.id, ok: true });
+    } catch (err) {
+      stats.errors += 1;
+      stats.skipped += 1;
+      stats.details.push({ userId: row.id, ok: false, error: err.message });
+    }
+  }
+  
+  if (successRuns > 0) {
+    stats.candidateCount = Math.round(totalCandidateCount / successRuns);
+    stats.freshCandidateCount = Math.round(totalFreshCandidateCount / successRuns);
+    stats.oldCandidateCount = Math.round(totalOldCandidateCount / successRuns);
+    stats.otherDailyCandidateCount = Math.round(totalOtherDailyCandidateCount / successRuns);
+    stats.overlapRatio = totalOverlapRatio / successRuns;
+    stats.addedSongs = Math.round(totalAddedSongs / successRuns);
+    stats.removedSongs = Math.round(totalRemovedSongs / successRuns);
+    stats.crossPlaylistOverlapRatioBefore = Number((totalCrossBefore / successRuns).toFixed(2));
+    stats.crossPlaylistOverlapRatioAfter = Number((totalCrossAfter / successRuns).toFixed(2));
+    stats.actualMaxSameArtistRatio = Number((totalArtistRatio / successRuns).toFixed(2));
+    stats.actualMaxSameGenreRatio = Number((totalGenreRatio / successRuns).toFixed(2));
+    stats.worstMaxSameArtistRatio = Number(worstArtistRatio.toFixed(2));
+    stats.worstMaxSameGenreRatio = Number(worstGenreRatio.toFixed(2));
+    stats.failedDiversityPlaylists = failedDiversityPlaylists;
+    stats.finalDiversityPassed = failedDiversityPlaylists === 0;
+    stats.successRate = Number((canApplyRuns / successRuns).toFixed(3));
+    stats.canApply = stats.finalDiversityPassed && stats.successRate >= 0.85;
+    stats.status = lastStatus;
+    if (!allCanApply && stats.canApply) {
+      stats.status = 'warning';
+    }
+  }
+
+  return stats;
+}
+
 module.exports = {
   SYSTEM_KEYS,
   PLAYLIST_DESCRIPTIONS,
@@ -923,4 +1314,5 @@ module.exports = {
   generateDailyMixForDate,
   generateDailyMixesForUser,
   generateDailyMixesForAllUsers,
+  generateDailyMixByKeyForAllUsers,
 };
