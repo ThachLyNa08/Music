@@ -29,6 +29,8 @@ router.post('/music-data-tools/bulk/analyze-features', adminMusicDataToolsContro
 router.get('/dashboard', adminController.getDashboardStats);
 router.get('/dashboard/overview', adminController.getDashboardStats);
 router.get('/dashboard/summary', adminController.getDashboardSummary);
+router.post('/dashboard/insights/analyze', adminController.analyzeDashboardInsights);
+router.post('/dashboard/insights/save', adminController.saveDashboardInsights);
 router.get('/listening-trends', adminController.getListeningTrends);
 
 router.get('/top-artists-trends', adminController.getTopArtistTrends);

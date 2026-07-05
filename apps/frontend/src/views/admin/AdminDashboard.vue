@@ -7,11 +7,17 @@
         <p class="page-subtitle">Theo dõi nội dung, người dùng và doanh thu Premium từ dữ liệu thật của hệ thống.</p>
       </div>
 
-      <button class="refresh-button" type="button" :disabled="loading" @click="fetchData" title="Làm mới" style="width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-        <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5m-5 4a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5" />
-        </svg>
-      </button>
+      <div class="flex items-center gap-3">
+        <button type="button" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg flex items-center gap-2 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed" :disabled="isAnalyzingInsight" @click="openInsightModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          Phân tích dữ liệu
+        </button>
+        <button class="refresh-button" type="button" :disabled="loading" @click="fetchData" title="Làm mới" style="width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+          <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5m-5 4a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5" />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <div v-if="error" class="alert-card">
@@ -468,6 +474,55 @@
       type="primary" 
       @confirm="regenerateSystemPlaylists" 
     />
+    <teleport to="body">
+      <div v-if="showInsightModal" class="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" @click.self="closeInsightModal">
+        <section class="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-2xl">
+          <header class="mb-5">
+            <h2 class="text-xl font-bold text-slate-800">Phân tích dữ liệu Dashboard</h2>
+            <p class="mt-2 text-sm leading-6 text-slate-500">Chọn khoảng thời gian để hệ thống tổng hợp dữ liệu vận hành.</p>
+          </header>
+
+          <div class="mb-5 space-y-3">
+            <label v-for="preset in insightPresets" :key="preset.value" class="flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition" :class="insightPreset === preset.value ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:bg-slate-50'">
+              <input v-model="insightPreset" type="radio" name="dashboard-insight-period" :value="preset.value" />
+              <span class="text-sm font-semibold text-slate-700">{{ preset.label }}</span>
+            </label>
+          </div>
+
+          <div v-if="insightPreset === 'custom'" class="mb-5 grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-slate-500">Từ ngày</span>
+              <input v-model="insightDateFrom" type="date" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-purple-500" />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-slate-500">Đến ngày</span>
+              <input v-model="insightDateTo" type="date" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-purple-500" />
+            </label>
+          </div>
+
+          <p v-if="insightValidationError" class="mb-4 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">
+            {{ insightValidationError }}
+          </p>
+
+          <footer class="flex justify-end gap-3">
+            <button type="button" class="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200" @click="closeInsightModal">
+              Hủy
+            </button>
+            <button type="button" class="rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-200 hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isAnalyzingInsight || Boolean(insightValidationError)" @click="startDashboardInsightAnalysis">
+              Bắt đầu phân tích
+            </button>
+          </footer>
+        </section>
+      </div>
+    </teleport>
+
+    <DashboardInsightOverlay
+      :show="isInsightOverlayOpen"
+      :is-loading="isAnalyzingInsight"
+      :report="insightReport"
+      :period-label="insightPeriodLabel"
+      @close="closeInsightOverlay"
+    />
   </section>
 </template>
 
@@ -493,6 +548,7 @@ import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DashboardInsightOverlay from '@/components/admin/DashboardInsightOverlay.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Filler)
@@ -523,9 +579,92 @@ const trendRangeOptions = [
 
 const showRegenerateConfirm = ref(false)
 const isRegeneratingPlaylists = ref(false)
+const showInsightModal = ref(false)
+const isInsightOverlayOpen = ref(false)
+const isAnalyzingInsight = ref(false)
+const insightReport = ref(null)
+const insightPreset = ref('last7d')
+const insightDateFrom = ref('')
+const insightDateTo = ref('')
+
+const insightPresets = [
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'last7d', label: '7 ngày gần đây' },
+  { value: 'thisMonth', label: 'Tháng này' },
+  { value: 'lastMonth', label: 'Tháng trước' },
+  { value: 'custom', label: 'Tùy chỉnh' }
+]
+
+const insightValidationError = computed(() => {
+  if (insightPreset.value !== 'custom') return ''
+  if (!insightDateFrom.value) return 'Vui lòng chọn ngày bắt đầu.'
+  if (!insightDateTo.value) return 'Vui lòng chọn ngày kết thúc.'
+  if (insightDateFrom.value > insightDateTo.value) return 'Ngày bắt đầu không được lớn hơn ngày kết thúc.'
+  return ''
+})
+
+const insightPeriodLabel = computed(() => {
+  if (insightPreset.value === 'custom') {
+    return `Từ ${formatInsightDate(insightDateFrom.value)} đến ${formatInsightDate(insightDateTo.value)}`
+  }
+  return insightPresets.find(item => item.value === insightPreset.value)?.label || ''
+})
 
 function confirmRegeneratePlaylists() {
   showRegenerateConfirm.value = true
+}
+
+function openInsightModal() {
+  console.log('[DashboardInsight] open modal clicked')
+  showInsightModal.value = true
+}
+
+function closeInsightModal() {
+  showInsightModal.value = false
+}
+
+function closeInsightOverlay() {
+  isInsightOverlayOpen.value = false
+  isAnalyzingInsight.value = false
+  insightReport.value = null
+}
+
+function formatInsightDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('vi-VN')
+}
+
+async function startDashboardInsightAnalysis() {
+  if (isAnalyzingInsight.value || insightValidationError.value) return
+
+  const payload = {
+    preset: insightPreset.value,
+    dateFrom: insightPreset.value === 'custom' ? insightDateFrom.value : undefined,
+    dateTo: insightPreset.value === 'custom' ? insightDateTo.value : undefined
+  }
+
+  console.log('[DashboardInsight] start analyze', payload)
+  showInsightModal.value = false
+  isInsightOverlayOpen.value = true
+  isAnalyzingInsight.value = true
+  insightReport.value = null
+
+  try {
+    const res = await api.post('/admin/dashboard/insights/analyze', payload)
+    const report = res.data?.report
+    console.log('[DashboardInsight] report received', report)
+    if (!res.data?.success || !report) {
+      throw new Error(res.data?.message || 'Dữ liệu báo cáo không hợp lệ.')
+    }
+    insightReport.value = report
+  } catch (err) {
+    alert(err.response?.data?.message || err.message || 'Không thể phân tích dữ liệu lúc này.')
+    isInsightOverlayOpen.value = false
+  } finally {
+    isAnalyzingInsight.value = false
+  }
 }
 
 async function regenerateSystemPlaylists() {

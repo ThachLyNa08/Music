@@ -4667,6 +4667,29 @@ exports.getSystemPlaylistsOperationSummary = async (req, res, next) => {
   }
 };
 
+const adminDashboardInsightService = require('../services/adminDashboardInsight.service');
+
+exports.analyzeDashboardInsights = async (req, res, next) => {
+  try {
+    const { preset, dateFrom, dateTo } = req.body;
+    const report = await adminDashboardInsightService.analyzeDashboardInsights(preset, dateFrom, dateTo);
+    res.json({ success: true, report });
+  } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
+};
+
+exports.saveDashboardInsights = async (req, res, next) => {
+  try {
+    res.json({ success: true, message: 'Báo cáo đã được lưu thành công (MOCK).' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getSystemPlaylistsActivityLog = async (req, res, next) => {
   try {
     // Return empty array as there are no logs yet

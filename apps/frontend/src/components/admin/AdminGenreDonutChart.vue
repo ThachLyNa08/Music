@@ -16,7 +16,7 @@
 
       <div v-else class="flex flex-col items-center w-full">
         <!-- Chart Area -->
-        <div class="relative mx-auto w-full max-w-[220px] aspect-square flex items-center justify-center chart-wrapper">
+        <div class="relative mx-auto w-full aspect-square flex items-center justify-center chart-wrapper" :class="sizeClass">
           <Doughnut :data="chartData" :options="chartOptions" />
           
           <!-- Center Label Overlay -->
@@ -53,7 +53,8 @@ const props = defineProps({
   valueKey: { type: String, default: 'value' },
   centerLabel: { type: [String, Number], default: '' },
   centerSubLabel: { type: String, default: '' },
-  emptyText: { type: String, default: 'Chưa có dữ liệu thể loại.' }
+  emptyText: { type: String, default: 'Chưa có dữ liệu thể loại.' },
+  sizeClass: { type: String, default: 'max-w-[220px]' }
 });
 
 const normalizedData = computed(() => {
