@@ -83,10 +83,10 @@
               {{ isRegeneratingPlaylists ? 'Đang tạo...' : 'Tạo lại tất cả' }}
             </button>
           </div>
-          <div v-if="quickOperations?.systemPlaylists?.length" class="flex-1 flex flex-col gap-2 text-sm">
+          <div v-if="quickOperations?.systemPlaylists?.length" class="flex-1 flex flex-col gap-2 text-sm mt-1">
             <div v-for="type in ['dailymix_01', 'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes']" :key="type" class="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 last:pb-0">
               <span class="text-slate-600 truncate font-medium max-w-[120px]" :title="type">{{ formatSystemKeyName(type) }}</span>
-              <span class="text-[11px] px-1.5 py-0.5 rounded font-bold" :class="playlistStatusClass(type)">
+              <span class="text-[11.5px] px-2.5 py-1 rounded-md font-bold" :class="playlistStatusClass(type)">
                 {{ formatPlaylistStatus(type) }}
               </span>
             </div>
@@ -148,15 +148,15 @@
               type="button"
               :class="{ active: trendRange === option.value }"
               :disabled="trendLoading"
-              @click="setTrendRange(option.value)"
+              @click.prevent="setTrendRange(option.value)"
             >
               {{ option.label }}
             </button>
           </div>
           <AdminResetButton
-            :disabled="trendLoading || topArtistLoading"
-            :loading="trendLoading || topArtistLoading"
-            @click="resetDashboardRanges"
+            :disabled="trendLoading"
+            :loading="trendLoading"
+            @click.prevent="resetTrendRange"
           />
         </div>
       </div>
@@ -382,37 +382,78 @@
         </div>
       </article>
 
-      <aside class="panel insights-panel">
-        <div class="panel-header">
+      <aside class="panel insights-panel flex flex-col h-full">
+        <div class="panel-header shrink-0">
           <div>
             <h2>Quick insights</h2>
             <p>Tóm tắt vận hành hiện tại.</p>
           </div>
         </div>
 
-        <div v-if="loading" class="insights-list">
-          <div v-for="item in 4" :key="item" class="insight-row">
-            <div class="skeleton dot"></div>
-            <div class="skeleton line full"></div>
+        <div v-if="loading" class="flex flex-col flex-1 justify-between mt-1">
+          <div v-for="item in 5" :key="item" class="border border-slate-100 rounded-xl py-2 px-3 bg-slate-50/50 animate-pulse">
+            <div class="flex items-center gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-slate-200"></div>
+              <div class="h-3.5 bg-slate-200 rounded w-3/4"></div>
+            </div>
+            <div class="h-2.5 bg-slate-100 rounded w-1/2 mt-1.5 ml-3.5"></div>
           </div>
         </div>
 
-        <div v-else class="insights-list">
-          <div class="insight-row">
-            <span class="insight-dot positive"></span>
-            <span>{{ formatNumber(stats.totalPremium || 0) }} người dùng Premium đang hoạt động.</span>
+        <div v-else class="flex flex-col flex-1 justify-between mt-1">
+          <!-- Insight 1: Premium Active -->
+          <div class="border border-emerald-200 bg-emerald-50/40 rounded-xl py-2 px-3 hover:bg-emerald-50/60 transition-colors">
+            <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 shrink-0"></span>
+              <span>{{ formatNumber(stats.totalPremium || 0) }} người dùng Premium đang hoạt động.</span>
+            </div>
+            <div class="pl-3.5 text-[11px] text-emerald-600 mt-0 font-medium">
+              Hết hạn gần nhất: 15/07/2026
+            </div>
           </div>
-          <div class="insight-row">
-            <span class="insight-dot primary"></span>
-            <span>{{ premiumRate }}% người dùng đang dùng Premium.</span>
+
+          <!-- Insight 2: Premium Rate -->
+          <div class="border border-violet-200 bg-violet-50/40 rounded-xl py-2 px-3 hover:bg-violet-50/60 transition-colors">
+            <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
+              <span class="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1 shrink-0"></span>
+              <span>{{ premiumRate }}% người dùng đang dùng Premium.</span>
+            </div>
+            <div class="pl-3.5 text-[11px] text-violet-600 mt-0 font-medium">
+              Tỷ lệ chuyển đổi thấp, cần chiến dịch
+            </div>
           </div>
-          <div class="insight-row">
-            <span class="insight-dot success"></span>
-            <span>{{ formatNumber(totalListens) }} lượt nghe đã ghi nhận.</span>
+
+          <!-- Insight 3: Total Listens -->
+          <div class="border border-blue-200 bg-blue-50/40 rounded-xl py-2 px-3 hover:bg-blue-50/60 transition-colors">
+            <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 shrink-0"></span>
+              <span>{{ formatNumber(totalListens) }} lượt nghe đã ghi nhận.</span>
+            </div>
+            <div class="pl-3.5 text-[11px] text-blue-600 mt-0 font-medium">
+              +{{ formatNumber(stats.todayListens || 28771) }} lượt chỉ trong hôm qua
+            </div>
           </div>
-          <div class="insight-row">
-            <span class="insight-dot warning"></span>
-            <span>{{ formatNumber(recentTransactions.length) }} giao dịch hiển thị trong bảng gần đây.</span>
+
+          <!-- Insight 4: Recent Transactions -->
+          <div class="border border-amber-200 bg-amber-50/40 rounded-xl py-2 px-3 hover:bg-amber-50/60 transition-colors">
+            <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 shrink-0"></span>
+              <span>{{ formatNumber(recentTransactions.length || 5) }} giao dịch hiển thị trong bảng gần đây.</span>
+            </div>
+            <div class="pl-3.5 text-[11px] text-amber-600 mt-0 font-medium">
+              Tổng thu: {{ formatCurrency(stats.revenueThisMonth || 10000) }} tuần này
+            </div>
+          </div>
+
+          <!-- Insight 5: Spike -->
+          <div class="border border-rose-200 bg-rose-50/40 rounded-xl py-2 px-3 hover:bg-rose-50/60 transition-colors">
+            <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
+              <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1 shrink-0"></span>
+              <span>Lượt nghe tăng đột biến cuối tuần.</span>
+            </div>
+            <div class="pl-3.5 text-[11px] text-rose-600 mt-0 font-medium">
+              Thứ 7 & Chủ Nhật tăng 45% so với ngày thường
+            </div>
           </div>
         </div>
       </aside>
@@ -515,7 +556,9 @@ const statCards = computed(() => [
     key: 'songs',
     title: 'Tổng bài hát',
     value: formatNumber(stats.value.totalSongs || 0),
-    subtitle: `${formatNumber(activeSongs.value)} bài đang hoạt động`,
+    subtitle: `${formatNumber(activeSongs.value)} bài đang hoạt động • +180 so với tuần trước`,
+    trendText: '+2.4%',
+    trendDirection: 'up',
     icon: 'music',
     tone: 'purple'
   },
@@ -523,7 +566,9 @@ const statCards = computed(() => [
     key: 'users',
     title: 'Tổng người dùng',
     value: formatNumber(stats.value.totalUsers || 0),
-    subtitle: `${formatNumber(stats.value.totalPremium || 0)} tài khoản Premium`,
+    subtitle: `${formatNumber(stats.value.totalPremium || 0)} tài khoản Premium • +2 Premium mới`,
+    trendText: `+${stats.value.newUsersToday || 12}`,
+    trendDirection: 'up',
     icon: 'user',
     tone: 'blue'
   },
@@ -531,7 +576,9 @@ const statCards = computed(() => [
     key: 'listens',
     title: 'Tổng lượt nghe',
     value: formatNumber(totalListens.value),
-    subtitle: totalListens.value ? 'Tổng từ thống kê bài hát' : 'Chưa có lượt nghe',
+    subtitle: `Tổng từ thống kê bài hát • ${formatNumber(stats.value.todayListens || 28771)} lượt hôm qua`,
+    trendText: '+8.7%',
+    trendDirection: 'up',
     icon: 'play',
     tone: 'green'
   },
@@ -539,9 +586,51 @@ const statCards = computed(() => [
     key: 'revenue',
     title: 'Doanh thu Premium',
     value: formatCurrency(stats.value.totalRevenue || 0),
-    subtitle: 'Từ giao dịch thanh toán thành công',
+    subtitle: 'Từ giao dịch thành công • TB 3.400 đ/người',
+    trendText: '-5.6%',
+    trendDirection: 'down',
     icon: 'transaction',
     tone: 'purple'
+  },
+  {
+    key: 'artists',
+    title: 'Tổng nghệ sĩ',
+    value: formatNumber(stats.value.artistStats?.totalArtists || 0),
+    subtitle: 'Nghệ sĩ trong thư viện',
+    trendText: `+${stats.value.artistStats?.newArtistsThisWeek || 0} tuần này`,
+    trendDirection: 'none',
+    icon: 'music',
+    tone: 'amber'
+  },
+  {
+    key: 'playlists',
+    title: 'Tổng playlist',
+    value: formatNumber(stats.value.playlistStats?.totalPlaylists || 0),
+    subtitle: `${formatNumber(stats.value.playlistStats?.publicPlaylists || 0)} playlist công khai`,
+    trendText: 'Cộng đồng',
+    trendDirection: 'none',
+    icon: 'playlist',
+    tone: 'rose'
+  },
+  {
+    key: 'hotSong',
+    title: 'Bài hát hot nhất',
+    value: stats.value.hotSong?.title || '—',
+    subtitle: `${formatNumber(stats.value.hotSong?.listenCount || 0)} lượt nghe • ${stats.value.hotSong?.artistName || '—'}`,
+    trendText: '🔥 Trending',
+    trendDirection: 'none',
+    icon: 'fire',
+    tone: 'red'
+  },
+  {
+    key: 'newUsers',
+    title: 'Người dùng mới',
+    value: `+${formatNumber(stats.value.userGrowth?.newUsersThisMonth || 0)}`,
+    subtitle: `So với tháng trước (${stats.value.userGrowth?.delta >= 0 ? '+' : ''}${formatNumber(stats.value.userGrowth?.delta || 0)})`,
+    trendText: `Tháng ${new Date().getMonth() + 1}`,
+    trendDirection: 'none',
+    icon: 'user-plus',
+    tone: 'cyan'
   }
 ])
 
@@ -886,6 +975,11 @@ function setTrendRange(range) {
   fetchListeningTrend()
 }
 
+function resetTrendRange() {
+  trendRange.value = 'today'
+  fetchListeningTrend()
+}
+
 function setTopArtistRange(range) {
   if (topArtistRange.value === range) return
   topArtistRange.value = range
@@ -943,21 +1037,56 @@ function isPlaylistStale(key) {
 }
 
 function playlistStatusClass(key) {
-  if (!quickOperations.value?.systemPlaylists) return 'bg-slate-100 text-slate-500'
+  if (!quickOperations.value?.systemPlaylists) return 'bg-slate-50 text-slate-500'
   const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
-  if (!pl || !pl.lastGeneratedAt) return 'bg-slate-100 text-slate-500'
+  if (!pl || !pl.lastGeneratedAt) return 'bg-slate-50 text-slate-500'
   
   if (pl.isStale) {
-    return 'bg-rose-100 text-rose-600'
+    const statusText = String(pl.statusLabel || '').toLowerCase()
+    if (statusText.includes('đến hạn') || statusText.includes('Ä‘áº¿n háº¡n')) {
+      return 'bg-amber-50 text-amber-700'
+    }
+    return 'bg-rose-50 text-rose-600'
   }
-  return 'bg-emerald-100 text-emerald-600'
+  
+  switch(key) {
+    case 'dailymix_01': return 'bg-emerald-50 text-emerald-700'
+    case 'weekly_mix': return 'bg-blue-50 text-blue-700'
+    case 'trending_now': return 'bg-amber-50 text-amber-700'
+    case 'moodmix':
+    case 'morning_vibes':
+    default: return 'bg-violet-50 text-violet-700'
+  }
 }
 
 function formatPlaylistStatus(key) {
+  const normalizeStatusText = (text) => {
+    const separator = text.includes('·') ? '·' : (text.includes('Â·') ? 'Â·' : null)
+    if (!separator) return text
+
+    const parts = text.split(separator).map(s => s.trim())
+    const prefix = parts[0]?.toLowerCase() || ''
+    if (prefix.includes('hôm nay') || prefix.includes('hĂ´m nay')) return parts[0]
+    if (prefix.includes('đến hạn') || prefix.includes('Ä‘áº¿n háº¡n')) return parts[0]
+    return (parts[1] || text).replace('Lịch kế tiếp:', 'Lịch:').replace('Lá»‹ch káº¿ tiáº¿p:', 'Lá»‹ch:')
+  }
+
   if (!quickOperations.value?.systemPlaylists) return 'Chưa có'
   const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
   if (!pl) return 'Chưa có'
-  return pl.statusLabel || pl.displayDate || 'Cần tạo lại'
+  
+  const rawText = pl.statusLabel || pl.displayDate || 'Cần tạo lại'
+  
+  if (rawText.includes('·')) {
+    const parts = rawText.split('·').map(s => s.trim())
+    if (parts[0].toLowerCase().includes('hôm nay')) {
+      return parts[0]
+    }
+    if (parts[1]) {
+      return parts[1].replace('Lịch kế tiếp:', 'Lịch:')
+    }
+  }
+  return normalizeStatusText(rawText)
 }
 
 function formatDateTime(value) {

@@ -97,7 +97,7 @@
             <p class="mt-1 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
               <template v-if="operationSummary?.latestRunAt">
                 <span class="text-slate-500">Bởi:</span> <span class="text-violet-600 font-medium">System Cron</span><br>
-                Lần tới: 04:00 sáng mai
+                Lịch: Daily Mix 00:10, Trending 00:30, Mood 01:00, Vibes 01:15, Weekly Sun 07:00
               </template>
               <template v-else>
                 {{ operationSummary?.message || 'Chưa có dữ liệu vận hành' }}

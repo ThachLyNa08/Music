@@ -264,7 +264,7 @@ if (RECOMMENDATION_ENABLED) {
       } catch (e) {
         console.error('[CRON] Contextual Mood failed:', e.message);
       }
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
   }
 
   // ---- Trending Now cron job ------------------------------------------------
@@ -289,7 +289,7 @@ if (RECOMMENDATION_ENABLED) {
       } catch (e) {
         console.error('[CRON] Trending Now failed:', e.message);
       }
-    });
+    }, { timezone: 'Asia/Ho_Chi_Minh' });
   }
 }
 

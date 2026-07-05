@@ -220,6 +220,54 @@ exports.getDashboardStats = async (req, res) => {
     const [[{ revenueThisMonth }]] = await pool.query("SELECT SUM(amount) as revenueThisMonth FROM payment_transactions WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())");
     const [[{ pendingTransactions }]] = await pool.query("SELECT COUNT(*) as pendingTransactions FROM payment_transactions WHERE status = 'pending'");
 
+    // 1.5. New KPI fields
+    const [[{ newArtistsThisWeek }]] = await pool.query('SELECT COUNT(*) as cnt FROM artists WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    const [[playlistStatsRow]] = await pool.query('SELECT COUNT(*) as totalPlaylists, SUM(CASE WHEN is_public = 1 THEN 1 ELSE 0 END) as publicPlaylists, SUM(CASE WHEN is_system = 1 THEN 1 ELSE 0 END) as systemPlaylists, SUM(CASE WHEN is_system = 0 THEN 1 ELSE 0 END) as userPlaylists FROM playlists');
+    const [hotSongRows] = await pool.query(`
+      SELECT lh.song_id, COUNT(*) as cnt, s.title, a.name as artist
+      FROM listening_history lh
+      JOIN songs s ON lh.song_id = s.id
+      LEFT JOIN artists a ON s.artist_id = a.id
+      WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      GROUP BY lh.song_id, s.title, a.name
+      ORDER BY cnt DESC
+      LIMIT 1
+    `);
+    let hotSong = null;
+    if (hotSongRows && hotSongRows.length > 0) {
+      hotSong = {
+        songId: hotSongRows[0].song_id,
+        title: hotSongRows[0].title,
+        artistName: hotSongRows[0].artist,
+        listenCount: hotSongRows[0].cnt,
+        period: '7d'
+      };
+    } else {
+      const [fallbackHot] = await pool.query(`
+        SELECT s.id, s.title, a.name as artist, s.play_count 
+        FROM songs s 
+        LEFT JOIN artists a ON s.artist_id = a.id 
+        ORDER BY s.play_count DESC LIMIT 1
+      `);
+      if (fallbackHot && fallbackHot.length > 0) {
+        hotSong = {
+          songId: fallbackHot[0].id,
+          title: fallbackHot[0].title,
+          artistName: fallbackHot[0].artist,
+          listenCount: fallbackHot[0].play_count,
+          period: 'all'
+        };
+      }
+    }
+    const [[usersGrowthRow]] = await pool.query(`
+      SELECT 
+        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
+        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
+      FROM users
+    `);
+    const newUsersThisMonth = Number(usersGrowthRow?.thisMonth || 0);
+    const newUsersLastMonth = Number(usersGrowthRow?.lastMonth || 0);
+
     // 2. Thống kê theo tháng (6 tháng gần nhất) - Doanh thu
     const [revenueByMonth] = await pool.query(`
       SELECT 
@@ -334,6 +382,22 @@ exports.getDashboardStats = async (req, res) => {
           totalRevenue: totalRevenue || 0,
           revenueThisMonth: revenueThisMonth || 0,
           pendingTransactions: pendingTransactions || 0,
+          artistStats: {
+            totalArtists: totalArtists || 0,
+            newArtistsThisWeek: newArtistsThisWeek || 0
+          },
+          playlistStats: {
+            totalPlaylists: playlistStatsRow?.totalPlaylists || 0,
+            publicPlaylists: playlistStatsRow?.publicPlaylists || 0,
+            systemPlaylists: playlistStatsRow?.systemPlaylists || 0,
+            userPlaylists: playlistStatsRow?.userPlaylists || 0
+          },
+          hotSong: hotSong,
+          userGrowth: {
+            newUsersThisMonth,
+            newUsersLastMonth,
+            delta: newUsersThisMonth - newUsersLastMonth
+          }
         },
         charts: {
           revenue: revenueByMonth,
@@ -1768,7 +1832,7 @@ exports.getUserDetail = async (req, res, next) => {
     const artistFollowStats = await safeQuery('SELECT COUNT(*) as cnt FROM artist_follows WHERE user_id = ?', [id], [{ cnt: 0 }]);
     if (artistFollowStats[0]) result.summary.followedArtists = artistFollowStats[0].cnt;
 
-    const trxStats = await safeQuery('SELECT COUNT(*) as cnt, SUM(amount) as total FROM payment_transactions WHERE user_id = ? AND status = "success"', [id], [{ cnt: 0, total: 0 }]);
+    const trxStats = await safeQuery('SELECT COUNT(*) as cnt, SUM(amount) as total FROM payment_transactions WHERE user_id = ? AND status = "paid"', [id], [{ cnt: 0, total: 0 }]);
     if (trxStats[0]) {
       result.summary.totalTransactions = trxStats[0].cnt || 0;
       result.summary.totalSpent = trxStats[0].total || 0;
@@ -1822,7 +1886,7 @@ exports.getUserDetail = async (req, res, next) => {
     const likesTrend = await getTrendStats('song_likes', 'liked_at');
     const playlistsTrend = await getTrendStats('playlists', 'created_at', "AND type = 'manual' AND (is_system = 0 OR is_system IS NULL) AND (system_key IS NULL OR system_key = '')");
     const followsTrend = await getTrendStats('artist_follows', 'created_at');
-    const spentTrend = await getTrendStats('payment_transactions', 'created_at', 'AND status = "success"', 'amount');
+    const spentTrend = await getTrendStats('payment_transactions', 'created_at', 'AND status = "paid"', 'amount');
 
     result.summary.trends = {
       totalListens: formatTrend(listensTrend.this_week, listensTrend.last_week),
@@ -3479,7 +3543,7 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
     if (systemKey.startsWith('dailymix_')) {
       const dailyMixService = require('../services/dailyMix.service');
       await dailyMixService.generateDailyMixesForUser(userId, { perMix: 50 });
-    } else if (systemKey === 'weeklymix') {
+    } else if (systemKey === 'weeklymix' || systemKey === 'weekly_mix') {
       const weeklyMixService = require('../services/weeklyMix.service');
       await weeklyMixService.generateWeeklyMixForUser(userId, { limit: 50 });
     } else if (systemKey === 'moodmix') {
@@ -3496,7 +3560,7 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
     }
 
     const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
-    await logSystemPlaylistRun({ system_key: systemKey, run_type: 'manual' });
+    await logSystemPlaylistRun({ system_key: systemKey === 'weeklymix' ? 'weekly_mix' : systemKey, run_type: 'manual' });
     res.json({ success: true, message: 'Đã tạo lại playlist thành công' });
   } catch (error) {
     console.error('regenerateSystemPlaylist Error:', error);
@@ -3534,7 +3598,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
     try {
       const weeklyMixService = require('../services/weeklyMix.service');
       await weeklyMixService.generateWeeklyMixForAllUsers();
-      await logSystemPlaylistRun({ system_key: 'weeklymix', run_type: 'admin_all' });
+      await logSystemPlaylistRun({ system_key: 'weekly_mix', run_type: 'admin_all' });
       results.weekly = 'success';
     } catch(e) { results.weekly = e.message; }
 
@@ -4004,7 +4068,7 @@ exports.getSongDetail = async (req, res, next) => {
     `, [id], []);
 
     const recentListeners = await safeQuery(`
-      SELECT lh.user_id, u.username, u.email, lh.listened_at, lh.completion_rate, lh.source
+      SELECT lh.user_id, u.display_name as username, u.email, lh.listened_at, lh.completion_rate, lh.source
       FROM listening_history lh
       JOIN users u ON lh.user_id = u.id
       WHERE lh.song_id = ?
@@ -4012,10 +4076,15 @@ exports.getSongDetail = async (req, res, next) => {
       LIMIT 10
     `, [id], []);
 
+    const clampedRecentListeners = recentListeners.map(l => ({
+      ...l,
+      completion_rate: l.completion_rate != null ? Math.max(0, Math.min(1, Number(l.completion_rate))) : null
+    }));
+
     const analytics = {
       listensByDay,
       listensByHour,
-      recentListeners
+      recentListeners: clampedRecentListeners
     };
 
     // 5. Relations
@@ -4441,9 +4510,9 @@ exports.exportUsers = async (req, res, next) => {
 
     let query = `
       SELECT u.id as user_id, u.display_name as name, u.email, u.role,
-             CASE WHEN u.is_active = 1 THEN 'Active' ELSE 'Inactive' END as status,
-             CASE WHEN u.is_premium = 1 THEN 'Premium' ELSE 'Free' END as is_premium,
-             u.created_at, u.last_login_at
+             u.status as status,
+             CASE WHEN u.premium_expires_at > NOW() THEN 'Premium' ELSE 'Free' END as is_premium,
+             u.created_at, u.updated_at as last_login_at
       FROM users u
       WHERE 1=1
     `;
@@ -4458,12 +4527,15 @@ exports.exportUsers = async (req, res, next) => {
       params.push(role);
     }
     if (status) {
-      query += ` AND u.is_active = ?`;
-      params.push(status === 'active' ? 1 : 0);
+      query += ` AND u.status = ?`;
+      params.push(status);
     }
     if (premium) {
-      query += ` AND u.is_premium = ?`;
-      params.push(premium === 'premium' ? 1 : 0);
+      if (premium === 'premium') {
+        query += ` AND u.premium_expires_at > NOW()`;
+      } else {
+        query += ` AND (u.premium_expires_at IS NULL OR u.premium_expires_at <= NOW())`;
+      }
     }
 
     query += ` ORDER BY u.created_at DESC LIMIT 10000`;

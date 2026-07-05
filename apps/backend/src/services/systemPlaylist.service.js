@@ -36,7 +36,7 @@ const PERSONALIZED_SYSTEM_PLAYLISTS = [
     description: 'Playlist ca nhan hoa dua tren thoi quen nghe nhac cua ban'
   },
   {
-    system_key: 'weeklymix',
+    system_key: 'weekly_mix',
     name: 'Weekly Mix',
     coverBaseName: 'weeklymix',
     description: 'Tong hop am nhac phu hop voi ban trong tuan'

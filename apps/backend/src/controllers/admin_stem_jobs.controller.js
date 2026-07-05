@@ -1,6 +1,7 @@
 const { pool: db } = require('../config/database');
 const fs = require('fs');
 const path = require('path');
+const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
 // Helper function to check if file exists
 const fileExists = (filePath) => {
@@ -199,6 +200,94 @@ exports.retryJob = async (req, res) => {
 
   } catch (error) {
     console.error('Lỗi khi retry stem job:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+};
+
+exports.exportReport = async (req, res) => {
+  try {
+    const status = req.query.status || '';
+    const q = req.query.q || '';
+
+    let whereConditions = [];
+    let queryParams = [];
+
+    if (status && status !== 'all') {
+      whereConditions.push('ss.status = ?');
+      queryParams.push(status);
+    }
+
+    if (q) {
+      whereConditions.push('(s.title LIKE ? OR a.name LIKE ?)');
+      queryParams.push(`%${q}%`, `%${q}%`);
+    }
+
+    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+    const dataQuery = `
+      SELECT 
+        ss.id as stem_id,
+        ss.song_id,
+        s.title,
+        a.name as artist_name,
+        ss.status,
+        ss.error_message,
+        ss.created_at,
+        ss.updated_at,
+        ss.processed_at as completed_at,
+        ss.vocals_url,
+        ss.instrumental_url
+      FROM song_stems ss
+      JOIN songs s ON ss.song_id = s.id
+      JOIN artists a ON s.artist_id = a.id
+      ${whereClause}
+      ORDER BY ss.updated_at DESC
+      LIMIT 10000
+    `;
+    
+    const [items] = await db.execute(dataQuery, queryParams);
+
+    const processedItems = items.map(item => {
+      let has_vocals_file = 'No';
+      let has_instrumental_file = 'No';
+
+      if (item.vocals_url) {
+        has_vocals_file = fileExists(item.vocals_url) ? 'Yes' : 'Missing';
+      }
+      if (item.instrumental_url) {
+        has_instrumental_file = fileExists(item.instrumental_url) ? 'Yes' : 'Missing';
+      }
+
+      return {
+        stem_id: item.stem_id,
+        song_title: item.title,
+        artist_name: item.artist_name,
+        status: item.status,
+        vocals_file: has_vocals_file,
+        instrumental_file: has_instrumental_file,
+        error_message: item.error_message || '',
+        created_at: item.created_at,
+        updated_at: item.updated_at
+      };
+    });
+
+    const columns = [
+      { header: 'Job ID', key: 'stem_id' },
+      { header: 'Song Title', key: 'song_title' },
+      { header: 'Artist', key: 'artist_name' },
+      { header: 'Status', key: 'status' },
+      { header: 'Vocals File', key: 'vocals_file' },
+      { header: 'Instrumental File', key: 'instrumental_file' },
+      { header: 'Error Message', key: 'error_message' },
+      { header: 'Created At', key: 'created_at' },
+      { header: 'Updated At', key: 'updated_at' }
+    ];
+
+    const csvContent = jsonToCsv(processedItems, columns);
+    const filename = createCsvFilename('stem_jobs');
+    return sendCsv(res, filename, csvContent);
+  } catch (error) {
+    console.error('Lỗi khi export stem jobs:', error);
     res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 };

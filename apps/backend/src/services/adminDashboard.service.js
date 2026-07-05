@@ -41,6 +41,28 @@ function emptySummary() {
         publicPath: '/uploads',
       },
     },
+    artistStats: {
+      totalArtists: 0,
+      newArtistsThisWeek: 0
+    },
+    playlistStats: {
+      totalPlaylists: 0,
+      publicPlaylists: 0,
+      systemPlaylists: 0,
+      userPlaylists: 0
+    },
+    hotSong: {
+      songId: null,
+      title: null,
+      artistName: null,
+      listenCount: 0,
+      period: '7d'
+    },
+    userGrowth: {
+      newUsersThisMonth: 0,
+      newUsersLastMonth: 0,
+      delta: 0
+    },
     warnings: [],
   };
 }
@@ -315,6 +337,64 @@ async function getDashboardSummary() {
   data.marketDistribution = await getMarketDistribution(warnings);
   data.systemStatus = await getSystemStatus(warnings);
 
+  // 1. artistStats
+  data.artistStats.totalArtists = data.totals.totalArtists;
+  if (await tableExists('artists')) {
+    const [newArtists] = await safeQuery(warnings, 'new artists', 'SELECT COUNT(*) as cnt FROM artists WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    data.artistStats.newArtistsThisWeek = newArtists?.cnt || 0;
+  }
+
+  // 2. playlistStats
+  if (await tableExists('playlists')) {
+    const [playlists] = await safeQuery(warnings, 'playlists', 'SELECT COUNT(*) as total, SUM(CASE WHEN is_public = 1 THEN 1 ELSE 0 END) as publicPlaylists, SUM(CASE WHEN is_system = 1 THEN 1 ELSE 0 END) as systemPlaylists, SUM(CASE WHEN is_system = 0 THEN 1 ELSE 0 END) as userPlaylists FROM playlists');
+    data.playlistStats.totalPlaylists = playlists?.total || 0;
+    data.playlistStats.publicPlaylists = playlists?.publicPlaylists || 0;
+    data.playlistStats.systemPlaylists = playlists?.systemPlaylists || 0;
+    data.playlistStats.userPlaylists = playlists?.userPlaylists || 0;
+  }
+
+  // 3. hotSong
+  if (await tableExists('listening_history')) {
+    const hot = await safeQuery(warnings, 'hot song', `
+      SELECT lh.song_id, COUNT(*) as cnt, s.title, s.artist
+      FROM listening_history lh
+      JOIN songs s ON lh.song_id = s.id
+      WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      GROUP BY lh.song_id, s.title, s.artist
+      ORDER BY cnt DESC
+      LIMIT 1
+    `);
+    if (hot && hot.length > 0) {
+      data.hotSong.songId = hot[0].song_id;
+      data.hotSong.title = hot[0].title;
+      data.hotSong.artistName = hot[0].artist;
+      data.hotSong.listenCount = hot[0].cnt;
+      data.hotSong.period = '7d';
+    } else {
+      const fallbackHot = await safeQuery(warnings, 'hot song fallback', 'SELECT id, title, artist, play_count FROM songs ORDER BY play_count DESC LIMIT 1');
+      if (fallbackHot && fallbackHot.length > 0) {
+        data.hotSong.songId = fallbackHot[0].id;
+        data.hotSong.title = fallbackHot[0].title;
+        data.hotSong.artistName = fallbackHot[0].artist;
+        data.hotSong.listenCount = fallbackHot[0].play_count;
+        data.hotSong.period = 'all';
+      }
+    }
+  }
+
+  // 4. userGrowth
+  if (await tableExists('users')) {
+    const [usersGrowth] = await safeQuery(warnings, 'user growth', `
+      SELECT 
+        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
+        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
+      FROM users
+    `);
+    data.userGrowth.newUsersThisMonth = Number(usersGrowth?.thisMonth || 0);
+    data.userGrowth.newUsersLastMonth = Number(usersGrowth?.lastMonth || 0);
+    data.userGrowth.delta = data.userGrowth.newUsersThisMonth - data.userGrowth.newUsersLastMonth;
+  }
+
   return data;
 }
 
@@ -357,7 +437,12 @@ async function getQuickOperations() {
         'weekly_mix', 'weeklymix', 'moodmix', 'mood_mix', 'trending_now', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'
       ];
       
-      const { SYSTEM_PLAYLIST_SCHEDULES } = require('../schedulers/systemPlaylistScheduler');
+      const {
+        SYSTEM_PLAYLIST_SCHEDULES,
+        getLatestScheduledOccurrence,
+        getLastGeneratedAtForKey,
+        normalizeSystemKey
+      } = require('../schedulers/systemPlaylistScheduler');
       const weekdays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
       
       const [rows] = await pool.query(
@@ -371,11 +456,22 @@ async function getQuickOperations() {
          GROUP BY system_key`,
         [keys]
       );
+
+      const lastGenMap = rows.reduce((acc, row) => {
+        const keysToSet = [row.system_key, normalizeSystemKey(row.system_key)];
+        for (const key of keysToSet) {
+          if (!acc[key] || new Date(row.updated_at) > new Date(acc[key])) {
+            acc[key] = row.updated_at;
+          }
+        }
+        return acc;
+      }, {});
       
       let logMap = new Map();
+      const lastSuccessMap = {};
       if (await tableExists('system_playlist_runs')) {
         const [runLogs] = await pool.query(`
-           SELECT r1.system_key, r1.run_type, r1.source_start_date, r1.scheduled_for, r1.finished_at, r1.status 
+           SELECT r1.id, r1.system_key, r1.run_type, r1.source_start_date, r1.scheduled_for, r1.finished_at, r1.status 
            FROM system_playlist_runs r1
            INNER JOIN (
              SELECT system_key, MAX(id) as max_id
@@ -383,8 +479,30 @@ async function getQuickOperations() {
              GROUP BY system_key
            ) r2 ON r1.id = r2.max_id
         `);
+        const [successLogs] = await pool.query(`
+           SELECT system_key, MAX(finished_at) AS lastSuccessAt
+           FROM system_playlist_runs
+           WHERE status = 'success'
+           GROUP BY system_key
+        `);
+        const setLatestLog = (key, log) => {
+          const existing = logMap.get(key);
+          if (!existing || Number(log.id || 0) > Number(existing.id || 0)) {
+            logMap.set(key, log);
+          }
+        };
         for (const log of runLogs) {
-           logMap.set(log.system_key, log);
+           setLatestLog(log.system_key, log);
+           setLatestLog(normalizeSystemKey(log.system_key), log);
+        }
+        for (const log of successLogs) {
+          if (!log.lastSuccessAt) continue;
+          const key = normalizeSystemKey(log.system_key);
+          const current = lastSuccessMap[key];
+          if (!current || new Date(log.lastSuccessAt) > new Date(current)) {
+            lastSuccessMap[key] = log.lastSuccessAt;
+          }
+          lastSuccessMap[log.system_key] = log.lastSuccessAt;
         }
       }
       
@@ -401,6 +519,7 @@ async function getQuickOperations() {
         const schedule = SYSTEM_PLAYLIST_SCHEDULES.find(s => 
           s.keys.some(k => 
             k === row.system_key || 
+            normalizeSystemKey(k) === normalizeSystemKey(row.system_key) ||
             k.replace('mix', '_mix') === row.system_key || 
             k.replace('_mix', 'mix') === row.system_key
           )
@@ -412,30 +531,30 @@ async function getQuickOperations() {
           diffHours = diffMs / (1000 * 60 * 60);
           
           if (schedule) {
+            const scheduleLastGeneratedAt =
+              getLastGeneratedAtForKey(lastSuccessMap, row.system_key) ||
+              getLastGeneratedAtForKey(lastGenMap, row.system_key) ||
+              updatedAt;
+            const latestScheduledFor = getLatestScheduledOccurrence(schedule, now);
+            const isDueForLatestSchedule = Boolean(latestScheduledFor) && latestScheduledFor <= now && new Date(scheduleLastGeneratedAt) < latestScheduledFor;
+            const overdueMs = latestScheduledFor ? Math.max(0, now - latestScheduledFor) : 0;
+            const overdueDays = Math.floor(overdueMs / (1000 * 60 * 60 * 24));
+
             if (schedule.runDayOfWeek !== undefined) {
               // Weekly or specific day schedule
               const targetDay = schedule.runDayOfWeek;
-              const todayDay = now.getDay();
-              
-              const isRunDay = targetDay === todayDay;
-              const isPastTime = now.getHours() > schedule.hour || (now.getHours() === schedule.hour && now.getMinutes() >= schedule.minute);
-              
-              if (isRunDay && isPastTime && diffHours > 24) {
-                // It was supposed to run today, but hasn't run in the last 24h
-                isStale = true;
-              } else if (diffHours > (schedule.staleAfterHours || 24 * 7)) {
-                // Fallback catch-all for weekly
-                isStale = true;
-              }
+              isStale = isDueForLatestSchedule;
               
               const hh = schedule.hour.toString().padStart(2, '0');
               const mm = schedule.minute.toString().padStart(2, '0');
-              const nextRunText = `Lịch kế tiếp: ${weekdays[targetDay]} ${hh}:${mm}`;
+              const nextRunText = `Lịch: ${weekdays[targetDay]} ${hh}:${mm}`;
               
               if (isStale) {
-                statusLabel = `Quá hạn ${diffDays > 0 ? diffDays : 1} ngày`;
-              } else if (logMap.has(row.system_key)) {
-                const runLog = logMap.get(row.system_key);
+                statusLabel = overdueDays > 0
+                  ? `Quá hạn ${overdueDays} ngày`
+                  : `Đến hạn cập nhật · ${nextRunText}`;
+              } else if (logMap.has(row.system_key) || logMap.has(normalizeSystemKey(row.system_key))) {
+                const runLog = logMap.get(row.system_key) || logMap.get(normalizeSystemKey(row.system_key));
                 const runTypeMap = { 'scheduled': 'Đã chạy theo lịch', 'manual': 'Đã cập nhật thủ công', 'admin_all': 'Đã cập nhật thủ công (All)', 'script': 'Đã chạy bằng script' };
                 const prefix = runTypeMap[runLog.run_type] || 'Đã cập nhật';
                 let sourceText = '';
@@ -456,15 +575,17 @@ async function getQuickOperations() {
               }
             } else {
               // Daily schedule
-              isStale = diffHours > (schedule.staleAfterHours || 24 + 1);
+              isStale = isDueForLatestSchedule;
               const hh = schedule.hour !== undefined ? schedule.hour.toString().padStart(2, '0') : '00';
               const mm = schedule.minute !== undefined ? schedule.minute.toString().padStart(2, '0') : '00';
               const nextRunText = `Lịch: Mỗi ngày ${hh}:${mm}`;
               
               if (isStale) {
-                statusLabel = `Quá hạn ${diffDays > 0 ? diffDays : 1} ngày`;
-              } else if (logMap.has(row.system_key)) {
-                const runLog = logMap.get(row.system_key);
+                statusLabel = overdueDays > 0
+                  ? `Quá hạn ${overdueDays} ngày`
+                  : `Đến hạn cập nhật · ${nextRunText}`;
+              } else if (logMap.has(row.system_key) || logMap.has(normalizeSystemKey(row.system_key))) {
+                const runLog = logMap.get(row.system_key) || logMap.get(normalizeSystemKey(row.system_key));
                 const runTypeMap = { 'scheduled': 'Đã chạy theo lịch', 'manual': 'Đã cập nhật thủ công', 'admin_all': 'Đã cập nhật thủ công', 'script': 'Đã chạy bằng script' };
                 const prefix = runTypeMap[runLog.run_type] || 'Đã cập nhật';
                 let sourceText = '';
@@ -518,8 +639,8 @@ async function getQuickOperations() {
       const enabled = process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false';
       result.playlistAutomation = {
         schedulerEnabled: enabled,
-        scheduleDescription: 'Daily Mix 01–06 cập nhật luân phiên theo từng ngày trong tuần. Mood/Vibes/Trending cập nhật theo lịch riêng.',
-        nextRunHint: 'Backend kiểm tra mỗi 60 phút khi đang chạy.'
+        scheduleDescription: 'Daily Mix: Tue-Sat/Mon 00:10; Weekly: Sun 07:00; Trending: daily 00:30; Mood: daily 01:00; Vibes: daily 01:15.',
+        nextRunHint: 'Backend kiểm tra mỗi 60 phút và catch-up job đã quá mốc nếu chưa chạy thành công.'
       };
       
       if (process.env.DEBUG_DASHBOARD_QUICKOPS === 'true') {

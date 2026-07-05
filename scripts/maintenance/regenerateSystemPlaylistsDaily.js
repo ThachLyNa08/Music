@@ -58,7 +58,16 @@ async function run() {
     await connectRedis();
 
     if (debug) console.log('[Script] Invoking SystemPlaylistScheduler manually...');
-    await checkAndRunDueSystemPlaylists(forceKeys, dryRun, customNow, compare);
+    const result = await checkAndRunDueSystemPlaylists(forceKeys, dryRun, customNow, compare);
+
+    if (dryRun && result?.details) {
+      console.log('[DryRun] System playlist schedule check:');
+      for (const item of result.details) {
+        const status = item.due ? 'DUE' : 'SKIP';
+        const scheduledFor = item.scheduledFor ? new Date(item.scheduledFor).toISOString() : 'n/a';
+        console.log(`  - ${status} ${item.label} (${item.keys.join(', ')}): scheduledFor=${scheduledFor}; ${item.reason}`);
+      }
+    }
     
     if (debug) console.log('[Script] Completed successfully.');
     process.exit(0);

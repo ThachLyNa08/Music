@@ -1180,6 +1180,8 @@ async function generateDailyMixesForAllUsers(options = {}) {
 }
 
 async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
+  if (!SYSTEM_KEYS.includes(systemKey)) throw new Error('Invalid daily mix key');
+
   const perMix = clampPerMix(options.perMix);
   const dryRun = Boolean(options.dryRun);
   const [rows] = await pool.query(
@@ -1195,20 +1197,25 @@ async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
     details: [],
   };
 
-  const today = new Date();
-  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const dayOfWeek = today0.getDay();
-  const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const lastMonday = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate() - offsetToThisMonday - 7);
-  
   let targetDate;
-  if (systemKey === 'dailymix_01') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate());
-  else if (systemKey === 'dailymix_02') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 1);
-  else if (systemKey === 'dailymix_03') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 2);
-  else if (systemKey === 'dailymix_04') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 3);
-  else if (systemKey === 'dailymix_05') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 4);
-  else if (systemKey === 'dailymix_06') targetDate = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 6); // Sunday for weekend
-  else throw new Error('Invalid daily mix key');
+  if (options.scheduledFor) {
+    const scheduledFor = new Date(options.scheduledFor);
+    targetDate = new Date(scheduledFor.getFullYear(), scheduledFor.getMonth(), scheduledFor.getDate() - 1);
+  } else {
+    const today = new Date();
+    const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const dayOfWeek = today0.getDay();
+    const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisMonday = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate() - offsetToThisMonday);
+    
+    if (systemKey === 'dailymix_01') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate());
+    else if (systemKey === 'dailymix_02') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 1);
+    else if (systemKey === 'dailymix_03') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 2);
+    else if (systemKey === 'dailymix_04') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 3);
+    else if (systemKey === 'dailymix_05') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 4);
+    else if (systemKey === 'dailymix_06') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1); // Sunday for weekend
+  }
+  if (!targetDate) throw new Error('Invalid daily mix key');
 
   let totalCandidateCount = 0;
   let totalFreshCandidateCount = 0;

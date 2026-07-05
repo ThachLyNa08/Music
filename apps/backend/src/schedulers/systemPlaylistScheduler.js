@@ -65,7 +65,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['weekly_mix'],
     label: 'Weekly Mix',
     runDayOfWeek: 0, // Chủ Nhật
-    hour: 6,
+    hour: 7,
     minute: 0,
     staleAfterHours: 24 * 7,
     regenerate: async (options) => weeklyMixService.generateWeeklyMixForAllUsers(options)
@@ -73,24 +73,24 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
   {
     keys: ['moodmix'],
     label: 'Mood Mix',
-    hour: 0,
-    minute: 20,
+    hour: 1,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => moodMixService.generateMoodMixForAllUsers(options)
   },
   {
     keys: ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'],
     label: 'Contextual Vibes',
-    hour: 4,
-    minute: 0,
+    hour: 1,
+    minute: 15,
     staleAfterHours: 24,
     regenerate: async (options) => contextualService.generateContextualMoodPlaylistsForAllUsers(options)
   },
   {
     keys: ['trending_now'],
     label: 'Trending Now',
-    hour: 1,
-    minute: 0,
+    hour: 0,
+    minute: 30,
     staleAfterHours: 24,
     regenerate: async (options) => trendingService.generateTrendingPlaylist(options)
   },
@@ -113,35 +113,155 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
 let isRunning = false;
 let intervalId = null;
 
-function isScheduledTimeDue(schedule, now = new Date()) {
-  const day = now.getDay();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
+const SYSTEM_KEY_ALIASES = {
+  weeklymix: 'weekly_mix',
+  weekly_mix: 'weekly_mix',
+  mood_mix: 'moodmix',
+  moodmix: 'moodmix',
+};
 
-  if (schedule.runDayOfWeek !== undefined && schedule.runDayOfWeek !== null) {
-    if (day !== schedule.runDayOfWeek) return false;
-  }
-  
-  if (schedule.hour !== undefined && schedule.hour !== null) {
-    if (hour !== schedule.hour) return false;
-  }
-  
-  if (schedule.minute !== undefined && schedule.minute !== null) {
-    // 60-minute window for safety
-    return minute >= schedule.minute && minute < schedule.minute + 60;
-  }
-  
-  return true;
+function normalizeSystemKey(key) {
+  return SYSTEM_KEY_ALIASES[key] || key;
 }
 
-function hasRunToday(lastGeneratedAt, now = new Date()) {
-  if (!lastGeneratedAt) return false;
-  const last = new Date(lastGeneratedAt);
-  return (
-    last.getFullYear() === now.getFullYear() &&
-    last.getMonth() === now.getMonth() &&
-    last.getDate() === now.getDate()
-  );
+function equivalentSystemKeys(key) {
+  const canonical = normalizeSystemKey(key);
+  const aliases = new Set([key, canonical]);
+  for (const [alias, target] of Object.entries(SYSTEM_KEY_ALIASES)) {
+    if (target === canonical) aliases.add(alias);
+  }
+  return Array.from(aliases);
+}
+
+function getLatestScheduledOccurrence(schedule, now = new Date()) {
+  const occurrence = new Date(now);
+  occurrence.setHours(schedule.hour ?? 0, schedule.minute ?? 0, 0, 0);
+
+  if (schedule.runDayOfWeek !== undefined && schedule.runDayOfWeek !== null) {
+    const diffDays = schedule.runDayOfWeek - occurrence.getDay();
+    occurrence.setDate(occurrence.getDate() + diffDays);
+    return occurrence <= now ? occurrence : null;
+  }
+
+  return occurrence <= now ? occurrence : null;
+}
+
+function getLastGeneratedAtForKey(lastGenMap, key) {
+  let latest = null;
+  for (const equivalentKey of equivalentSystemKeys(key)) {
+    const value = lastGenMap[equivalentKey];
+    if (!value) continue;
+    const date = new Date(value);
+    if (!latest || date > latest) latest = date;
+  }
+  return latest;
+}
+
+function getLastGeneratedAtForSchedule(lastGenMap, schedule) {
+  let latest = null;
+  for (const key of schedule.keys) {
+    const date = getLastGeneratedAtForKey(lastGenMap, key);
+    if (date && (!latest || date > latest)) latest = date;
+  }
+  return latest;
+}
+
+async function buildLastSuccessMap() {
+  const lastSuccessMap = {};
+
+  try {
+    const [runRows] = await pool.query(`
+      SELECT system_key, MAX(finished_at) AS lastSuccessAt
+      FROM system_playlist_runs
+      WHERE status = 'success'
+      GROUP BY system_key
+    `);
+
+    for (const row of runRows) {
+      if (!row.lastSuccessAt) continue;
+      const key = normalizeSystemKey(row.system_key);
+      const current = lastSuccessMap[key];
+      const date = new Date(row.lastSuccessAt);
+      if (!current || date > new Date(current)) {
+        lastSuccessMap[key] = row.lastSuccessAt;
+      }
+    }
+  } catch (err) {
+    if (process.argv.includes('--debug')) {
+      console.warn('[SystemPlaylistScheduler] system_playlist_runs unavailable, falling back to playlists.updated_at:', err.message);
+    }
+  }
+
+  const [playlistRows] = await pool.query(`
+    SELECT system_key, MAX(updated_at) as lastGeneratedAt
+    FROM playlists
+    WHERE system_key IS NOT NULL
+    GROUP BY system_key
+  `);
+
+  for (const row of playlistRows) {
+    const key = normalizeSystemKey(row.system_key);
+    if (!lastSuccessMap[key]) {
+      lastSuccessMap[key] = row.lastGeneratedAt;
+    }
+    lastSuccessMap[row.system_key] = row.lastGeneratedAt;
+  }
+
+  return lastSuccessMap;
+}
+
+function hasScheduleRunForOccurrence(lastGenMap, schedule, scheduledFor) {
+  if (!scheduledFor) return false;
+  return schedule.keys.every((key) => {
+    const lastGeneratedAt = getLastGeneratedAtForKey(lastGenMap, key);
+    return lastGeneratedAt && lastGeneratedAt >= scheduledFor;
+  });
+}
+
+function isScheduledTimeDue(schedule, now = new Date(), lastGeneratedAt = null) {
+  const scheduledFor = getLatestScheduledOccurrence(schedule, now);
+  if (!scheduledFor || scheduledFor > now) return false;
+  if (!lastGeneratedAt) return true;
+  return new Date(lastGeneratedAt) < scheduledFor;
+}
+
+function formatDateOnly(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getDailyMixSourceWindow(key, scheduledFor) {
+  const sourceDate = new Date(scheduledFor);
+  sourceDate.setDate(sourceDate.getDate() - 1);
+
+  if (key === 'dailymix_06') {
+    const startAt = new Date(sourceDate);
+    startAt.setDate(startAt.getDate() - 1);
+    return {
+      source_start: formatDateOnly(startAt),
+      source_end: formatDateOnly(sourceDate),
+      targetDate: sourceDate,
+    };
+  }
+
+  return {
+    source_start: formatDateOnly(sourceDate),
+    source_end: formatDateOnly(sourceDate),
+    targetDate: sourceDate,
+  };
+}
+
+function getWeeklyMixSourceWindow(scheduledFor) {
+  const endAt = new Date(scheduledFor);
+  endAt.setHours(0, 0, 0, 0);
+  endAt.setDate(endAt.getDate() - 1);
+
+  const startAt = new Date(endAt);
+  startAt.setDate(startAt.getDate() - 5);
+
+  return {
+    source_start: formatDateOnly(startAt),
+    source_end: formatDateOnly(endAt),
+  };
 }
 
 async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, customNow = null, compareRun = false) {
@@ -161,17 +281,15 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
 
   let successCount = 0;
   let failedCount = 0;
+  const details = [];
 
   try {
-    const [rows] = await pool.query(`SELECT system_key, MAX(updated_at) as lastGeneratedAt FROM playlists WHERE system_key IS NOT NULL GROUP BY system_key`);
-    const lastGenMap = rows.reduce((acc, row) => {
-      acc[row.system_key] = row.lastGeneratedAt;
-      return acc;
-    }, {});
+    const lastGenMap = await buildLastSuccessMap();
 
     for (const schedule of SYSTEM_PLAYLIST_SCHEDULES) {
       let shouldRun = false;
       let reason = '';
+      const scheduledFor = getLatestScheduledOccurrence(schedule, now);
 
       if (forceKeys === 'ALL') {
         shouldRun = true;
@@ -189,17 +307,22 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
           reason = 'key mismatch';
         }
       } else {
-        if (!isScheduledTimeDue(schedule, now)) {
-          reason = 'not scheduled today or outside time window';
+        if (!scheduledFor || scheduledFor > now) {
+          reason = 'latest scheduled occurrence is in the future';
+        } else if (hasScheduleRunForOccurrence(lastGenMap, schedule, scheduledFor)) {
+          reason = 'already run for latest scheduled occurrence';
         } else {
-          const alreadyRun = schedule.keys.every(k => hasRunToday(lastGenMap[k], now));
-          if (alreadyRun) {
-            reason = 'already run today';
-          } else {
-            shouldRun = true;
-          }
+          shouldRun = true;
         }
       }
+
+      details.push({
+        label: schedule.label,
+        keys: schedule.keys,
+        scheduledFor,
+        due: shouldRun,
+        reason: shouldRun ? reason || 'due for latest scheduled occurrence' : reason
+      });
 
       if (shouldRun) {
         if (compareRun) {
@@ -222,7 +345,7 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
           let stats = null;
           
           try {
-            stats = await schedule.regenerate({});
+            stats = await schedule.regenerate({ scheduledFor });
             if (debug) console.log(`[SystemPlaylistScheduler] Completed ${schedule.label}`);
             successCount++;
             
@@ -240,44 +363,25 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
           for (const key of schedule.keys) {
             const isDaily = key.startsWith('dailymix');
             const isWeekly = key === 'weekly_mix';
+            const sourceReference = scheduledFor || now;
             let source_start = null;
             let source_end = null;
+            let targetDate = null;
             
             if (isDaily) {
-              const today = new Date(now);
-              const dayOfWeek = today.getDay();
-              const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-              const lastMonday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offsetToThisMonday - 7);
-              
-              let targetDate = new Date(lastMonday);
-              if (key === 'dailymix_01') targetDate.setDate(lastMonday.getDate());
-              else if (key === 'dailymix_02') targetDate.setDate(lastMonday.getDate() + 1);
-              else if (key === 'dailymix_03') targetDate.setDate(lastMonday.getDate() + 2);
-              else if (key === 'dailymix_04') targetDate.setDate(lastMonday.getDate() + 3);
-              else if (key === 'dailymix_05') targetDate.setDate(lastMonday.getDate() + 4);
-              else if (key === 'dailymix_06') targetDate.setDate(lastMonday.getDate() + 6);
-              
-              source_start = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
-              source_end = source_start;
+              const sourceWindow = getDailyMixSourceWindow(key, sourceReference);
+              source_start = sourceWindow.source_start;
+              source_end = sourceWindow.source_end;
+              targetDate = sourceWindow.targetDate;
             } else if (isWeekly) {
-              const ref = new Date(now);
-              const day = ref.getDay();
-              let diffToSun = day === 0 ? 0 : day;
-              if (day === 0 && ref.getHours() < 6) diffToSun = 7;
-              
-              const endAt = new Date(ref.getTime());
-              endAt.setDate(ref.getDate() - diffToSun - 1); // Saturday
-              const startAt = new Date(endAt.getTime());
-              startAt.setDate(startAt.getDate() - 5); // Monday
-              
-              source_start = `${startAt.getFullYear()}-${String(startAt.getMonth() + 1).padStart(2, '0')}-${String(startAt.getDate()).padStart(2, '0')}`;
-              source_end = `${endAt.getFullYear()}-${String(endAt.getMonth() + 1).padStart(2, '0')}-${String(endAt.getDate()).padStart(2, '0')}`;
+              const sourceWindow = getWeeklyMixSourceWindow(sourceReference);
+              source_start = sourceWindow.source_start;
+              source_end = sourceWindow.source_end;
             }
             
             let scheduled_for = null;
             if (!forceKeys) {
-              scheduled_for = new Date(now);
-              scheduled_for.setHours(schedule.hour !== undefined ? schedule.hour : 0, schedule.minute !== undefined ? schedule.minute : 0, 0, 0);
+              scheduled_for = getLatestScheduledOccurrence(schedule, now);
             }
             
             try {
@@ -311,7 +415,7 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
     if (debug) console.log(`[SystemPlaylistScheduler] Finished. Success: ${successCount}, Failed: ${failedCount}`);
   }
   
-  return { successCount, failedCount };
+  return { successCount, failedCount, details };
 }
 
 function startSystemPlaylistScheduler() {
@@ -337,5 +441,10 @@ function startSystemPlaylistScheduler() {
 module.exports = {
   SYSTEM_PLAYLIST_SCHEDULES,
   checkAndRunDueSystemPlaylists,
-  startSystemPlaylistScheduler
+  startSystemPlaylistScheduler,
+  getLatestScheduledOccurrence,
+  getLastGeneratedAtForKey,
+  getLastGeneratedAtForSchedule,
+  hasScheduleRunForOccurrence,
+  normalizeSystemKey
 };

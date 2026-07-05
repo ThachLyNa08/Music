@@ -205,12 +205,17 @@
                 </div>
                 <div class="overflow-x-auto">
                   <table class="w-full text-left text-sm" v-if="analytics.recentListeners.length > 0">
-                    <thead class="bg-gray-50 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400">
+                    <thead class="bg-gray-50 dark:bg-bg-card/50 text-gray-900 dark:text-gray-200">
                       <tr>
                         <th class="px-4 py-3 font-semibold">User ID</th>
                         <th class="px-4 py-3 font-semibold">Username</th>
                         <th class="px-4 py-3 font-semibold">Thời gian</th>
-                        <th class="px-4 py-3 font-semibold text-right">% Hoàn thành</th>
+                        <th class="px-4 py-3 font-semibold text-right">
+                          <div class="flex items-center justify-end gap-1" :title="'Tỷ lệ thời lượng user đã nghe so với tổng thời lượng bài hát.\nGiá trị hiển thị được giới hạn trong khoảng 0–100%.'">
+                            % Hoàn thành
+                            <MfIcon name="info" size="14" class="text-gray-400 cursor-help hover:text-indigo-500" />
+                          </div>
+                        </th>
                         <th class="px-4 py-3 font-semibold">Nguồn</th>
                       </tr>
                     </thead>
@@ -220,8 +225,9 @@
                         <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-200">{{ l.username }}</td>
                         <td class="px-4 py-3 text-gray-500">{{ new Date(l.listened_at).toLocaleString('vi-VN') }}</td>
                         <td class="px-4 py-3 text-right">
-                          <span :class="l.completion_rate > 0.8 ? 'text-emerald-600' : (l.completion_rate < 0.3 ? 'text-red-500' : 'text-yellow-600')">
-                            {{ Math.round(l.completion_rate * 100) }}%
+                          <span v-if="l.completion_rate == null || isNaN(Number(l.completion_rate))" class="text-gray-400">—</span>
+                          <span v-else :class="Number(l.completion_rate) > 0.8 ? 'text-emerald-600' : (Number(l.completion_rate) < 0.3 ? 'text-red-500' : 'text-yellow-600')">
+                            {{ Math.round(Math.max(0, Math.min(1, Number(l.completion_rate))) * 100) }}%
                           </span>
                         </td>
                         <td class="px-4 py-3">

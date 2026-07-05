@@ -378,7 +378,7 @@ exports.exportPremium = async (req, res, next) => {
         MAX(pt.created_at) as last_transaction_date
       FROM users u
       LEFT JOIN payment_transactions pt ON pt.user_id = u.id AND pt.status = 'paid'
-      LEFT JOIN premium_plans p ON pt.plan_id = p.id
+      LEFT JOIN premium_plans p ON u.premium_plan_id = p.id
       WHERE ${whereClause}
       GROUP BY u.id
       ORDER BY u.premium_expires_at DESC

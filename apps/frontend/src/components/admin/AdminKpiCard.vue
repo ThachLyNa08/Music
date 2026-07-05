@@ -4,11 +4,11 @@
     :class="compact && showIcon ? 'p-3.5' : 'p-5'"
   >
     <!-- Skeleton Loading -->
-    <div v-if="loading" class="animate-pulse flex items-start justify-between gap-4">
-      <div class="h-11 w-11 rounded-xl bg-slate-200"></div>
-      <div class="min-w-0 flex-1 text-right flex flex-col items-end">
-        <div class="h-4 w-24 bg-slate-200 rounded mb-2"></div>
-        <div class="h-8 w-16 bg-slate-200 rounded mb-2"></div>
+    <div v-if="loading" class="animate-pulse flex items-center gap-4">
+      <div class="h-11 w-11 rounded-xl bg-slate-200 shrink-0"></div>
+      <div class="min-w-0 flex-1 flex flex-col items-start">
+        <div class="h-4 w-24 bg-slate-200 rounded mb-1.5"></div>
+        <div class="h-7 w-16 bg-slate-200 rounded mb-1"></div>
         <div class="h-3 w-32 bg-slate-200 rounded"></div>
       </div>
     </div>
@@ -17,35 +17,54 @@
     <template v-else>
       <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r" :class="accentClass" />
       
-      <div v-if="showIcon" class="flex items-start justify-between gap-4">
+      <div v-if="showIcon" class="flex items-center gap-4">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" :class="iconClass">
           <MfIcon :name="icon || 'info'" size="20" />
         </div>
 
-        <div class="min-w-0 text-right flex-1">
-          <p class="text-sm font-medium text-black truncate" :title="title">{{ title }}</p>
-          <p class="mt-1 text-2xl font-bold tracking-tight" :class="valueClass">{{ formattedValue }}</p>
+        <div class="min-w-0 flex-1 text-left">
+          <p class="text-sm font-medium text-slate-600 truncate" :title="title">{{ title }}</p>
+          <p class="mt-0.5 text-2xl font-bold tracking-tight" :class="valueClass">{{ formattedValue }}</p>
           <p v-if="subtitle" class="mt-1 text-xs truncate" :class="subtitleColorClass" :title="subtitle">{{ subtitle }}</p>
         </div>
       </div>
 
-      <div v-else class="flex items-start justify-between gap-5">
+      <div v-else class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold text-slate-700 line-clamp-1">
+          <p class="text-[13px] font-semibold text-slate-500 line-clamp-1">
             {{ title }}
           </p>
 
-          <p class="mt-2 text-3xl font-bold tracking-tight" :class="valueClass">
+          <p class="mt-1.5 leading-tight font-black tracking-tight truncate" 
+             :class="[
+               valueClass,
+               String(formattedValue).length > 18 ? 'text-lg' :
+               String(formattedValue).length > 12 ? 'text-xl' :
+               String(formattedValue).length > 8 ? 'text-2xl' : 'text-[28px]'
+             ]" 
+             :title="String(formattedValue)">
             {{ formattedValue }}
           </p>
 
-          <p v-if="subtitle" class="mt-1 text-sm text-slate-400 line-clamp-1">
+          <p v-if="subtitle" class="mt-1 text-xs font-medium line-clamp-1" :class="subtitleColorClass">
             {{ subtitle }}
           </p>
         </div>
 
+        <div v-if="trendText" class="shrink-0 mt-0.5">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide" 
+            :class="[
+              trendDirection === 'down' ? 'bg-rose-50 text-rose-600' : 
+              trendDirection === 'none' ? iconClass : 
+              'bg-emerald-50 text-emerald-600'
+            ]">
+            <MfIcon v-if="trendDirection === 'down'" name="arrow_downward" size="14" />
+            <MfIcon v-else-if="trendDirection === 'up'" name="arrow_upward" size="14" />
+            {{ trendText }}
+          </span>
+        </div>
         <div
-          v-if="meta"
+          v-else-if="meta"
           class="shrink-0 rounded-2xl px-4 py-3 text-right"
           :class="metaBoxClass"
         >
@@ -85,6 +104,11 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false
+  },
+  trendText: String,
+  trendDirection: {
+    type: String,
+    default: 'up'
   }
 })
 

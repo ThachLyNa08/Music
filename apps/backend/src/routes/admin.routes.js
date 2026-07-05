@@ -57,6 +57,7 @@ router.post('/ai-playlist-test/preview', adminAiPlaylistTestController.preview);
 
 // Stem Jobs
 router.get('/stem-jobs/summary', adminStemJobsController.getSummary);
+router.get('/stem-jobs/export', adminStemJobsController.exportReport);
 router.get('/stem-jobs', adminStemJobsController.getJobs);
 router.post('/stem-jobs/:id/retry', adminStemJobsController.retryJob);
 

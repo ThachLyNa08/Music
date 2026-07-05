@@ -129,26 +129,53 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <!-- Left: Engagement Score -->
                 <div class="card bg-white border border-slate-200 rounded-2xl flex flex-col p-6 shadow-sm">
-                  <h3 class="mb-4 font-bold text-slate-800 m-0">Engagement Score</h3>
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2">
+                      <h3 class="font-bold text-slate-800 m-0 leading-none">Engagement Score</h3>
+                      <div class="relative group flex items-center -mt-0.5">
+                        <MfIcon name="info" size="16" class="text-slate-400 cursor-pointer hover:text-violet-500 transition-colors" />
+                        
+                        <!-- Tooltip -->
+                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 pointer-events-none text-left font-normal">
+                          <div class="font-bold mb-1 text-violet-300">Công thức khái quát:</div>
+                          <div class="mb-2 leading-relaxed">
+                            Engagement Score = điểm hoạt động gần đây + điểm tần suất nghe + điểm streak + điểm tương tác thư viện/playlist
+                            <br>Sau đó chuẩn hóa về 0–100.
+                          </div>
+                          <div class="font-bold mb-1 text-violet-300">Giải thích các dòng:</div>
+                          <ul class="list-disc pl-4 space-y-1 text-slate-200 leading-relaxed">
+                            <li><span class="font-semibold text-white">Nguy cơ churn:</span> đánh giá khả năng user ngừng sử dụng dựa trên thời gian không hoạt động gần đây.</li>
+                            <li><span class="font-semibold text-white">Listening Streak:</span> số ngày liên tiếp user có hoạt động nghe nhạc.</li>
+                            <li><span class="font-semibold text-white">Nghe gần nhất:</span> thời điểm phát sinh lượt nghe gần nhất.</li>
+                          </ul>
+                          <!-- Mũi tên tooltip -->
+                          <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!engagementLoading && engagementData" class="font-bold text-2xl text-slate-800 leading-none">
+                      {{ engagementData.engagementScore }}<span class="text-sm text-slate-500 font-normal">/100</span>
+                    </div>
+                  </div>
+                  <p class="text-xs text-slate-500 mb-6 leading-relaxed">
+                    Điểm tương tác được tổng hợp từ hoạt động nghe gần đây, tần suất nghe, streak và các tương tác như thích bài hát/playlist. Điểm được chuẩn hóa trên thang 0–100.
+                  </p>
                   <div v-if="engagementLoading" class="flex-1 flex justify-center items-center py-8">
                     <div class="spinner"></div>
                   </div>
                   <div v-else-if="!engagementData" class="flex-1 flex justify-center items-center py-8 text-slate-500 text-sm">
                     Chưa có dữ liệu
                   </div>
-                  <div v-else class="flex-1 flex flex-col items-center justify-center">
-                    <!-- SVG Gauge -->
-                    <div class="relative w-40 h-20 overflow-hidden mb-4">
-                      <svg viewBox="0 0 100 50" class="w-full h-full">
-                        <!-- Nền -->
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f1f5f9" stroke-width="12" stroke-linecap="round" />
-                        <!-- Giá trị -->
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#8b5cf6" stroke-width="12" stroke-linecap="round"
-                              :stroke-dasharray="125.6" :stroke-dashoffset="125.6 - (125.6 * (engagementData.engagementScore === '--' ? 0 : engagementData.engagementScore) / 100)" 
-                              style="transition: stroke-dashoffset 1s ease-in-out;" />
-                      </svg>
-                      <div class="absolute bottom-0 w-full text-center font-bold text-3xl text-slate-800">
-                        {{ engagementData.engagementScore }}<span class="text-sm text-slate-500 font-normal">/100</span>
+                  <div v-else class="flex-1 flex flex-col justify-center w-full">
+                    <!-- Progress Bar Section -->
+                    <div class="w-full mb-6 mt-2">
+                      <div class="h-3 w-full bg-slate-100 rounded-full overflow-hidden mb-2">
+                        <div class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-1000 ease-out"
+                             :style="{ width: engagementData.engagementScore === '--' ? '0%' : `${engagementData.engagementScore}%` }">
+                        </div>
+                      </div>
+                      <div class="text-right text-xs font-semibold" :class="getEngagementLabelColor(engagementData.engagementScore)">
+                        {{ getEngagementLabel(engagementData.engagementScore) }}
                       </div>
                     </div>
                     
@@ -668,7 +695,7 @@
                   <td>#{{ trx.id }}</td>
                   <td class="font-bold">{{ formatCurrency(trx.amount) }}</td>
                   <td>
-                    <span class="badge" :class="trx.status === 'success' ? 'active' : 'free'">
+                    <span class="badge" :class="trx.status === 'paid' || trx.status === 'success' ? 'active' : 'free'">
                       {{ trx.status }}
                     </span>
                   </td>
@@ -1065,6 +1092,24 @@ const summary = ref({})
 const listeningTrends = ref({ byDay: [] })
 const musicTaste = ref({ topSongs: [], topArtists: [], recentLikedSongs: [], favoriteGenres: [] })
 const userPlaylistsLoading = ref(true)
+
+const getEngagementLabel = (score) => {
+  if (score === '--') return 'Chưa có'
+  const val = Number(score)
+  if (val < 40) return 'Tương tác thấp'
+  if (val < 70) return 'Tương tác trung bình'
+  if (val < 90) return 'Tương tác tốt'
+  return 'Tương tác rất cao'
+}
+
+const getEngagementLabelColor = (score) => {
+  if (score === '--') return 'text-slate-400'
+  const val = Number(score)
+  if (val < 40) return 'text-rose-500'
+  if (val < 70) return 'text-amber-500'
+  if (val < 90) return 'text-emerald-500'
+  return 'text-violet-600'
+}
 
 const formatListeningTime = (minutes) => {
   if (minutes === undefined || minutes === null) return '--'

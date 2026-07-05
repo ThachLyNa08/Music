@@ -11,8 +11,9 @@
           <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Làm mới" @click="fetchData">
             <MfIcon name="sync" size="20" :class="{ 'animate-spin': loadingSummary || loadingList }" />
           </button>
-          <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport">
-            <MfIcon name="download" size="20" />
+          <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport" :disabled="exportLoading">
+            <MfIcon v-if="exportLoading" name="sync" size="20" class="animate-spin" />
+            <MfIcon v-else name="download" size="20" />
           </button>
         </div>
       </div>
@@ -317,6 +318,8 @@ const confirmState = reactive({
   jobId: null
 })
 
+const exportLoading = ref(false)
+
 const showHistory = ref(false)
 const searchHistory = ref([])
 const HISTORY_KEY = 'admin_stem_jobs_search_history'
@@ -374,8 +377,44 @@ function fetchData() {
   fetchList()
 }
 
-function exportReport() {
-  toast.showToast('Chức năng xuất báo cáo đang được hoàn thiện', 'info')
+async function exportReport() {
+  exportLoading.value = true
+  try {
+    const response = await api.get('/admin/stem-jobs/export', {
+      params: {
+        status: filters.status !== 'all' ? filters.status : '',
+        q: filters.q
+      },
+      responseType: 'blob'
+    })
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Parse filename from headers if exists, otherwise default
+    let filename = 'stem_jobs.csv'
+    const disposition = response.headers['content-disposition']
+    if (disposition && disposition.includes('attachment')) {
+      const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      const matches = filenameRegex.exec(disposition)
+      if (matches != null && matches[1]) { 
+        filename = matches[1].replace(/['"]/g, '')
+      }
+    }
+    
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    toast.showToast('Xuất báo cáo thành công', 'success')
+  } catch (error) {
+    console.error('Lỗi export:', error)
+    toast.showToast('Có lỗi xảy ra khi xuất báo cáo', 'error')
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 function handleSearch() {
@@ -479,6 +518,7 @@ function isPendingLong(updatedAt) {
   const now = new Date().getTime()
   return (now - updatedTime) > 10 * 60 * 1000 // > 10 minutes
 }
+
 
 function goToSong(id) {
   router.push(`/admin/songs/${id}`)
