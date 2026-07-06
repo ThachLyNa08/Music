@@ -365,19 +365,19 @@ exports.searchSongs = async (req, res, next) => {
       AND (
         s.title LIKE ? OR a.name LIKE ? OR al.title LIKE ?
         OR s.title LIKE ? OR a.name LIKE ?
+        OR s.lyrics LIKE ? OR s.lyrics LIKE ?
     `;
-    let songParams = [searchTerm, searchTerm, searchTerm, searchTermNoAccent, searchTermNoAccent];
+    let songParams = [searchTerm, searchTerm, searchTerm, searchTermNoAccent, searchTermNoAccent, searchTerm, searchTermNoAccent];
 
     if (matchedGenreKey) {
-      // Match genre key hoặc genre slug
       songWhere += ` OR g.slug = ? OR g.slug LIKE ? OR g.slug LIKE ?`;
       songParams.push(matchedGenreKey, `%${matchedGenreKey}%`, `%${compactQ}%`);
     }
 
     songWhere += `)`;
 
-    const [songs] = await pool.query(`
-      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count,
+    const [rows] = await pool.query(`
+      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count, s.lyrics,
              al.title as album, al.id as album_id,
              a.name as artist, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre
       FROM songs s
@@ -385,21 +385,85 @@ exports.searchSongs = async (req, res, next) => {
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
       WHERE ${songWhere}
-      ORDER BY
-        CASE
-          WHEN s.title LIKE ? OR s.title LIKE ? THEN 1
-          WHEN a.name LIKE ? OR a.name LIKE ? THEN 2
-          WHEN al.title LIKE ? THEN 3
-          ELSE 4
-        END,
-        s.play_count DESC
-      LIMIT ?
-    `, [...songParams,
-      `${q}%`, `${normalizedQ}%`,
-      `${q}%`, `${normalizedQ}%`,
-      `${q}%`,
-      limit
-    ]);
+      LIMIT 100
+    `, songParams);
+
+    const scoredSongs = rows.map(row => {
+      let score = 0;
+      let matchType = 'semantic';
+      let matchedSnippet = null;
+      let matchedField = null;
+
+      const normTitle = normalizeSearchText(row.title);
+      const normQuery = normalizedQ;
+      const normArtist = normalizeSearchText(row.artist_name);
+      const normAlbum = normalizeSearchText(row.album || '');
+      const cleanLyrics = (row.lyrics || '').replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, ' ').replace(/\s+/g, ' ').trim();
+      const normLyrics = normalizeSearchText(cleanLyrics);
+
+      if (normTitle === normQuery) {
+        score += 120;
+        matchType = 'title';
+        matchedField = 'title';
+      } else if (normTitle.includes(normQuery)) {
+        score += 90;
+        matchType = 'title';
+        matchedField = 'title';
+      } else if (normArtist === normQuery || normArtist.includes(normQuery)) {
+        score += 80;
+        matchType = 'artist';
+        matchedField = 'artist';
+      } else if (normAlbum && normAlbum.includes(normQuery)) {
+        score += 50;
+        matchType = 'album';
+        matchedField = 'album';
+      } else if (normLyrics.includes(normQuery)) {
+        score += 45;
+        matchType = 'lyrics';
+        matchedField = 'lyrics';
+        const idx = normLyrics.indexOf(normQuery);
+        const start = Math.max(0, idx - 60);
+        const end = Math.min(cleanLyrics.length, idx + normQuery.length + 60);
+        matchedSnippet = cleanLyrics.substring(start, end).trim();
+        if (start > 0) matchedSnippet = '... ' + matchedSnippet;
+        if (end < cleanLyrics.length) matchedSnippet = matchedSnippet + ' ...';
+      } else {
+        const queryTokens = normQuery.split(' ').filter(x => x.length >= 2);
+        if (queryTokens.length > 0) {
+          const lyricsTokens = new Set(normLyrics.split(' '));
+          const matchCount = queryTokens.filter(t => lyricsTokens.has(t)).length;
+          if (matchCount === queryTokens.length) {
+             score += 30;
+             matchType = 'lyrics';
+             matchedField = 'lyrics';
+          } else if (matchCount > 0) {
+             score += 10;
+             matchType = 'lyrics';
+             matchedField = 'lyrics';
+          }
+        }
+      }
+
+      score += Math.min(Number(row.play_count) || 0, 1000000) / 100000 * 10;
+
+      return {
+         ...row,
+         _score: score,
+         matchType,
+         matchedSnippet,
+         matchedField
+      };
+    });
+
+    const songs = scoredSongs
+      .filter(s => s._score > 0)
+      .sort((a, b) => b._score - a._score)
+      .slice(0, limit)
+      .map(row => {
+         delete row._score;
+         delete row.lyrics;
+         return row;
+      });
 
     // ── 2. Tìm nghệ sĩ khớp ──
     const [artists] = await pool.query(`

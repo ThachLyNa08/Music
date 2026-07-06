@@ -58,7 +58,7 @@ function parseSongIds(value) {
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed)) return parseSongIds(parsed);
-  } catch {}
+  } catch { }
 
   return String(value)
     .split(',')
@@ -210,11 +210,11 @@ exports.getDashboardStats = async (req, res) => {
     const [[{ totalAlbums }]] = await pool.query('SELECT COUNT(*) as totalAlbums FROM albums');
     const [[{ totalPlaylists }]] = await pool.query('SELECT COUNT(*) as totalPlaylists FROM playlists');
     const [[{ totalListens }]] = await pool.query('SELECT COALESCE(SUM(play_count), 0) as totalListens FROM songs');
-    
+
     // Hôm nay (Listens & Users)
     const [[{ todayListens }]] = await pool.query('SELECT COUNT(*) as todayListens FROM listening_history WHERE DATE(listened_at) = CURDATE()');
     const [[{ newUsersToday }]] = await pool.query('SELECT COUNT(*) as newUsersToday FROM users WHERE DATE(created_at) = CURDATE()');
-    
+
     // Revenue & Transactions
     const [[{ totalRevenue }]] = await pool.query("SELECT SUM(amount) as totalRevenue FROM payment_transactions WHERE status = 'paid'");
     const [[{ revenueThisMonth }]] = await pool.query("SELECT SUM(amount) as revenueThisMonth FROM payment_transactions WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())");
@@ -320,7 +320,7 @@ exports.getDashboardStats = async (req, res) => {
       `, [artistIds]);
 
       // Generate last 7 days strings in local DB timezone equivalent (assuming simple JS date works for now, or just query it)
-      const last7Days = Array.from({length: 7}, (_, i) => {
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - (6 - i));
         // offset to local timezone YYYY-MM-DD
@@ -353,7 +353,7 @@ exports.getDashboardStats = async (req, res) => {
       ORDER BY created_at DESC 
       LIMIT 5
     `);
-    
+
     const secureUsers = latestUsers.map(u => ({
       ...u,
       email: maskEmail(u.email)
@@ -564,13 +564,13 @@ exports.getTopArtistTrends = async (req, res, next) => {
 
     const range = allowedRanges[req.query.range] ? req.query.range : 'all';
     const config = allowedRanges[range];
-    
+
     if (config.bucketType === 'month') {
       const now = new Date();
       let months = (now.getFullYear() - 2026) * 12 + (now.getMonth() - 4) + 1; // 4 = Tháng 5
       config.bucketCount = Math.max(1, months);
     }
-    
+
     const validListenExpr = 'CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END';
 
     const [topArtists] = await pool.query(`
@@ -653,31 +653,31 @@ exports.getTopArtistTrends = async (req, res, next) => {
 
     const buckets = config.bucketType === 'hour'
       ? Array.from({ length: config.bucketCount }, (_, hour) => ({
-          key: pad(hour),
-          label: `${pad(hour)}:00`
-        }))
+        key: pad(hour),
+        label: `${pad(hour)}:00`
+      }))
       : config.bucketType === 'month'
         ? Array.from({ length: config.bucketCount }, (_, index) => {
-            const date = new Date();
-            date.setDate(1);
-            date.setMonth(date.getMonth() - (config.bucketCount - 1 - index));
-            const y = date.getFullYear();
-            const m = pad(date.getMonth() + 1);
-            const shortY = String(y).slice(-2);
-            return {
-              key: `${y}-${m}`,
-              label: `${m}/${shortY}`
-            };
-          })
+          const date = new Date();
+          date.setDate(1);
+          date.setMonth(date.getMonth() - (config.bucketCount - 1 - index));
+          const y = date.getFullYear();
+          const m = pad(date.getMonth() + 1);
+          const shortY = String(y).slice(-2);
+          return {
+            key: `${y}-${m}`,
+            label: `${m}/${shortY}`
+          };
+        })
         : Array.from({ length: config.bucketCount }, (_, index) => {
-            const date = new Date();
-            date.setHours(0, 0, 0, 0);
-            date.setDate(date.getDate() - (config.bucketCount - 1 - index));
-            return {
-              key: formatLocalDateKey(date),
-              label: formatLocalDateLabel(date)
-            };
-          });
+          const date = new Date();
+          date.setHours(0, 0, 0, 0);
+          date.setDate(date.getDate() - (config.bucketCount - 1 - index));
+          return {
+            key: formatLocalDateKey(date),
+            label: formatLocalDateLabel(date)
+          };
+        });
 
     const series = buckets.map(bucket => {
       const artists = topArtists.map(artist => {
@@ -726,7 +726,7 @@ exports.getFormData = async (req, res, next) => {
       ORDER BY title ASC
     `);
     const [genres] = await pool.query('SELECT id, name FROM genres ORDER BY id ASC');
-    
+
     res.json({
       success: true,
       data: { artists, albums, genres }
@@ -1583,7 +1583,7 @@ exports.updateUser = async (req, res, next) => {
 exports.getEngagementSummary = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     const [lhStats] = await pool.query(`
       SELECT 
         COUNT(*) as total_listens,
@@ -1591,10 +1591,10 @@ exports.getEngagementSummary = async (req, res, next) => {
       FROM listening_history
       WHERE user_id = ?
     `, [id]);
-    
+
     const [likes] = await pool.query(`SELECT COUNT(*) as liked_count FROM song_likes WHERE user_id = ?`, [id]);
     const [follows] = await pool.query(`SELECT COUNT(*) as followed_count FROM artist_follows WHERE user_id = ?`, [id]);
-    
+
     // Check premium status
     const [users] = await pool.query(`SELECT premium_expires_at FROM users WHERE id = ?`, [id]);
     const user = users[0] || {};
@@ -1633,26 +1633,26 @@ exports.getEngagementSummary = async (req, res, next) => {
           ORDER BY listen_date DESC
           LIMIT 30
         `, [id]);
-        
+
         if (history.length > 0) {
           let streak = 0;
           let expectedDate = new Date(); // Start checking from today
-          
+
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          
+
           const lastListenDate = new Date(history[0].listen_date);
           lastListenDate.setHours(0, 0, 0, 0);
-          
+
           const diffDays = Math.floor((today - lastListenDate) / (1000 * 60 * 60 * 24));
-          
+
           if (diffDays <= 1) { // They listened today or yesterday
             expectedDate = new Date(lastListenDate);
-            
+
             for (const row of history) {
               const rowDate = new Date(row.listen_date);
-              rowDate.setHours(0,0,0,0);
-              
+              rowDate.setHours(0, 0, 0, 0);
+
               if (rowDate.getTime() === expectedDate.getTime()) {
                 streak++;
                 expectedDate.setDate(expectedDate.getDate() - 1);
@@ -1692,7 +1692,7 @@ exports.getListeningHeatmap = async (req, res, next) => {
   try {
     const { id } = req.params;
     let months = parseInt(req.query.months, 10) || 6;
-    
+
     if (months > 12) months = 12;
 
     const [rows] = await pool.query(`
@@ -1712,7 +1712,7 @@ exports.getListeningHeatmap = async (req, res, next) => {
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const day = String(dateObj.getDate()).padStart(2, '0');
-      
+
       return {
         date: `${year}-${month}-${day}`,
         count: Number(r.count || 0),
@@ -1857,7 +1857,7 @@ exports.getUserDetail = async (req, res, next) => {
       const lw = Number(lastWeek || 0);
       if (tw === 0 && lw === 0) return null;
       if (tw === lw) return { text: 'Không đổi', status: 'neutral' };
-      
+
       const diff = tw - lw;
       if (diff > 0) return { text: `↑ ${diff} ${unit}`, status: 'up' };
       return { text: `↓ ${Math.abs(diff)} ${unit}`, status: 'down' };
@@ -1868,7 +1868,7 @@ exports.getUserDetail = async (req, res, next) => {
       const lw = Number(lastWeek || 0);
       if (tw === 0 && lw === 0) return null;
       if (tw === lw) return { text: 'Không đổi', status: 'neutral' };
-      
+
       const diff = tw - lw;
       const formattedDiff = new Intl.NumberFormat('vi-VN').format(Math.abs(diff));
       if (diff > 0) return { text: `↑ ${formattedDiff}đ vs tuần trước`, status: 'up' };
@@ -1940,7 +1940,7 @@ exports.getUserDetail = async (req, res, next) => {
       WHERE lh.user_id = ?
       GROUP BY a.id, a.name, a.avatar_url HAVING user_plays > 0 ORDER BY user_plays DESC LIMIT 5
     `, [id], []);
-    
+
     topArtists.forEach(a => {
       a.avatar_url = resolveArtistAvatar(a, req);
     });
@@ -1951,7 +1951,7 @@ exports.getUserDetail = async (req, res, next) => {
     result.recommendation.selectedGenres = genresPref;
 
     const artistsPref = await safeQuery('SELECT a.id, a.name, a.avatar_url FROM user_artist_preferences ua JOIN artists a ON ua.artist_id = a.id WHERE ua.user_id = ?', [id], []);
-    
+
     artistsPref.forEach(a => {
       a.avatar_url = resolveArtistAvatar(a, req);
     });
@@ -1997,7 +1997,7 @@ exports.getUserDetail = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       WHERE lh.user_id = ? ORDER BY lh.listened_at DESC LIMIT 10
     `, [id], []);
-    
+
     result.recentActivity = recentListens.map(rl => ({
       id: rl.id,
       type: 'listen',
@@ -2057,7 +2057,7 @@ exports.updateUserPremium = async (req, res, next) => {
     const { id } = req.params;
     const { premium_expires_at } = req.body;
     const expiresVal = premium_expires_at ? new Date(premium_expires_at) : null;
-    
+
     if (expiresVal) {
       await pool.query(
         'UPDATE users SET premium_started_at = COALESCE(premium_started_at, NOW()), premium_expires_at = ? WHERE id = ?',
@@ -2069,7 +2069,7 @@ exports.updateUserPremium = async (req, res, next) => {
         [id]
       );
     }
-    
+
     res.json({ success: true, message: 'Cập nhật premium thành công' });
   } catch (error) {
     console.error('updateUserPremium Error:', error);
@@ -2083,7 +2083,7 @@ exports.createUser = async (req, res, next) => {
     if (!email || !password || !display_name) {
       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc' });
     }
-    
+
     // Check if email exists
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
@@ -2108,20 +2108,20 @@ exports.createUser = async (req, res, next) => {
 exports.deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     // Prevent deleting self or other admins, or maybe just simple delete
     const [users] = await pool.query('SELECT role FROM users WHERE id = ?', [id]);
     if (users.length === 0) {
       return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
-    
+
     if (users[0].role === 'admin' && req.user.id !== parseInt(id)) {
       // Actually let's allow it, but with caution, or let's prevent deleting other admins unless necessary.
       // But it's an admin panel, let's just delete
     }
 
     if (parseInt(id) === req.user.id) {
-       return res.status(400).json({ success: false, message: 'Không thể xóa chính mình' });
+      return res.status(400).json({ success: false, message: 'Không thể xóa chính mình' });
     }
 
     await pool.query('DELETE FROM users WHERE id = ?', [id]);
@@ -2136,7 +2136,7 @@ exports.deleteUser = async (req, res, next) => {
 exports.getAllSongs = async (req, res, next) => {
   try {
     const { group, search, page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC', genreId, artistId, status, releaseStatus } = req.query;
-    
+
     let query = `
       SELECT s.id
       FROM songs s
@@ -2255,8 +2255,8 @@ exports.getAllSongs = async (req, res, next) => {
 
     const [[{ total }]] = await pool.query(countQuery, countParams);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: songs,
       pagination: {
         total,
@@ -2654,7 +2654,7 @@ exports.getArtistSummary = async (req, res, next) => {
       FROM artists a
       LEFT JOIN songs s ON a.id = s.artist_id
     `);
-    
+
     return res.json({
       success: true,
       data: {
@@ -2701,7 +2701,7 @@ exports.getAllArtists = async (req, res, next) => {
       GROUP BY a.id
       ORDER BY a.created_at DESC
     `);
-    
+
     // Giả sử có hàm parseGenresJson helper
     const parseGenresJson = (json) => {
       try { return JSON.parse(json); } catch (e) { return []; }
@@ -2810,7 +2810,7 @@ exports.getArtistDetailFull = async (req, res, next) => {
     const { id } = req.params;
     const fs = require('fs');
     const path = require('path');
-    
+
     // Default response structure
     const result = {
       artist: null,
@@ -2853,11 +2853,11 @@ exports.getArtistDetailFull = async (req, res, next) => {
     }
     const artistData = artists[0];
     artistData.avatar_url = resolveArtistAvatar(artistData, req);
-    
+
     // Add missing schema fallback fields just in case
     artistData.market = artistData.market || artistData.region || 'Khác';
     artistData.country = artistData.country || '';
-    
+
     result.artist = artistData;
 
     // 2. Songs
@@ -2872,10 +2872,10 @@ exports.getArtistDetailFull = async (req, res, next) => {
       ORDER BY s.play_count DESC, s.created_at DESC
       LIMIT 100
     `, [id], []);
-    
+
     result.songs = songs;
     result.stats.songCount = songs.length;
-    
+
     const countRes = await safeQuery('SELECT COUNT(*) as cnt, SUM(play_count) as total_listens FROM songs WHERE artist_id = ?', [id], [{ cnt: songs.length, total_listens: 0 }]);
     if (countRes.length > 0) {
       result.stats.songCount = countRes[0].cnt;
@@ -2928,18 +2928,18 @@ exports.getArtistDetailFull = async (req, res, next) => {
 
     const buckets = config.bucketType === 'hour'
       ? Array.from({ length: config.bucketCount }, (_, hour) => ({
-          key: `${pad(hour)}:00`,
-          label: `${pad(hour)}:00`
-        }))
+        key: `${pad(hour)}:00`,
+        label: `${pad(hour)}:00`
+      }))
       : Array.from({ length: config.bucketCount }, (_, index) => {
-          const date = new Date();
-          date.setHours(0, 0, 0, 0);
-          date.setDate(date.getDate() - (config.bucketCount - 1 - index));
-          return {
-            key: formatLocalDateKey(date),
-            label: formatLocalDateLabel(date)
-          };
-        });
+        const date = new Date();
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() - (config.bucketCount - 1 - index));
+        return {
+          key: formatLocalDateKey(date),
+          label: formatLocalDateLabel(date)
+        };
+      });
 
     result.listenTrend = buckets.map(bucket => {
       const row = trendRows.find(item => item.bucket_key === bucket.key);
@@ -2968,14 +2968,14 @@ exports.getArtistDetailFull = async (req, res, next) => {
       ORDER BY al.release_date DESC, al.created_at DESC
       LIMIT 100
     `, [id], []);
-    
+
     // Fallback for album type/total tracks if schema misses them
     result.albums = albums.map(a => {
       a.album_type = a.album_type || (a.actual_song_count > 3 ? 'Album' : 'Single');
       a.total_tracks = a.total_tracks || a.actual_song_count;
       if (a.actual_song_count !== a.total_tracks && a.total_tracks > 0) {
-         result.stats.albumMismatchCount++;
-         result.warnings.push(`Album "${a.title}" bị lệch số bài hát (có ${a.actual_song_count}, cần ${a.total_tracks}).`);
+        result.stats.albumMismatchCount++;
+        result.warnings.push(`Album "${a.title}" bị lệch số bài hát (có ${a.actual_song_count}, cần ${a.total_tracks}).`);
       }
       return a;
     });
@@ -2995,7 +2995,7 @@ exports.getArtistDetailFull = async (req, res, next) => {
         WHERE s.album_id IN (?) AND s.is_active = TRUE
         ORDER BY s.play_count DESC
       `, [albumIds], []);
-      
+
       result.albums.forEach(a => {
         a.songs = albumSongs.filter(s => s.album_id === a.id);
       });
@@ -3012,10 +3012,10 @@ exports.getArtistDetailFull = async (req, res, next) => {
       } else {
         try {
           if (s.audio_url.startsWith('/uploads')) {
-             const filePath = path.join(__dirname, '..', '..', s.audio_url);
-             if (!fs.existsSync(filePath)) result.stats.brokenAudioCount++;
+            const filePath = path.join(__dirname, '..', '..', s.audio_url);
+            if (!fs.existsSync(filePath)) result.stats.brokenAudioCount++;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       if (!s.cover_url) result.stats.missingCoverCount++;
       if (!s.lyrics) result.stats.missingLyricsCount++;
@@ -3039,11 +3039,11 @@ exports.getArtistDetails = async (req, res, next) => {
   try {
     const { id } = req.params;
     const [artists] = await pool.query('SELECT * FROM artists WHERE id = ?', [id]);
-    
+
     if (artists.length === 0) {
       return res.status(404).json({ success: false, message: 'Nghệ sĩ không tồn tại' });
     }
-    
+
     const [songs] = await pool.query(`
       SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.play_count, s.is_active, s.created_at,
              s.artist_id, s.album_id, s.genre_id,
@@ -3230,7 +3230,7 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
       FROM playlists 
       WHERE is_system = 1 OR type = 'system'
     `);
-    
+
     const [statusStats] = await pool.query(`
       SELECT p.id,
              COUNT(ps.song_id) as song_count,
@@ -3261,8 +3261,8 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
       totalSongsInSystemPlaylists += Number(p.song_count || 0);
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         totalSystemPlaylists: totalRes.totalSystemPlaylists || 0,
         total_playlists: totalRes.totalSystemPlaylists || 0,
@@ -3273,7 +3273,7 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
         total_songs: totalSongsInSystemPlaylists,
         lastGeneratedAt: totalRes.lastGeneratedAt,
         playlistsNeedUpdate
-      } 
+      }
     });
   } catch (error) {
     console.error('getSystemPlaylistsSummary Error:', error);
@@ -3375,7 +3375,7 @@ exports.getSystemPlaylists = async (req, res, next) => {
     `;
 
     params.push(Number(limit), Number(offset));
-    
+
     const countQuery = `
       SELECT COUNT(*) as total FROM (
         SELECT p.id, COUNT(ps.song_id) as song_count,
@@ -3398,12 +3398,12 @@ exports.getSystemPlaylists = async (req, res, next) => {
       pool.query(countQuery, countParams),
       pool.query(query, params)
     ]);
-    
+
     const total = countRows[0]?.total || 0;
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: playlists,
       pagination: {
         total,
@@ -3423,7 +3423,7 @@ exports.getSystemPlaylists = async (req, res, next) => {
 exports.getUserPlaylists = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     const [[user]] = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
     if (!user) return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
 
@@ -3456,7 +3456,7 @@ exports.getUserPlaylists = async (req, res, next) => {
     playlists.forEach(p => {
       p.missing_cover = !p.cover_url && !p.first_song_cover_url;
       p.is_empty = p.song_count === 0;
-      
+
       result.summary.totalSongs += p.song_count;
 
       if (p.type === 'ai') {
@@ -3509,8 +3509,8 @@ exports.getSystemPlaylistDetail = async (req, res, next) => {
     const totalDuration = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
     const uniqueArtists = new Set(songs.map(s => s.artist)).size;
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         ...playlist,
         total_duration: totalDuration,
@@ -3584,7 +3584,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       await trendingService.generateTrendingPlaylist();
       await logSystemPlaylistRun({ system_key: 'trending_now', run_type: 'admin_all' });
       results.trending = 'success';
-    } catch(e) { results.trending = e.message; }
+    } catch (e) { results.trending = e.message; }
 
     try {
       const dailyMixService = require('../services/dailyMix.service');
@@ -3593,21 +3593,21 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
         await logSystemPlaylistRun({ system_key: `dailymix_0${i}`, run_type: 'admin_all' });
       }
       results.daily = 'success';
-    } catch(e) { results.daily = e.message; }
+    } catch (e) { results.daily = e.message; }
 
     try {
       const weeklyMixService = require('../services/weeklyMix.service');
       await weeklyMixService.generateWeeklyMixForAllUsers();
       await logSystemPlaylistRun({ system_key: 'weekly_mix', run_type: 'admin_all' });
       results.weekly = 'success';
-    } catch(e) { results.weekly = e.message; }
+    } catch (e) { results.weekly = e.message; }
 
     try {
       const moodMixService = require('../services/moodMix.service');
       await moodMixService.generateMoodMixForAllUsers();
       await logSystemPlaylistRun({ system_key: 'moodmix', run_type: 'admin_all' });
       results.mood = 'success';
-    } catch(e) { results.mood = e.message; }
+    } catch (e) { results.mood = e.message; }
 
     try {
       const contextualService = require('../services/contextualMoodPlaylist.service');
@@ -3617,10 +3617,10 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       await logSystemPlaylistRun({ system_key: 'evening_vibes', run_type: 'admin_all' });
       await logSystemPlaylistRun({ system_key: 'night_vibes', run_type: 'admin_all' });
       results.contextual = 'success';
-    } catch(e) { results.contextual = e.message; }
+    } catch (e) { results.contextual = e.message; }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Hoàn tất quá trình tạo lại',
       data: results
     });
@@ -3638,11 +3638,11 @@ exports.getAiStatus = async (req, res, next) => {
       if (redisClient && redisClient.isReady) {
         redisConnected = true;
       }
-    } catch(e) {}
+    } catch (e) { }
 
     const aiServiceConfigured = !!process.env.AI_SERVICE_URL;
     const recommendationEnabled = process.env.ENABLE_RECOMMENDATIONS === 'true' || true;
-    
+
     const [[{ totalUsers }]] = await pool.query(`SELECT COUNT(*) as totalUsers FROM users`);
     const [[{ totalListens }]] = await pool.query(`SELECT COUNT(*) as totalListens FROM listening_history`);
 
@@ -3726,9 +3726,9 @@ exports.deleteArtist = async (req, res, next) => {
     // Check if artist has songs
     const [songs] = await pool.query('SELECT id FROM songs WHERE artist_id = ? LIMIT 1', [id]);
     if (songs.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Không thể xóa nghệ sĩ vì hệ thống đang có bài hát của nghệ sĩ này. Hãy xóa các bài hát trước.' 
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể xóa nghệ sĩ vì hệ thống đang có bài hát của nghệ sĩ này. Hãy xóa các bài hát trước.'
       });
     }
 
@@ -3813,8 +3813,8 @@ exports.syncMusic = async (req, res, next) => {
     rawTracks.sort((a, b) => b.streams - a.streams);
 
     // Priority artists
-    const priorityArtists = ['blackpink', 'sơn tùng', 'sơn tùng m-tp', 'đen', 'đen vâu', 'jack', 'tlinh', 
-      'vũ.', 'hoàng thuỳ linh', 'lisa', 'jennie', 'rosé', 'jisoo', 'bigbang', 'bts', 
+    const priorityArtists = ['blackpink', 'sơn tùng', 'sơn tùng m-tp', 'đen', 'đen vâu', 'jack', 'tlinh',
+      'vũ.', 'hoàng thuỳ linh', 'lisa', 'jennie', 'rosé', 'jisoo', 'bigbang', 'bts',
       'taylor swift', 'ed sheeran', 'ariana grande', 'the weeknd', 'dua lipa',
       'michael jackson', 'eminem', 'drake', 'justin bieber', 'billie eilish',
       'adele', 'bruno mars', 'post malone', 'imagine dragons', 'maroon 5'];
@@ -4149,7 +4149,7 @@ exports.getAllTransactions = async (req, res, next) => {
     const { userId } = req.query;
     let whereClause = '';
     const params = [];
-    
+
     if (userId) {
       whereClause = 'WHERE t.user_id = ?';
       params.push(userId);
@@ -4213,7 +4213,7 @@ exports.getUserRecommendations = async (req, res, next) => {
 exports.exportSongs = async (req, res, next) => {
   try {
     const { group, search, sortBy = 'created_at', sortOrder = 'DESC', genreId, artistId, status, releaseStatus } = req.query;
-    
+
     let query = `
       SELECT s.id
       FROM songs s
@@ -4479,7 +4479,7 @@ exports.exportArtists = async (req, res, next) => {
     const validSortCols = ['created_at', 'name', 'song_count', 'total_plays', 'popularity'];
     const sortCol = validSortCols.includes(sortBy) ? sortBy : 'created_at';
     const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    
+
     query += ` GROUP BY a.id ORDER BY ${sortCol} ${sortDir} LIMIT 10000`;
 
     const [artists] = await pool.query(query, params);
@@ -4566,7 +4566,7 @@ exports.getSystemPlaylistsQualityReport = async (req, res, next) => {
   try {
     const projectRoot = path.resolve(__dirname, '../../../..');
     const reportPath = path.join(projectRoot, 'datasets', 'processed', 'system_playlist_evaluation_report.csv');
-    
+
     if (!fs.existsSync(reportPath)) {
       return res.json({
         success: true,

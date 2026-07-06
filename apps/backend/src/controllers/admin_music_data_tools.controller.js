@@ -178,7 +178,8 @@ exports.getDetail = async (req, res, next) => {
         IF(sl.song_id IS NOT NULL, 1, 0) AS has_lyrics,
         IF(saf.song_id IS NOT NULL, 1, 0) AS has_features,
         saf.*,
-        sl.plain_lyrics, sl.sync_type
+        sl.plain_lyrics, sl.sync_type,
+        s.id
       FROM songs s
       LEFT JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id

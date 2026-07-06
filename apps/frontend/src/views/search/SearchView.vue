@@ -2,9 +2,19 @@
   <div class="search-page search-page-enter pb-32 pt-8 px-4 sm:px-8 min-h-full">
     <!-- Search Bar -->
     <section class="relative max-w-lg mx-auto mb-10 z-10 search-reveal">
-      <div class="search-v6-wrapper" :class="{ 'is-focused': isInputFocused }">
+      <div class="search-v6-wrapper" :class="{ 'is-focused': isInputFocused, 'is-ai-mode': isAiMode }">
         <div class="search-v6">
           <span class="sparkle">✦</span>
+          <button
+            type="button"
+            class="sparkle ai-mode-toggle"
+            :class="{ 'is-active': isAiMode }"
+            :aria-pressed="isAiMode"
+            :aria-label="isAiMode ? 'Tắt AI Mode' : 'Bật AI Mode'"
+            @click="toggleAiMode"
+          >
+            ✦
+          </button>
           <input
             ref="searchInput"
             v-model="query"
@@ -15,14 +25,15 @@
             @blur="handleBlur"
             @keyup.enter="submitSearch"
           />
-          <button v-if="query.length > 0 || committedQuery.length > 0" class="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex-shrink-0 z-10" @click="clearSearch" aria-label="Xóa">
+          <span v-if="isAiMode" class="ai-search-badge">AI</span>
+          <button v-if="query.length > 0 || committedQuery.length > 0 || aiResult" class="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex-shrink-0 z-10" @click="clearSearch" aria-label="Xóa">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
       </div>
 
       <!-- Recent Searches Dropdown -->
-      <div v-if="isInputFocused && query.length === 0 && recentSearches.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      <div v-if="!isAiMode && isInputFocused && query.length === 0 && recentSearches.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
         <div class="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-white/5">
           <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Tìm kiếm gần đây</span>
           <button class="text-xs font-semibold text-gray-400 hover:text-white transition-colors" @mousedown.prevent="clearHistory">Xóa tất cả</button>
@@ -70,6 +81,54 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div v-if="isAiMode && (aiLoading || aiError || aiResult)" class="ai-search-panel mt-3">
+        <div v-if="aiLoading" class="ai-search-panel-state">
+          <div class="w-5 h-5 border-2 border-white/10 border-t-[#1ed760] rounded-full animate-spin"></div>
+          <span>Đang hỏi AI Music Assistant...</span>
+        </div>
+
+        <div v-else-if="aiError" class="ai-search-panel-state ai-search-error">
+          {{ aiError }}
+        </div>
+
+        <template v-else>
+          <div class="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-[#1ed760] uppercase tracking-wider">AI Music Assistant</p>
+              <p class="text-sm text-gray-300 truncate">{{ aiResult.message }}</p>
+            </div>
+            <button
+              v-if="aiSongs.length > 0"
+              class="ai-search-play-button"
+              type="button"
+              @click="playAiSong(aiSongs[0], 0)"
+            >
+              Phát
+            </button>
+          </div>
+
+          <div v-if="aiSongs.length === 0" class="ai-search-panel-state">
+            Không có kết quả phù hợp trong thư viện.
+          </div>
+
+          <div v-else class="px-2 pb-2">
+            <SongRow
+              v-for="(song, idx) in aiSongs.slice(0, 5)"
+              :key="song.id || idx"
+              :song="song"
+              :index="idx + 1"
+              :showIndex="false"
+              :showAlbum="false"
+              :compact="true"
+              @play="(selectedSong) => playAiSong(selectedSong, idx)"
+              @open-menu="handleOpenMenu"
+              @toggle-like="toggleLike"
+              class="hover:bg-[#252525] rounded-md transition-colors"
+            />
+          </div>
+        </template>
       </div>
     </section>
 
@@ -304,13 +363,14 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useScroll } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 import { songApi } from '@/api/song'
 import { artistApi } from '@/api/artist'
+import { aiAssistantApi } from '@/api/aiAssistant'
 import api from '@/api/axios'
 import { formatImageUrl } from '@/utils/formatters'
 import SongRow from '@/components/common/SongRow.vue'
@@ -326,6 +386,10 @@ const query = ref('')
 const committedQuery = ref('')
 const isInputFocused = ref(false)
 const searchInput = ref(null)
+const isAiMode = ref(false)
+const aiLoading = ref(false)
+const aiError = ref('')
+const aiResult = ref(null)
 
 const songResults = ref([])
 const artistResults = ref([])
@@ -343,13 +407,22 @@ const recentSearches = ref([])
 const userTopGenres = ref([])
 
 let suggestionTimer = null
+const normalSearchPlaceholder = 'Bạn muốn nghe gì?'
+const aiSearchPlaceholder = 'Bạn muốn nghe gì? Ví dụ: mở nhạc buồn nhẹ...'
+
+function updateSearchPlaceholder() {
+  if (!searchInput.value) return
+  searchInput.value.placeholder = isAiMode.value ? aiSearchPlaceholder : normalSearchPlaceholder
+}
 
 const totalResults = computed(() => {
   return songResults.value.length + artistResults.value.length + albumResults.value.length + genreResults.value.length
 })
 
+const aiSongs = computed(() => aiResult.value?.songs || [])
+
 const showSuggestions = computed(() => {
-  return isInputFocused.value && query.value.length >= 1 && !hasSearched.value
+  return !isAiMode.value && isInputFocused.value && query.value.length >= 1 && !hasSearched.value
 })
 
 const isGenreMode = ref(false)
@@ -494,6 +567,7 @@ const displayBrowseGenres = computed(() => {
 })
 
 onMounted(async () => {
+  updateSearchPlaceholder()
   library.fetchLikedSongs()
   try {
     const saved = localStorage.getItem('musicflow_recent_searches')
@@ -524,6 +598,12 @@ watch(query, (val) => {
   }
 
   clearTimeout(suggestionTimer)
+
+  if (isAiMode.value) {
+    suggestions.value = []
+    return
+  }
+
   const q = val.trim()
 
   if (q.length < 1) {
@@ -563,6 +643,11 @@ async function submitSearch() {
   const q = query.value.trim()
   if (!q) return
 
+  if (isAiMode.value) {
+    await submitAiSearch(q)
+    return
+  }
+
   committedQuery.value = q
   isInputFocused.value = false
   saveRecent(q)
@@ -589,6 +674,58 @@ async function submitSearch() {
   } finally {
     isSearching.value = false
   }
+}
+
+async function submitAiSearch(prompt) {
+  aiLoading.value = true
+  aiError.value = ''
+  aiResult.value = null
+  suggestions.value = []
+  isInputFocused.value = false
+
+  try {
+    const res = await aiAssistantApi.music({
+      prompt,
+      autoPlay: true,
+      source: 'search_bar',
+      currentSongId: player.currentSong?.id || null
+    })
+
+    if (!res.data?.success) {
+      throw new Error(res.data?.message || 'AI Music Assistant failed')
+    }
+
+    const data = res.data.data || {}
+    const songs = library.applyLikedStateToSongs((data.songs || []).map(normalizeSong))
+    aiResult.value = { ...data, songs }
+
+    if (data.canAutoPlay && songs.length > 0) {
+      await playAiSong(songs[0], 0)
+    }
+  } catch (err) {
+    console.warn('AI assistant error:', err)
+    aiError.value = 'AI Music Assistant đang gặp lỗi. Hãy thử lại sau.'
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+function toggleAiMode() {
+  isAiMode.value = !isAiMode.value
+  suggestions.value = []
+  aiError.value = ''
+  if (!isAiMode.value) aiResult.value = null
+  nextTick(() => {
+    updateSearchPlaceholder()
+    searchInput.value?.focus()
+  })
+}
+
+async function playAiSong(song, index = 0) {
+  if (!song) return
+  const queue = aiSongs.value.length > 0 ? aiSongs.value : [song]
+  player.playbackSource = 'ai_search'
+  await player.setSong(song, queue, index, { source: 'ai_search' })
 }
 
 function applySuggestion(s) {
@@ -630,6 +767,8 @@ function goToArtist(song) {
 }
 
 function clearSearch() {
+  aiError.value = ''
+  aiResult.value = null
   if (query.value.length > 0) {
     query.value = ''
     searchInput.value?.focus()
@@ -835,6 +974,11 @@ input::placeholder {
   box-shadow: 0 0 20px rgba(30, 215, 96, 0.15);
 }
 
+.search-v6-wrapper.is-ai-mode {
+  background: rgba(30, 215, 96, 0.45);
+  box-shadow: 0 0 18px rgba(30, 215, 96, 0.14);
+}
+
 .search-v6-wrapper::before {
   content: '';
   position: absolute;
@@ -862,6 +1006,10 @@ input::placeholder {
   border-radius: 999px;
 }
 
+.search-v6 > span.sparkle {
+  display: none;
+}
+
 .search-v6 input {
   flex: 1;
   background: transparent;
@@ -879,6 +1027,81 @@ input::placeholder {
   font-size: 18px;
   line-height: 1;
   user-select: none;
+}
+
+.ai-mode-toggle {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #1ED760;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ai-mode-toggle:hover,
+.ai-mode-toggle.is-active {
+  background: #1ED760;
+  border-color: #1ED760;
+  color: #06130a;
+}
+
+.ai-search-badge {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(30, 215, 96, 0.12);
+  color: #1ED760;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ai-search-panel {
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(30, 215, 96, 0.16);
+  background: rgba(18, 18, 18, 0.96);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.ai-search-panel-state {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  color: #d1d5db;
+  font-size: 14px;
+  text-align: center;
+}
+
+.ai-search-error {
+  color: #fca5a5;
+}
+
+.ai-search-play-button {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #1ED760;
+  color: #06130a;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 12px;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.ai-search-play-button:hover {
+  transform: scale(1.04);
+  filter: brightness(1.04);
 }
 
 @keyframes rotate {

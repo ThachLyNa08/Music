@@ -64,7 +64,9 @@ router.get('/stem-jobs', adminStemJobsController.getJobs);
 router.post('/stem-jobs/:id/retry', adminStemJobsController.retryJob);
 
 // Quản lý người dùng
+const adminUsersController = require('../controllers/admin.users.controller');
 router.get('/users/export', adminController.exportUsers);
+router.get('/users/overview', requireAdmin, adminUsersController.getUsersOverview);
 router.get('/users', adminController.getAllUsers);
 router.post('/users', adminController.createUser);
 router.get('/users/:id/playlists', adminController.getUserPlaylists);

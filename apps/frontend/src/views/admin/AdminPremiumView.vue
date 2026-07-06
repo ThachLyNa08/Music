@@ -1,28 +1,34 @@
 <template>
   <div class="-mt-6">
-    <header class="sticky -top-6 z-40 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border -mx-6 px-6 pt-6 pb-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between">
+    <header class="sticky -top-6 z-40 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border -mx-6 px-6 pt-4 pb-3 mb-4 flex flex-col md:flex-row items-start md:items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Premium</h1>
-        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Premium</h1>
+        <p class="text-gray-500 dark:text-text-secondary mt-1 text-xs font-medium">Theo dõi và phân quyền Premium cho các thành viên hệ thống</p>
       </div>
       <div class="mt-4 md:mt-0 flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar pb-2 md:pb-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>
 
-    <div class="space-y-6 pb-10">
+    <div class="space-y-4 pb-8">
       <!-- Overview Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
       <AdminKpiCard 
         title="Người dùng Premium" 
         :value="summary?.totalPremiumUsers ?? 0" 
         icon="workspace_premium" 
         tone="indigo" 
         :loading="isSummaryLoading"
+        iconPosition="left"
+        compact
       >
         <template #subtext v-if="!isSummaryLoading">
-          <span class="text-emerald-600">{{ summary?.activePremiumUsers ?? 0 }} đang hoạt động</span> &middot; 
-          <span class="text-rose-500">{{ summary?.expiredPremiumUsers ?? 0 }} đã hết hạn</span>
+          <span v-if="(summary?.usersAddedThisMonth ?? 0) - (summary?.usersAddedLastMonth ?? 0) >= 0" class="text-emerald-600 font-medium">
+            &uarr; +{{ (summary?.usersAddedThisMonth ?? 0) - (summary?.usersAddedLastMonth ?? 0) }} so với tháng trước
+          </span>
+          <span v-else class="text-rose-600 font-medium">
+            &darr; {{ (summary?.usersAddedThisMonth ?? 0) - (summary?.usersAddedLastMonth ?? 0) }} so với tháng trước
+          </span>
         </template>
       </AdminKpiCard>
       
@@ -32,10 +38,15 @@
         icon="history" 
         tone="amber" 
         :loading="isSummaryLoading"
+        iconPosition="left"
+        compact
       >
         <template #subtext v-if="!isSummaryLoading">
-          <span :class="(summary?.expiringSoonUsers ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
-            {{ (summary?.expiringSoonUsers ?? 0) > 0 ? 'Cần gia hạn ngay' : 'Không có cảnh báo' }}
+          <span v-if="(summary?.expiringSoonUsers ?? 0) === 0" class="text-emerald-600 font-medium">
+            &check; An toàn
+          </span>
+          <span v-else class="text-rose-600 font-medium">
+            &darr; Cần chú ý
           </span>
         </template>
       </AdminKpiCard>
@@ -46,9 +57,22 @@
         icon="payments" 
         tone="blue" 
         :loading="isSummaryLoading"
+        iconPosition="left"
+        compact
       >
         <template #subtext v-if="!isSummaryLoading">
-          <span class="text-slate-400">Từ giao dịch đã thanh toán</span>
+          <span v-if="(summary?.monthlyPremiumRevenue ?? 0) > (summary?.lastMonthPremiumRevenue ?? 0)" class="text-emerald-600 font-medium">
+            &uarr; Tăng so với tháng trước
+          </span>
+          <span v-else-if="(summary?.monthlyPremiumRevenue ?? 0) === 0" class="text-rose-600 font-medium">
+            &darr; Chưa có giao dịch mới
+          </span>
+          <span v-else-if="(summary?.monthlyPremiumRevenue ?? 0) < (summary?.lastMonthPremiumRevenue ?? 0)" class="text-rose-600 font-medium">
+            &darr; Giảm so với tháng trước
+          </span>
+          <span v-else class="text-emerald-600 font-medium">
+            &check; Ổn định
+          </span>
         </template>
       </AdminKpiCard>
       
@@ -58,48 +82,194 @@
         icon="history" 
         tone="slate" 
         :loading="isSummaryLoading"
+        iconPosition="left"
+        compact
       >
         <template #subtext v-if="!isSummaryLoading">
-          <span :class="(summary?.pendingPremiumTransactions ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400'">
-            {{ (summary?.pendingPremiumTransactions ?? 0) > 0 ? 'Chờ xác nhận thanh toán' : 'Không có giao dịch chờ' }}
+          <span v-if="(summary?.pendingPremiumTransactions ?? 0) === 0" class="text-emerald-600 font-medium">
+            &check; Tất cả đã xử lý
+          </span>
+          <span v-else class="text-rose-600 font-medium">
+            &darr; Cần xử lý ngay
           </span>
         </template>
       </AdminKpiCard>
     </div>
 
+    <!-- NEW DISTRIBUTION AND TIMELINE SECTIONS -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+      <!-- Plan Distribution -->
+      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
+        <div class="flex items-center gap-2 mb-1">
+          <MfIcon name="category" size="18" class="text-indigo-500" />
+          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Phân bổ gói Premium</h3>
+        </div>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">{{ summary?.activePremiumUsers || 0 }} người dùng đang đăng ký</p>
+        
+        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
+          <div v-for="i in 3" :key="i">
+            <div class="flex justify-between mb-2">
+              <div class="w-32 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div class="w-12 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+          </div>
+        </div>
+        <div v-else-if="summary?.planDistribution?.length" class="space-y-4">
+          <div v-for="(plan, index) in summary.planDistribution" :key="plan.id">
+            <div class="flex justify-between items-center mb-1">
+              <div class="flex items-center">
+                <span class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ plan.name }}</span>
+              </div>
+              <div class="text-[11px] font-medium">
+                <span class="text-gray-900 dark:text-white font-bold">{{ plan.user_count }}</span>
+                <span class="text-gray-400 ml-1">({{ summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0 }}%)</span>
+              </div>
+            </div>
+            <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+              <div class="h-2 rounded-full" :class="getPlanColorClass(index, 'bg')" :style="{ width: `${summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0}%` }"></div>
+            </div>
+            <div class="text-[10px] text-gray-400 mt-1.5">
+              {{ formatCurrency(plan.price) }} / {{ plan.duration_days >= 30 ? Math.round(plan.duration_days / 30) + ' tháng' : plan.duration_days + ' ngày' }} 
+              <span v-if="plan.price > 0 && plan.user_count > 0">&middot; Tổng thu ước tính: {{ formatCurrency(plan.price * plan.user_count) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-center py-6 text-sm text-gray-400">Không có dữ liệu phân bổ gói.</div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
+        <div class="flex items-center gap-2 mb-1">
+          <MfIcon name="clock" size="18" class="text-indigo-500" />
+          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Timeline hết hạn Premium</h3>
+        </div>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">Dự kiến gia hạn trong 90 ngày tới</p>
+        
+        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
+          <div v-for="i in 4" :key="i" class="flex gap-3 items-start">
+            <div class="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 mt-1"></div>
+            <div class="flex-1 flex justify-between">
+              <div>
+                <div class="w-24 h-4 bg-gray-200 dark:bg-gray-700 rounded mb-1"></div>
+                <div class="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+              <div class="w-16 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="summary?.expiringTimeline?.length">
+          <div class="space-y-3 max-h-[260px] overflow-y-auto no-scrollbar pr-2">
+            <template v-for="(user, index) in summary.expiringTimeline" :key="user.id">
+              <!-- Thẻ nhắc nhở (Dưới 7 ngày) -->
+              <div v-if="getDaysRemaining(user.premium_expires_at) <= 7" class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3">
+                <div class="flex items-center justify-between mb-2.5">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
+                      {{ user.display_name.charAt(0).toUpperCase() }}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-sm font-bold text-gray-900 dark:text-rose-100 truncate">{{ user.display_name }}</p>
+                      <p class="text-[11px] text-gray-500 dark:text-rose-200/70 truncate">{{ user.email }}</p>
+                    </div>
+                  </div>
+                  <div class="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-bold shrink-0">
+                    {{ getDaysRemainingText(user.premium_expires_at) }}
+                  </div>
+                </div>
+                
+                <div class="w-full bg-rose-200 dark:bg-rose-800/50 rounded-full h-1 mb-2">
+                  <div class="bg-rose-500 h-1 rounded-full" :style="{ width: getProgressWidth(user.premium_expires_at) }"></div>
+                </div>
+                
+                <div class="flex justify-between items-center text-[11px]">
+                  <span class="text-gray-500 dark:text-rose-200/70">Hết hạn: {{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</span>
+                  <button class="text-rose-600 dark:text-rose-400 font-medium hover:underline flex items-center gap-0.5">
+                    Nhắc nhở &rarr;
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Timeline bình thường (Trên 7 ngày) -->
+              <div v-else class="flex items-start gap-3 relative mt-2 pl-1">
+                <!-- Vertical line -->
+                <div v-if="index !== summary.expiringTimeline.length - 1 && getDaysRemaining(summary.expiringTimeline[index+1]?.premium_expires_at) > 7" class="absolute left-[9px] top-4 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
+                
+                <div class="w-3 h-3 rounded-full mt-1 ring-[3px] ring-white dark:ring-bg-card shrink-0 z-10" :class="getTimelineColorClass(user.premium_expires_at)"></div>
+                <div class="flex-1 min-w-0 pb-3">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <p class="text-xs font-semibold text-gray-900 dark:text-white truncate">{{ user.display_name }}</p>
+                      <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">{{ user.plan_name || 'Premium' }}</p>
+                    </div>
+                    <div class="text-right shrink-0 ml-2">
+                      <p class="text-xs font-bold" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</p>
+                      <p class="text-[10px] font-medium" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ getDaysRemainingText(user.premium_expires_at) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div v-else class="text-center py-6 text-sm text-gray-400">Không có người dùng nào sắp hết hạn.</div>
+      </div>
+    </div>
+
     <!-- Filters & Search -->
-    <AdminFilterBar>
+    <AdminFilterBar class="relative z-30">
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative min-w-[280px] flex-1">
-          <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input 
+            ref="searchInputRef"
             v-model="filterForm.q" 
-            @keyup.enter="handleFilterChange" 
+            @input="onSearchInput"
+            @keyup.enter="handleEnterSearch"
+            @focus="showHistory = true"
             type="text" 
             placeholder="Tìm theo tên, email hoặc ID..." 
-            class="admin-input pl-9 w-full" 
+            class="admin-input !py-2 !pl-8 !pr-8 !text-xs !rounded-lg w-full" 
             :disabled="isInitialLoading"
           />
+          <button v-if="filterForm.q" @click="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <MfIcon name="close" size="16" />
+          </button>
+          
+          <!-- Search History Dropdown -->
+          <div v-if="showHistory && searchHistory.length > 0" class="search-history-dropdown absolute top-full left-0 right-0 mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg z-50 overflow-hidden py-1">
+            <ul class="max-h-60 overflow-y-auto">
+              <li v-for="item in searchHistory" :key="item" class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-bg-surface cursor-pointer group" @click="selectHistory(item)">
+                <div class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 truncate">
+                  <MfIcon name="history" size="14" class="text-gray-400 shrink-0" />
+                  <span class="truncate">{{ item }}</span>
+                </div>
+                <button @click.stop="removeSearchHistory(item)" class="text-gray-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-1">
+                  <MfIcon name="close" size="14" />
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
-        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isPlansLoading">
+        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isPlansLoading">
           <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
           <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
         </select>
-        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
+        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="Tất cả Premium">Tất cả Premium</option>
           <option value="Đang hoạt động">Đang hoạt động</option>
           <option value="Sắp hết hạn">Sắp hết hạn</option>
           <option value="Đã hết hạn">Đã hết hạn</option>
           <option value="Chưa Premium">Chưa Premium</option>
         </select>
-        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
+        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-48 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="">Sắp xếp mặc định</option>
           <option value="Hết hạn gần nhất">Hết hạn gần nhất</option>
           <option value="Mới nâng cấp gần đây">Mới nâng cấp gần đây</option>
           <option value="Chi tiêu cao nhất">Chi tiêu cao nhất</option>
           <option value="Tên A-Z">Tên A-Z</option>
         </select>
-        <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="xl:shrink-0" />
+        <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="xl:shrink-0 !h-[34px] !w-[34px] !rounded-lg" />
       </div>
     </AdminFilterBar>
 
@@ -110,22 +280,23 @@
         :empty="!(isInitialLoading || isTableLoading) && users.length === 0" 
         emptyTitle="Không tìm thấy người dùng" 
         emptySubtitle="Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm."
+        maxHeight="432px"
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
           <thead>
-            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 min-w-[250px]">Người dùng</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Trạng thái</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Gói hiện tại</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Ngày hết hạn</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Tổng chi</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">Lần cuối thanh toán</th>
-              <th class="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
+            <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-30 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300 min-w-[250px] max-w-[250px] sticky left-0 top-0 z-30 bg-gray-50 dark:bg-bg-card">Người dùng</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300">Trạng thái</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300">Gói hiện tại</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300">Ngày hết hạn</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300">Tổng chi</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300">Lần cuối thanh toán</th>
+              <th class="py-2 px-3 font-bold text-black dark:text-gray-300 text-right sticky right-0 top-0 z-30 bg-gray-50 dark:bg-bg-card w-24">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
             <tr v-for="(u, index) in users" :key="u.user_id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group cursor-pointer" @click="goToDetail(u.user_id)">
-              <td class="py-3 px-4">
+              <td class="py-2 px-3 sticky left-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors max-w-[250px]">
                 <div class="flex items-center gap-3">
                   <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover" :alt="u.name" />
                   <div v-else class="w-10 h-10 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
@@ -137,17 +308,17 @@
                   </div>
                 </div>
               </td>
-              <td class="py-3 px-4">
+              <td class="py-2 px-3">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="u.premium_status === 'active' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : (u.premium_status === 'expiring_soon' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' : (u.premium_status === 'expired' ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'))">
                   {{ formatPremiumStatus(u.premium_status) }}
                 </span>
               </td>
-              <td class="py-3 px-4">
+              <td class="py-2 px-3">
                 <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider" :class="u.plan_id ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">
                   {{ (u.plan_name && u.plan_name !== '-') ? u.plan_name : 'Free' }}
                 </span>
               </td>
-              <td class="py-3 px-4">
+              <td class="py-2 px-3">
                 <div class="flex flex-col gap-0.5">
                   <span class="font-bold" :class="{'text-rose-500': u.premium_status === 'expired' || u.premium_status === 'expiring_soon', 'text-gray-900 dark:text-white': u.premium_status === 'active'}">
                     {{ u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString('vi-VN') : '—' }}
@@ -157,17 +328,17 @@
                   </span>
                 </div>
               </td>
-              <td class="py-3 px-4">
+              <td class="py-2 px-3">
                 <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(u.total_spent) }}</span>
               </td>
-              <td class="py-3 px-4">
+              <td class="py-2 px-3">
                 <div v-if="u.last_paid_at" class="flex flex-col gap-0.5">
                   <span class="text-xs font-bold text-gray-700 dark:text-gray-300">{{ new Date(u.last_paid_at).toLocaleDateString('vi-VN') }}</span>
                   <span v-if="u.last_transaction_code" class="text-[10px] text-gray-500 font-mono">#{{ u.last_transaction_code }}</span>
                 </div>
                 <span v-else class="text-gray-400">—</span>
               </td>
-              <td class="py-3 px-4 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
+              <td class="py-2 px-3 text-right sticky right-0 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors" @click.stop>
                 <div class="flex justify-end">
                   <AdminActionMenu :actions="getPremiumActions(u)" />
                 </div>
@@ -236,6 +407,78 @@ import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 const router = useRouter()
 const toast = useToastStore()
 
+// Search History
+const searchHistory = ref([])
+const showHistory = ref(false)
+const searchInputRef = ref(null)
+let searchTimeout = null
+
+function loadSearchHistory() {
+  try {
+    const saved = localStorage.getItem('admin_premium_search_history')
+    if (saved) searchHistory.value = JSON.parse(saved)
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+function saveSearchHistory(query) {
+  if (!query) return
+  const index = searchHistory.value.indexOf(query)
+  if (index !== -1) searchHistory.value.splice(index, 1)
+  searchHistory.value.unshift(query)
+  if (searchHistory.value.length > 5) searchHistory.value.pop()
+  localStorage.setItem('admin_premium_search_history', JSON.stringify(searchHistory.value))
+}
+
+function removeSearchHistory(query) {
+  searchHistory.value = searchHistory.value.filter(q => q !== query)
+  localStorage.setItem('admin_premium_search_history', JSON.stringify(searchHistory.value))
+}
+
+function clearAllHistory() {
+  searchHistory.value = []
+  localStorage.removeItem('admin_premium_search_history')
+}
+
+function selectHistory(query) {
+  filterForm.value.q = query
+  showHistory.value = false
+  if (query.trim()) {
+    saveSearchHistory(query.trim())
+  }
+  handleFilterChange()
+}
+
+function onSearchInput() {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    handleFilterChange()
+  }, 500)
+}
+
+function handleEnterSearch() {
+  if (filterForm.value.q.trim()) {
+    saveSearchHistory(filterForm.value.q.trim())
+  }
+  if (searchTimeout) clearTimeout(searchTimeout)
+  handleFilterChange()
+  showHistory.value = false
+}
+
+function clearSearch() {
+  filterForm.value.q = ''
+  if (searchTimeout) clearTimeout(searchTimeout)
+  handleFilterChange()
+  searchInputRef.value?.focus()
+}
+
+function handleClickOutside(e) {
+  if (searchInputRef.value && !searchInputRef.value.contains(e.target) && !e.target.closest('.search-history-dropdown')) {
+    showHistory.value = false
+  }
+}
+
 // Loading states
 const isInitialLoading = ref(true)
 const isSummaryLoading = ref(true)
@@ -273,6 +516,54 @@ const confirmState = ref({
   loading: false,
   action: null
 })
+
+// Helper Functions
+const planColors = ['bg-blue-500', 'bg-violet-500', 'bg-amber-500', 'bg-emerald-500', 'bg-rose-500', 'bg-cyan-500']
+
+function getPlanColorClass(index, prefix = 'bg') {
+  const colorClass = planColors[index % planColors.length]
+  return prefix === 'bg' ? colorClass : colorClass.replace('bg-', 'text-')
+}
+
+function getDaysRemaining(dateString) {
+  if (!dateString) return 0
+  const now = new Date()
+  const expiry = new Date(dateString)
+  now.setHours(0, 0, 0, 0)
+  expiry.setHours(0, 0, 0, 0)
+  const diffTime = expiry - now
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+}
+
+function getDaysRemainingText(dateString) {
+  const days = getDaysRemaining(dateString)
+  if (days < 0) return 'Đã hết hạn'
+  if (days === 0) return 'Hết hạn hôm nay'
+  return `Còn ${days} ngày`
+}
+
+function getTimelineColorClass(dateString) {
+  const days = getDaysRemaining(dateString)
+  if (days <= 14) return 'bg-rose-500'
+  if (days <= 30) return 'bg-amber-500'
+  if (days <= 60) return 'bg-blue-500'
+  return 'bg-emerald-500'
+}
+
+function getTimelineTextColorClass(dateString) {
+  const days = getDaysRemaining(dateString)
+  if (days <= 14) return 'text-rose-600 dark:text-rose-400'
+  if (days <= 30) return 'text-amber-600 dark:text-amber-400'
+  if (days <= 60) return 'text-blue-600 dark:text-blue-400'
+  return 'text-emerald-600 dark:text-emerald-400'
+}
+
+function getProgressWidth(dateString) {
+  const days = getDaysRemaining(dateString)
+  if (days <= 0) return '100%'
+  if (days >= 7) return '5%'
+  return `${100 - (days / 7) * 100}%`
+}
 
 function getPremiumActions(u) {
   const actions = [
@@ -387,14 +678,16 @@ async function fetchData() {
 }
 
 function handleFilterChange() {
-  currentPage.value = 1
-  fetchUsers()
+  if (currentPage.value !== 1) {
+    currentPage.value = 1
+  } else {
+    fetchUsers()
+  }
 }
 
 watch(currentPage, (newVal, oldVal) => {
   if (newVal !== oldVal && !isInitialLoading.value) {
     fetchUsers()
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 })
 
@@ -488,6 +781,9 @@ function cancelPremium(user) {
 }
 
 onMounted(async () => {
+  loadSearchHistory()
+  document.addEventListener('click', handleClickOutside)
+  
   // Parallel fetch for initial load
   await Promise.allSettled([
     fetchSummary(),
@@ -499,6 +795,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 

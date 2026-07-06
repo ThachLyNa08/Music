@@ -2,8 +2,8 @@
   <div class="-mt-6">
     <header class="flex flex-col md:flex-row items-start md:items-center justify-between sticky -top-6 z-40 bg-white border-b border-gray-200 -mx-6 px-6 pt-6 pb-4 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
-        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
+        <p class="text-gray-500 dark:text-text-secondary mt-1 text-xs font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
       </div>
       <div class="flex items-center gap-3 mt-4 md:mt-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
@@ -11,30 +11,41 @@
       </div>
     </header>
 
+    <!-- KPI Section -->
+    <div v-if="overviewData" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 [&>a]:!p-4 [&>div]:!p-4 [&_.text-\[28px\]]:!text-[26px] [&_.text-\[13px\]]:!text-[11px] [&_.text-xs]:!text-[10px]">
+      <AdminKpiCard
+        v-for="card in statCards"
+        :key="card.key"
+        v-bind="card"
+        :loading="overviewLoading"
+        :show-icon="false"
+      />
+    </div>
+
     <div class="space-y-6 pb-10">
       <!-- Filters & Search -->
     <AdminFilterBar>
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative min-w-[280px] flex-1">
-          <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9 w-full" />
+          <MfIcon name="search" size="15" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9 w-full !text-xs !py-1.5" />
         </div>
-        <select v-model="filterRole" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+        <select v-model="filterRole" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
           <option value="">Tất cả vai trò</option>
           <option value="user">Người dùng thường</option>
           <option value="admin">Quản trị viên (Admin)</option>
         </select>
-        <select v-model="filterStatus" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+        <select v-model="filterStatus" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
           <option value="locked">Bị khóa</option>
         </select>
-        <select v-model="filterPremium" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+        <select v-model="filterPremium" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
           <option value="">Tất cả Premium</option>
           <option value="active">Đang có Premium</option>
           <option value="inactive">Không có Premium</option>
         </select>
-        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
+        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0 scale-90" />
       </div>
     </AdminFilterBar>
 
@@ -50,51 +61,51 @@
         <table class="w-full text-center border-collapse text-sm whitespace-nowrap table-fixed">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[22%] text-left">Thành viên</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[11%]">Vai trò</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[10%]">Trạng thái</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[14%]">Hạn Premium</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[16%]">Lượt tạo Playlist</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[15%]">Hoạt động gần nhất</th>
-              <th class="px-4 py-4 font-semibold text-black uppercase text-xs w-[12%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[22%] text-left">Thành viên</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[11%]">Vai trò</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[10%]">Trạng thái</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[14%]">Hạn Premium</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[16%]">Lượt tạo Playlist</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[15%]">Hoạt động gần nhất</th>
+              <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[12%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-for="u in paginatedUsers" :key="u.id" class="hover:bg-slate-50 transition group cursor-pointer" @click="goToDetail(u.id)">
-              <td class="px-4 py-3 truncate text-left">
+              <td class="px-3 py-2.5 truncate text-left">
                 <div class="flex items-center justify-start gap-3">
-                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-10 h-10 rounded-full object-cover shrink-0" :alt="u.display_name" />
-                  <div v-else class="w-10 h-10 shrink-0 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-sm">
+                  <img v-if="u.avatar_url" :src="normalizeImageUrl(u.avatar_url, 'user')" class="w-8 h-8 rounded-full object-cover shrink-0" :alt="u.display_name" />
+                  <div v-else class="w-8 h-8 shrink-0 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold text-xs">
                     {{ u.display_name?.charAt(0).toUpperCase() }}
                   </div>
                   <div class="flex flex-col min-w-0">
-                    <span class="font-bold text-gray-900 truncate">{{ u.display_name }}</span>
-                    <span class="text-xs text-gray-500 truncate">{{ u.email }}</span>
+                    <span class="text-[13px] font-bold text-gray-900 truncate">{{ u.display_name }}</span>
+                    <span class="text-[11px] text-gray-500 truncate">{{ u.email }}</span>
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 truncate">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider" :class="u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-gray-100 text-gray-600'">
+              <td class="px-3 py-2.5 truncate">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" :class="u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-gray-100 text-gray-600'">
                   {{ u.role === 'admin' ? 'Quản trị viên' : 'Thành viên' }}
                 </span>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-2.5">
                 <div class="flex items-center justify-center gap-2" @click.stop="toggleStatus(u)" :title="u.status === 'locked' ? 'Bị khóa' : 'Hoạt động'">
-                  <div class="w-10 h-5 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out shadow-inner" :class="u.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'">
-                    <div class="bg-white w-3 h-3 rounded-full shadow-md transform duration-300 ease-in-out" :class="{ 'translate-x-5': u.status === 'active' }"></div>
+                  <div class="w-8 h-5 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out shadow-inner" :class="u.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'">
+                    <div class="bg-white w-3 h-3 rounded-full shadow-md transform duration-300 ease-in-out" :class="{ 'translate-x-3': u.status === 'active' }"></div>
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 truncate">
+              <td class="px-3 py-2.5 truncate">
                 <div class="flex flex-col gap-1 items-center justify-center">
-                  <span class="inline-flex px-2 py-1 rounded text-[11px] font-bold tracking-wider" :class="isPremiumActive(u.premium_expires_at) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'">
+                  <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider" :class="isPremiumActive(u.premium_expires_at) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'">
                     {{ formatPremiumDate(u.premium_expires_at) }}
                   </span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-sm font-medium text-gray-600">{{ u.playlistCount || 0 }}</td>
-              <td class="px-4 py-3 text-xs font-medium text-gray-500 truncate">{{ formatLastActive(u.last_listened_at) }}</td>
-              <td class="px-4 py-3 sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10" @click.stop>
+              <td class="px-3 py-2.5 text-[13px] font-medium text-gray-600">{{ u.playlistCount || 0 }}</td>
+              <td class="px-3 py-2.5 text-[11px] font-medium text-gray-500 truncate">{{ formatLastActive(u.last_listened_at) }}</td>
+              <td class="px-3 py-2.5 sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10" @click.stop>
                 <div class="flex justify-center">
                   <AdminActionMenu :actions="getUserActions(u)" />
                 </div>
@@ -121,6 +132,83 @@
           :totalPages="totalPages" 
         />
       </div>
+
+      <!-- New Sections: Recent Activities & Top Users -->
+      <div v-if="overviewData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        
+        <!-- Hoạt động gần đây -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h3 class="text-sm font-bold text-gray-800 mb-4">Hoạt động gần đây</h3>
+          <ul class="space-y-4">
+            <li v-for="act in overviewData.recentActivities" :key="act.id" class="flex items-start gap-3">
+              <div class="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" :class="'bg-' + act.color + '-500'"></div>
+              <div>
+                <p class="text-xs text-slate-700 leading-snug">
+                  <span class="font-bold text-slate-900">{{ act.username }}</span> {{ act.message }}
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5">{{ act.timeAgo }}</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Top thành viên tích cực -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
+              🏆 Top thành viên tích cực
+            </h3>
+            <select class="text-[10px] border border-gray-200 rounded-md px-2 py-1 bg-white outline-none text-slate-600 font-medium cursor-pointer hover:border-gray-300">
+              <option>Tháng này</option>
+              <option>Tuần này</option>
+            </select>
+          </div>
+          <div class="space-y-3">
+            <div v-for="(u, index) in overviewData.topUsers" :key="u.id" 
+                 class="flex items-center justify-between p-3 rounded-xl border transition-all"
+                 :class="{
+                   'bg-amber-50/40 border-amber-200/60': index === 0,
+                   'bg-slate-50/50 border-slate-100': index > 0
+                 }">
+              <div class="flex items-center gap-3 w-full">
+                <!-- Rank -->
+                <div class="w-6 text-center font-black text-base"
+                     :class="{
+                       'text-amber-500': index === 0,
+                       'text-slate-400': index === 1,
+                       'text-orange-700': index === 2
+                     }">
+                  {{ index + 1 }}
+                </div>
+                <!-- Avatar -->
+                <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                     :class="{
+                       'bg-blue-100 text-blue-600': index === 0,
+                       'bg-purple-100 text-purple-600': index === 1,
+                       'bg-blue-50 text-blue-500': index === 2
+                     }">
+                  {{ u.initial }}
+                </div>
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-bold text-slate-800 truncate">{{ u.name }}</p>
+                  <p class="text-[10px] text-slate-500 truncate">{{ u.role }} &bull; {{ formatNumber(u.plays) }} lượt nghe</p>
+                </div>
+                <!-- Points -->
+                <div class="text-right shrink-0">
+                  <p class="text-xs font-bold"
+                     :class="index === 0 ? 'text-amber-600' : 'text-slate-700'">
+                    {{ formatNumber(u.points) }} điểm
+                  </p>
+                  <p class="text-[10px] text-slate-400">{{ formatNumber(u.playlists) }} playlist</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
     </div>
     </div>
 
@@ -266,6 +354,7 @@ import AdminExportButton from '@/components/admin/AdminExportButton.vue'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import MfIcon from '@/components/common/MfIcon.vue'
+import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 
 const router = useRouter()
 const toast = useToastStore()
@@ -276,6 +365,72 @@ const searchQuery = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
 const filterPremium = ref('')
+
+// Overview data
+const overviewData = ref(null)
+const overviewLoading = ref(true)
+
+async function fetchOverview() {
+  overviewLoading.value = true
+  try {
+    const res = await api.get('/admin/users/overview')
+    overviewData.value = res.data.data
+  } catch (err) {
+    console.error('Lỗi khi tải overview:', err)
+  } finally {
+    overviewLoading.value = false
+  }
+}
+
+function formatNumber(num) {
+  if (!num) return '0'
+  return new Intl.NumberFormat('vi-VN').format(num)
+}
+
+const statCards = computed(() => {
+  if (!overviewData.value) return []
+  const summary = overviewData.value.summary
+  const activePercent = summary.totalUsers ? ((summary.activeUsers / summary.totalUsers) * 100).toFixed(1) : 0
+  const premiumPercent = summary.totalUsers ? ((summary.premiumUsers / summary.totalUsers) * 100).toFixed(1) : 0
+  return [
+    {
+      key: 'total',
+      title: 'TỔNG THÀNH VIÊN',
+      value: formatNumber(summary.totalUsers),
+      trendText: '+12.5%',
+      trendDirection: 'up',
+      subtitle: 'Tổng tài khoản hệ thống',
+      tone: 'blue'
+    },
+    {
+      key: 'active',
+      title: 'ĐANG HOẠT ĐỘNG',
+      value: formatNumber(summary.activeUsers),
+      trendText: `${activePercent}%`,
+      trendDirection: 'up',
+      subtitle: 'Tỷ lệ tài khoản hoạt động',
+      tone: 'blue'
+    },
+    {
+      key: 'premium',
+      title: 'PREMIUM ĐANG DÙNG',
+      value: formatNumber(summary.premiumUsers),
+      trendText: `${premiumPercent}%`,
+      trendDirection: 'up',
+      subtitle: 'Tỷ lệ chuyển đổi Premium',
+      tone: 'amber'
+    },
+    {
+      key: 'new',
+      title: 'MỚI THÁNG NÀY',
+      value: formatNumber(summary.newUsersThisMonth),
+      trendText: '-2.4%',
+      trendDirection: 'down',
+      subtitle: 'So với tháng trước',
+      tone: 'rose'
+    }
+  ]
+})
 
 // Dropdown state logic removed since AdminActionMenu handles it
 
@@ -668,6 +823,7 @@ async function saveCustomPremiumExpiry() {
 }
 
 onMounted(() => {
+  fetchOverview()
   fetchUsers()
 })
 

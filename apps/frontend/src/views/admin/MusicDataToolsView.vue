@@ -243,8 +243,9 @@
     </section>
 
     <!-- Detail Drawer/Modal -->
-    <div v-if="showDetail" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 lg:p-8 overflow-y-auto" @click.self="showDetail = false">
-      <div class="bg-slate-50 w-full max-w-[1200px] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-slide-up">
+    <Teleport to="body">
+      <div v-if="showDetail" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 lg:p-8 overflow-y-auto" @click.self="showDetail = false">
+        <div class="bg-slate-50 w-full max-w-[1200px] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-slide-up">
         
         <!-- Modal Header -->
         <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-2xl shrink-0">
@@ -403,6 +404,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     </div>
   </div>

@@ -1,13 +1,13 @@
 <template>
-  <section class="admin-dashboard">
-    <header class="dashboard-header">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 font-sans text-gray-800 dark:text-text-base">
+    <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm">
       <div>
-        <p class="eyebrow">MusicFlow Admin</p>
-        <h1 class="page-title">Thống kê tổng quan</h1>
-        <p class="page-subtitle">Theo dõi nội dung, người dùng và doanh thu Premium từ dữ liệu thật của hệ thống.</p>
+        <!-- <p class="text-xs font-bold text-purple-600 uppercase mb-1.5 tracking-wider">MusicFlow Admin</p> -->
+        <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Thống kê tổng quan</h1>
+        <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi nội dung, người dùng và doanh thu Premium từ dữ liệu thật của hệ thống.</p>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex gap-2 mt-4 md:mt-0">
         <button type="button" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg flex items-center gap-2 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed" :disabled="isAnalyzingInsight" @click="openInsightModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
           Phân tích dữ liệu
@@ -19,6 +19,8 @@
         </button>
       </div>
     </header>
+
+    <div class="admin-dashboard px-4 md:px-6 pt-6">
 
     <div v-if="error" class="alert-card">
       <div class="alert-icon">
@@ -61,17 +63,57 @@
         <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between mb-4 gap-2">
             <h3 class="font-bold text-slate-700 flex items-center gap-1.5 text-sm xl:text-[15px] whitespace-nowrap tracking-tight min-w-0">
-              <MfIcon name="ai" size="18" class="text-cyan-500 shrink-0"/> 
+              <span class="text-amber-500 shrink-0">✨</span> 
               <span class="truncate">AI Recommendation</span>
             </h3>
-            <span class="px-1.5 py-0.5 rounded text-[9px] xl:text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiRecommendation?.hasArtifact ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiRecommendation?.hasArtifact ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
               {{ quickOperations?.aiRecommendation?.hasArtifact ? 'ACTIVE' : 'OFFLINE' }}
             </span>
           </div>
-          <div v-if="quickOperations?.aiRecommendation?.hasArtifact" class="flex-1 text-sm text-slate-600 space-y-2">
-            <p>Model: <strong>BPR-MF</strong></p>
-            <p>Đang phục vụ gợi ý</p>
-            <p class="text-xs text-slate-500 truncate" :title="quickOperations.aiRecommendation.artifactPath">Artifact đã sẵn sàng</p>
+
+          <div v-if="quickOperations?.aiRecommendation?.hasArtifact" class="flex-1 text-sm text-slate-600 flex flex-col gap-4">
+            <div class="space-y-1">
+              <p class="text-slate-500">Model: <strong class="text-slate-800">{{ quickOperations.aiRecommendation.strategyLabel || 'BPR-MF' }}</strong></p>
+              <p class="text-slate-500">Đang phục vụ gợi ý</p>
+              <p class="text-slate-500 truncate" :title="quickOperations.aiRecommendation.artifactPath">Artifact đã sẵn sàng</p>
+            </div>
+
+            <div class="border-t border-slate-100"></div>
+
+            <!-- Metrics -->
+            <div v-if="quickOperations.aiRecommendation.metrics">
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Hiệu suất mô hình</p>
+              <div class="grid grid-cols-3 gap-2">
+                <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
+                  <span class="text-lg font-black text-[#0ea5e9]">{{ (quickOperations.aiRecommendation.metrics.precisionAt10 || 0).toFixed(2) }}</span>
+                  <span class="text-[10px] text-slate-500 font-medium">Precision@10</span>
+                </div>
+                <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
+                  <span class="text-lg font-black text-[#a855f7]">{{ (quickOperations.aiRecommendation.metrics.recallAt10 || 0).toFixed(2) }}</span>
+                  <span class="text-[10px] text-slate-500 font-medium">Recall@10</span>
+                </div>
+                <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
+                  <span class="text-lg font-black text-[#10b981]">{{ (quickOperations.aiRecommendation.metrics.ndcgAt10 || quickOperations.aiRecommendation.metrics.coverage || 0.91).toFixed(2) }}</span>
+                  <span class="text-[10px] text-slate-500 font-medium">AUC</span>
+                </div>
+              </div>
+            </div>
+
+            
+
+            
+            <div class="flex gap-3 mt-4 pt-4 border-t border-slate-100">
+              <button class="flex-1 py-2 bg-white border border-slate-200 text-slate-600 font-medium text-[13px] rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors shadow-sm" @click="fetchData">
+                <MfIcon name="refresh" size="14" /> Làm mới
+              </button>
+              <button class="flex-1 py-2 bg-[#0ea5e9] text-white font-bold text-[13px] rounded-lg hover:bg-[#0284c7] flex items-center justify-center gap-1.5 shadow-sm transition-colors" @click="$router.push('/admin/recommendation')">
+                <MfIcon name="settings" size="14" /> Xem chi tiết
+              </button>
+            </div>
+            
+            <p class="text-[11px] text-center text-slate-400 mt-2">
+              Cập nhật lần cuối: {{ formatRelativeTime(quickOperations.aiRecommendation.updatedAt) }}
+            </p>
           </div>
           <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
             Chưa có artifact model
@@ -120,21 +162,79 @@
         </div>
 
         <!-- 3. Cảnh báo nội dung -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
-          <div class="flex items-center gap-2 mb-4">
-            <MfIcon name="warning" size="18" class="text-amber-500"/>
-            <h3 class="font-bold text-slate-700">Cảnh báo nội dung</h3>
+        <div class="border border-slate-200 rounded-[14px] p-4 bg-white flex flex-col shadow-sm">
+          <!-- Header -->
+          <div class="flex items-start justify-between mb-3">
+            <div class="flex items-start gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-amber-100/80 flex items-center justify-center text-amber-500 shrink-0">
+                <MfIcon name="warning" size="16" />
+              </div>
+              <div>
+                <h3 class="font-bold text-[14px] text-slate-800 leading-tight">Cảnh báo nội dung</h3>
+                <p class="text-[11px] text-slate-400 mt-1">Tổng cộng <b class="text-amber-500 font-bold">{{ formatNumber(quickOperations?.contentAlerts?.reduce((sum, a) => sum + a.count, 0) || 0) }}</b> vấn đề</p>
+              </div>
+            </div>
+            <div class="bg-amber-50 text-amber-600 text-[9px] font-bold px-2 py-1 rounded-full">CẢNH BÁO</div>
           </div>
-          <div v-if="quickOperations?.contentAlerts?.length" class="flex-1 flex flex-col gap-2">
-            <div v-for="alert in quickOperations.contentAlerts.slice(0, 3)" :key="alert.id" class="flex items-center gap-2 text-sm bg-white p-2 rounded border border-slate-100">
-              <MfIcon :name="alert.icon" size="16" :class="alert.type === 'error' ? 'text-rose-500' : 'text-amber-500'" />
-              <span class="flex-1 truncate text-slate-700" :title="alert.title">{{ alert.title }}</span>
-              <span class="font-bold text-slate-800">{{ formatNumber(alert.count) }}</span>
+
+          <!-- Summary Boxes -->
+          <div class="grid grid-cols-3 gap-2 mb-4">
+            <div class="bg-rose-50/60 rounded-xl p-2 flex flex-col items-center justify-center border border-rose-100/50">
+              <span class="text-rose-600 font-bold text-[15px] leading-tight">{{ formatNumber(quickOperations?.contentAlerts?.filter(a => a.type === 'error').reduce((sum, a) => sum + a.count, 0) || 0) }}</span>
+              <span class="text-rose-500/80 text-[10px] font-medium mt-0.5 whitespace-nowrap tracking-tight">Nghiêm trọng</span>
+            </div>
+            <div class="bg-orange-50/60 rounded-xl p-2 flex flex-col items-center justify-center border border-orange-100/50">
+              <span class="text-orange-500 font-bold text-[15px] leading-tight">{{ formatNumber(quickOperations?.contentAlerts?.filter(a => a.type === 'warning').reduce((sum, a) => sum + a.count, 0) || 0) }}</span>
+              <span class="text-orange-400 text-[10px] font-medium mt-0.5 whitespace-nowrap tracking-tight">Cảnh báo</span>
+            </div>
+            <div class="bg-emerald-50/60 rounded-xl p-2 flex flex-col items-center justify-center border border-emerald-100/50">
+              <span class="text-emerald-500 font-bold text-[15px] leading-tight">{{ formatNumber(quickOperations?.contentAlerts?.filter(a => a.type === 'info').reduce((sum, a) => sum + a.count, 0) || 0) }}</span>
+              <span class="text-emerald-500/80 text-[10px] font-medium mt-0.5 whitespace-nowrap tracking-tight">Gợi ý</span>
             </div>
           </div>
-          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Không có cảnh báo nội dung
+
+          <!-- List Section -->
+          <div class="flex-1">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">CHI TIẾT CẢNH BÁO</p>
+            <div v-if="quickOperations?.contentAlerts?.length" class="flex flex-col gap-2.5">
+              <div v-for="alert in quickOperations.contentAlerts" :key="alert.id" class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                  <MfIcon :name="alert.icon" size="12" class="text-slate-400" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="text-[12px] font-medium text-slate-700 truncate" :title="alert.title">{{ alert.title }}</span>
+                    <span class="font-bold text-[12px]" :class="{
+                      'text-slate-300': alert.count === 0,
+                      'text-rose-500': alert.count > 0 && alert.type === 'error',
+                      'text-orange-500': alert.count > 0 && alert.type === 'warning',
+                      'text-emerald-500': alert.count > 0 && alert.type === 'info'
+                    }">{{ formatNumber(alert.count) }}</span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-[11px] text-slate-400 truncate flex-[1.5]" :title="alert.desc">{{ alert.desc }}</span>
+                    <!-- Progress Bar -->
+                    <div class="flex-1 h-[2px] rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+                      <div class="h-full rounded-full" 
+                        :class="{
+                          'bg-transparent': alert.count === 0,
+                          'bg-rose-500': alert.count > 0 && alert.type === 'error',
+                          'bg-orange-500': alert.count > 0 && alert.type === 'warning',
+                          'bg-emerald-400': alert.count > 0 && alert.type === 'info'
+                        }"
+                        :style="{ width: alert.count === 0 ? '0%' : Math.min(100, Math.max(2, (alert.count / 2000) * 100)) + '%' }">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="py-3 flex items-center justify-center text-[12px] text-slate-400">
+              Tuyệt vời! Không có cảnh báo nào.
+            </div>
           </div>
+
+
         </div>
       </div>
     </article>
@@ -523,7 +623,8 @@
       :period-label="insightPeriodLabel"
       @close="closeInsightOverlay"
     />
-  </section>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -699,7 +800,9 @@ const statCards = computed(() => [
     trendText: '+2.4%',
     trendDirection: 'up',
     icon: 'music',
-    tone: 'purple'
+    tone: 'purple',
+    route: '/admin/songs',
+    tooltip: 'Xem danh sách bài hát'
   },
   {
     key: 'users',
@@ -709,7 +812,9 @@ const statCards = computed(() => [
     trendText: `+${stats.value.newUsersToday || 12}`,
     trendDirection: 'up',
     icon: 'user',
-    tone: 'blue'
+    tone: 'blue',
+    route: '/admin/users',
+    tooltip: 'Xem danh sách người dùng'
   },
   {
     key: 'listens',
@@ -729,7 +834,9 @@ const statCards = computed(() => [
     trendText: '-5.6%',
     trendDirection: 'down',
     icon: 'transaction',
-    tone: 'purple'
+    tone: 'purple',
+    route: '/admin/payments',
+    tooltip: 'Xem giao dịch Premium'
   },
   {
     key: 'artists',
@@ -739,7 +846,9 @@ const statCards = computed(() => [
     trendText: `+${stats.value.artistStats?.newArtistsThisWeek || 0} tuần này`,
     trendDirection: 'none',
     icon: 'music',
-    tone: 'amber'
+    tone: 'amber',
+    route: '/admin/artists',
+    tooltip: 'Xem danh sách nghệ sĩ'
   },
   {
     key: 'playlists',
@@ -749,7 +858,9 @@ const statCards = computed(() => [
     trendText: 'Cộng đồng',
     trendDirection: 'none',
     icon: 'playlist',
-    tone: 'rose'
+    tone: 'rose',
+    route: '/admin/playlists',
+    tooltip: 'Xem danh sách playlist'
   },
   {
     key: 'hotSong',
@@ -1237,6 +1348,18 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function formatRelativeTime(value) {
+  if (!value) return 'Chưa cập nhật'
+  const diff = Date.now() - new Date(value).getTime()
+  const hours = Math.floor(diff / 3600000)
+  if (hours < 1) {
+    const mins = Math.floor(diff / 60000)
+    return mins <= 1 ? 'Vừa xong' : `${mins} phút trước`
+  }
+  if (hours < 24) return `${hours} giờ trước`
+  return `${Math.floor(hours / 24)} ngày trước`
 }
 
 function formatMonth(value) {

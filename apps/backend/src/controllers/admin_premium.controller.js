@@ -42,10 +42,54 @@ exports.getPremiumSummary = async (req, res, next) => {
       WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())
     `);
     
+    const [[{ lastMonthPremiumRevenue }]] = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) as lastMonthPremiumRevenue 
+      FROM payment_transactions 
+      WHERE status = 'paid' 
+      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) 
+      AND YEAR(paid_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
+    `);
+
+    const [[{ usersAddedThisMonth }]] = await pool.query(`
+      SELECT COUNT(DISTINCT user_id) as usersAddedThisMonth
+      FROM payment_transactions
+      WHERE status = 'paid'
+      AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())
+    `);
+
+    const [[{ usersAddedLastMonth }]] = await pool.query(`
+      SELECT COUNT(DISTINCT user_id) as usersAddedLastMonth
+      FROM payment_transactions
+      WHERE status = 'paid'
+      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) 
+      AND YEAR(paid_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
+    `);
+    
     const [[{ pendingPremiumTransactions }]] = await pool.query(`
       SELECT COUNT(*) as pendingPremiumTransactions 
       FROM payment_transactions 
       WHERE status = 'pending'
+    `);
+
+    const [planDistribution] = await pool.query(`
+      SELECT 
+        p.id, p.name, p.price, p.duration_days,
+        COUNT(u.id) as user_count
+      FROM premium_plans p
+      LEFT JOIN users u ON u.premium_plan_id = p.id AND u.premium_expires_at > NOW()
+      GROUP BY p.id, p.name, p.price, p.duration_days
+      ORDER BY p.duration_days ASC
+    `);
+
+    const [expiringTimeline] = await pool.query(`
+      SELECT 
+        u.id, u.display_name, u.email, u.avatar_url, 
+        u.premium_expires_at, p.name as plan_name
+      FROM users u
+      LEFT JOIN premium_plans p ON u.premium_plan_id = p.id
+      WHERE u.premium_expires_at > NOW() AND u.premium_expires_at <= DATE_ADD(NOW(), INTERVAL 90 DAY)
+      ORDER BY u.premium_expires_at ASC
+      LIMIT 15
     `);
 
     res.json({
@@ -56,7 +100,12 @@ exports.getPremiumSummary = async (req, res, next) => {
         expiringSoonUsers: Number(expiringSoonUsers || 0),
         expiredPremiumUsers: Number(expiredPremiumUsers || 0),
         monthlyPremiumRevenue: Number(monthlyPremiumRevenue || 0),
-        pendingPremiumTransactions: Number(pendingPremiumTransactions || 0)
+        lastMonthPremiumRevenue: Number(lastMonthPremiumRevenue || 0),
+        usersAddedThisMonth: Number(usersAddedThisMonth || 0),
+        usersAddedLastMonth: Number(usersAddedLastMonth || 0),
+        pendingPremiumTransactions: Number(pendingPremiumTransactions || 0),
+        planDistribution,
+        expiringTimeline
       }
     });
   } catch (error) {

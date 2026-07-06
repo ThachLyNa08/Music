@@ -40,7 +40,6 @@ function findLatestFileByPrefix(dir, prefix, ext = '.json') {
 
   return files[0] ? files[0].fullPath : null;
 }
-
 const recommendationFinalDir = path.resolve(
   __dirname,
   '../../../../datasets/processed/recommendation/final'
@@ -48,8 +47,54 @@ const recommendationFinalDir = path.resolve(
 
 function resolveModelPath(overridePath) {
   if (overridePath) return path.isAbsolute(overridePath) ? overridePath : path.resolve(__dirname, '../../../', overridePath);
-  if (process.env.BPR_MF_MODEL_PATH) return path.isAbsolute(process.env.BPR_MF_MODEL_PATH) ? process.env.BPR_MF_MODEL_PATH : path.resolve(__dirname, '../../../', process.env.BPR_MF_MODEL_PATH);
   
+  const projectRoot = path.resolve(__dirname, '../../../../');
+  
+  // Priority 1: env var
+  if (process.env.RECOMMENDATION_MODEL_PATH) {
+    const envPath = path.isAbsolute(process.env.RECOMMENDATION_MODEL_PATH) ? process.env.RECOMMENDATION_MODEL_PATH : path.resolve(projectRoot, process.env.RECOMMENDATION_MODEL_PATH);
+    if (fs.existsSync(envPath)) {
+      console.log(`[RecommendationModel] Loaded active model from env RECOMMENDATION_MODEL_PATH: ${envPath}`);
+      return envPath;
+    }
+  }
+  if (process.env.BPR_MF_MODEL_PATH) {
+    const envPath2 = path.isAbsolute(process.env.BPR_MF_MODEL_PATH) ? process.env.BPR_MF_MODEL_PATH : path.resolve(projectRoot, process.env.BPR_MF_MODEL_PATH);
+    if (fs.existsSync(envPath2)) {
+      return envPath2;
+    }
+  }
+  
+  // Priority 2: current_model.json pointer
+  const pointerPath = path.join(projectRoot, 'storage/recommendation/models/current_model.json');
+  try {
+    if (fs.existsSync(pointerPath)) {
+      const pointerData = JSON.parse(fs.readFileSync(pointerPath, 'utf8'));
+      if (pointerData && pointerData.model_path) {
+        const activeModelPath = path.isAbsolute(pointerData.model_path) 
+          ? pointerData.model_path 
+          : path.join(projectRoot, pointerData.model_path);
+          
+        if (fs.existsSync(activeModelPath)) {
+          console.log(`[RecommendationModel] Loaded active model: ${pointerData.active_version || 'unknown'} from ${activeModelPath}`);
+          return activeModelPath;
+        } else {
+          console.warn(`[RecommendationModel] Warning: current_model.json points to non-existent model_path: ${activeModelPath}. Falling back.`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[RecommendationModel] Error reading current_model.json: ${err.message}. Falling back.`);
+  }
+
+  // Priority 3: V3 fallback if exists
+  const v3Path = path.join(projectRoot, 'storage/recommendation/models/v3/bpr_mf_v3.json');
+  if (fs.existsSync(v3Path)) {
+    console.log(`[RecommendationModel] Loaded active model: v3 (fallback) from ${v3Path}`);
+    return v3Path;
+  }
+
+  // Priority 4: Legacy logic
   const latestModelPath = findLatestFileByPrefix(recommendationFinalDir, 'recommendation_bpr_model_final_', '.json');
   if (latestModelPath) {
     if (process.argv.includes('--debug')) {

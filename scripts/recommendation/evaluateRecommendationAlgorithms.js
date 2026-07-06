@@ -41,9 +41,18 @@ const { pool } = require(path.join(BACKEND_ROOT, 'src/config/database'));
 
 // ─── Config constants ────────────────────────────────────────────────────────
 const SOURCE = 'experiment_seed';
-const OUTPUT_DIR = path.resolve(__dirname, '../../datasets/processed');
-const CHART_DIR = path.join(OUTPUT_DIR, 'charts');
-const MODEL_DIR = path.resolve(__dirname, '../../storage/recommendation/models');
+const OUTPUT_DIR = args['output-dir']
+  ? path.resolve(process.cwd(), args['output-dir'])
+  : path.resolve(__dirname, '../../datasets/processed');
+const CHART_DIR = args['chart-dir']
+  ? path.resolve(process.cwd(), args['chart-dir'])
+  : path.join(OUTPUT_DIR, 'charts');
+const MODEL_DIR = args['model-dir']
+  ? path.resolve(process.cwd(), args['model-dir'])
+  : path.resolve(__dirname, '../../storage/recommendation/models');
+const SEMANTIC_FILE_PATH = args['semantic-file']
+  ? path.resolve(process.cwd(), args['semantic-file'])
+  : null;
 const POSITIVE_COMPLETION_THRESHOLD = 0.5;
 const MIN_TRAIN_INTERACTIONS = 200;
 const MIN_TEST_POSITIVE_HOLDOUT = 10;
@@ -539,10 +548,104 @@ async function loadDataset() {
 }
 
 // ─── Song feature catalog ────────────────────────────────────────────────────
+function parseCsvLine(line) {
+  const cells = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      cells.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+
+  cells.push(current);
+  return cells;
+}
+
+function parseCsv(text) {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length) return { header: [], rows: [] };
+  const header = parseCsvLine(lines[0]).map((cell) => cell.trim());
+  const rows = lines.slice(1).map((line) => {
+    const values = parseCsvLine(line);
+    const row = {};
+    header.forEach((key, idx) => {
+      row[key] = values[idx] ?? '';
+    });
+    return row;
+  });
+  return { header, rows };
+}
+
+function parseTagList(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {}
+  }
+  return raw.split(/[;|]/).map((tag) => tag.trim()).filter(Boolean);
+}
+
+function truthyCell(value) {
+  return ['1', 'true', 'yes', 'y'].includes(String(value || '').trim().toLowerCase());
+}
+
+function loadSemanticProfilesFromCsv(filePath) {
+  if (!filePath) return null;
+  if (!fs.existsSync(filePath)) throw new Error(`Semantic file not found: ${filePath}`);
+
+  const { header, rows } = parseCsv(fs.readFileSync(filePath, 'utf8'));
+  const bySongId = new Map();
+  const seenTitles = new Map();
+
+  for (const row of rows) {
+    const songId = Number(row.song_id);
+    if (!Number.isInteger(songId) || songId <= 0) continue;
+    if (!bySongId.has(songId)) {
+      bySongId.set(songId, {
+        main_theme: row.main_theme || null,
+        mood_tags: parseTagList(row.mood_tags),
+        situation_tags: parseTagList(row.situation_tags),
+        meaning_confidence: row.meaning_confidence === '' ? 0 : Number(row.meaning_confidence) || 0,
+        evidence_level: row.evidence_level || 'unknown',
+        review_status: row.review_status || 'unknown',
+        needs_llm_retry: truthyCell(row.needs_llm_retry),
+      });
+    }
+
+    const titleKey = String(row.title || '').trim().toLowerCase();
+    if (titleKey) seenTitles.set(titleKey, (seenTitles.get(titleKey) || 0) + 1);
+  }
+
+  return {
+    filePath,
+    header,
+    rows,
+    bySongId,
+    duplicateTitleCount: [...seenTitles.values()].filter((count) => count > 1).length,
+  };
+}
+
 async function loadSongCatalog() {
   const songCols = await getColumns('songs');
   const hasAudio = await tableExists('song_audio_features');
   const audioCols = hasAudio ? await getColumns('song_audio_features') : new Set();
+  const semanticCsv = INCLUDE_SEMANTIC && SEMANTIC_FILE_PATH ? loadSemanticProfilesFromCsv(SEMANTIC_FILE_PATH) : null;
 
   const songSelect = [
     's.id',
@@ -567,7 +670,7 @@ async function loadSongCatalog() {
   ];
   const audioJoin = hasAudio ? 'LEFT JOIN song_audio_features saf ON saf.song_id = s.id' : '';
 
-  const hasSemantic = INCLUDE_SEMANTIC && await tableExists('song_semantic_profiles');
+  const hasSemantic = INCLUDE_SEMANTIC && !semanticCsv && await tableExists('song_semantic_profiles');
   const semanticSelect = hasSemantic ? [
     'ssp.main_theme', 'ssp.mood_tags', 'ssp.situation_tags', 'ssp.meaning_confidence',
     'ssp.evidence_level', 'ssp.review_status'
@@ -590,6 +693,7 @@ async function loadSongCatalog() {
 
   const byId = new Map();
   for (const row of rows) {
+    const csvSemantic = semanticCsv?.bySongId.get(Number(row.id));
     byId.set(Number(row.id), {
       id: Number(row.id),
       market: row.market || null,
@@ -604,13 +708,19 @@ async function loadSongCatalog() {
       brightness: row.brightness === null || row.brightness === undefined ? null : Number(row.brightness),
       mood: row.mood || null,
       vibe: row.vibe || null,
-      main_theme: row.main_theme || null,
-      mood_tags: row.mood_tags ? (typeof row.mood_tags === 'string' ? JSON.parse(row.mood_tags) : row.mood_tags) : [],
-      situation_tags: row.situation_tags ? (typeof row.situation_tags === 'string' ? JSON.parse(row.situation_tags) : row.situation_tags) : [],
-      meaning_confidence: row.meaning_confidence !== null && row.meaning_confidence !== undefined ? Number(row.meaning_confidence) : 0,
-      evidence_level: row.evidence_level || 'unknown',
-      review_status: row.review_status || 'unknown',
+      main_theme: csvSemantic ? csvSemantic.main_theme : (row.main_theme || null),
+      mood_tags: csvSemantic ? csvSemantic.mood_tags : (row.mood_tags ? (typeof row.mood_tags === 'string' ? JSON.parse(row.mood_tags) : row.mood_tags) : []),
+      situation_tags: csvSemantic ? csvSemantic.situation_tags : (row.situation_tags ? (typeof row.situation_tags === 'string' ? JSON.parse(row.situation_tags) : row.situation_tags) : []),
+      meaning_confidence: csvSemantic ? csvSemantic.meaning_confidence : (row.meaning_confidence !== null && row.meaning_confidence !== undefined ? Number(row.meaning_confidence) : 0),
+      evidence_level: csvSemantic ? csvSemantic.evidence_level : (row.evidence_level || 'unknown'),
+      review_status: csvSemantic ? csvSemantic.review_status : (row.review_status || 'unknown'),
+      needs_llm_retry: csvSemantic ? csvSemantic.needs_llm_retry : false,
     });
+  }
+  if (semanticCsv) {
+    const matched = [...semanticCsv.bySongId.keys()].filter((id) => byId.has(Number(id))).length;
+    console.log(`[Semantic] canonical CSV: ${semanticCsv.filePath}`);
+    console.log(`[Semantic] CSV rows: ${semanticCsv.rows.length}, columns: ${semanticCsv.header.length}, matched catalog ids: ${matched}`);
   }
   console.log(`[SongCatalog] ${byId.size} available songs`);
   return byId;

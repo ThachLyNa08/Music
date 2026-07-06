@@ -1,7 +1,13 @@
 <template>
-  <div 
+  <component 
+    :is="route ? RouterLink : 'div'"
+    :to="route"
+    :title="tooltip"
     class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-    :class="compact && showIcon ? 'p-3.5' : 'p-5'"
+    :class="[
+      compact && showIcon ? 'p-3.5' : compact ? 'p-4' : 'p-5',
+      route ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/50 block' : ''
+    ]"
   >
     <!-- Skeleton Loading -->
     <div v-if="loading" class="animate-pulse flex items-center gap-4">
@@ -17,38 +23,44 @@
     <template v-else>
       <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r" :class="accentClass" />
       
-      <div v-if="showIcon" class="flex items-center gap-4">
+      <div v-if="showIcon && iconPosition === 'left'" class="flex items-center gap-4">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" :class="iconClass">
           <MfIcon :name="icon || 'info'" size="20" />
         </div>
 
         <div class="min-w-0 flex-1 text-left">
-          <p class="text-sm font-medium text-slate-600 truncate" :title="title">{{ title }}</p>
-          <p class="mt-0.5 text-2xl font-bold tracking-tight" :class="valueClass">{{ formattedValue }}</p>
-          <p v-if="subtitle" class="mt-1 text-xs truncate" :class="subtitleColorClass" :title="subtitle">{{ subtitle }}</p>
+          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate" :title="title">{{ title }}</p>
+          <p class="mt-0.5 text-xl font-black tracking-tight text-slate-800" :class="valueClass">{{ formattedValue }}</p>
+          <p v-if="subtitle" class="mt-1 text-[11px] truncate" :class="subtitleColorClass" :title="subtitle">{{ subtitle }}</p>
+          <div v-if="$slots.subtext" class="mt-1 text-[10px] truncate">
+            <slot name="subtext"></slot>
+          </div>
         </div>
       </div>
 
       <div v-else class="flex items-start justify-between gap-4">
         <div class="min-w-0 flex-1">
-          <p class="text-[13px] font-semibold text-slate-500 line-clamp-1">
+          <p class="text-xs font-semibold text-slate-500 line-clamp-1">
             {{ title }}
           </p>
 
-          <p class="mt-1.5 leading-tight font-black tracking-tight truncate" 
+          <p class="mt-1 leading-tight font-black tracking-tight truncate" 
              :class="[
                valueClass,
-               String(formattedValue).length > 18 ? 'text-lg' :
-               String(formattedValue).length > 12 ? 'text-xl' :
-               String(formattedValue).length > 8 ? 'text-2xl' : 'text-[28px]'
+               String(formattedValue).length > 18 ? 'text-base' :
+               String(formattedValue).length > 12 ? 'text-lg' :
+               String(formattedValue).length > 8 ? 'text-xl' : 'text-2xl'
              ]" 
              :title="String(formattedValue)">
             {{ formattedValue }}
           </p>
 
-          <p v-if="subtitle" class="mt-1 text-xs font-medium line-clamp-1" :class="subtitleColorClass">
+          <p v-if="subtitle" class="mt-1 text-[11px] font-medium line-clamp-1" :class="subtitleColorClass">
             {{ subtitle }}
           </p>
+          <div v-if="$slots.subtext" class="mt-1 text-[11px] font-medium line-clamp-1">
+            <slot name="subtext"></slot>
+          </div>
         </div>
 
         <div v-if="trendText" class="shrink-0 mt-0.5">
@@ -65,23 +77,27 @@
         </div>
         <div
           v-else-if="meta"
-          class="shrink-0 rounded-2xl px-4 py-3 text-right"
+          class="shrink-0 rounded-2xl px-4 py-2 text-right"
           :class="metaBoxClass"
         >
-          <p class="text-[11px] font-bold uppercase tracking-wide opacity-70">
+          <p class="text-[10px] font-bold uppercase tracking-wide opacity-70">
             Tỷ lệ
           </p>
-          <p class="mt-1 text-xl font-black tracking-tight">
+          <p class="mt-1 text-lg font-black tracking-tight">
             {{ meta }}
           </p>
         </div>
+        <div v-else-if="showIcon && iconPosition === 'right' && icon" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" :class="iconClass">
+          <MfIcon :name="icon" size="20" />
+        </div>
       </div>
     </template>
-  </div>
+  </component>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 
 const props = defineProps({
   title: String,
@@ -101,6 +117,10 @@ const props = defineProps({
     type: Boolean,
     default: true
   },
+  iconPosition: {
+    type: String,
+    default: 'left'
+  },
   compact: {
     type: Boolean,
     default: false
@@ -109,6 +129,14 @@ const props = defineProps({
   trendDirection: {
     type: String,
     default: 'up'
+  },
+  route: {
+    type: String,
+    default: ''
+  },
+  tooltip: {
+    type: String,
+    default: ''
   }
 })
 

@@ -420,7 +420,8 @@ async function getQuickOperations() {
       hasArtifact: summaryData.hasArtifact,
       artifactPath: summaryData.artifactPath,
       updatedAt: summaryData.updatedAt,
-      metrics: summaryData.metrics
+      metrics: summaryData.metrics,
+      training: summaryData.training
     };
     
     console.log('[Dashboard QuickOps] aiRecommendation:', result.aiRecommendation);
@@ -658,18 +659,31 @@ async function getQuickOperations() {
   try {
     if (await tableExists('songs')) {
       const [noAudio] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE audio_url IS NULL OR TRIM(audio_url) = ""');
-      if (noAudio[0].c > 0) result.contentAlerts.push({ id: 'no_audio', title: 'Bài hát thiếu audio', count: noAudio[0].c, type: 'error', icon: 'error' });
-      
-      const [noCover] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE cover_url IS NULL OR TRIM(cover_url) = ""');
-      if (noCover[0].c > 0) result.contentAlerts.push({ id: 'no_cover', title: 'Bài hát thiếu cover', count: noCover[0].c, type: 'warning', icon: 'image' });
+      result.contentAlerts.push({ id: 'no_audio', title: 'Bài hát thiếu audio', desc: 'Không thể phát nhạc', count: noAudio[0].c, type: 'error', icon: 'error' });
       
       const missingLyricsCount = await getMissingLyricsCount(warnings);
-      if (missingLyricsCount > 0) result.contentAlerts.push({ id: 'no_lyrics', title: 'Bài hát thiếu lyrics', count: missingLyricsCount, type: 'info', icon: 'article' });
+      result.contentAlerts.push({ id: 'no_lyrics', title: 'Bài hát thiếu lyrics', desc: 'Cần bổ sung lời bài hát', count: missingLyricsCount, type: 'warning', icon: 'article' });
+      const [noCover] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE cover_url IS NULL OR TRIM(cover_url) = ""');
+      result.contentAlerts.push({ id: 'no_cover', title: 'Bài hát thiếu ảnh bìa', desc: 'Chưa có artwork', count: noCover[0].c, type: 'info', icon: 'image' });
     }
     if (await tableExists('albums')) {
       const [emptyAlbums] = await pool.query("SELECT COUNT(al.id) as c FROM albums al LEFT JOIN songs s ON s.album_id = al.id WHERE s.id IS NULL AND al.release_status NOT IN ('draft', 'hidden')");
-      if (emptyAlbums[0].c > 0) result.contentAlerts.push({ id: 'empty_album', title: 'Album không có bài', count: emptyAlbums[0].c, type: 'warning', icon: 'album' });
+      result.contentAlerts.push({ id: 'empty_album', title: 'Album không có bài hát', desc: 'Album rỗng, cần kiểm tra', count: emptyAlbums[0].c, type: 'error', icon: 'album' });
     }
+    if (await tableExists('playlists')) {
+      const [emptyPlaylists] = await pool.query("SELECT COUNT(p.id) as c FROM playlists p LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id WHERE ps.song_id IS NULL");
+      result.contentAlerts.push({ id: 'empty_playlist', title: 'Playlist rỗng', desc: 'Không có bài hát nào', count: emptyPlaylists[0].c, type: 'info', icon: 'playlist' });
+    }
+    
+    // Sort so errors come first, then warnings, then info, but keep 0 counts at the bottom
+    result.contentAlerts.sort((a, b) => {
+      if (a.count === 0 && b.count > 0) return 1;
+      if (a.count > 0 && b.count === 0) return -1;
+      const typeWeight = { error: 3, warning: 2, info: 1 };
+      if (typeWeight[a.type] !== typeWeight[b.type]) return typeWeight[b.type] - typeWeight[a.type];
+      return b.count - a.count;
+    });
+
   } catch (e) {
     warnings.push(`Content Alert Error: ${e.message}`);
   }

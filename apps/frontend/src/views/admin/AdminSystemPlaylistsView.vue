@@ -30,81 +30,81 @@
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-2">
       <!-- Tỷ Lệ Lỗi -->
-      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 to-sky-400"></div>
-        <div class="flex items-start justify-between gap-5">
+        <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Tỷ Lệ Lỗi Tạo Playlist</p>
-            <p class="mt-2 font-bold tracking-tight text-cyan-600" :class="operationSummary?.errorRate24h != null ? 'text-3xl' : 'text-2xl'">
+            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Tỷ Lệ Lỗi Tạo Playlist</p>
+            <p class="mt-1 leading-tight font-black tracking-tight text-cyan-600" :class="operationSummary?.errorRate24h != null ? 'text-2xl' : 'text-xl'">
               {{ operationSummary?.errorRate24h != null ? operationSummary.errorRate24h + '%' : 'Chưa có dữ liệu' }}
             </p>
-            <p class="mt-1 text-sm font-medium line-clamp-1" :class="operationSummary?.errorRate24h != null ? 'text-emerald-500' : 'text-slate-400'">
+            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="operationSummary?.errorRate24h != null ? 'text-emerald-500' : 'text-slate-400'">
               {{ operationSummary?.errorRate24h != null ? '↓ 1.2% so với hôm qua' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
             </p>
           </div>
-          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-cyan-50 text-cyan-700">24H</div>
+          <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-cyan-50 text-cyan-700 mt-0.5">24H</div>
         </div>
       </div>
 
       <!-- Thời Gian Tạo -->
-      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 to-purple-400"></div>
-        <div class="flex items-start justify-between gap-5">
+        <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Thời Gian Tạo TB</p>
-            <p class="mt-2 text-3xl font-bold tracking-tight text-violet-600">
+            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Thời Gian Tạo TB</p>
+            <p class="mt-1 leading-tight font-black tracking-tight text-violet-600 text-2xl">
               {{ operationSummary?.avgGenerationTimeMs != null ? operationSummary.avgGenerationTimeMs + 's' : '—' }}
             </p>
-            <p class="mt-1 text-sm font-medium line-clamp-1" :class="operationSummary?.avgGenerationTimeMs != null ? 'text-emerald-500' : 'text-slate-400'">
+            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="operationSummary?.avgGenerationTimeMs != null ? 'text-emerald-500' : 'text-slate-400'">
               {{ operationSummary?.avgGenerationTimeMs != null ? '↓ 0.3s nhanh hơn trung bình' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
             </p>
           </div>
-          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700">MS</div>
+          <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700 mt-0.5">MS</div>
         </div>
       </div>
 
       <!-- Đang Xử Lý -->
-      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-amber-400"></div>
-        <div class="flex items-start justify-between gap-5">
+        <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Đang Xử Lý</p>
-            <p class="mt-2 text-3xl font-bold tracking-tight text-orange-600">
+            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Đang Xử Lý</p>
+            <p class="mt-1 leading-tight font-black tracking-tight text-orange-600 text-2xl">
               {{ operationSummary?.processingCount || 0 }}
             </p>
-            <div class="mt-3 mb-1.5 flex items-center gap-2">
-              <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div class="mt-2 mb-1 flex items-center gap-2">
+              <div class="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                 <div class="h-full bg-orange-500 rounded-full" :style="{ width: (operationSummary?.processingCount > 0 ? '50%' : '0%') }"></div>
               </div>
             </div>
-            <p class="text-[11px] text-slate-400 line-clamp-1">
+            <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-1">
               {{ operationSummary?.processingCount > 0 ? 'Ước tính 3 phút nữa xong' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
             </p>
           </div>
-          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700">QUEUE</div>
+          <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 mt-0.5">QUEUE</div>
         </div>
       </div>
 
       <!-- Tạo Lại Gần Nhất -->
-      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-400 to-slate-300"></div>
-        <div class="flex items-start justify-between gap-5">
+        <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-slate-700 line-clamp-1">Tạo Lại Gần Nhất</p>
-            <p class="mt-2 font-bold tracking-tight text-slate-800" :class="operationSummary?.latestRunAt ? 'text-xl' : 'text-2xl'">
+            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Tạo Lại Gần Nhất</p>
+            <p class="mt-1 leading-tight font-black tracking-tight text-slate-800" :class="operationSummary?.latestRunAt ? 'text-lg' : 'text-xl'">
               {{ operationSummary?.latestRunAt || 'Chưa ghi nhận' }}
             </p>
-            <p class="mt-1 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+            <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-2 leading-relaxed">
               <template v-if="operationSummary?.latestRunAt">
                 <span class="text-slate-500">Bởi:</span> <span class="text-violet-600 font-medium">System Cron</span><br>
                 Lịch: Daily Mix 00:10, Trending 00:30, Mood 01:00, Vibes 01:15, Weekly Sun 07:00
               </template>
               <template v-else>
-                {{ operationSummary?.message || 'Chưa có dữ liệu vận hành' }}
+                Chưa có dữ liệu vận hành
               </template>
             </p>
           </div>
-          <div class="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">AUTO</div>
+          <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 mt-0.5">AUTO</div>
         </div>
       </div>
     </div>
@@ -112,9 +112,9 @@
     <!-- Distribution & Activity -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
       <!-- Chart -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex flex-col lg:col-span-2">
-        <h3 class="text-lg text-slate-800 !font-heading font-bold mb-1">Phân bố loại playlist</h3>
-        <p class="text-xs text-slate-500 mb-4">Số lượng playlist theo từng system key (Theo toàn bộ dữ liệu)</p>
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col lg:col-span-2">
+        <h3 class="text-base text-slate-800 !font-heading font-bold mb-1">Phân bố loại playlist</h3>
+        <p class="text-[11px] text-slate-500 mb-4">Số lượng playlist theo từng system key (Theo toàn bộ dữ liệu)</p>
         <div v-if="distributionChartItems.length > 0" class="playlist-distribution-chart mt-4">
           <div
             v-for="item in distributionChartItems"
@@ -140,26 +140,26 @@
             </div>
           </div>
         </div>
-        <div v-else class="flex h-[240px] items-center justify-center text-sm text-slate-500">
+        <div v-else class="flex h-[240px] items-center justify-center text-[13px] text-slate-500">
           Chưa có dữ liệu phân bố playlist hệ thống.
         </div>
       </div>
 
       <!-- Activity Log -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex flex-col lg:col-span-1">
-        <h3 class="text-lg text-slate-800 !font-heading font-bold mb-1">Lịch sử hoạt động</h3>
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col lg:col-span-1">
+        <h3 class="text-base text-slate-800 !font-heading font-bold mb-1">Lịch sử hoạt động</h3>
         <div class="flex-1 overflow-y-auto max-h-[250px] custom-scrollbar">
-          <div v-if="loadingActivity" class="text-sm text-slate-500 py-4 text-center">Đang tải...</div>
-          <div v-else-if="!activityLogs || activityLogs.length === 0" class="text-sm text-slate-500 py-8 text-center flex flex-col items-center justify-center h-full">
+          <div v-if="loadingActivity" class="text-[13px] text-slate-500 py-4 text-center">Đang tải...</div>
+          <div v-else-if="!activityLogs || activityLogs.length === 0" class="text-[13px] text-slate-500 py-8 text-center flex flex-col items-center justify-center h-full">
             <MfIcon name="history" size="32" class="text-slate-300 mb-2" />
             <span>Chưa có lịch sử hoạt động.<br>Các lần tạo lại playlist sẽ xuất hiện tại đây sau khi hệ thống ghi log.</span>
           </div>
           <div v-else class="space-y-4 pr-2">
-            <div v-for="(log, idx) in activityLogs" :key="idx" class="flex gap-3 text-sm">
+            <div v-for="(log, idx) in activityLogs" :key="idx" class="flex gap-3 text-[13px]">
               <div class="w-2 h-2 mt-1.5 rounded-full bg-slate-300 shrink-0"></div>
               <div>
                 <div class="font-medium text-slate-800">{{ log.message }}</div>
-                <div class="text-xs text-slate-500 mt-0.5">{{ log.created_at }} - bởi {{ log.actor }}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">{{ log.created_at }} - bởi {{ log.actor }}</div>
               </div>
             </div>
           </div>
@@ -176,9 +176,9 @@
             Báo cáo chất lượng theo loại playlist
             <span class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] uppercase tracking-wide font-bold">Báo cáo tổng hợp</span>
           </h2>
-          <p class="text-xs text-slate-500 font-normal mt-1">Mỗi dòng là một loại playlist hệ thống (system key), dùng để đánh giá thuật toán tạo playlist: số bài ứng viên, độ trùng lặp, độ đa dạng nghệ sĩ/thể loại và độ phủ audio features.</p>
+          <p class="text-[11px] text-slate-500 font-normal mt-1">Mỗi dòng là một loại playlist hệ thống (system key), dùng để đánh giá thuật toán tạo playlist: số bài ứng viên, độ trùng lặp, độ đa dạng nghệ sĩ/thể loại và độ phủ audio features.</p>
         </div>
-        <div v-if="qualityReport.rows && qualityReport.rows.length === 0 && qualityReport.message" class="text-xs text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-200">
+        <div v-if="qualityReport.rows && qualityReport.rows.length === 0 && qualityReport.message" class="text-[11px] text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-200">
           {{ qualityReport.message }}
         </div>
       </div>
@@ -186,22 +186,22 @@
 
         <!-- Quick Filters -->
         <div class="flex gap-2 mb-4" v-if="qualityReport.rows && qualityReport.rows.length > 0">
-          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          <button class="px-2.5 py-1 rounded-md text-xs font-semibold transition"
             :class="qualityFilter === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
             @click="qualityFilter = 'all'">
             Tất cả ({{ qualityReport.summary.total }})
           </button>
-          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          <button class="px-2.5 py-1 rounded-md text-xs font-semibold transition"
             :class="qualityFilter === 'good' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
             @click="qualityFilter = 'good'">
             Good ({{ qualityReport.summary.good }})
           </button>
-          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          <button class="px-2.5 py-1 rounded-md text-xs font-semibold transition"
             :class="qualityFilter === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
             @click="qualityFilter = 'warning'">
             Warning ({{ qualityReport.summary.warning }})
           </button>
-          <button class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          <button class="px-2.5 py-1 rounded-md text-xs font-semibold transition"
             :class="qualityFilter === 'bad' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
             @click="qualityFilter = 'bad'">
             Bad ({{ qualityReport.summary.bad }})

@@ -33,6 +33,7 @@ app.use('/api/genres',   require('./routes/genre.routes'));
 app.use('/api/albums',   require('./routes/album.routes'));
 app.use('/api/playlists',require('./routes/playlist.routes'));
 app.use('/api/ai-playlists', require('./routes/aiPlaylist.routes'));
+app.use('/api/ai-assistant', require('./routes/aiAssistant.routes'));
 app.use('/api/recommend',require('./routes/recommendation.routes'));
 app.use('/api/charts',   require('./routes/chart.routes'));
 app.use('/api/stem',     require('./routes/stem.routes'));

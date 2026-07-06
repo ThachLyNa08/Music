@@ -7,6 +7,26 @@ const { publicSongCondition } = require('../utils/public.utils');
 
 const projectRoot = path.resolve(__dirname, '../../../..');
 const recommendationRoot = path.join(projectRoot, 'datasets', 'processed', 'recommendation');
+const officialV3MetricsPath = path.join(
+  projectRoot,
+  'storage',
+  'recommendation',
+  'evaluation',
+  'v3',
+  'metrics',
+  'recommendation_final_semantic_v3_metrics.json'
+);
+const legacyV2MetricsPath = path.join(
+  recommendationRoot,
+  'final',
+  'recommendation_final_semantic_v2_metrics.json'
+);
+const legacyEvaluationMetricsPath = path.join(
+  projectRoot,
+  'datasets',
+  'processed',
+  'recommendation_evaluation_results.json'
+);
 
 const candidateDirs = [
   path.join(recommendationRoot, 'final'),
@@ -40,6 +60,50 @@ function findLatestFile(dirs, matcher) {
   }
 
   return candidates.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] || null;
+}
+
+function fileInfo(fullPath, source) {
+  const stat = fs.statSync(fullPath);
+  return {
+    file: path.basename(fullPath),
+    fullPath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    updatedAt: stat.mtime,
+    source
+  };
+}
+
+function resolveMetricsFile() {
+  if (fs.existsSync(officialV3MetricsPath)) {
+    console.info('[Recommendation Admin] Using V3 recommendation metrics:', officialV3MetricsPath);
+    return fileInfo(officialV3MetricsPath, 'v3');
+  }
+
+  if (fs.existsSync(legacyV2MetricsPath)) {
+    console.warn('[Recommendation Admin] V3 metrics not found, falling back to V2 metrics:', legacyV2MetricsPath);
+    return fileInfo(legacyV2MetricsPath, 'v2_fallback');
+  }
+
+  const metricsFile = findLatestFile(candidateDirs, (file) => {
+    const lower = file.toLowerCase();
+    return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
+  });
+
+  if (metricsFile) {
+    console.warn('[Recommendation Admin] V3/V2 metrics not found, using latest legacy metrics:', metricsFile.fullPath);
+    return {
+      ...metricsFile,
+      source: 'legacy_latest_fallback'
+    };
+  }
+
+  if (fs.existsSync(legacyEvaluationMetricsPath)) {
+    console.warn('[Recommendation Admin] V3 metrics not found, falling back to legacy evaluation metrics:', legacyEvaluationMetricsPath);
+    return fileInfo(legacyEvaluationMetricsPath, 'legacy_evaluation_fallback');
+  }
+
+  return null;
 }
 
 function safeReadJson(filePath) {
@@ -114,15 +178,77 @@ exports.getSummaryData = () => {
   console.log('[Recommendation Admin] recommendationRoot:', recommendationRoot);
   console.log('[Recommendation Admin] candidateDirs:', candidateDirs);
 
+  // Check current_model.json pointer first
+  const pointerPath = path.join(projectRoot, 'storage', 'recommendation', 'models', 'current_model.json');
+  let currentModelConfig = null;
+  if (fs.existsSync(pointerPath)) {
+    try {
+      currentModelConfig = JSON.parse(fs.readFileSync(pointerPath, 'utf8'));
+    } catch(err) {
+      console.warn('[Recommendation Admin] Warning: current_model.json is invalid JSON', err.message);
+    }
+  }
+
+  if (currentModelConfig && currentModelConfig.model_path) {
+    const fullModelPath = path.isAbsolute(currentModelConfig.model_path) ? currentModelConfig.model_path : path.join(projectRoot, currentModelConfig.model_path);
+    if (fs.existsSync(fullModelPath)) {
+      console.log('[Recommendation Admin] Using current_model pointer:', currentModelConfig.active_version);
+      
+      const fullMetricsPath = currentModelConfig.metrics_path ? (path.isAbsolute(currentModelConfig.metrics_path) ? currentModelConfig.metrics_path : path.join(projectRoot, currentModelConfig.metrics_path)) : null;
+      const parsedMetricsData = safeReadJson(fullMetricsPath);
+      const normalizedMetrics = normalizeMetrics(parsedMetricsData);
+      
+      const parsedModel = safeReadJson(fullModelPath);
+      let parsedTraining = null;
+      if (parsedModel) {
+        parsedTraining = {
+          epochs: parsedModel.hyperparameters?.epochs || null,
+          factors: parsedModel.factors || parsedModel.hyperparameters?.factors || null,
+          trainedUsers: parsedModel.trained_users || parsedModel.users || null,
+          trainedItems: parsedModel.trained_items || parsedModel.items || null,
+          interactions: parsedModel.positive_pairs || parsedModel.interactions || null
+        };
+      }
+      
+      return {
+        hasArtifact: true,
+        hasMetrics: Boolean(parsedMetricsData),
+        strategy: currentModelConfig.strategy || 'bpr_mf_rerank',
+        
+        artifactPath: currentModelConfig.model_path.replace(/\\/g, '/'),
+        metricsPath: currentModelConfig.metrics_path ? currentModelConfig.metrics_path.replace(/\\/g, '/') : null,
+        trainingPath: currentModelConfig.model_info_path ? currentModelConfig.model_info_path.replace(/\\/g, '/') : null,
+        
+        updatedAt: currentModelConfig.activated_at || (fs.statSync(fullModelPath).mtime),
+        
+        metricsSource: currentModelConfig.active_version,
+        files: {
+          model: path.basename(fullModelPath),
+          metrics: fullMetricsPath ? path.basename(fullMetricsPath) : null,
+          training: currentModelConfig.model_info_path ? path.basename(currentModelConfig.model_info_path) : null,
+          runInfo: null,
+          sampleOutputs: null
+        },
+        metrics: normalizedMetrics.metrics,
+        metricsComparison: normalizedMetrics.metricsComparison,
+        training: parsedTraining,
+        activeVersion: currentModelConfig.active_version || 'unknown',
+        semanticSource: currentModelConfig.semantic_source || null
+      };
+    } else {
+      console.warn('[Recommendation Admin] Warning: current_model.json points to non-existent model:', fullModelPath);
+    }
+  }
+
+  // Fallback to legacy logic
+  console.warn('[Recommendation Admin] No valid current_model pointer found. Falling back to candidateDirs.');
+
   const modelFile = findLatestFile(candidateDirs, (file) => {
     const lower = file.toLowerCase();
     return lower.endsWith('.json') && (lower.includes('bpr_model') || lower.includes('model_final') || lower.includes('bpr_mf'));
   });
 
-  const metricsFile = findLatestFile(candidateDirs, (file) => {
-    const lower = file.toLowerCase();
-    return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
-  });
+  const metricsFile = resolveMetricsFile();
 
   const trainingFile = findLatestFile(candidateDirs, (file) => {
     const lower = file.toLowerCase();
@@ -170,6 +296,7 @@ exports.getSummaryData = () => {
     
     updatedAt: modelFile?.updatedAt || metricsFile?.updatedAt || null,
     
+    metricsSource: metricsFile?.source || null,
     files: {
       model: modelFile?.file || null,
       metrics: metricsFile?.file || null,
@@ -198,17 +325,8 @@ exports.getSummary = async (req, res) => {
 
 exports.getMetrics = async (req, res) => {
   try {
-    const metricsFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
-    });
-
-    let targetPath = metricsFile ? metricsFile.fullPath : null;
-    // Also check METRICS_FILE_PATH_OLD as fallback just in case
-    const METRICS_FILE_PATH_OLD = path.join(projectRoot, 'datasets', 'processed', 'recommendation_evaluation_results.json');
-    if (!targetPath && fs.existsSync(METRICS_FILE_PATH_OLD)) {
-      targetPath = METRICS_FILE_PATH_OLD;
-    }
+    const metricsFile = resolveMetricsFile();
+    const targetPath = metricsFile ? metricsFile.fullPath : null;
 
     if (targetPath) {
       const data = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
@@ -227,16 +345,8 @@ exports.getMetrics = async (req, res) => {
 
 exports.exportReport = async (req, res) => {
   try {
-    const metricsFile = findLatestFile(candidateDirs, (file) => {
-      const lower = file.toLowerCase();
-      return lower.endsWith('.json') && (lower.includes('metrics') || lower.includes('evaluation') || lower.includes('eval'));
-    });
-
-    let targetPath = metricsFile ? metricsFile.fullPath : null;
-    const METRICS_FILE_PATH_OLD = path.join(projectRoot, 'datasets', 'processed', 'recommendation_evaluation_results.json');
-    if (!targetPath && fs.existsSync(METRICS_FILE_PATH_OLD)) {
-      targetPath = METRICS_FILE_PATH_OLD;
-    }
+    const metricsFile = resolveMetricsFile();
+    const targetPath = metricsFile ? metricsFile.fullPath : null;
 
     if (targetPath) {
       return res.download(targetPath, 'recommendation_metrics_report.json');

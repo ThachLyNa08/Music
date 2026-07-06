@@ -41,6 +41,10 @@
             {{ normalizedSong.artist }}
           </span>
         </div>
+        <div v-if="normalizedSong.matchType === 'lyrics'" class="text-xs text-gray-400 truncate mt-1 flex items-center gap-1.5">
+           <span class="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-semibold text-gray-300 uppercase leading-none shrink-0">Khớp lời bài hát</span>
+           <span v-if="normalizedSong.matchedSnippet" class="italic opacity-80 truncate">"{{ normalizedSong.matchedSnippet }}"</span>
+        </div>
       </div>
     </div>
 
