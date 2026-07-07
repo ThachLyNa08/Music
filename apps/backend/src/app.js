@@ -38,6 +38,7 @@ app.use('/api/recommend',require('./routes/recommendation.routes'));
 app.use('/api/charts',   require('./routes/chart.routes'));
 app.use('/api/stem',     require('./routes/stem.routes'));
 app.use('/api/payments', require('./routes/payments.routes'));
+app.use('/api/messages', require('./routes/message.routes'));
 app.use('/api/admin',    require('./routes/admin.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/spotify',  require('./routes/spotify.routes'));

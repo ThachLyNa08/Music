@@ -1,10 +1,10 @@
 <template>
-  <div class="h-20 flex items-center px-4 gap-4 border-t flex-shrink-0"
+  <div class="h-14 flex items-center px-4 gap-4 border-t flex-shrink-0"
        :class="isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'">
 
     <!-- Bài hát đang phát -->
     <div class="flex items-center gap-3 w-56 min-w-0">
-      <div class="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center"
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center"
            :class="[isDark ? 'bg-dark-surface' : 'bg-light-card', currentSong ? 'cursor-pointer hover:opacity-80 transition' : '']"
            @click="currentSong && $router.push(`/song/${currentSong.id}`)">
         <MfIcon v-if="!currentSong" name="music_note" :className="isDark ? 'text-gray-600' : 'text-gray-300'" size="24" />
@@ -46,27 +46,27 @@
         <button @click="player.toggleShuffle()"
           :title="player.shuffle ? 'Tắt phát ngẫu nhiên' : 'Bật phát ngẫu nhiên'"
           class="transition-colors" :class="player.shuffle ? 'text-[#1ed760] hover:text-[#1fdf64]' : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-800'">
-          <MfIcon name="shuffle" size="20" />
+          <MfIcon name="shuffle" size="18" />
         </button>
         <!-- Prev -->
         <button @click="player.prev()" class="transition-colors" :class="isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'">
-          <MfIcon name="skip_previous" size="24" />
+          <MfIcon name="skip_previous" size="22" />
         </button>
         <!-- Play/Pause -->
         <button @click="player.togglePlay()"
-          class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary-dark transition-all hover:scale-105">
-          <MfIcon v-if="!player.isPlaying" name="play_arrow" filled className="ml-0.5" size="24" />
-          <MfIcon v-else name="pause" filled size="24" />
+          class="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary-dark transition-all hover:scale-105">
+          <MfIcon v-if="!player.isPlaying" name="play_arrow" filled className="ml-0.5" size="22" />
+          <MfIcon v-else name="pause" filled size="22" />
         </button>
         <!-- Next -->
         <button @click="player.next()" class="transition-colors" :class="isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'">
-          <MfIcon name="skip_next" size="24" />
+          <MfIcon name="skip_next" size="22" />
         </button>
         <!-- Repeat -->
         <button @click="player.toggleRepeat()"
           :title="player.repeat === 'none' ? 'Bật lặp lại' : player.repeat === 'all' ? 'Đang lặp danh sách' : 'Đang lặp một bài'"
           class="transition-colors relative" :class="player.repeat !== 'none' ? 'text-[#1ed760] hover:text-[#1fdf64]' : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-800'">
-          <MfIcon name="repeat" size="20" />
+          <MfIcon name="repeat" size="18" />
           <span v-if="player.repeat === 'one'" class="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-[#1ed760] text-[8px] font-bold text-black">
             1
           </span>

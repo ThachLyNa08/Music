@@ -18,7 +18,6 @@ async function bootstrap() {
 
   const { ensureLogTableExists } = require('./services/systemPlaylistRunLog.service');
   await ensureLogTableExists();
-
   // 2. Tạo HTTP server
   const server = http.createServer(app);
 

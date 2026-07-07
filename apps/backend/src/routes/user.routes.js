@@ -10,5 +10,6 @@ router.get('/me/followed-artists', authenticate, userController.getFollowedArtis
 router.put('/me/profile', authenticate, userController.updateProfile);
 router.post('/me/avatar', authenticate, upload.single('avatar'), userController.uploadAvatar);
 router.get('/me/recently-played', authenticate, userController.getRecentlyPlayed);
+router.get('/:id/public-profile', authenticate, userController.getPublicProfile);
 
 module.exports = router;

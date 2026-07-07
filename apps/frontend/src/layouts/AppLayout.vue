@@ -1,7 +1,7 @@
 <template>
   <div class="user-layout-surface min-h-screen w-full overflow-x-hidden text-gray-200 font-sans">
     <!-- SIDEBAR -->
-    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[80] hidden w-[260px] flex-col overflow-y-auto border-r border-white/10 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl md:flex">
+    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[80] hidden w-[220px] flex-col overflow-y-auto border-r border-white/10 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl md:flex">
       <!-- Brand -->
       <div class="mb-5 flex h-20 items-center gap-3 px-2">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-500/20 shadow-lg shadow-violet-950/30">
@@ -23,7 +23,13 @@
           :class="isActive(item.to) ? 'border border-white/10 bg-white/[0.10] font-bold text-white shadow-lg shadow-black/10' : 'border border-transparent font-semibold text-slate-400 hover:bg-white/[0.06] hover:text-white'"
         >
           <MfIcon :name="item.icon" size="20" className="shrink-0 transition-colors" :class="isActive(item.to) ? 'text-white' : 'text-slate-500 group-hover:text-white'" />
-          <span class="truncate">{{ item.label }}</span>
+          <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+          <span
+            v-if="item.to === '/messages' && messageUnreadCount > 0"
+            class="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-pink-500 px-1.5 text-[10px] font-black leading-none text-white shadow-sm shadow-pink-950/30"
+          >
+            {{ messageUnreadLabel }}
+          </span>
         </RouterLink>
 
         <div class="my-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -67,13 +73,13 @@
 
     <!-- MAIN AREA -->
     <div
-      class="relative flex min-h-screen flex-col user-layout-surface overflow-hidden md:ml-[260px]"
-      :class="isRightSidebarOpen ? '2xl:mr-[400px]' : '2xl:mr-0'"
+      class="relative flex min-h-screen flex-col user-layout-surface overflow-hidden md:ml-[220px]"
+      :class="isRightSidebarOpen ? '2xl:mr-[320px]' : '2xl:mr-0'"
     >
       <UserTopbar :is-queue-open="isRightSidebarOpen" />
 
       <!-- Page content -->
-      <main class="relative z-10 flex-1 pt-16 pb-[112px]">
+      <main class="relative z-10 flex-1 pt-16" :class="isActive('/messages') ? 'pb-[80px]' : 'pb-[96px]'">
         <RouterView />
       </main>
     </div>
@@ -87,7 +93,7 @@
 
     <!-- RIGHT SIDEBAR -->
     <aside
-      class="fixed right-0 top-0 bottom-[96px] z-[90] flex flex-col w-[400px] max-w-[calc(100vw-24px)] overflow-hidden border-l border-white/10 bg-[#070a12]/95 backdrop-blur-xl shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
+      class="fixed right-0 top-0 bottom-[80px] z-[90] flex flex-col w-[320px] max-w-[calc(100vw-24px)] overflow-hidden border-l border-white/10 bg-[#070a12]/95 backdrop-blur-xl shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
       :class="isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'"
     >
       <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
@@ -180,10 +186,10 @@
     </aside>
 
     <!-- PLAYER BAR -->
-    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[96px] items-center justify-between border-t border-white/10 bg-[#05070d]/95 px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[80px] items-center justify-between border-t border-white/10 bg-[#05070d]/95 px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
       <!-- Now playing -->
-      <div class="flex items-center gap-4 min-w-[200px] flex-1">
-        <div class="w-14 h-14 rounded-[4px] bg-white/10 flex items-center justify-center shrink-0 overflow-hidden group shadow-lg">
+      <div class="flex items-center gap-3 min-w-[200px] flex-1">
+        <div class="w-[52px] h-[52px] rounded-[4px] bg-white/10 flex items-center justify-center shrink-0 overflow-hidden group shadow-lg">
           <img v-if="player.currentSong?.cover_url" :src="$formatImageUrl(player.currentSong.cover_url)" @error="event => event.target.src = '/default-cover.png'" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           <MfIcon v-else name="music_note" size="24" className="text-gray-600" />
         </div>
@@ -214,18 +220,18 @@
           
           <!-- Previous -->
           <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.prev()" title="Previous">
-            <MfIcon name="skip_previous" size="24" />
+            <MfIcon name="skip_previous" size="20" />
           </button>
           
           <!-- Play/Pause -->
-          <button class="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer" @click="player.togglePlay()" title="Play/Pause">
+          <button class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer" @click="player.togglePlay()" title="Play/Pause">
             <MfIcon v-if="!player.isPlaying" name="play_arrow" filled size="24" className="ml-0.5" />
             <MfIcon v-else name="pause" filled size="24" />
           </button>
           
           <!-- Next -->
           <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.next()" title="Next">
-            <MfIcon name="skip_next" size="24" />
+            <MfIcon name="skip_next" size="20" />
           </button>
           
           <!-- Repeat -->
@@ -257,7 +263,7 @@
       </div>
 
       <!-- Right controls -->
-      <div class="flex items-center gap-1 flex-1 justify-end">
+      <div class="flex items-center gap-3 flex-1 justify-end">
         <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" :class="{ 'text-[#1ed760]': isRightSidebarOpen }" @click="isRightSidebarOpen = !isRightSidebarOpen" title="Danh sách chờ">
           <MfIcon name="queue_music" size="20" />
         </button>
@@ -274,7 +280,7 @@
         
         <div class="flex items-center gap-1 group relative">
           <MfIcon :name="player.volume === 0 ? 'volume_off' : 'volume_up'" size="20" className="text-gray-500 group-hover:text-white transition-colors" />
-          <div class="w-[80px] h-1 bg-white/15 rounded-full relative cursor-pointer group-hover:bg-white/30">
+          <div class="w-[96px] h-1 bg-white/15 rounded-full relative cursor-pointer group-hover:bg-white/30">
             <input type="range" min="0" max="100" :value="player.volume * 100" @input="player.setVolume($event.target.value / 100)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
             <div class="absolute left-0 h-full bg-white rounded-full group-hover:bg-[#1ed760] transition-colors" :style="`width:${player.volume * 100}%`"></div>
           </div>
@@ -303,6 +309,7 @@ import { useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
+import { useMessagesStore } from '@/stores/messages'
 import AddToPlaylistModal from '@/components/playlist/AddToPlaylistModal.vue'
 import UserTopbar from '@/components/layout/UserTopbar.vue'
 import NowPlayingView from '@/views/player/NowPlayingView.vue'
@@ -312,6 +319,7 @@ import { addToast } from '@/utils/toast'
 
 const player = usePlayerStore()
 const library = useLibraryStore()
+const messagesStore = useMessagesStore()
 const router = useRouter()
 
 const pct = computed(() => player.duration ? (player.currentTime / player.duration) * 100 : 0)
@@ -323,6 +331,8 @@ const displayPct = computed(() => {
   if (!player.duration) return 0
   return isSeeking.value ? (seekPreviewTime.value / player.duration) * 100 : pct.value
 })
+const messageUnreadCount = computed(() => messagesStore.unreadCount)
+const messageUnreadLabel = computed(() => messageUnreadCount.value > 99 ? '99+' : String(messageUnreadCount.value))
 
 const isRightSidebarOpen = ref(false)
 
@@ -356,6 +366,7 @@ function isActive(path) {
 
 onMounted(() => {
   library.fetchLikedSongs()
+  messagesStore.fetchUnreadCount()
 })
 
 function formatTime(s) {
@@ -399,6 +410,7 @@ const navItems = [
   { to: '/', label: 'Trang chủ', icon: 'home' },
   { to: '/search', label: 'Tìm kiếm', icon: 'search' },
   { to: '/library', label: 'Thư viện', icon: 'library_music' },
+  { to: '/messages', label: 'Tin nhắn', icon: 'chat' },
   { to: '/ai', label: 'AI Playlist', icon: 'auto_awesome' },
   { to: '/karaoke', label: 'Karaoke', icon: 'mic_external_on' },
 ]

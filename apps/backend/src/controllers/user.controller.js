@@ -2,6 +2,112 @@ const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
 
+async function userColumnExists(columnName) {
+  const [rows] = await pool.query(
+    `SELECT 1
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [columnName]
+  );
+  return rows.length > 0;
+}
+
+function toPublicUsername(email) {
+  if (!email || typeof email !== 'string') return null;
+  const username = email.split('@')[0]?.trim();
+  return username || null;
+}
+
+exports.getPublicProfile = async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ success: false, message: 'User khong hop le' });
+    }
+
+    const hasBio = await userColumnExists('bio');
+    const [users] = await pool.query(
+      `SELECT id, display_name, email, avatar_url, ${hasBio ? 'bio' : 'NULL AS bio'}, created_at
+       FROM users
+       WHERE id = ? AND role = 'user' AND status = 'active'
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'Khong tim thay nguoi dung' });
+    }
+
+    const [publicPlaylists] = await pool.query(
+      `SELECT
+         p.id,
+         p.name,
+         p.description,
+         p.cover_url,
+         p.created_at,
+         p.updated_at,
+         COUNT(ps.song_id) AS song_count
+       FROM playlists p
+       LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id
+       WHERE p.user_id = ?
+         AND p.is_public = 1
+       GROUP BY p.id, p.name, p.description, p.cover_url, p.created_at, p.updated_at
+       ORDER BY p.updated_at DESC
+       LIMIT 12`,
+      [userId]
+    );
+
+    const [followedArtists] = await pool.query(
+      `SELECT
+         a.id,
+         a.name,
+         a.avatar_url,
+         a.avatar_url AS cover_url,
+         COUNT(DISTINCT af_follower.id) AS followers_count,
+         COUNT(DISTINCT s.id) AS song_count,
+         MAX(af.created_at) AS followed_at
+       FROM artist_follows af
+       JOIN artists a ON a.id = af.artist_id
+       LEFT JOIN artist_follows af_follower ON af_follower.artist_id = a.id
+       LEFT JOIN songs s ON s.artist_id = a.id AND ${publicSongCondition('s')}
+       WHERE af.user_id = ?
+       GROUP BY a.id, a.name, a.avatar_url
+       ORDER BY followed_at DESC, a.name ASC
+       LIMIT 12`,
+      [userId]
+    );
+
+    followedArtists.forEach((artist) => {
+      artist.avatar_url = resolveArtistAvatar(artist, req);
+      artist.cover_url = artist.avatar_url;
+      artist.followers_count = Number(artist.followers_count || 0);
+      artist.song_count = Number(artist.song_count || 0);
+      delete artist.followed_at;
+    });
+
+    const user = users[0];
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.display_name,
+        username: toPublicUsername(user.email),
+        avatar_url: user.avatar_url,
+        bio: user.bio || null,
+        created_at: user.created_at,
+        public_playlists: publicPlaylists,
+        followed_artists: followedArtists,
+        followed_artists_count: followedArtists.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getProfileStats = async (req, res, next) => {
   try {
     const userId = req.user.id;
