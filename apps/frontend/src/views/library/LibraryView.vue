@@ -1,6 +1,6 @@
 <template>
   <div class="library-page user-page-bg">
-    <section class="library-hero relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+    <section class="library-hero relative overflow-hidden px-6 py-4 md:px-8 md:py-6 mb-6 border-b border-white/5 shadow-xl bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img
         :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.library)"
@@ -14,25 +14,23 @@
       <div class="library-hero-glow library-hero-glow-1 z-0"></div>
       <div class="library-hero-glow library-hero-glow-2 z-0"></div>
 
-      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-8 w-full">
+      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-6 w-full">
         <img
           :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.library)"
           alt="Library"
-          class="library-cover w-[130px] h-[130px] lg:w-[180px] lg:h-[180px] object-cover rounded-2xl shadow-2xl border border-white/10 flex-shrink-0"
+          class="library-cover w-[100px] h-[100px] lg:w-[140px] lg:h-[140px] object-cover rounded-2xl shadow-2xl border border-white/10 flex-shrink-0"
         />
 
         <div class="library-hero-content min-w-0 flex-1">
           <div class="library-label">Cá nhân</div>
-          <h1 class="library-title">Thư viện của tôi</h1>
-          <p class="library-subtitle">Quản lý toàn bộ âm nhạc và playlist yêu thích của bạn</p>
-          <p class="library-meta">{{ playlistItems.length }} Playlist • {{ albumCount }} Album • {{ singleCount }} Single • {{ followedCount }} Nghệ sĩ</p>
-
-          <div class="library-actions mt-5">
-            <button type="button" class="library-primary-btn" @click="showCreateModal = true">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-              Tạo playlist mới
+          <div class="flex items-center gap-4 mb-2">
+            <h1 class="library-title" style="margin-bottom: 0;">Thư viện của tôi</h1>
+            <button type="button" class="library-primary-btn" title="Tạo playlist mới" @click="showCreateModal = true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
             </button>
           </div>
+          <p class="library-subtitle">Quản lý toàn bộ âm nhạc và playlist yêu thích của bạn</p>
+          <p class="library-meta">{{ playlistItems.length }} Playlist • {{ albumCount }} Album • {{ singleCount }} Single • {{ followedCount }} Nghệ sĩ</p>
         </div>
       </div>
     </section>
@@ -529,28 +527,28 @@ async function handleCreate(form) {
 }
 
 .library-title {
-  font-size: clamp(36px, 5vw, 64px);
+  font-size: clamp(32px, 4vw, 56px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.04em;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   color: #fff;
   text-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
 .library-subtitle {
-  font-size: clamp(16px, 1.5vw, 18px);
+  font-size: clamp(14px, 1.2vw, 16px);
   font-weight: 600;
   color: rgba(255,255,255,0.85);
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   line-height: 1.4;
 }
 
 .library-meta {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: rgba(255,255,255,0.6);
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
 
 .library-actions {
@@ -564,14 +562,11 @@ async function handleCreate(form) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 52px;
-  padding: 0 32px;
-  border-radius: 999px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
   background: #1ED760;
   color: #000000;
-  font-size: 16px;
-  font-weight: 800;
   border: none;
   cursor: pointer;
   transition: all 0.2s;

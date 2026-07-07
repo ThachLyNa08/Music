@@ -29,7 +29,7 @@
 
         <div class="hero-actions">
           <button class="btn-primary home-primary-btn" @click="$emit('play', featuredItem)">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><polygon points="5 3 19 12 5 21 5 3" /></svg>
             <span>Phát ngay</span>
           </button>
         </div>
@@ -90,8 +90,8 @@ const greetingSubtitle = computed(() => {
 .home-hero {
   position: relative;
   width: 100%;
-  min-height: 380px;
-  padding: 40px 52px;
+  min-height: 280px;
+  padding: 32px 42px;
   overflow: hidden;
   isolation: isolate;
   display: flex;
@@ -150,16 +150,16 @@ const greetingSubtitle = computed(() => {
 .hero-greeting {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 16px;
+  gap: 7px;
+  padding: 6px 14px;
   border-radius: 999px;
   color: #fff;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   background: rgba(255,255,255,0.13);
   border: 1px solid rgba(255,255,255,0.18);
   backdrop-filter: blur(18px);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .status-dot {
@@ -173,16 +173,16 @@ const greetingSubtitle = computed(() => {
 .hero-title {
   margin: 0;
   color: #fff;
-  font-size: clamp(44px, 5.2vw, 72px);
+  font-size: clamp(36px, 4.5vw, 56px);
   line-height: 0.95;
   font-weight: 900;
   letter-spacing: -0.055em;
 }
 
 .hero-subtitle {
-  margin: 18px 0 0;
+  margin: 12px 0 0;
   color: rgba(255,255,255,0.72);
-  font-size: clamp(17px, 1.5vw, 22px);
+  font-size: clamp(15px, 1.3vw, 18px);
   line-height: 1.35;
   font-weight: 650;
 }
@@ -190,22 +190,22 @@ const greetingSubtitle = computed(() => {
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 28px;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .btn-primary,
 .btn-secondary {
-  height: 54px;
+  height: 44px;
   border-radius: 999px;
-  padding: 0 28px;
+  padding: 0 22px;
   border: 0;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 850;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
@@ -222,30 +222,30 @@ const greetingSubtitle = computed(() => {
 
 @media (max-height: 780px) {
   .home-hero {
-    min-height: 320px;
-    padding: 30px 48px;
+    min-height: 240px;
+    padding: 24px 32px;
   }
 
   .hero-title {
-    font-size: clamp(40px, 4.7vw, 62px);
+    font-size: clamp(30px, 4vw, 46px);
   }
 
   .hero-actions {
-    margin-top: 24px;
+    margin-top: 16px;
   }
 
   .btn-primary,
   .btn-secondary {
-    height: 50px;
-    padding: 0 24px;
-    font-size: 16px;
+    height: 40px;
+    padding: 0 18px;
+    font-size: 14px;
   }
 }
 
 @media (max-width: 768px) {
   .home-hero {
-    min-height: 420px;
-    padding: 28px;
+    min-height: 320px;
+    padding: 24px;
   }
 
   .home-hero-video-overlay {
@@ -259,7 +259,7 @@ const greetingSubtitle = computed(() => {
   }
 
   .hero-title {
-    font-size: 42px;
+    font-size: 32px;
   }
 
   .home-hero-lobster-title {
@@ -268,7 +268,7 @@ const greetingSubtitle = computed(() => {
   }
 
   .hero-subtitle {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .hero-actions {

@@ -21,7 +21,7 @@
     <div v-else-if="song" class="w-full">
       
       <!-- HERO BANNER -->
-      <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+      <section class="relative overflow-hidden w-full px-6 py-4 md:px-8 md:py-6 mb-6 border-b border-white/5 shadow-xl bg-[#090B14]">
         <!-- Blurred Background Cover -->
         <img 
           :src="coverImage"
@@ -32,21 +32,21 @@
         <!-- Dark Overlay -->
         <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#1e3a8a]/20 z-0 pointer-events-none"></div>
 
-        <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+        <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-4 md:gap-6 max-w-[1400px] mx-auto">
           <!-- Foreground Cover -->
           <img 
             :src="coverImage" 
             :alt="song.title"
-            class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] object-cover rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0"
+            class="w-[120px] h-[120px] lg:w-[160px] lg:h-[160px] object-cover rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0"
             @error="handleImageError"
           />
 
           <!-- Song Info -->
-          <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
-            <span class="hidden lg:inline-block text-xs font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">BÀI HÁT</span>
-            <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ song.title }}</h1>
+          <div class="flex flex-col gap-1 min-w-0 flex-1 text-center lg:text-left w-full">
+            <span class="hidden lg:inline-block text-[10px] lg:text-[11px] font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">BÀI HÁT</span>
+            <h1 class="text-3xl md:text-4xl lg:text-[48px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ song.title }}</h1>
             
-            <div class="text-base md:text-lg font-bold text-white/90 mt-1 truncate">
+            <div class="text-sm md:text-base font-bold text-white/90 mt-1 truncate">
               <template v-for="(artist, idx) in song.artists" :key="artist.id">
                 <RouterLink :to="`/artist/${artist.id}`" class="hover:text-white hover:underline transition">{{ artist.name }}</RouterLink>
                 <span v-if="idx < song.artists.length - 1" class="mx-1.5 opacity-70">•</span>
@@ -58,7 +58,7 @@
               </span>
             </div>
             
-            <div class="flex items-center justify-center lg:justify-start gap-3 text-sm font-medium text-white/70 mt-2 flex-wrap">
+            <div class="flex items-center justify-center lg:justify-start gap-3 text-xs md:text-sm font-medium text-white/70 mt-1 flex-wrap">
               <span v-if="song.like_count !== undefined" class="inline-flex items-center gap-1 font-bold text-white">
                 <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 {{ formatCount(displayLikeCount) }} <span class="text-white/60 font-medium hidden sm:inline">lượt thích</span>

@@ -124,16 +124,18 @@
   }
 
   .home-panel {
-    @apply rounded-[28px] border border-white/10 p-5 md:p-6 backdrop-blur-md;
-    background:
-      linear-gradient(135deg, rgba(76,29,149,0.18), rgba(30,27,75,0.34), rgba(15,23,42,0.88));
-    box-shadow: 0 18px 45px rgba(0,0,0,0.26);
+    /* @apply rounded-[28px] border border-white/10 p-5 md:p-6 backdrop-blur-md; */
+    /* background:
+      linear-gradient(135deg, rgba(76,29,149,0.18), rgba(30,27,75,0.34), rgba(15,23,42,0.88)); */
+    /* box-shadow: 0 18px 45px rgba(0,0,0,0.26); */
+    @apply p-5 md:p-6;
   }
 
   .home-panel-soft {
-    @apply rounded-[24px] border border-white/10 p-4 md:p-5 backdrop-blur-md;
-    background:
-      linear-gradient(135deg, rgba(76,29,149,0.12), rgba(15,23,42,0.78));
+    /* @apply rounded-[24px] border border-white/10 p-4 md:p-5 backdrop-blur-md; */
+    /* background:
+      linear-gradient(135deg, rgba(76,29,149,0.12), rgba(15,23,42,0.78)); */
+    @apply p-4 md:p-5;
   }
 
   .home-card {

@@ -1,7 +1,7 @@
 <template>
   <div class="liked-songs-view user-page-bg">
     <!-- Header Hero Section -->
-    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl -mx-8 -mt-8 bg-[#090B14]">
+    <section class="relative overflow-hidden px-6 py-4 md:px-8 md:py-6 mb-6 border-b border-white/5 shadow-xl -mx-8 -mt-8 bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img
         :src="getPlaylistCover({ system_key: 'favorite_songs' })"
@@ -12,25 +12,25 @@
       <!-- Dark Overlay with Pinkish Tint -->
       <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#ec4899]/20 z-0 pointer-events-none"></div>
 
-      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-8 w-full">
+      <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-6 w-full">
         <!-- Foreground Cover -->
-        <div class="w-[130px] h-[130px] lg:w-[180px] lg:h-[180px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
+        <div class="w-[100px] h-[100px] lg:w-[140px] lg:h-[140px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
           <CoverImage :src="getPlaylistCover({ system_key: 'favorite_songs' })" class="w-full h-full object-cover" />
         </div>
         
-        <div class="flex flex-col gap-2 min-w-0 flex-1">
-          <span class="text-sm font-bold uppercase tracking-wider text-white/70">Playlist</span>
-          <h1 class="text-5xl lg:text-[72px] font-black leading-[1.1] text-white tracking-tight mb-1 drop-shadow-lg">Bài Hát Đã Thích</h1>
-          <div class="flex items-center gap-2 text-sm text-white/60 font-semibold mb-3">
+        <div class="flex flex-col gap-1.5 min-w-0 flex-1">
+          <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-white/70">Playlist</span>
+          <h1 class="text-4xl lg:text-[56px] font-black leading-[1.1] text-white tracking-tight mb-1 drop-shadow-lg">Bài Hát Đã Thích</h1>
+          <div class="flex items-center gap-2 text-xs md:text-sm text-white/60 font-semibold mb-2">
             <span class="text-white font-bold">{{ userDisplayName }}</span>
             <span>•</span>
             <span>{{ likedSongs.length }} bài hát</span>
           </div>
           
           <div class="flex items-center gap-4 mt-2">
-            <button v-if="likedSongs.length > 0" class="w-14 h-14 rounded-full bg-[#1ED760] text-black flex items-center justify-center hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.3)] shrink-0" @click="toggleLikedSongsPlayback">
-              <svg v-if="!isLikedSongsPlaying" viewBox="0 0 24 24" width="28" height="28" fill="currentColor" class="ml-1"><path d="M8 5v14l11-7z"/></svg>
-              <svg v-else viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <button v-if="likedSongs.length > 0" class="w-12 h-12 rounded-full bg-[#1ED760] text-black flex items-center justify-center hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.3)] shrink-0" @click="toggleLikedSongsPlayback">
+              <svg v-if="!isLikedSongsPlaying" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" class="ml-1"><path d="M8 5v14l11-7z"/></svg>
+              <svg v-else viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
           </div>
         </div>

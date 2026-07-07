@@ -1,7 +1,7 @@
 <template>
   <div class="followed-artists-page user-page-bg pb-4">
     <!-- Header Hero Section -->
-    <section class="relative overflow-hidden px-8 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+    <section class="relative overflow-hidden px-6 py-4 md:px-8 md:py-6 mb-6 border-b border-white/5 shadow-xl bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img
         :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.followedArtists)"
@@ -12,17 +12,17 @@
       <!-- Dark Overlay with Purple Tint -->
       <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-[#090B14]/80 to-[#8b5cf6]/20 z-0 pointer-events-none"></div>
 
-      <div class="relative z-10 flex flex-col sm:flex-row items-center sm:items-center gap-6 sm:gap-8 w-full">
+      <div class="relative z-10 flex flex-col sm:flex-row items-center sm:items-center gap-4 sm:gap-6 w-full">
         <!-- Foreground Avatar -->
-        <div class="w-[120px] h-[120px] lg:w-[160px] lg:h-[160px] rounded-full shadow-[0_15px_40px_rgba(0,0,0,0.6)] border-2 border-white/10 flex-shrink-0 overflow-hidden">
+        <div class="w-[90px] h-[90px] lg:w-[120px] lg:h-[120px] rounded-full shadow-[0_15px_40px_rgba(0,0,0,0.6)] border-2 border-white/10 flex-shrink-0 overflow-hidden">
           <img :src="normalizeAssetUrl(DEFAULT_SPECIAL_COVERS.followedArtists)" alt="Followed Artists" class="w-full h-full object-cover" />
         </div>
         
         <div class="flex flex-col gap-1 min-w-0 flex-1 text-center sm:text-left">
-          <span class="hidden sm:block text-sm font-bold uppercase tracking-wider text-white/70 mb-1">Hồ sơ</span>
-          <h1 class="text-4xl sm:text-5xl lg:text-[72px] font-black leading-[1.1] text-white tracking-tight mb-2 drop-shadow-lg">Nghệ sĩ đã theo dõi</h1>
-          <p class="text-white/70 font-medium text-sm sm:text-base mb-1">Những nghệ sĩ bạn quan tâm</p>
-          <div class="flex items-center justify-center sm:justify-start gap-2 text-sm text-white/50 font-semibold">
+          <span class="hidden sm:block text-xs md:text-sm font-bold uppercase tracking-wider text-white/70 mb-1">Hồ sơ</span>
+          <h1 class="text-3xl sm:text-4xl lg:text-[56px] font-black leading-[1.1] text-white tracking-tight mb-2 drop-shadow-lg">Nghệ sĩ đã theo dõi</h1>
+          <p class="text-white/70 font-medium text-xs sm:text-sm mb-1">Những nghệ sĩ bạn quan tâm</p>
+          <div class="flex items-center justify-center sm:justify-start gap-2 text-xs text-white/50 font-semibold">
             <span class="text-white font-bold">{{ artists.length }}</span>
             <span>nghệ sĩ</span>
           </div>

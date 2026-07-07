@@ -6,7 +6,7 @@
       <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#7c3aed]/[0.025] blur-[120px]"></div>
     </div>
 
-    <section class="relative z-10 overflow-hidden px-8 py-5 md:px-10 md:py-6 mb-6 border-b border-white/5 shadow-xl bg-[#0b0d12]/60 backdrop-blur-3xl">
+    <section class="relative z-10 overflow-hidden px-6 py-4 md:px-8 md:py-5 mb-5 border-b border-white/5 shadow-xl bg-[#0b0d12]/60 backdrop-blur-3xl">
       <!-- Blurred Background Cover -->
       <img
         :src="aiPlaylistCoverUrl"
@@ -19,18 +19,18 @@
 
       <div class="relative z-10 flex flex-col lg:flex-row items-start lg:items-center gap-6 md:gap-8 w-full max-w-[1360px] mx-auto">
         <!-- Foreground Cover -->
-        <div class="w-[120px] h-[120px] lg:w-[160px] lg:h-[160px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
+        <div class="w-[90px] h-[90px] lg:w-[120px] lg:h-[120px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
           <img :src="aiPlaylistCoverUrl" class="w-full h-full object-cover" />
         </div>
         
         <div class="flex flex-col gap-1.5 min-w-0 flex-1">
-          <span class="text-xs md:text-sm font-bold uppercase tracking-wider text-[#b3b3b3]">MUSICFLOW AI</span>
-          <h1 class="text-4xl lg:text-6xl font-black leading-[1.1] text-white tracking-tight mb-0.5 drop-shadow-lg">AI Playlist</h1>
+          <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#b3b3b3]">MUSICFLOW AI</span>
+          <h1 class="text-3xl lg:text-5xl font-black leading-[1.1] text-white tracking-tight mb-0.5 drop-shadow-lg">AI Playlist</h1>
           
-          <p class="mt-2 text-sm leading-relaxed text-[#b3b3b3] md:text-base max-w-2xl">
+          <p class="mt-2 text-xs leading-relaxed text-[#b3b3b3] md:text-sm max-w-2xl">
             Tạo playlist thông minh từ mô tả, tâm trạng và gu nghe của bạn.
           </p>
-          <div class="flex items-center gap-2 text-xs md:text-sm text-[#b3b3b3] font-medium mt-1 mb-3">
+          <div class="flex items-center gap-2 text-[10px] md:text-xs text-[#b3b3b3] font-medium mt-1 mb-3">
             <span>Cá nhân hóa bằng BPR-MF</span>
             <span>•</span>
             <span>Audio features</span>
@@ -40,7 +40,7 @@
 
           <div class="flex items-center gap-4 mt-2">
             <button 
-              class="rounded-full bg-[#1ed760] px-6 py-2.5 text-sm font-bold text-black transition hover:scale-105 hover:bg-[#1fdf64] shadow-[0_0_20px_rgba(30,215,96,0.3)] shrink-0" 
+              class="rounded-full bg-[#1ed760] px-5 py-2 text-[13px] font-bold text-black transition hover:scale-105 hover:bg-[#1fdf64] shadow-[0_0_20px_rgba(30,215,96,0.3)] shrink-0" 
               @click="scrollToPrompt"
             >
               Tạo playlist
@@ -48,7 +48,7 @@
             <button
               v-if="savedPlaylist"
               type="button"
-              class="rounded-full border border-white/20 bg-transparent px-6 py-2.5 text-sm font-bold text-white transition hover:border-white/40 hover:bg-white/5 shrink-0"
+              class="rounded-full border border-white/20 bg-transparent px-5 py-2 text-[13px] font-bold text-white transition hover:border-white/40 hover:bg-white/5 shrink-0"
               @click="openSavedPlaylist"
             >
               Mở playlist

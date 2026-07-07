@@ -3,7 +3,7 @@
     <div class="relative z-10 max-w-[1920px] mx-auto home-shell" :class="{ 'home-shell--entered': isHomeEntered }">
       
       <!-- Error Banner -->
-      <div v-if="homeError" class="mb-8 p-4 mx-4 sm:mx-6 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm flex items-center gap-3">
+      <div v-if="homeError" class="mb-3 p-4 mx-4 sm:mx-6 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm flex items-center gap-3">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
         <span>{{ homeError }}</span>
       </div>
@@ -18,16 +18,16 @@
         :featuredItem="featuredItem"
         @play="handlePlayFeatured"
         @explore="$router.push('/search')"
-        class="mb-8 rounded-none md:rounded-none"
+        class="mb-3 rounded-none md:rounded-none"
       />
 
       <!-- Quick Access Section -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-8 w-full">
+      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
            <div v-for="i in 6" :key="i" class="h-20 bg-white/5 rounded-2xl animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="quickAccess.length > 0" class="home-panel-soft mb-8">
+      <section v-else-if="quickAccess.length > 0" class="home-panel-soft mb-3">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div 
             v-for="item in displayQuickAccess" 
@@ -56,7 +56,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="madeForYouPlaylists.length > 0" class="home-panel mb-8">
+      <section v-else-if="madeForYouPlaylists.length > 0" class="home-panel mb-3">
         <SectionHeader 
           title="Mix cá nhân của bạn"
           subtitle="Những danh sách phát cá nhân hóa dựa trên thói quen nghe nhạc của bạn"
@@ -82,7 +82,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedSongs.length > 0" class="home-panel mb-8">
+      <section v-else-if="recommendedSongs.length > 0" class="home-panel mb-3">
         <SectionHeader 
           :title="recommendTitle"
           :subtitle="recommendSubtitle"
@@ -106,7 +106,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recentSongs.length > 0" class="home-panel mb-8">
+      <section v-else-if="recentSongs.length > 0" class="home-panel mb-3">
         <SectionHeader 
           title="Nghe gần đây"
           subtitle="Tiếp tục từ nơi bạn đã dừng lại"
@@ -130,7 +130,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedToday.length > 0" class="home-panel mb-8">
+      <section v-else-if="recommendedToday.length > 0" class="home-panel mb-3">
         <SectionHeader 
           title="Gợi ý hôm nay"
           subtitle="Playlist phù hợp với thời điểm và thói quen nghe nhạc của bạn"
@@ -155,7 +155,7 @@
            <div v-for="j in 5" :key="j" class="h-14 w-full bg-white/5 rounded-md animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="trendingSongs.length > 0" class="home-panel mb-8">
+      <section v-else-if="trendingSongs.length > 0" class="home-panel mb-3">
         <SectionHeader
           title="Xu hướng"
           subtitle="Những bài hát hot nhất hiện nay"
@@ -178,7 +178,7 @@
       </section>
 
       <!-- Weekly Chart -->
-      <WeeklyChartSection class="home-panel mb-8" @open-menu="handleOpenMenu" />
+      <WeeklyChartSection class="home-panel mb-3" @open-menu="handleOpenMenu" />
 
       <!-- Section: Danh sách phát của bạn -->
       <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
@@ -187,7 +187,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="userPlaylists.length > 0" class="home-panel mb-8">
+      <section v-else-if="userPlaylists.length > 0" class="home-panel mb-3">
         <SectionHeader 
           title="Danh sách phát của bạn"
           subtitle="Những playlist do bạn tạo"
@@ -211,7 +211,7 @@
           <div v-for="j in 5" :key="j" class="w-[160px] h-[160px] rounded-full bg-white/5 animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="displayArtists.length > 0" class="home-panel mb-8">
+      <section v-else-if="displayArtists.length > 0" class="home-panel mb-3">
         <SectionHeader 
           :title="hasFollowedArtists ? 'Từ nghệ sĩ bạn quan tâm' : 'Nghệ sĩ nổi bật'"
           :subtitle="hasFollowedArtists ? 'Những nghệ sĩ bạn đang theo dõi' : 'Khám phá những nghệ sĩ được yêu thích'"

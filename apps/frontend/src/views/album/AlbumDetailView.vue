@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col user-page-bg pb-4" v-if="album">
     <!-- Header Hero Section -->
-    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+    <section class="relative overflow-hidden w-full px-6 py-4 md:px-8 md:py-6 mb-6 border-b border-white/5 shadow-xl bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img 
         :src="getItemCover(album)"
@@ -14,21 +14,21 @@
       <!-- Pink/Purple Tint Overlay -->
       <div class="absolute inset-0 bg-gradient-to-t from-[#090B14] via-transparent to-pink-500/10 z-0 pointer-events-none"></div>
 
-      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
+      <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-4 md:gap-6 max-w-[1400px] mx-auto">
         <!-- Foreground Cover -->
-        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
+        <div class="w-[120px] h-[120px] lg:w-[160px] lg:h-[160px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
           <CoverImage :src="getItemCover(album)" class="w-full h-full object-cover" />
         </div>
 
-        <div class="flex flex-col gap-1.5 min-w-0 flex-1 text-center lg:text-left w-full">
-          <span class="hidden lg:inline-block text-xs font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">
+        <div class="flex flex-col gap-1 min-w-0 flex-1 text-center lg:text-left w-full">
+          <span class="hidden lg:inline-block text-[10px] lg:text-[11px] font-bold uppercase tracking-wider text-white/70 mb-0.5 w-max">
             {{ album.album_type === 'single' ? 'SINGLE' : (album.album_type === 'compilation' ? 'COMPILATION' : 'ALBUM') }}
           </span>
-          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ album.title }}</h1>
+          <h1 class="text-3xl md:text-4xl lg:text-[48px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ album.title }}</h1>
           
-          <div class="flex items-center justify-center lg:justify-start gap-2 text-sm md:text-base font-bold text-white/90 mt-1 flex-wrap">
-            <img v-if="album.artist_avatar_url" :src="$formatImageUrl(album.artist_avatar_url)" @error="event => event.target.src = '/default-cover.png'" class="w-6 h-6 rounded-full object-cover shadow-sm hidden md:block" />
-            <RouterLink :to="'/artist/' + album.artist_id" class="text-white hover:text-[#1ed760] transition font-bold text-base md:text-lg">{{ album.artist_name }}</RouterLink>
+          <div class="flex items-center justify-center lg:justify-start gap-1.5 text-xs md:text-sm font-bold text-white/90 mt-1 flex-wrap">
+            <img v-if="album.artist_avatar_url" :src="$formatImageUrl(album.artist_avatar_url)" @error="event => event.target.src = '/default-cover.png'" class="w-5 h-5 rounded-full object-cover shadow-sm hidden md:block" />
+            <RouterLink :to="'/artist/' + album.artist_id" class="text-white hover:text-[#1ed760] transition font-bold text-sm md:text-base">{{ album.artist_name }}</RouterLink>
             
             <span class="w-1 h-1 bg-white/30 rounded-full mx-1 hidden lg:block"></span>
             <span class="hidden lg:block">{{ album.song_count }} bài hát</span>
