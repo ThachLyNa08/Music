@@ -24,12 +24,12 @@
     <button @click="openShareModal" class="w-full text-left rounded-xl hover:bg-white/10 hover:text-white transition" :class="compact ? 'px-3 py-1.5' : 'px-4 py-2.5'">Chia sẻ với bạn bè</button>
   </div>
 
-  <ShareSongModal v-model:open="isShareModalOpen" :song="shareSong" />
+  <ShareEntityModal v-model:open="isShareModalOpen" :entity="shareSong" entityType="song" />
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import ShareSongModal from '@/components/common/ShareSongModal.vue'
+import ShareEntityModal from '@/components/common/ShareEntityModal.vue'
 
 const props = defineProps({
   show: Boolean,

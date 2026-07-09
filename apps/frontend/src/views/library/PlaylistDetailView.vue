@@ -59,13 +59,11 @@
             <PlaybackButton v-if="songs.length > 0" class="mr-2" :is-playing="isCurrentPlaylistPlaying" @click="togglePlaylistPlayback" />
             
             <template v-if="canEditMetadata">
-              <button class="bg-white/10 backdrop-blur-md border border-white/10 text-white font-bold px-4 py-2.5 rounded-full hover:bg-white/20 hover:scale-105 transition-all shadow-lg cursor-pointer flex items-center gap-2" @click="editPlaylist">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                Sửa
+              <button class="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg cursor-pointer" @click="editPlaylist" title="Sửa playlist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
-              <button class="bg-red-500/10 backdrop-blur-md border border-red-500/30 text-red-400 font-bold px-4 py-2.5 rounded-full hover:bg-red-500 hover:text-white hover:scale-105 transition-all shadow-lg cursor-pointer flex items-center gap-2" @click="deletePlaylist">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                Xóa
+              <button class="w-14 h-14 rounded-full bg-red-500/10 backdrop-blur-md border border-red-500/30 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white hover:scale-105 transition-all shadow-lg cursor-pointer" @click="deletePlaylist" title="Xóa playlist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </template>
             
@@ -91,6 +89,16 @@
                 </svg>
               </button>
             </template>
+            <button 
+              type="button"
+              class="w-14 h-14 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer"
+              title="Chia sẻ playlist"
+              @click="isShareModalOpen = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -210,6 +218,9 @@
       @go-to-album="handleGoToAlbum"
       @share="handleShare"
     />
+    
+    <!-- Share Modal -->
+    <ShareEntityModal v-model:open="isShareModalOpen" :entity="playlist" entityType="playlist" />
   </div>
   
   <div v-else-if="loadingData" class="flex flex-col items-center justify-center h-full user-page-bg">
@@ -347,6 +358,7 @@ import CoverImage from '@/components/common/CoverImage.vue'
 import PlaybackButton from '@/components/common/PlaybackButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import PlaylistRecommendations from '@/components/playlist/PlaylistRecommendations.vue'
+import ShareEntityModal from '@/components/common/ShareEntityModal.vue'
 import PlaylistInlineSearch from '@/components/playlist/PlaylistInlineSearch.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
 
@@ -364,6 +376,7 @@ const loadingData = ref(true)
 const showEditModal = ref(false)
 const isSubmitting = ref(false)
 const isCloning = ref(false)
+const isShareModalOpen = ref(false)
 const editForm = ref({ name: '', description: '', is_public: true, coverFile: null })
 const editPreviewUrl = ref(null)
 

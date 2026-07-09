@@ -123,3 +123,25 @@ scratch_*.js
 musicflow_liquid_glass.html
 musicflow_user_dashboard.html
 playlist_gallery.html
+
+# Local debug / temporary scripts
+apps/backend/check_msg.js
+apps/backend/query_db.js
+apps/backend/scripts/run_migration.js
+
+# Local backup patch
+backup_working_changes.patch
+
+# Generated / local datasets
+datasets/
+
+# Temporary exports / reports
+*.tmp
+*.bak
+*.log
+
+# Local one-off migration runners
+apps/backend/scripts/run_*_migration.js
+
+# Local thesis/doc backups
+docs/thesis/backup/

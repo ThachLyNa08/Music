@@ -1,3 +1,6 @@
+> [!WARNING]
+> **LEGACY V2:** Tài liệu này thuộc hướng contextual mood V2 cũ. Trong phiên bản hiện tại (V3), thành phần này đóng vai trò phụ trợ thay vì cốt lõi. Hãy tham khảo `01_CURRENT_RECOMMENDATION_SYSTEM.md` để biết kiến trúc V3 mới nhất.
+
 # Contextual Mood Recommendation (Gợi ý theo buổi trong ngày)
 
 > **Mục tiêu**: thêm một section nhẹ trên Home với các bài hát được cá nhân

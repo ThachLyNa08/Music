@@ -41,9 +41,15 @@ def health():
     return {"status": "ok", "service": "musicflow-ai"}
 
 
-@app.post("/api/recommend/retrain", status_code=501)
+@app.post("/api/recommend/retrain")
 def retrain_recommendation_model():
-    return feature_not_ready()
+    return {
+        "success": False,
+        "mode": "offline_training",
+        "code": "OFFLINE_TRAINING_ONLY",
+        "message": "Retrain tự động qua API chưa được bật. Hệ thống hiện sử dụng offline cronjob/script để huấn luyện mô hình.",
+        # TODO: Có thể bổ sung background job retraining trong phase sau.
+    }
 
 
 class StemJobRequest(BaseModel):

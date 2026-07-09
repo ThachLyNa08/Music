@@ -10,10 +10,12 @@
           <MfIcon name="refresh" :class="{ spinning: loading }" size="18" />
           Làm mới
         </button>
-        <button class="btn-action primary" @click="retrainModel">
-          <MfIcon name="model_training" size="18" />
-          Train lại Model
-        </button>
+        <span :title="offlineTrainingTooltip">
+          <button class="btn-action primary" disabled @click="retrainModel">
+            <MfIcon name="model_training" size="18" />
+            Chạy offline script
+          </button>
+        </span>
       </div>
     </header>
 
@@ -62,7 +64,7 @@
             <span class="stat-label">Tổng lượt nghe hệ thống</span>
             <span class="stat-value text-blue">{{ formatNumber(data.totalListeningHistory) }}</span>
           </div>
-          <div class="stat-meta">Dữ liệu train thuật toán</div>
+          <div class="stat-meta">Dữ liệu cho offline training</div>
         </div>
       </div>
 
@@ -78,7 +80,7 @@
               <span class="value font-semibold">{{ data.currentModel || 'BPR-MF / Hybrid' }}</span>
             </div>
             <div class="quality-item">
-              <span class="label">Lần train gần nhất:</span>
+              <span class="label">Cập nhật artifact gần nhất:</span>
               <span class="value">{{ data.lastTrainingRun ? new Date(data.lastTrainingRun).toLocaleString('vi-VN') : 'N/A' }}</span>
             </div>
             <div class="quality-item">
@@ -159,6 +161,7 @@ const toast = useToastStore()
 const loading = ref(true)
 const error = ref(null)
 const data = ref({})
+const offlineTrainingTooltip = 'MVP hiện sử dụng offline training script. Vui lòng chạy script huấn luyện từ backend để cập nhật model artifact.'
 
 async function fetchData() {
   loading.value = true
@@ -174,8 +177,8 @@ async function fetchData() {
 }
 
 function retrainModel() {
-  toast.showToast('Đã gửi yêu cầu Retrain Model. Quá trình này có thể mất vài phút đến vài giờ tùy lượng dữ liệu.', 'success')
-  // Call to actual retrain API would go here
+  toast.showToast(offlineTrainingTooltip, 'warning')
+  // TODO: Có thể bổ sung background job retraining trong phase sau.
 }
 
 function formatNumber(num) {
@@ -247,7 +250,7 @@ onMounted(fetchData)
   border-color: #7c3aed;
   color: #ffffff;
 }
-.btn-action.primary:hover {
+.btn-action.primary:hover:not(:disabled) {
   background: #6d28d9;
 }
 

@@ -173,15 +173,125 @@
             </div>
 
             <button
+              v-if="!activeListenSession"
               class="w-8 h-8 shrink-0 rounded-full bg-[#1f232e] hover:bg-[#2a2f3d] flex items-center justify-center transition-colors text-gray-400"
               type="button"
-              title="Tải lại tin nhắn"
-              @click="loadMessages(activeConversation.conversation_id)"
+              title="Bắt đầu nghe cùng nhau"
+              @click="$refs.listenTogetherRef?.startListenTogether()"
             >
-              <MfIcon name="refresh" size="15" />
+              <MfIcon name="headphones" size="15" />
+            </button>
+
+            <button
+              class="w-8 h-8 shrink-0 rounded-full bg-[#1f232e] hover:bg-[#2a2f3d] flex items-center justify-center transition-colors"
+              :class="isMediaPanelOpen ? 'text-[#6366f1]' : 'text-gray-400'"
+              type="button"
+              title="Media đã chia sẻ"
+              @click="isMediaPanelOpen = !isMediaPanelOpen"
+            >
+              <MfIcon name="library" size="15" />
+            </button>
+            <button
+              class="w-8 h-8 shrink-0 rounded-full bg-[#1f232e] hover:bg-[#2a2f3d] flex items-center justify-center transition-colors text-gray-400"
+              type="button"
+              title="Tìm kiếm trong cuộc trò chuyện"
+              @click="isConvSearchOpen = !isConvSearchOpen; if (isConvSearchOpen) nextTick(() => $refs.convSearchInput?.focus())"
+            >
+              <MfIcon name="search" size="15" />
             </button>
           </div>
         </div>
+
+        <ChatListenTogether 
+          ref="listenTogetherRef" 
+          v-if="activeConversation"
+          :conversation-id="activeConversation.conversation_id" 
+          @session-updated="session => activeListenSession = session"
+        />
+
+        <!-- Conversation Search Bar -->
+        <div v-if="isConvSearchOpen" class="w-full bg-[#1f232e] border-b border-[#2a2f3d] py-2 px-4 flex flex-col gap-2 shrink-0 animate-fade-in relative z-20">
+          <div class="relative flex items-center">
+            <MfIcon name="search" size="14" className="absolute left-3 text-gray-500" />
+            <input 
+              ref="convSearchInput"
+              v-model="convSearchQuery"
+              type="text"
+              placeholder="Tìm trong cuộc trò chuyện..."
+              class="w-full bg-[#0f1117] text-white text-[12px] rounded-lg pl-9 pr-9 py-1.5 outline-none border border-transparent focus:border-[#6366f1]/50 transition"
+            />
+            <button @click="isConvSearchOpen = false; convSearchQuery = ''" class="absolute right-1.5 w-6 h-6 flex items-center justify-center text-gray-500 hover:text-white rounded-md hover:bg-[#2a2f3d] transition">
+              <MfIcon name="close" size="12" />
+            </button>
+          </div>
+          
+          <!-- Search Results -->
+          <div v-if="convSearchQuery.trim() && (convSearchLoading || convSearchResults.length > 0 || !convSearchLoading)" class="absolute top-full left-0 right-0 mt-1 mx-3 bg-[#1f232e] border border-[#2a2f3d] rounded-xl shadow-xl max-h-[300px] overflow-y-auto scrollbar-thin z-30">
+            <div v-if="convSearchLoading" class="p-4 text-center text-gray-400 text-[13px]">Đang tìm...</div>
+            <div v-else-if="convSearchResults.length === 0" class="p-4 text-center text-gray-400 text-[13px]">Không tìm thấy kết quả phù hợp</div>
+            <div v-else class="flex flex-col">
+              <button 
+                v-for="item in convSearchResults" 
+                :key="item.id"
+                @click="scrollToMessage(item.id)"
+                type="button"
+                class="flex items-start gap-3 p-3 hover:bg-[#2a2f3d] transition border-b border-[#2a2f3d]/50 last:border-0 text-left"
+              >
+                <!-- Result Icon/Avatar based on type -->
+                <div v-if="['song', 'playlist', 'album', 'artist'].includes(item.matched_type) && getSharedEntity(item)" class="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-black/50">
+                  <img :src="getSharedEntityCover(item)" class="w-full h-full object-cover" />
+                </div>
+                <UserAvatar v-else :user="{ avatar_url: item.sender_avatar, display_name: item.sender_name }" size-class="w-9 h-9" />
+                
+                <div class="min-w-0 flex-1">
+                  <div class="flex justify-between items-baseline mb-0.5">
+                    <span class="text-[12px] font-bold text-gray-300 truncate">{{ item.sender_name }}</span>
+                    <span class="text-[10px] text-gray-500 shrink-0 ml-2">{{ formatTime(item.created_at) }}</span>
+                  </div>
+                  <div v-if="['song', 'playlist', 'album', 'artist'].includes(item.matched_type) && getSharedEntity(item)" class="text-[13px] text-white truncate font-medium">
+                    <MfIcon :name="item.matched_type === 'song' ? 'music_note' : (item.matched_type === 'playlist' ? 'queue_music' : (item.matched_type === 'album' ? 'album' : 'mic'))" size="13" className="inline text-[#6366f1] mr-1" />
+                    {{ getSharedEntityTitle(item) }} <span class="text-gray-400 font-normal" v-if="getSharedEntitySubtitle(item)">- {{ getSharedEntitySubtitle(item) }}</span>
+                  </div>
+                  <div v-else class="text-[13px] text-gray-300 line-clamp-2 leading-relaxed">
+                    {{ item.body }}
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pinned Message Bar -->
+        <transition 
+          enter-active-class="transition duration-300 ease-out"
+          enter-from-class="-translate-y-full opacity-0"
+          enter-to-class="translate-y-0 opacity-100"
+          leave-active-class="transition duration-200 ease-in"
+          leave-from-class="translate-y-0 opacity-100"
+          leave-to-class="-translate-y-full opacity-0"
+        >
+          <div v-if="pinnedMessage" class="w-full bg-[#1a1d27]/90 backdrop-blur border-b border-[#2a2f3d] py-1.5 px-4 flex items-center gap-3 shrink-0 relative z-10 cursor-pointer hover:bg-[#1f232e] transition-colors" @click="scrollToMessage(pinnedMessage.message.id)">
+            <div class="flex-shrink-0 text-[#6366f1]">
+              <MfIcon name="push_pin" size="14" />
+            </div>
+            <div class="min-w-0 flex-1 flex flex-col justify-center py-0.5">
+              <span class="text-[10px] text-[#6366f1] font-bold uppercase tracking-wider mb-0.5">
+                {{ ['song_share', 'playlist_share', 'album_share', 'artist_share'].includes(pinnedMessage.message.message_type) ? 'Đã ghim nội dung chia sẻ' : 'Đã ghim tin nhắn' }}
+              </span>
+              
+              <div v-if="['song_share', 'playlist_share', 'album_share', 'artist_share'].includes(pinnedMessage.message.message_type)" class="flex items-center gap-2">
+                <img :src="getSharedEntityCover(pinnedMessage.message)" class="w-4 h-4 rounded object-cover flex-shrink-0" />
+                <span class="text-[12px] text-white font-medium truncate">{{ getSharedEntityTitle(pinnedMessage.message) }} <span class="text-gray-400 font-normal" v-if="getSharedEntitySubtitle(pinnedMessage.message)">- {{ getSharedEntitySubtitle(pinnedMessage.message) }}</span></span>
+              </div>
+              <div v-else class="text-[12px] text-gray-300 truncate">
+                <span class="font-bold text-white mr-1">{{ pinnedMessage.message.sender.display_name }}:</span>{{ pinnedMessage.message.body }}
+              </div>
+            </div>
+            <button @click.stop="handleUnpinMessage" class="w-6 h-6 rounded-md hover:bg-[#2a2f3d] flex items-center justify-center text-gray-500 hover:text-white transition flex-shrink-0" title="Bỏ ghim">
+              <MfIcon name="close" size="14" />
+            </button>
+          </div>
+        </transition>
 
         <!-- Mobile Now Playing Banner -->
         <div v-if="peerNowPlaying" class="sm:hidden w-full bg-[#1f232e]/80 backdrop-blur border-b border-[#2a2f3d] px-4 py-2 flex items-center justify-between cursor-pointer animate-fade-in" @click="playSharedSong(peerNowPlaying)">
@@ -226,24 +336,38 @@
               </div>
 
               <!-- Message Group -->
-              <div class="flex items-end gap-2 max-w-[85%] sm:max-w-[70%]" :class="group.isOwn ? 'ml-auto justify-end' : ''">
+              <div class="flex items-end gap-2" :class="[
+                group.isSystem ? 'w-full justify-center' : 'max-w-[85%] sm:max-w-[70%]',
+                !group.isSystem && group.isOwn ? 'ml-auto justify-end' : ''
+              ]">
                 <UserAvatar
-                  v-if="!group.isOwn"
+                  v-if="!group.isOwn && !group.isSystem"
                   :user="activeConversation.other_user"
                   size-class="w-6 h-6 mb-1.5 shrink-0"
                 />
                 
-                <div class="flex flex-col gap-1 min-w-0" :class="group.isOwn ? 'items-end' : 'items-start'">
+                <div class="flex flex-col gap-1 min-w-0" :class="[
+                  group.isSystem ? 'w-full items-center justify-center' : (group.isOwn ? 'items-end' : 'items-start')
+                ]">
                   <div
                     v-for="(message, msgIndex) in group.messages"
                     :key="message.id"
-                    class="flex flex-col gap-1"
-                    :class="group.isOwn ? 'items-end' : 'items-start'"
+                    class="flex flex-col gap-1 w-full"
+                    :class="[
+                      group.isSystem ? 'items-center justify-center' : (group.isOwn ? 'items-end' : 'items-start')
+                    ]"
                   >
+                    <template v-if="group.isSystem">
+                      <SystemMessageItem :message="message" />
+                    </template>
                     <div
+                      v-else
                       :id="'msg-' + message.id"
-                      class="group/message flex items-center gap-2 relative rounded-2xl transition-colors duration-500"
-                      :class="group.isOwn ? 'flex-row-reverse' : 'flex-row'"
+                      class="group/message flex items-center gap-2 relative rounded-2xl transition-all duration-500"
+                      :class="[
+                        group.isOwn ? 'flex-row-reverse' : 'flex-row',
+                        highlightedMessageId === message.id ? 'bg-[#6366f1]/20 shadow-[0_0_15px_rgba(99,102,241,0.2)] scale-[1.02] z-10 p-1 -m-1' : ''
+                      ]"
                     >
                     <!-- Bubble Wrapper -->
                     <div class="flex flex-col min-w-0" :class="group.isOwn ? 'items-end' : 'items-start'">
@@ -261,6 +385,18 @@
                             <MfIcon name="music_note" size="11" className="inline mr-0.5" />
                             {{ message.reply_to.shared_song?.title || 'Bài hát' }}
                           </template>
+                          <template v-else-if="message.reply_to.message_type === 'playlist_share'">
+                            <MfIcon name="queue_music" size="11" className="inline mr-0.5" />
+                            {{ message.reply_to.shared_playlist?.title || 'Playlist' }}
+                          </template>
+                          <template v-else-if="message.reply_to.message_type === 'album_share'">
+                            <MfIcon name="album" size="11" className="inline mr-0.5" />
+                            {{ message.reply_to.shared_album?.title || 'Album' }}
+                          </template>
+                          <template v-else-if="message.reply_to.message_type === 'artist_share'">
+                            <MfIcon name="mic" size="11" className="inline mr-0.5" />
+                            {{ message.reply_to.shared_artist?.name || 'Nghệ sĩ' }}
+                          </template>
                           <template v-else-if="message.reply_to.message_type === 'recalled'">
                             <i class="opacity-70">Tin nhắn đã được thu hồi</i>
                           </template>
@@ -270,40 +406,40 @@
                         </div>
                       </div>
 
-                    <!-- Bubble -->
-                    <div
+                      <div
                       class="text-left leading-relaxed overflow-wrap-anywhere relative select-none"
                       @dblclick="message.message_type !== 'recalled' && toggleReaction(message.id, '❤️')"
                       @contextmenu.prevent="typeof message.id === 'number' && openActionMenu(message, $event)"
                       style="-webkit-touch-callout: none;"
                       :class="[
                         group.isOwn ? 'bg-[#6366f1] text-white' : 'bg-[#1f232e] text-gray-300',
-                        message.message_type === 'song_share' ? 'p-0 overflow-hidden' : 'px-3 py-2 text-[13px]',
+                        ['song_share', 'playlist_share', 'album_share', 'artist_share'].includes(message.message_type) ? 'p-0 overflow-hidden' : 'px-3 py-2 text-[13px]',
                         getBubbleShape(group.isOwn, group.messages.length, msgIndex),
                         message.status === 'sending' ? 'opacity-70' : '',
                         message.status === 'error' ? 'bg-red-500/20 text-red-200 border border-red-500/50' : '',
                         message.message_type === 'recalled' ? '!bg-transparent border border-gray-600 !text-gray-500 italic' : ''
                       ]"
                     >
-                      <template v-if="message.message_type === 'song_share'">
+                      <template v-if="['song_share', 'playlist_share', 'album_share', 'artist_share'].includes(message.message_type)">
                         <div
-                          v-if="message.shared_song"
+                          v-if="getSharedEntity(message)"
                           class="flex w-full min-w-[240px] max-w-[320px] cursor-pointer items-center gap-2.5 p-2 transition group/card relative"
                           :class="group.isOwn ? 'bg-black/10 hover:bg-black/20' : 'hover:bg-[#2a2f3d]'"
                           role="button"
                           tabindex="0"
-                          title="Xem chi tiết bài hát"
-                          @click="openSongDetail(message.shared_song)"
-                          @keydown.enter.prevent="openSongDetail(message.shared_song)"
+                          :title="getSharedEntityTitleText(message)"
+                          @click="openSharedEntity(message)"
+                          @keydown.enter.prevent="openSharedEntity(message)"
                         >
                           <div class="w-[60px] h-[60px] rounded-lg bg-black/20 flex items-center justify-center relative overflow-hidden shrink-0 group/cover">
                             <img
-                              :src="songCover(message.shared_song)"
+                              :src="getSharedEntityCover(message)"
                               alt=""
                               class="w-full h-full object-cover"
                               @error="event => event.target.src = '/default-cover.png'"
                             />
                             <button
+                              v-if="message.message_type === 'song_share'"
                               class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition"
                               type="button"
                               title="Phát bài hát"
@@ -313,41 +449,43 @@
                             </button>
                           </div>
                           <div class="min-w-0 flex-1 pt-0.5">
-                            <div class="truncate text-[15px] font-bold text-white">{{ message.shared_song.title }}</div>
+                            <div class="truncate text-[15px] font-bold text-white">{{ getSharedEntityTitle(message) }}</div>
                             <div class="mt-0.5 flex items-center justify-between gap-2">
                               <div class="truncate text-[13px]" :class="group.isOwn ? 'text-white/80' : 'text-gray-400'">
-                                {{ songArtist(message.shared_song) }}<template v-if="message.shared_song.album"> · {{ message.shared_song.album }}</template>
+                                {{ getSharedEntitySubtitle(message) }}
                               </div>
                               <div class="flex items-center shrink-0">
-                                <LikeButton 
-                                  :song="message.shared_song" 
-                                  size="14" 
-                                  baseClass="p-0.5 transition-all rounded-full"
-                                  :class="group.isOwn ? 'hover:bg-black/20 text-white/90' : 'hover:bg-white/10 text-gray-400'"
-                                />
-                                <button
-                                  class="p-0.5 rounded-full transition-colors flex items-center justify-center ml-0.5"
-                                  :class="group.isOwn ? 'text-white/90 hover:bg-black/20 hover:text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'"
-                                  type="button"
-                                  title="Thêm vào hàng chờ"
-                                  @click.stop="addToQueue(message.shared_song)"
-                                >
-                                  <MfIcon name="queue" size="14" />
-                                </button>
-                                <button
-                                  class="p-0.5 rounded-full transition-colors flex items-center justify-center ml-0.5"
-                                  :class="group.isOwn ? 'text-white/90 hover:bg-black/20 hover:text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'"
-                                  type="button"
-                                  title="Thêm"
-                                  @click.stop="openSongMenu(message.shared_song, $event)"
-                                >
-                                  <MfIcon name="more_vert" size="14" />
-                                </button>
+                                <template v-if="message.message_type === 'song_share'">
+                                  <LikeButton 
+                                    :song="message.shared_song" 
+                                    size="14" 
+                                    baseClass="p-0.5 transition-all rounded-full"
+                                    :class="group.isOwn ? 'hover:bg-black/20 text-white/90' : 'hover:bg-white/10 text-gray-400'"
+                                  />
+                                  <button
+                                    class="p-0.5 rounded-full transition-colors flex items-center justify-center ml-0.5"
+                                    :class="group.isOwn ? 'text-white/90 hover:bg-black/20 hover:text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'"
+                                    type="button"
+                                    title="Thêm vào hàng chờ"
+                                    @click.stop="addToQueue(message.shared_song)"
+                                  >
+                                    <MfIcon name="queue" size="14" />
+                                  </button>
+                                  <button
+                                    class="p-0.5 rounded-full transition-colors flex items-center justify-center ml-0.5"
+                                    :class="group.isOwn ? 'text-white/90 hover:bg-black/20 hover:text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'"
+                                    type="button"
+                                    title="Thêm"
+                                    @click.stop="openSongMenu(message.shared_song, $event)"
+                                  >
+                                    <MfIcon name="more_vert" size="14" />
+                                  </button>
+                                </template>
                               </div>
                             </div>
                           </div>
                         </div>
-                        <div v-else class="p-3 text-[13px] font-semibold opacity-80">Bài hát này không còn khả dụng.</div>
+                        <div v-else class="p-3 text-[13px] font-semibold opacity-80">Nội dung này không còn khả dụng.</div>
                         
                         <div v-if="message.body && !isDefaultShareBody(message)" class="px-3 pb-3 pt-1 whitespace-pre-wrap break-words text-[13px]" :class="group.isOwn ? 'text-white/90' : 'text-gray-300'">
                           {{ message.body }}
@@ -391,7 +529,7 @@
 
                 </div>
                   
-                  <div class="flex items-center gap-1.5 px-1 mt-0.5" :class="group.isOwn ? 'justify-end' : 'justify-start'">
+                  <div v-if="!group.isSystem" class="flex items-center gap-1.5 px-1 mt-0.5" :class="group.isOwn ? 'justify-end' : 'justify-start'">
                     <span class="text-[9px] text-gray-600">{{ formatTime(group.end_time) }}</span>
                     <span v-if="group.isOwn && isGroupRead(group)" class="text-[10px] text-[#818cf8] flex items-center" title="Đã xem">
                       <MfIcon name="done_all" size="14" />
@@ -404,6 +542,19 @@
         </div>
 
         <!-- Input Area -->
+        <div v-if="peerTyping" class="px-4 flex items-end gap-2 my-2">
+          <img v-if="activeConversation?.other_user?.avatar_url" :src="normalizeImageUrl(activeConversation.other_user.avatar_url)" class="w-7 h-7 rounded-full object-cover shrink-0" />
+          <div v-else class="w-7 h-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#a855f7] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+            {{ peerTypingName?.charAt(0)?.toUpperCase() || 'U' }}
+          </div>
+          <div class="px-3.5 py-2 bg-[#1f232e] rounded-2xl rounded-bl-sm w-fit flex items-center justify-center min-h-[32px]">
+            <div class="flex items-center gap-1.5 h-3">
+              <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot typing-dot-1"></div>
+              <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot typing-dot-2"></div>
+              <div class="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot typing-dot-3"></div>
+            </div>
+          </div>
+        </div>
         <form class="shrink-0 border-t border-[#1f232e] bg-[#0f1117] flex flex-col" @submit.prevent="sendMessage">
           <div v-if="replyingMessage" class="px-4 pt-3 pb-1 flex items-center justify-between bg-[#0f1117]">
              <div class="flex items-center gap-2 text-[12px] text-gray-400 min-w-0 border-l-2 border-[#6366f1] pl-2.5 py-0.5">
@@ -421,6 +572,8 @@
               maxlength="1000"
               placeholder="Nhập tin nhắn..."
               rows="1"
+              @focus="startTypingInterval"
+              @blur="stopTyping"
               @keydown.enter.exact.prevent="sendMessage"
             />
             <button
@@ -447,20 +600,143 @@
       </div>
     </section>
 
+    <!-- Shared Media Panel (Desktop & Mobile combined) -->
+    <aside 
+      v-if="isMediaPanelOpen" 
+      class="absolute inset-0 z-40 md:relative md:inset-auto md:z-auto md:flex w-full md:w-[280px] lg:w-[300px] bg-[#1a1d27] md:bg-[#1a1d27] border-l border-[#2a2f3d] flex-col shrink-0 animate-fade-in"
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-[#2a2f3d]">
+        <h3 class="text-white font-bold text-[15px] m-0">Media đã chia sẻ</h3>
+        <button @click="isMediaPanelOpen = false" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#2a2f3d] text-gray-400 hover:text-white transition">
+          <MfIcon name="close" size="16" />
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex items-center px-2 py-1 border-b border-[#2a2f3d]">
+        <button 
+          v-for="t in [{id: 'song', label: 'Bài hát'}, {id: 'playlist', label: 'Playlist'}, {id: 'album_artist', label: 'Album/Nghệ sĩ'}]" 
+          :key="t.id"
+          @click="mediaTab = t.id"
+          class="flex-1 text-center py-2 text-[13px] font-medium transition border-b-2"
+          :class="mediaTab === t.id ? 'text-[#6366f1] border-[#6366f1]' : 'text-gray-400 border-transparent hover:text-gray-300'"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-3">
+        <div v-if="sharedMediaLoading && sharedMediaItems.length === 0" class="flex justify-center py-8">
+          <div class="w-6 h-6 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        
+        <!-- Tab: Song -->
+        <template v-else-if="mediaTab === 'song'">
+          <div v-if="sharedMediaItems.length === 0" class="flex flex-col items-center justify-center text-center py-10 opacity-60">
+            <MfIcon name="music" size="32" className="mb-3 text-gray-500" />
+            <p class="text-[13px] text-gray-400 m-0 px-4">Chưa có bài hát nào được chia sẻ trong cuộc trò chuyện này.</p>
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div v-for="item in sharedMediaItems" :key="item.message_id" class="flex gap-3 p-2 rounded-xl hover:bg-[#2a2f3d] transition group relative">
+              <div class="w-11 h-11 rounded bg-black shrink-0 relative overflow-hidden cursor-pointer" @click="playSharedSong(item.song)">
+                <img :src="songCover(item.song)" class="w-full h-full object-cover" />
+                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                  <MfIcon name="play" size="20" className="text-white" />
+                </div>
+              </div>
+              <div class="flex-1 min-w-0 flex flex-col justify-center">
+                <p class="text-[13px] text-white font-medium truncate m-0 cursor-pointer hover:underline" @click="openSongDetail(item.song)">{{ item.song.title }}</p>
+                <p class="text-[11px] text-gray-400 truncate m-0">{{ item.song.artist_name }}</p>
+                <p class="text-[10px] text-gray-500 mt-0.5 truncate m-0">Từ {{ item.sender.display_name }} • {{ formatTime(item.shared_at) }}</p>
+              </div>
+              <!-- Action Menu for Song -->
+              <div class="absolute right-2 top-2 bottom-2 flex flex-col justify-center opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-[#2a2f3d] via-[#2a2f3d] to-transparent pl-4">
+                <div class="flex gap-1">
+                  <button class="w-7 h-7 rounded-full hover:bg-[#3b4255] flex items-center justify-center text-gray-300 hover:text-white transition" title="Thêm vào hàng chờ" @click="addToQueue(item.song)">
+                    <MfIcon name="add" size="14" />
+                  </button>
+                  <button class="w-7 h-7 rounded-full hover:bg-[#3b4255] flex items-center justify-center text-gray-300 hover:text-white transition" title="Xem trong chat" @click="scrollToMessage(item.message_id)">
+                    <MfIcon name="search" size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        
+        <!-- Tab: Playlist -->
+        <template v-else-if="mediaTab === 'playlist'">
+          <div v-if="sharedMediaItems.length === 0" class="flex flex-col items-center justify-center text-center py-10 opacity-60">
+            <MfIcon name="queue_music" size="32" className="mb-3 text-gray-500" />
+            <p class="text-[13px] text-gray-400 m-0 px-4">Chưa có playlist nào được chia sẻ.</p>
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div v-for="item in sharedMediaItems" :key="item.message_id" class="flex gap-3 p-2 rounded-xl hover:bg-[#2a2f3d] transition group relative">
+              <div class="w-11 h-11 rounded bg-black shrink-0 relative overflow-hidden cursor-pointer" @click="$router.push(`/playlist/${item.playlist?.id}`)">
+                <img :src="item.playlist?.cover_url ? normalizeImageUrl(item.playlist.cover_url) : '/default-cover.png'" class="w-full h-full object-cover" />
+              </div>
+              <div class="flex-1 min-w-0 flex flex-col justify-center">
+                <p class="text-[13px] text-white font-medium truncate m-0 cursor-pointer hover:underline" @click="$router.push(`/playlist/${item.playlist?.id}`)">{{ item.playlist?.title }}</p>
+                <p class="text-[10px] text-gray-500 mt-0.5 truncate m-0">Từ {{ item.sender.display_name }} • {{ formatTime(item.shared_at) }}</p>
+              </div>
+              <div class="absolute right-2 top-2 bottom-2 flex flex-col justify-center opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-[#2a2f3d] via-[#2a2f3d] to-transparent pl-4">
+                <button class="w-7 h-7 rounded-full hover:bg-[#3b4255] flex items-center justify-center text-gray-300 hover:text-white transition" title="Xem trong chat" @click="scrollToMessage(item.message_id)">
+                  <MfIcon name="search" size="14" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+        
+        <!-- Tab: Album/Artist -->
+        <template v-else-if="mediaTab === 'album_artist'">
+          <div v-if="sharedMediaItems.length === 0" class="flex flex-col items-center justify-center text-center py-10 opacity-60">
+            <MfIcon name="album" size="32" className="mb-3 text-gray-500" />
+            <p class="text-[13px] text-gray-400 m-0 px-4">Chưa có album hoặc nghệ sĩ nào được chia sẻ.</p>
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div v-for="item in sharedMediaItems" :key="item.message_id" class="flex gap-3 p-2 rounded-xl hover:bg-[#2a2f3d] transition group relative">
+              <div v-if="item.album" class="w-11 h-11 rounded bg-black shrink-0 relative overflow-hidden cursor-pointer" @click="$router.push(`/album/${item.album.id}`)">
+                <img :src="item.album.cover_url ? normalizeImageUrl(item.album.cover_url) : '/default-cover.png'" class="w-full h-full object-cover" />
+              </div>
+              <div v-else-if="item.artist" class="w-11 h-11 rounded-full bg-black shrink-0 relative overflow-hidden cursor-pointer" @click="$router.push(`/artist/${item.artist.id}`)">
+                <img :src="item.artist.avatar_url ? normalizeImageUrl(item.artist.avatar_url) : '/default-cover.png'" class="w-full h-full object-cover" />
+              </div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-center">
+                <p v-if="item.album" class="text-[13px] text-white font-medium truncate m-0 cursor-pointer hover:underline" @click="$router.push(`/album/${item.album.id}`)">{{ item.album.title }} <span class="text-gray-400 text-[11px]">(Album)</span></p>
+                <p v-else-if="item.artist" class="text-[13px] text-white font-medium truncate m-0 cursor-pointer hover:underline" @click="$router.push(`/artist/${item.artist.id}`)">{{ item.artist.name }} <span class="text-gray-400 text-[11px]">(Nghệ sĩ)</span></p>
+                
+                <p v-if="item.album" class="text-[11px] text-gray-400 truncate m-0">{{ item.album.artist_name }}</p>
+                <p class="text-[10px] text-gray-500 mt-0.5 truncate m-0">Từ {{ item.sender.display_name }} • {{ formatTime(item.shared_at) }}</p>
+              </div>
+              <div class="absolute right-2 top-2 bottom-2 flex flex-col justify-center opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-[#2a2f3d] via-[#2a2f3d] to-transparent pl-4">
+                <button class="w-7 h-7 rounded-full hover:bg-[#3b4255] flex items-center justify-center text-gray-300 hover:text-white transition" title="Xem trong chat" @click="scrollToMessage(item.message_id)">
+                  <MfIcon name="search" size="14" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </aside>
+
     <!-- Action Menu Popover -->
     <Teleport to="body">
       <div v-if="actionMenu.visible" class="fixed inset-0 z-40" @click="closeActionMenu" @contextmenu.prevent="closeActionMenu">
         <div 
-          class="absolute bg-[#1f232e] border border-[#2a2f3d] shadow-xl rounded-2xl p-2 flex flex-col w-56 animate-fade-in"
+          class="absolute bg-[#1f232e] border border-[#2a2f3d] shadow-xl rounded-2xl p-1.5 flex flex-col w-44 animate-fade-in"
           :style="{ top: actionMenu.y + 'px', left: actionMenu.x + 'px' }"
           @click.stop
         >
           <!-- Emoji Reactions -->
-          <div class="flex items-center justify-between px-2 py-2 mb-1 border-b border-[#2a2f3d]">
+          <div class="flex items-center justify-between px-1.5 py-1 mb-1 border-b border-[#2a2f3d]">
             <button
               v-for="emoji in allowedEmojis"
               :key="emoji"
-              class="w-8 h-8 flex items-center justify-center hover:bg-[#2a2f3d] rounded-full text-xl transition transform hover:scale-110 active:scale-95"
+              class="w-6 h-6 flex items-center justify-center hover:bg-[#2a2f3d] rounded-full text-base transition transform hover:scale-110 active:scale-95"
               @click="handleActionEmoji(emoji)"
             >
               {{ emoji }}
@@ -468,13 +744,18 @@
           </div>
           
           <!-- Actions -->
-          <button class="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-[#2a2f3d] rounded-xl transition w-full text-left mt-1" @click="handleActionReply(actionMenu.message)">
-            <MfIcon name="reply" size="18" />
+          <button class="flex items-center gap-2.5 px-2.5 py-2 text-[13px] text-gray-300 hover:text-white hover:bg-[#2a2f3d] rounded-xl transition w-full text-left mt-1" @click="handleActionReply(actionMenu.message)">
+            <MfIcon name="reply" size="16" />
             Trả lời
           </button>
 
-          <button v-if="actionMenu.message.sender_id === currentUserId" class="flex items-center gap-3 px-3 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl transition w-full text-left" @click="handleActionRecall(actionMenu.message)">
-            <MfIcon name="delete" size="18" />
+          <button class="flex items-center gap-2.5 px-2.5 py-2 text-[13px] text-gray-300 hover:text-white hover:bg-[#2a2f3d] rounded-xl transition w-full text-left" @click="() => { handlePinMessage(actionMenu.message.id); closeActionMenu() }">
+            <MfIcon name="push_pin" size="16" />
+            {{ actionMenu.message.message_type === 'song_share' ? 'Ghim bài hát' : 'Ghim tin' }}
+          </button>
+
+          <button v-if="actionMenu.message.sender_id === currentUserId" class="flex items-center gap-2.5 px-2.5 py-2 text-[13px] text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl transition w-full text-left" @click="handleActionRecall(actionMenu.message)">
+            <MfIcon name="delete" size="16" />
             Thu hồi
           </button>
         </div>
@@ -532,6 +813,8 @@ import { usePlayerStore } from '@/stores/player'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 import LikeButton from '@/components/common/LikeButton.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
+import ChatListenTogether from './components/ChatListenTogether.vue'
+import SystemMessageItem from '@/components/chat/SystemMessageItem.vue'
 import { useToastStore } from '@/stores/toast'
 
 const UserAvatar = {
@@ -587,17 +870,84 @@ const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const searchLoading = ref(false)
 const sending = ref(false)
+
+const isMediaPanelOpen = ref(false)
+const mediaTab = ref('song')
+const sharedMediaItems = ref([])
+const sharedMediaLoading = ref(false)
+const sharedMediaNextCursor = ref(null)
+
+const activeListenSession = ref(null)
+
 const draft = ref('')
 const messageListRef = ref(null)
 const messageInput = ref(null)
 const replyingMessage = ref(null)
 let searchTimer = null
 
+const peerTyping = ref(false)
+const peerTypingName = ref('')
+let typingIntervalTimer = null
+let isTypingSent = false
+let peerTypingAutoClearTimer = null
+
 const actionMenu = ref({ visible: false, message: null, x: 0, y: 0 })
 const songMenu = ref({ visible: false, position: { x: 0, y: 0 }, song: null })
 const allowedEmojis = ['❤️', '🔥', '🎧', '😍', '👏', '🎵']
 const confirmModal = ref({ visible: false, message: '', resolve: null })
 const peerNowPlaying = ref(null)
+const pinnedMessage = ref(null)
+
+const isConvSearchOpen = ref(false)
+const convSearchQuery = ref('')
+const convSearchLoading = ref(false)
+const convSearchResults = ref([])
+const highlightedMessageId = ref(null)
+let convSearchTimer = null
+
+watch(convSearchQuery, (val) => {
+  if (convSearchTimer) clearTimeout(convSearchTimer)
+  if (!val || val.trim().length < 1) {
+    convSearchResults.value = []
+    convSearchLoading.value = false
+    return
+  }
+  convSearchLoading.value = true
+  convSearchTimer = setTimeout(async () => {
+    if (!activeConversation.value) return
+    try {
+      const res = await messagesApi.searchConversationMessages(activeConversation.value.conversation_id, { q: val })
+      convSearchResults.value = res.data?.data?.items || []
+    } catch (err) {
+      console.error('Search failed:', err)
+      convSearchResults.value = []
+    } finally {
+      convSearchLoading.value = false
+    }
+  }, 300)
+})
+
+onBeforeUnmount(() => {
+  if (convSearchTimer) clearTimeout(convSearchTimer)
+  stopTyping()
+  cleanupSocket()
+})
+
+function scrollToMessage(messageId) {
+  isConvSearchOpen.value = false
+  const el = document.getElementById(`msg-${messageId}`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightedMessageId.value = messageId
+    setTimeout(() => {
+      if (highlightedMessageId.value === messageId) {
+        highlightedMessageId.value = null
+      }
+    }, 1500)
+  } else {
+    toast.show('Tin nhắn này chưa được tải trong danh sách hiện tại', 'info')
+  }
+}
 
 function requestConfirm(message) {
   return new Promise((resolve) => {
@@ -637,6 +987,8 @@ function setupSocket() {
   socket.on('chat:reaction_updated', handleReactionUpdated)
   socket.on('chat:now_playing:state', handleNowPlayingState)
   socket.on('chat:now_playing:state_updated', handleNowPlayingStateUpdated)
+  socket.on('chat:conversation_pin_updated', handleConversationPinUpdated)
+  socket.on('chat:typing:update', handleTypingUpdate)
   handleSocketConnect()
 }
 
@@ -652,6 +1004,58 @@ function cleanupSocket() {
   socket.off('chat:reaction_updated', handleReactionUpdated)
   socket.off('chat:now_playing:state', handleNowPlayingState)
   socket.off('chat:now_playing:state_updated', handleNowPlayingStateUpdated)
+  socket.off('chat:conversation_pin_updated', handleConversationPinUpdated)
+  socket.off('chat:typing:update', handleTypingUpdate)
+}
+
+function handleTypingUpdate(payload) {
+  if (payload.conversationId !== activeConversation.value?.conversation_id) return
+  if (payload.userId === auth.user?.id) return
+
+  peerTyping.value = payload.isTyping
+  peerTypingName.value = payload.displayName || activeConversation.value?.other_user?.display_name || 'Người kia'
+
+  if (payload.isTyping) {
+    clearTimeout(peerTypingAutoClearTimer)
+    peerTypingAutoClearTimer = setTimeout(() => {
+      peerTyping.value = false
+    }, 3000)
+  }
+}
+
+function startTypingInterval() {
+  if (!activeConversation.value?.conversation_id) return
+
+  // Phát tín hiệu đang nhập ngay lập tức
+  if (!isTypingSent) {
+    chatSocket()?.emit('chat:typing:start', {
+      conversationId: activeConversation.value.conversation_id
+    })
+    isTypingSent = true
+  }
+
+  // Cứ mỗi 2s lại phát lại để giữ bộ đếm 3s bên người nhận
+  clearInterval(typingIntervalTimer)
+  typingIntervalTimer = setInterval(() => {
+    if (activeConversation.value?.conversation_id) {
+      chatSocket()?.emit('chat:typing:start', {
+        conversationId: activeConversation.value.conversation_id
+      })
+    }
+  }, 2000)
+}
+
+function stopTyping() {
+  clearInterval(typingIntervalTimer)
+  
+  if (!activeConversation.value?.conversation_id) return
+  if (!isTypingSent) return
+
+  chatSocket()?.emit('chat:typing:stop', {
+    conversationId: activeConversation.value.conversation_id
+  })
+
+  isTypingSent = false
 }
 
 function handleReactionUpdated({ conversationId, messageId, reactions, actorUserId }) {
@@ -694,10 +1098,35 @@ function handleNowPlayingStateUpdated(data) {
   }
 }
 
-watch(activeConversation, (conv) => {
+function handleConversationPinUpdated(payload) {
+  if (Number(payload.conversationId) !== Number(activeConversation.value?.conversation_id)) return
+  pinnedMessage.value = payload.pin || null
+}
+
+watch(activeConversation, async (conv, oldConv) => {
+  if (oldConv && isTypingSent) {
+    chatSocket()?.emit('chat:typing:stop', { conversationId: oldConv.conversation_id })
+    isTypingSent = false
+    clearInterval(typingIntervalTimer)
+  }
+  peerTyping.value = false
+  clearTimeout(peerTypingAutoClearTimer)
+  
   peerNowPlaying.value = null
+  pinnedMessage.value = null
+  convSearchQuery.value = ''
+  isConvSearchOpen.value = false
+  convSearchResults.value = []
+  highlightedMessageId.value = null
+  
   if (conv) {
     chatSocket()?.emit('chat:now_playing:get', { conversationId: conv.conversation_id })
+    try {
+      const res = await messagesApi.getConversationPin(conv.conversation_id)
+      pinnedMessage.value = res.data?.data || null
+    } catch (err) {
+      console.error('Failed to get pinned message', err)
+    }
   }
 }, { immediate: true })
 
@@ -894,10 +1323,34 @@ async function selectConversation(conversation) {
   }
   activeConversation.value = conversation
   replyingMessage.value = null
+  isMediaPanelOpen.value = false
+  sharedMediaItems.value = []
+  sharedMediaNextCursor.value = null
   chatSocket()?.emit('chat:join', { conversationId: conversation.conversation_id })
   await loadMessages(conversation.conversation_id)
   await markActiveRead()
 }
+
+async function fetchSharedMedia() {
+  if (!activeConversation.value || !isMediaPanelOpen.value) return
+  sharedMediaLoading.value = true
+  try {
+    const res = await messagesApi.getConversationSharedMedia(activeConversation.value.conversation_id, { type: mediaTab.value })
+    sharedMediaItems.value = res.data?.data?.items || []
+    sharedMediaNextCursor.value = res.data?.data?.nextCursor || null
+  } catch (err) {
+    console.error('Failed to fetch shared media', err)
+  } finally {
+    sharedMediaLoading.value = false
+  }
+}
+
+watch(mediaTab, fetchSharedMedia)
+watch(isMediaPanelOpen, (isOpen) => {
+  if (isOpen && sharedMediaItems.value.length === 0) {
+    fetchSharedMedia()
+  }
+})
 
 async function loadMessages(conversationId) {
   loadingMessages.value = true
@@ -936,8 +1389,63 @@ function songShareDescription(song) {
 }
 
 function isDefaultShareBody(message) {
-  if (!message?.shared_song) return false
-  return message.body === `Đã chia sẻ: ${message.shared_song.title}`
+  if (message.message_type === 'song_share' && message.shared_song) {
+    return message.body === `Đã chia sẻ: ${message.shared_song.title}`
+  }
+  if (message.message_type === 'playlist_share' && message.shared_playlist) {
+    return message.body === `Đã chia sẻ: ${message.shared_playlist.title}`
+  }
+  if (message.message_type === 'album_share' && message.shared_album) {
+    return message.body === `Đã chia sẻ: ${message.shared_album.title}`
+  }
+  if (message.message_type === 'artist_share' && message.shared_artist) {
+    return message.body === `Đã chia sẻ: ${message.shared_artist.name}`
+  }
+  return false
+}
+
+function getSharedEntity(message) {
+  if (message.message_type === 'song_share') return message.shared_song
+  if (message.message_type === 'playlist_share') return message.shared_playlist
+  if (message.message_type === 'album_share') return message.shared_album
+  if (message.message_type === 'artist_share') return message.shared_artist
+  return null
+}
+
+function getSharedEntityTitleText(message) {
+  if (message.message_type === 'song_share') return 'Xem chi tiết bài hát'
+  if (message.message_type === 'playlist_share') return 'Xem chi tiết playlist'
+  if (message.message_type === 'album_share') return 'Xem chi tiết album'
+  if (message.message_type === 'artist_share') return 'Xem chi tiết nghệ sĩ'
+  return 'Xem chi tiết'
+}
+
+function getSharedEntityTitle(message) {
+  const entity = getSharedEntity(message)
+  return entity?.title || entity?.name || 'Nội dung chia sẻ'
+}
+
+function getSharedEntitySubtitle(message) {
+  const entity = getSharedEntity(message)
+  if (message.message_type === 'song_share') return songArtist(entity) + (entity?.album ? ` · ${entity.album}` : '')
+  if (message.message_type === 'playlist_share') return entity?.subtitle || 'Playlist'
+  if (message.message_type === 'album_share') return entity?.artist_name || 'Album'
+  if (message.message_type === 'artist_share') return 'Nghệ sĩ'
+  return ''
+}
+
+function getSharedEntityCover(message) {
+  const entity = getSharedEntity(message)
+  return normalizeImageUrl(entity?.cover_url || entity?.avatar_url || '')
+}
+
+function openSharedEntity(message) {
+  const entity = getSharedEntity(message)
+  if (!entity?.id) return
+  if (message.message_type === 'song_share') router.push(`/song/${entity.id}`)
+  if (message.message_type === 'playlist_share') router.push(`/playlist/${entity.id}`)
+  if (message.message_type === 'album_share') router.push(`/album/${entity.id}`)
+  if (message.message_type === 'artist_share') router.push(`/artist/${entity.id}`)
 }
 
 function openSongDetail(song) {
@@ -980,7 +1488,19 @@ const groupedMessages = computed(() => {
   let currentGroup = null
 
   messages.value.forEach((msg) => {
-    if (!currentGroup) {
+    if (msg.message_type === 'system') {
+      currentGroup = {
+        isSystem: true,
+        messages: [msg],
+        start_time: msg.created_at,
+        end_time: msg.created_at
+      }
+      groups.push(currentGroup)
+      currentGroup = null
+      return
+    }
+
+    if (!currentGroup || currentGroup.isSystem) {
       currentGroup = {
         sender_id: msg.sender_id,
         isOwn: isOwnMessage(msg),
@@ -1104,6 +1624,7 @@ async function sendMessage() {
 
   sending.value = true
   draft.value = ''
+  stopTyping()
   
   const tempId = 'temp_' + Date.now()
   const currentReply = replyingMessage.value
@@ -1253,15 +1774,27 @@ function scrollToBottom() {
   })
 }
 
-function scrollToMessage(msgId) {
-  if (!msgId) return
-  const el = document.getElementById(`msg-${msgId}`)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.classList.add('bg-[#6366f1]/30')
-    setTimeout(() => {
-      el.classList.remove('bg-[#6366f1]/30')
-    }, 1500)
+async function handlePinMessage(messageId) {
+  if (!activeConversation.value) return
+  try {
+    const res = await messagesApi.pinMessage(activeConversation.value.conversation_id, messageId)
+    pinnedMessage.value = res.data?.data || null
+    toast.show('Đã ghim tin nhắn', 'success')
+  } catch (err) {
+    console.error('Failed to pin message', err)
+    toast.show('Không thể ghim tin nhắn', 'error')
+  }
+}
+
+async function handleUnpinMessage() {
+  if (!activeConversation.value) return
+  try {
+    await messagesApi.unpinConversationMessage(activeConversation.value.conversation_id)
+    pinnedMessage.value = null
+    toast.show('Đã bỏ ghim tin nhắn', 'success')
+  } catch (err) {
+    console.error('Failed to unpin message', err)
+    toast.show('Không thể bỏ ghim', 'error')
   }
 }
 
@@ -1364,4 +1897,16 @@ onBeforeUnmount(() => {
 .overflow-wrap-anywhere {
   overflow-wrap: anywhere;
 }
+
+@keyframes bubble6 {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+.typing-dot {
+  animation: bubble6 1.4s infinite ease-in-out both;
+}
+.typing-dot-1 { animation-delay: 0s; }
+.typing-dot-2 { animation-delay: 0.2s; }
+.typing-dot-3 { animation-delay: 0.4s; }
 </style>

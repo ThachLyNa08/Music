@@ -73,6 +73,18 @@
                 {{ isSavedToLibrary ? 'Đã thêm vào thư viện' : 'Thêm vào thư viện' }}
               </div>
             </div>
+            
+            <!-- Share Button -->
+            <button 
+              type="button"
+              class="w-12 h-12 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer"
+              title="Chia sẻ"
+              @click="isShareModalOpen = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -131,6 +143,9 @@
       @go-to-album="handleGoToAlbum"
       @share="handleShare"
     />
+    
+    <!-- Share Modal -->
+    <ShareEntityModal v-model:open="isShareModalOpen" :entity="album" entityType="album" />
   </div>
   
   <div v-else-if="loading" class="flex flex-col items-center justify-center min-h-full user-page-bg">
@@ -157,6 +172,7 @@ import SongRow from '@/components/common/SongRow.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import PlaybackButton from '@/components/common/PlaybackButton.vue'
+import ShareEntityModal from '@/components/common/ShareEntityModal.vue'
 import { getItemCover } from '@/utils/imageUrl'
 import { addToast } from '@/utils/toast'
 
@@ -170,6 +186,7 @@ const loading = ref(true)
 const error = ref('')
 const isLibraryLoading = ref(false)
 const isSavedToLibrary = ref(false)
+const isShareModalOpen = ref(false)
 
 function getSongId(song) {
   return song?.id ?? song?.song_id ?? null

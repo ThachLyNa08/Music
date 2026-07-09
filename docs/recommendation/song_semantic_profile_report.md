@@ -1,3 +1,6 @@
+> [!WARNING]
+> **LEGACY V2:** Tài liệu này thuộc hướng Semantic V2 cũ. Trong phiên bản hiện tại (V3), thành phần Semantic Profile đóng vai trò là một lớp dữ liệu metadata phụ trợ. Hãy tham khảo `01_CURRENT_RECOMMENDATION_SYSTEM.md` để biết hệ thống BPR-MF mới nhất.
+
 # Song Semantic Profile Evaluation Report
 
 ## Overview

@@ -1,8 +1,10 @@
 const jwt = require('jsonwebtoken');
 const messageService = require('./message.service');
+const listenSessionService = require('./listenSession.service');
 
 let ioInstance;
 const nowPlayingMap = new Map();
+const typingMap = new Map(); // userId -> Set of conversationIds
 
 function joinUserRoom(socket, userId) {
   if (!userId) return;
@@ -132,6 +134,74 @@ function registerSocketEvents(io) {
       }
     });
 
+    socket.on('listen_together:control', async (payload) => {
+      try {
+        const userId = socket.data.userId;
+        if (!userId || !payload.conversationId) return;
+        
+        const updatedSession = await listenSessionService.updateSessionControl(
+          payload.conversationId, 
+          userId, 
+          payload
+        );
+
+        socket.to(`conversation:${payload.conversationId}`).emit('listen_together:control_updated', {
+          conversationId: payload.conversationId,
+          session: updatedSession,
+          action: payload.action,
+          clientTimestamp: payload.clientTimestamp
+        });
+      } catch (err) {
+        console.warn('listen_together:control error:', err);
+      }
+    });
+
+    socket.on('chat:typing:start', async ({ conversationId } = {}) => {
+      try {
+        const userId = socket.data.userId;
+        if (!userId || !conversationId) return;
+        
+        await messageService.assertParticipant(conversationId, userId);
+        
+        let userTypingSet = typingMap.get(userId);
+        if (!userTypingSet) {
+          userTypingSet = new Set();
+          typingMap.set(userId, userTypingSet);
+        }
+        userTypingSet.add(conversationId);
+
+        socket.to(`conversation:${conversationId}`).emit('chat:typing:update', {
+          conversationId: Number(conversationId),
+          userId,
+          isTyping: true,
+          updatedAt: Date.now()
+        });
+      } catch (err) {
+        console.warn('chat:typing:start error:', err.message);
+      }
+    });
+
+    socket.on('chat:typing:stop', async ({ conversationId } = {}) => {
+      try {
+        const userId = socket.data.userId;
+        if (!userId || !conversationId) return;
+        
+        const userTypingSet = typingMap.get(userId);
+        if (userTypingSet) {
+          userTypingSet.delete(conversationId);
+        }
+
+        socket.to(`conversation:${conversationId}`).emit('chat:typing:update', {
+          conversationId: Number(conversationId),
+          userId,
+          isTyping: false,
+          updatedAt: Date.now()
+        });
+      } catch (err) {
+        console.warn('chat:typing:stop error:', err.message);
+      }
+    });
+
     socket.on('disconnect', async () => {
       console.log(`Socket disconnected: ${socket.id}`);
       if (socket.data.userId && ioInstance) {
@@ -157,6 +227,36 @@ function registerSocketEvents(io) {
                   ...np
                 });
               }
+            }
+            
+            // Listen Together MVP: End session if host disconnects and has no more sockets
+            const endedConvIds = await listenSessionService.endSessionsByHost(socket.data.userId);
+            for (const cId of endedConvIds) {
+              ioInstance.to(`conversation:${cId}`).emit('listen_together:session_ended', { conversationId: cId });
+              
+              // Create system message
+              const sysMessage = await messageService.createSystemMessage({
+                conversationId: cId,
+                actorUserId: socket.data.userId,
+                eventType: 'listen_together_ended',
+                body: `Phiên nghe cùng nhau đã kết thúc`
+              });
+              const participants = await messageService.getParticipantUserIds(cId);
+              emitChatMessage(cId, sysMessage, participants);
+            }
+
+            // Typing indicator: stop typing on disconnect
+            const userTypingSet = typingMap.get(socket.data.userId);
+            if (userTypingSet) {
+              for (const cId of userTypingSet) {
+                ioInstance.to(`conversation:${cId}`).emit('chat:typing:update', {
+                  conversationId: Number(cId),
+                  userId: socket.data.userId,
+                  isTyping: false,
+                  updatedAt: Date.now()
+                });
+              }
+              typingMap.delete(socket.data.userId);
             }
           }
         } catch (err) {
@@ -235,6 +335,12 @@ function emitReactionUpdated(conversationId, messageId, reactions, actorUserId) 
   });
 }
 
+function emitConversationPinUpdated(conversationId, pin) {
+  const io = getIo();
+  if (!io) return;
+  io.to(`conversation:${conversationId}`).emit('chat:conversation_pin_updated', { conversationId, pin });
+}
+
 module.exports = {
   registerSocketEvents,
   notifyUser,
@@ -244,4 +350,5 @@ module.exports = {
   emitMessageRead,
   emitChatMessageDeleted,
   emitReactionUpdated,
+  emitConversationPinUpdated,
 };

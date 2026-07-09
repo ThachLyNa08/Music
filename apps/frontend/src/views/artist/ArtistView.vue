@@ -81,6 +81,16 @@
             </span>
           </button>
           
+          <button 
+            class="more-btn text-gray-400 hover:text-white transition-colors" 
+            title="Chia sẻ"
+            @click="isShareModalOpen = true"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-7 h-7">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+          </button>
+          
           <button class="more-btn text-gray-400 hover:text-white transition-colors" title="Thêm">
             <svg viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
           </button>
@@ -270,7 +280,8 @@
     @share="handleShare"
   />
 
-
+  <!-- Share Modal -->
+  <ShareEntityModal v-model:open="isShareModalOpen" :entity="artist" entityType="artist" />
 
   <ToastManager ref="toastManager" />
 </template>
@@ -287,6 +298,7 @@ import { extractDominantColor } from '@/utils/colorPalette'
 
 import SongRow from '@/components/common/SongRow.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
+import ShareEntityModal from '@/components/common/ShareEntityModal.vue'
 
 import ToastManager from '@/components/common/ToastManager.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
@@ -300,6 +312,8 @@ const playerStore = usePlayerStore()
 const authStore = useAuthStore()
 const followedArtistsStore = useFollowedArtistsStore()
 const library = useLibraryStore()
+
+const isShareModalOpen = ref(false)
 
 const artist = ref(null)
 const loading = ref(true)

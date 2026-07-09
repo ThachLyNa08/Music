@@ -130,10 +130,9 @@ Most Popular là baseline cần thiết và có thể tốt trên nhóm nghe c�
 
 | File | Vai trò |
 |---|---|
-| `datasets/processed/recommendation_evaluation_results.json` | Nguồn số liệu chính |
-| `datasets/processed/recommendation_evaluation_results.csv` | Bảng metric tổng hợp |
-| `datasets/processed/recommendation_evaluation_by_user.csv` | Metric theo user và thuật toán |
-| `datasets/processed/recommendation_sample_outputs.json` | Mẫu recommendation output |
+| `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_summary.json` | Nguồn số liệu chính |
+| `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_metrics.csv` | Bảng metric tổng hợp |
+| `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_metrics.json` | Metric theo user và thuật toán |
 
 ## 11. Biểu Đồ Và Artifact Huấn Luyện
 
@@ -141,11 +140,11 @@ Pipeline evaluation hiện tự xuất thêm các artifact phục vụ luận v�
 
 | Artifact | Vai trò |
 |---|---|
-| `storage/recommendation/models/bpr_mf_latest.json` | Model artifact BPR-MF mới nhất sau huấn luyện |
-| `datasets/processed/recommendation_bpr_training_history.json` | Training history theo epoch dạng JSON |
-| `datasets/processed/recommendation_bpr_training_history.csv` | Training history theo epoch dạng CSV |
-| `datasets/processed/charts/bpr_training_loss.png` | Biểu đồ loss BPR-MF theo epoch |
-| `datasets/processed/charts/bpr_pairwise_accuracy.png` | Biểu đồ `pairwise_accuracy_proxy` theo epoch |
+| `storage/recommendation/models/v3/bpr_mf_v3.json` | Model artifact BPR-MF mới nhất sau huấn luyện |
+| `storage/recommendation/models/v3/bpr_mf_v3_training_history.json` | Training history theo epoch dạng JSON |
+| `storage/recommendation/models/v3/bpr_mf_v3_training_history.csv` | Training history theo epoch dạng CSV |
+| `storage/recommendation/evaluation/v3/charts/bpr_training_loss.png` | Biểu đồ loss BPR-MF theo epoch |
+| `storage/recommendation/evaluation/v3/charts/bpr_pairwise_accuracy.png` | Biểu đồ `pairwise_accuracy_proxy` theo epoch |
 | `datasets/processed/charts/recommendation_metrics_comparison.png` | Biểu đồ so sánh Precision@10, NDCG@10, HitRate@10 của 4 thuật toán |
 | `datasets/processed/charts/recommendation_coverage_diversity.png` | Biểu đồ coverage/diversity đã normalize để so sánh xu hướng |
 | `datasets/processed/charts/recommendation_global_coverage.png` | Biểu đồ riêng cho `global_catalog_coverage_at_20` |

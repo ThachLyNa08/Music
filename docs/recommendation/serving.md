@@ -9,7 +9,7 @@ Bản ghi chép về cách tích hợp mô hình BPR-MF đã huấn luyện vào
 Đường dẫn mặc định:
 
 ```text
-storage/recommendation/models/bpr_mf_latest.json
+storage/recommendation/models/v3/bpr_mf_v3.json
 ```
 
 Artifact hiện tại:
@@ -17,7 +17,7 @@ Artifact hiện tại:
 | Field | Value |
 |---|---|
 | `algorithm` | `BPR-MF` |
-| `generated_at` | `2026-06-18T12:09:01.140Z` |
+| `generated_at` | `2026-07-06T03:53:08.412Z` |
 | `trained_users` | 194 |
 | `trained_items` | 2700 |
 | `train_positive_pairs` | 70319 |
@@ -102,7 +102,7 @@ Response shape:
   "generatedAt": "2026-06-18T...",
   "model": {
     "algorithm": "BPR-MF",
-    "generatedAt": "2026-06-18T12:09:01.140Z",
+    "generatedAt": "2026-07-06T03:53:08.412Z",
     "trainedUsers": 194,
     "trainedItems": 2700,
     "trainPositivePairs": 70319,
@@ -197,22 +197,22 @@ Mỗi case in ra:
 ## 6. Limitations (Honest)
 
 1. **Experimental data only.** Mô hình train từ 200 user mô phỏng + bài hát thật trong DB. Không phản ánh hành vi thật của người dùng MusicFlow.
-2. **User not in model:** index lookup trả `-1`, fallback content-based. Real users mới phải qua fallback cho đến khi BPR-MF được retrain.
+2. **User not in model:** index lookup trả `-1`, fallback content-based. Real users mới phải qua fallback cho đến khi BPR-MF được cập nhật bằng offline training script.
 3. **Cold start:** user chưa nghe gì cũng đi vào fallback path vì `buildContentBasedRecommendations` cần ít nhất 1 preference count.
-4. **No streaming recompute.** BPR-MF serve từ artifact JSON, không train real-time. Cần retrain định kỳ bằng `scripts/recommendation/evaluateRecommendationAlgorithms.js` (kèm `--write-bpr-model`) khi có batch listening_history mới.
+4. **No streaming recompute.** BPR-MF serve từ artifact JSON, không train real-time. Cần cập nhật artifact định kỳ bằng offline script `scripts/recommendation/evaluateRecommendationAlgorithms.js` (kèm `--write-bpr-model`) khi có batch listening_history mới.
 5. **Item factors dimension:** 7653 (đủ bài cho 194 user, 2700 trained items). User mới ngoài model sẽ không có vector nên chỉ nhận fallback.
 6. **No audio features in serving score.** Energy, danceability, mood chỉ phục vụ evaluation. Có thể bổ sung khi cần `context_mood_score` cho production.
 7. **Không cache kết quả.** Mỗi request đều chạy lại pipeline. Có thể thêm Redis cache TTL ~5 phút cho user in-model nếu traffic tăng.
 
 ---
 
-## 7. Cách Retrain Model (tham khảo, không nằm trong task này)
+## 7. Cách cập nhật model artifact bằng offline script
 
 ```bash
 node scripts/recommendation/evaluateRecommendationAlgorithms.js --full --write-bpr-model
 ```
 
-Sau khi retrain, artifact mới sẽ ghi đè `bpr_mf_latest.json`. Backend sẽ tự reload artifact trong request tiếp theo (cache check theo mtime).
+Sau khi offline script hoàn tất, artifact mới sẽ ghi đè `bpr_mf_v3.json`. Backend sẽ tự reload artifact trong request tiếp theo (cache check theo mtime).
 
 ---
 

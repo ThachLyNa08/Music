@@ -60,7 +60,59 @@
       </div>
 
       <!-- Detail Cards -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Training Mode Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+          <div class="px-5 py-4 border-b border-slate-100 bg-blue-50 rounded-t-2xl">
+            <h2 class="text-lg font-bold text-blue-950">Chế độ huấn luyện mô hình</h2>
+          </div>
+          <div class="p-5 flex-1 text-sm text-slate-700 flex flex-col gap-4">
+            <p class="leading-relaxed">
+              Hệ thống hiện sử dụng cơ chế huấn luyện định kỳ offline. Sau khi script huấn luyện hoàn tất, model artifact mới được lưu lại và backend sử dụng artifact này để phục vụ đề xuất cá nhân hóa theo thời gian thực.
+            </p>
+            <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-xs text-blue-900 leading-relaxed">
+              Serving real-time từ model đã huấn luyện; MVP chưa bật job retrain tự động qua API.
+            </div>
+            <div class="space-y-3 mt-auto">
+              <div class="flex justify-between gap-4">
+                <span class="font-medium text-slate-500">Strategy hiện tại:</span>
+                <span class="font-semibold text-right text-slate-900">{{ formatStrategyName(summary?.strategy || 'bpr_mf_rerank') }}</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="font-medium text-slate-500">Model artifact path:</span>
+                <span class="text-xs text-right text-slate-500 break-all" :title="summary?.artifactPath">{{ summary?.artifactPath || 'Không có' }}</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="font-medium text-slate-500">Last updated:</span>
+                <span class="font-medium text-right">{{ summary?.updatedAt ? formatDate(summary.updatedAt) : '—' }}</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <div class="rounded-lg bg-slate-50 border border-slate-100 p-2">
+                  <p class="text-[10px] font-semibold text-slate-500">Precision@10</p>
+                  <p class="font-bold text-slate-900">{{ formatPercent(summary?.metrics?.precisionAt10) }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-50 border border-slate-100 p-2">
+                  <p class="text-[10px] font-semibold text-slate-500">Recall@10</p>
+                  <p class="font-bold text-slate-900">{{ formatPercent(summary?.metrics?.recallAt10) }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-50 border border-slate-100 p-2">
+                  <p class="text-[10px] font-semibold text-slate-500">NDCG@10</p>
+                  <p class="font-bold text-slate-900">{{ formatPercent(summary?.metrics?.ndcgAt10) }}</p>
+                </div>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="font-medium text-slate-500">Trạng thái:</span>
+                <span
+                  class="px-2 py-1 rounded-full text-[11px] font-bold uppercase"
+                  :class="summary?.hasArtifact ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                >
+                  {{ summary?.hasArtifact ? 'Active' : 'Missing artifact' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Model Status Card -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
           <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl">

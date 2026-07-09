@@ -79,7 +79,7 @@ over-penalize (HitRate@10 = 0.4124, thấp hơn BPR-MF 0.6340).
 
 ## 4. Bảng so sánh metric Top-10
 
-Bảng dưới lấy từ `datasets/processed/recommendation_evaluation_results.json`
+Bảng dưới lấy từ `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_summary.json`
 (số liệu ở `K=10`, đã chuẩn hóa tên khóa `precision_at_10`, `recall_at_10`,
 `ndcg_at_10`, `map_at_10`, `hitrate_at_10`).
 
@@ -196,10 +196,10 @@ xuống Content-Based, rồi Most Popular. Lý do chọn theo thứ tự này:
 
 ## 9. File tham chiếu
 
-- Dữ liệu: `datasets/processed/recommendation_evaluation_results.json`,
-  `datasets/processed/recommendation_evaluation_results.csv`,
-  `datasets/processed/recommendation_bpr_training_history.csv`.
-- Biểu đồ: `datasets/processed/charts/bpr_selection_top10_metrics.png`,
+- Dữ liệu: `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_summary.json`,
+  `storage/recommendation/evaluation/v3/metrics/recommendation_final_semantic_v3_metrics.csv`,
+  `storage/recommendation/models/v3/bpr_mf_v3_training_history.csv`.
+- Biểu đồ: `storage/recommendation/evaluation/v3/charts/bpr_selection_top10_metrics.png`,
   `bpr_vs_baselines_precision_ndcg.png`, `bpr_training_loss.png`,
   `bpr_pairwise_accuracy.png`, `recommendation_metrics_comparison.png`.
 - Code phục vụ báo cáo: `docs/recommendation/scripts/make_bpr_selection_charts.py`

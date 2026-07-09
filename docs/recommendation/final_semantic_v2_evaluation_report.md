@@ -1,3 +1,6 @@
+> [!WARNING]
+> **LEGACY V2:** Đây là báo cáo đánh giá của hướng Semantic V2, không phải báo cáo đánh giá cuối cùng của hệ thống gợi ý hiện tại. Nội dung được giữ lại để tham khảo quá trình phát triển. Vui lòng xem `final_recommendation_v3_evaluation_report.md` để lấy số liệu V3.
+
 # Báo cáo đánh giá hệ thống gợi ý (Tích hợp Semantic Profiles V2)
 
 **Lần chạy:** `final_semantic_v2`
