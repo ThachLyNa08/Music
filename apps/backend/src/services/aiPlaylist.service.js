@@ -6,6 +6,7 @@ const { tableExists } = require('../utils/dbIntrospection');
 const { normalizeAiPlaylistIntent } = require('./aiPlaylistIntent.service');
 const { getAiPlaylistCandidates } = require('./aiPlaylistCandidate.service');
 const { rankAiPlaylistCandidates } = require('./aiPlaylistRanking.service');
+const semanticRagService = require('./semanticRag.service');
 
 function shapePreviewSong(song, req) {
     return {
@@ -60,6 +61,34 @@ function buildShortageMeta({ songs, candidates, count, candidateMeta, intent }) 
     };
 }
 
+function buildPlaylistTitle(intent, sourcePrompt) {
+    const parts = [];
+    if (intent?.hardConstraints?.market && intent.hardConstraints.market !== 'ANY') parts.push(intent.hardConstraints.market);
+    if (intent?.hardConstraints?.genre_family?.[0]) parts.push(intent.hardConstraints.genre_family[0].replace('_', ' '));
+    if (intent?.softPreferences?.mood?.[0]) parts.push(intent.softPreferences.mood[0]);
+    if (intent?.softPreferences?.activity) parts.push(intent.softPreferences.activity);
+    if (parts.length) return parts.join(' ').replace(/\b\w/g, (char) => char.toUpperCase()).slice(0, 120);
+
+    return String(sourcePrompt || 'AI Playlist').trim().replace(/^tao playlist\s+/i, '').slice(0, 120) || 'AI Playlist';
+}
+
+function buildRetrievalMeta({ ragResult, candidateMeta, songs }) {
+    const ragSongs = songs.filter((song) => Number.isFinite(Number(song.scoreBreakdown?.semanticRag)));
+    const averageRagScore = ragSongs.length
+        ? ragSongs.reduce((sum, song) => sum + Number(song.scoreBreakdown.semanticRag || 0), 0) / ragSongs.length
+        : 0;
+
+    return {
+        strategy: ragResult?.strategy || 'semantic_rag_v1',
+        semanticProfileSource: ragResult?.source || semanticRagService.getCachedProfileSource(),
+        retrievedCandidates: ragResult?.candidates?.length || 0,
+        usedCandidates: songs.length,
+        averageRagScore: Number(averageRagScore.toFixed(4)),
+        loadedProfiles: ragResult?.loadedProfiles || 0,
+        fallbackUsed: Boolean(candidateMeta?.fallbackUsed)
+    };
+}
+
 async function previewAiPlaylist({
     prompt,
     targetCount,
@@ -80,12 +109,18 @@ async function previewAiPlaylist({
 
     const previousSet = new Set(normalizeSongIds(previousSongIds));
     const candidateLimit = Math.max(count * 8, 120);
+    const ragResult = await semanticRagService.retrieveSemanticCandidates({
+        prompt,
+        intent,
+        limit: 300
+    });
     const { candidates, candidateMeta } = await getAiPlaylistCandidates({
         intent,
         userId,
         limit: candidateLimit,
         targetCount: count,
-        pool
+        pool,
+        ragCandidates: ragResult.candidates
     });
 
     let rankingCandidates = candidates;
@@ -107,23 +142,58 @@ async function previewAiPlaylist({
 
     const songs = ranked.songs.map((song) => shapePreviewSong(song, req));
     const shortageMeta = buildShortageMeta({ songs, candidates: rankingCandidates, count, candidateMeta, intent });
+    const playlistTitle = buildPlaylistTitle(intent, prompt);
+    const description = 'Playlist được tạo từ hồ sơ ngữ nghĩa bài hát và lọc lại bằng dữ liệu thật trong MusicFlow.';
+    const retrieval = buildRetrievalMeta({ ragResult, candidateMeta, songs });
+    const warnings = shortageMeta.shortage
+        ? [{
+            type: 'SHORTAGE',
+            message: shortageMeta.shortageReason
+        }]
+        : [];
+
+    if (retrieval.fallbackUsed && intent?.hardConstraints?.market && intent.hardConstraints.market !== 'ANY') {
+        warnings.push({
+            type: 'RAG_FALLBACK',
+            message: `Semantic RAG không đủ ứng viên ${intent.hardConstraints.market}; MusicFlow đã dùng thêm nguồn ứng viên DB nhưng vẫn giữ lọc market khi có thể.`
+        });
+    }
+
+    console.log('[AI Playlist RAG Preview]', {
+        prompt: String(prompt || '').slice(0, 300),
+        intent: {
+            market: intent?.hardConstraints?.market,
+            genres: intent?.hardConstraints?.genre_family,
+            artists: intent?.hardConstraints?.include_artists,
+            mood: intent?.softPreferences?.mood,
+            context: intent?.softPreferences?.context,
+            activity: intent?.softPreferences?.activity,
+            energy: intent?.softPreferences?.energy,
+            targetCount: count
+        },
+        retrievalStrategy: retrieval.strategy,
+        retrievedCount: retrieval.retrievedCandidates,
+        finalCount: songs.length,
+        fallbackUsed: retrieval.fallbackUsed
+    });
 
     return {
         success: true,
+        playlistTitle,
+        description,
         intent,
         normalizedIntent: intent,
         songs,
-        warnings: shortageMeta.shortage
-            ? [{
-                type: 'SHORTAGE',
-                message: shortageMeta.shortageReason
-            }]
-            : [],
+        warnings,
+        retrieval,
         strategy: ranked.rankingMeta.strategy,
         source: 'ai_playlist_hybrid',
         meta: {
             strategy: ranked.rankingMeta.strategy,
             candidateStrategy: candidateMeta.strategy,
+            playlistTitle,
+            description,
+            retrieval,
             targetCount: count,
             returned: songs.length,
             bprAvailable: ranked.rankingMeta.bprAvailable,

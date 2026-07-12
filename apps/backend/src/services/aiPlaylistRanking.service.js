@@ -6,13 +6,14 @@ const { buildAiPlaylistSongReason } = require('./aiPlaylistReason.service');
 const semanticProfileService = require('./songSemanticProfile.service');
 
 const DEFAULT_WEIGHTS = Object.freeze({
-    intentMatch: 0.25,
-    bpr: 0.20,
-    audioFeature: 0.15,
-    userHistory: 0.10,
-    popularity: 0.10,
-    semantic: 0.15,
-    diversity: 0.05
+    semanticRag: 0.20,
+    intentMatch: 0.22,
+    bpr: 0.18,
+    audioFeature: 0.14,
+    userHistory: 0.08,
+    popularity: 0.08,
+    semantic: 0.08,
+    diversity: 0.02
 });
 
 function clamp01(value) {
@@ -382,9 +383,11 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         const popularity = scorePopularity(song, normPopularity[index], intent);
         const penalty = scorePenalty(song, intent);
         const semantic = semanticProfileService.scoreSongByPromptIntent(song, intent);
+        const semanticRag = clamp01(song.rag_score || 0);
         const diversity = 0.7;
         const aiScore = clamp01(
-            DEFAULT_WEIGHTS.intentMatch * intentMatch
+            DEFAULT_WEIGHTS.semanticRag * semanticRag
+            + DEFAULT_WEIGHTS.intentMatch * intentMatch
             + DEFAULT_WEIGHTS.bpr * bprScore
             + DEFAULT_WEIGHTS.audioFeature * audioFeature
             + DEFAULT_WEIGHTS.userHistory * userHistory
@@ -398,6 +401,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             ...song,
             aiScore,
             scoreBreakdown: {
+                semanticRag: Number(semanticRag.toFixed(4)),
                 intentMatch: Number(intentMatch.toFixed(4)),
                 bpr: Number(bprScore.toFixed(4)),
                 audioFeature: Number(audioFeature.toFixed(4)),
@@ -413,7 +417,8 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
     scored.sort((a, b) => b.aiScore - a.aiScore || Number(b.play_count || 0) - Number(a.play_count || 0) || a.id - b.id);
     const selected = selectWithDiversity(scored, safeTarget, intent).map((song) => {
         const aiScore = clamp01(
-            DEFAULT_WEIGHTS.intentMatch * song.scoreBreakdown.intentMatch
+            DEFAULT_WEIGHTS.semanticRag * song.scoreBreakdown.semanticRag
+            + DEFAULT_WEIGHTS.intentMatch * song.scoreBreakdown.intentMatch
             + DEFAULT_WEIGHTS.bpr * song.scoreBreakdown.bpr
             + DEFAULT_WEIGHTS.audioFeature * song.scoreBreakdown.audioFeature
             + DEFAULT_WEIGHTS.userHistory * song.scoreBreakdown.userHistory

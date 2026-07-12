@@ -293,6 +293,117 @@ async function runCandidateQuery({ intent, db, limit, schema, includeGenre, incl
     };
 }
 
+async function runSemanticRagCandidateQuery({ intent, db, limit, schema, ragCandidates = [], includeGenre, includeArtists, keepMarket }) {
+    const ids = [...new Set((ragCandidates || [])
+        .map((item) => Number(item.song_id))
+        .filter((id) => Number.isInteger(id) && id > 0))];
+
+    if (!ids.length) {
+        return {
+            rows: [],
+            appliedFilters: ['availability', 'semantic_rag_ids'],
+            relaxedFilters: [],
+            fallbackUsed: false
+        };
+    }
+
+    const ragScoreById = new Map();
+    const ragRankById = new Map();
+    ragCandidates.forEach((item, index) => {
+        const id = Number(item.song_id);
+        if (!Number.isInteger(id) || id <= 0) return;
+        ragScoreById.set(id, Number(item.rag_score || 0));
+        if (!ragRankById.has(id)) ragRankById.set(id, index);
+    });
+
+    const params = [];
+    const where = [
+        publicSongCondition('s'),
+        "s.audio_url IS NOT NULL",
+        "TRIM(s.audio_url) <> ''"
+    ];
+    const appliedFilters = ['availability', 'semantic_rag_ids'];
+    const relaxedFilters = [];
+
+    const inClause = buildInClause('s.id', ids, params);
+    if (inClause) where.push(inClause);
+
+    const excludeArtistIds = await resolveArtistIds([
+        ...(intent?.hardConstraints?.exclude_artists || []),
+        ...(intent?.negativeConstraints?.artists || [])
+    ], db);
+    const includeArtistNames = intent?.hardConstraints?.include_artists || [];
+    const includeArtistIds = await resolveArtistIds(includeArtistNames, db);
+
+    if (excludeArtistIds.length) {
+        where.push(buildInClause('s.artist_id', excludeArtistIds, params).replace(' IN ', ' NOT IN '));
+        appliedFilters.push('exclude_artists');
+    }
+    const excludeNameFallback = buildArtistNameFallback(intent?.hardConstraints?.exclude_artists || [], params, true);
+    if (excludeNameFallback) {
+        where.push(excludeNameFallback);
+        appliedFilters.push('exclude_artist_names');
+    }
+
+    if (keepMarket) {
+        const marketCondition = buildMarketCondition(intent, schema, params);
+        if (marketCondition) {
+            where.push(marketCondition);
+            appliedFilters.push('market_language');
+        }
+    } else {
+        relaxedFilters.push('market_language');
+    }
+
+    if (includeGenre) {
+        const genreCondition = buildGenreCondition(intent, schema, params);
+        if (genreCondition) {
+            where.push(genreCondition);
+            appliedFilters.push('genre_family');
+        }
+    } else if (intent?.hardConstraints?.genre_family?.length) {
+        relaxedFilters.push('genre_family');
+    }
+
+    if (includeArtists && includeArtistNames.length) {
+        const artistClauses = [];
+        const artistInClause = buildInClause('s.artist_id', includeArtistIds, params);
+        if (artistInClause) artistClauses.push(artistInClause);
+        const nameFallback = buildArtistNameFallback(includeArtistNames, params, false);
+        if (nameFallback) artistClauses.push(nameFallback);
+        if (artistClauses.length) {
+            where.push(`(${artistClauses.join(' OR ')})`);
+            appliedFilters.push('include_artists');
+        }
+    } else if (includeArtistNames.length) {
+        relaxedFilters.push('include_artists');
+    }
+
+    const sql = `
+        ${buildSelectSql(schema)}
+        WHERE ${where.join('\n          AND ')}
+        LIMIT ?
+    `;
+    params.push(Math.max(limit, ids.length));
+
+    const [rows] = await db.query(sql, params);
+    const shaped = rows.map((row) => {
+        const candidate = shapeCandidate(row);
+        candidate.rag_score = Number(ragScoreById.get(candidate.id) || 0);
+        candidate.rag_rank = ragRankById.get(candidate.id) ?? 999999;
+        return candidate;
+    });
+
+    shaped.sort((a, b) => (b.rag_score || 0) - (a.rag_score || 0) || (a.rag_rank || 0) - (b.rag_rank || 0));
+
+    return {
+        rows: shaped.slice(0, limit),
+        appliedFilters,
+        relaxedFilters,
+        fallbackUsed: shaped.length < ids.length
+    };
+}
+
 function inferGenreFamily(row) {
     const raw = normalizeText(`${row.genre_slug || ''} ${row.genre_name || ''}`);
     for (const [family, patterns] of Object.entries(GENRE_PATTERNS)) {
@@ -351,12 +462,75 @@ function mergeUniqueCandidates(groups, limit) {
     return merged;
 }
 
-async function getAiPlaylistCandidates({ intent, userId = null, limit = 120, targetCount = 20, pool = defaultPool }) {
+async function getAiPlaylistCandidates({
+    intent,
+    userId = null,
+    limit = 120,
+    targetCount = 20,
+    pool = defaultPool,
+    ragCandidates = []
+}) {
     const db = pool;
     const candidateLimit = Math.max(Number(limit) || 120, targetCount * 5, 100);
     const minimumUseful = Math.max(targetCount * 2, 10);
     const schema = await getSchemaInfo(db);
     const attempts = [];
+    const safeRagCandidates = Array.isArray(ragCandidates) ? ragCandidates : [];
+
+    if (safeRagCandidates.length) {
+        const ragStrict = await runSemanticRagCandidateQuery({
+            intent,
+            db,
+            limit: candidateLimit,
+            schema,
+            ragCandidates: safeRagCandidates,
+            includeGenre: true,
+            includeArtists: true,
+            keepMarket: true
+        });
+        attempts.push({ name: 'semantic_rag_strict', ...ragStrict });
+
+        if (ragStrict.rows.length >= minimumUseful) {
+            return {
+                candidates: ragStrict.rows,
+                candidateMeta: {
+                    strategy: 'semantic_rag_strict',
+                    appliedFilters: ragStrict.appliedFilters,
+                    relaxedFilters: [],
+                    totalCandidates: ragStrict.rows.length,
+                    ragCandidates: safeRagCandidates.length,
+                    fallbackUsed: false
+                }
+            };
+        }
+
+        const ragRelaxedGenre = await runSemanticRagCandidateQuery({
+            intent,
+            db,
+            limit: candidateLimit,
+            schema,
+            ragCandidates: safeRagCandidates,
+            includeGenre: false,
+            includeArtists: true,
+            keepMarket: true
+        });
+        attempts.push({ name: 'semantic_rag_relaxed_genre', ...ragRelaxedGenre });
+        const mergedRag = mergeUniqueCandidates([ragStrict.rows, ragRelaxedGenre.rows], candidateLimit);
+
+        if (mergedRag.length >= minimumUseful) {
+            return {
+                candidates: mergedRag,
+                candidateMeta: {
+                    strategy: 'semantic_rag_relaxed',
+                    appliedFilters: ragRelaxedGenre.appliedFilters,
+                    relaxedFilters: ['genre_family'],
+                    totalCandidates: mergedRag.length,
+                    ragCandidates: safeRagCandidates.length,
+                    fallbackUsed: false
+                }
+            };
+        }
+    }
 
     const tier1 = await runCandidateQuery({
         intent,
@@ -376,7 +550,9 @@ async function getAiPlaylistCandidates({ intent, userId = null, limit = 120, tar
                 strategy: 'strict',
                 appliedFilters: tier1.appliedFilters,
                 relaxedFilters: [],
-                totalCandidates: tier1.rows.length
+                totalCandidates: tier1.rows.length,
+                ragCandidates: safeRagCandidates.length,
+                fallbackUsed: safeRagCandidates.length > 0
             }
         };
     }
@@ -400,7 +576,9 @@ async function getAiPlaylistCandidates({ intent, userId = null, limit = 120, tar
                 strategy: 'relaxed',
                 appliedFilters: tier2.appliedFilters,
                 relaxedFilters: ['genre_family'],
-                totalCandidates: mergedTier2.length
+                totalCandidates: mergedTier2.length,
+                ragCandidates: safeRagCandidates.length,
+                fallbackUsed: safeRagCandidates.length > 0
             }
         };
     }
@@ -426,7 +604,9 @@ async function getAiPlaylistCandidates({ intent, userId = null, limit = 120, tar
                 strategy: 'relaxed',
                 appliedFilters: tier3.appliedFilters,
                 relaxedFilters: ['genre_family', hasHardArtist ? null : 'include_artists'].filter(Boolean),
-                totalCandidates: mergedTier3.length
+                totalCandidates: mergedTier3.length,
+                ragCandidates: safeRagCandidates.length,
+                fallbackUsed: safeRagCandidates.length > 0
             }
         };
     }
@@ -451,6 +631,8 @@ async function getAiPlaylistCandidates({ intent, userId = null, limit = 120, tar
             appliedFilters: tier4.appliedFilters,
             relaxedFilters: ['genre_family', hasHardArtist ? null : 'include_artists', 'soft_audio_mood'].filter(Boolean),
             totalCandidates: mergedTier4.length,
+            ragCandidates: safeRagCandidates.length,
+            fallbackUsed: safeRagCandidates.length > 0,
             attempts: attempts.map((attempt) => ({
                 name: attempt.name,
                 total: attempt.rows.length,

@@ -11,13 +11,24 @@ const SYNONYM_RULES = [
     },
     {
         id: 'heartbreak',
-        phrases: ['suy', 'luy', 'that tinh', 'chia tay', 'dau long', 'nho nguoi cu', 'tan vo', 'that vong tinh yeu', 'bi luy'],
+        phrases: ['suy', 'luy', 'that tinh', 'chia tay', 'sau chia tay', 'dau long', 'nho nguoi cu', 'tan vo', 'that vong tinh yeu', 'bi luy'],
         apply: {
             mood: ['heartbreak'],
             context: ['breakup', 'lonely'],
             energy: 'low',
             tempo: 'slow',
             mood_intensity: 'deep'
+        }
+    },
+    {
+        id: 'healing',
+        phrases: ['healing', 'chua lanh', 'chua lanh sau chia tay', 'tu chua lanh', 'vuot qua chia tay'],
+        apply: {
+            mood: ['calm', 'heartbreak'],
+            context: ['breakup'],
+            energy: 'low',
+            tempo: 'slow',
+            mood_intensity: 'medium'
         }
     },
     {
@@ -40,7 +51,7 @@ const SYNONYM_RULES = [
     },
     {
         id: 'energetic_party',
-        phrases: ['chay bo', 'that chay', 'quay', 'boc', 'sung', 'soi dong', 'nao nhiet', 'tap gym', 'van dong', 'mau lua'],
+        phrases: ['nang luong', 'day nang luong', 'high energy', 'energetic', 'workout', 'dance', 'chay bo', 'that chay', 'quay', 'boc', 'sung', 'soi dong', 'nao nhiet', 'tap gym', 'van dong', 'mau lua'],
         apply: {
             mood: ['energetic', 'party'],
             energy: 'high',
@@ -110,7 +121,7 @@ const ACTIVITY_RULES = [
     { activity: 'study', phrases: ['hoc bai', 'hoc tap', 'on thi'] },
     { activity: 'coding', phrases: ['coding', 'code', 'lap trinh'] },
     { activity: 'work', phrases: ['lam viec', 'deadline', 'chay deadline', 'tap trung'] },
-    { activity: 'gym', phrases: ['tap gym', 'gym', 'workout', 'the duc', 'van dong'] },
+    { activity: 'gym', phrases: ['tap gym', 'gym', 'workout', 'the duc', 'van dong', 'dance'] },
     { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax'] },
     { activity: 'sleep', phrases: ['ngu', 'de ngu', 'ru ngu'] },
     { activity: 'party', phrases: ['party', 'tiec', 'quay', 'club', 'bar'] },

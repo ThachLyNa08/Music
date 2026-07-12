@@ -15,7 +15,10 @@
         <p class="mt-3 text-[13px] md:text-sm font-medium text-[#b3b3b3]">
           Playlist được tạo bởi AI • {{ songs.length }} bài hát
         </p>
-        
+        <div v-if="isSemanticRag" class="mt-2 inline-flex w-fit items-center rounded-full border border-[#1ed760]/25 bg-[#1ed760]/10 px-3 py-1 text-[11px] font-bold text-[#1ed760]">
+          Semantic RAG
+        </div>
+
         <p v-if="meta?.shortage" class="mt-1 text-[13px] text-amber-400">
           MusicFlow chỉ tìm được {{ songs.length }} bài.
           <span v-if="meta.relaxedFilters?.length" class="text-amber-500/80">
@@ -80,10 +83,11 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import AiPlaylistSongReason from './AiPlaylistSongReason.vue'
 
-defineProps({
+const props = defineProps({
   songs: { type: Array, default: () => [] },
   meta: { type: Object, default: null },
   debug: { type: Boolean, default: false },
@@ -95,6 +99,7 @@ defineProps({
 defineEmits(['play-song'])
 
 const playerStore = usePlayerStore()
+const isSemanticRag = computed(() => props.meta?.retrieval?.strategy === 'semantic_rag_v1')
 
 function formatDuration(value) {
   const seconds = Number(value || 0)
