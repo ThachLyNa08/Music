@@ -3568,9 +3568,62 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
   }
 };
 
+function normalizeGenerationStats(summary = {}, fallbackTotal = 0) {
+  const playlistsCreated = Number(summary.playlistsCreated || 0);
+  const playlistsUpdated = Number(summary.playlistsUpdated || 0);
+  const successCount = Number(
+    summary.playlistsSucceeded
+    ?? summary.successCount
+    ?? (playlistsCreated + playlistsUpdated)
+    ?? 0
+  );
+  const failedCount = Number(summary.playlistsFailed ?? summary.failedCount ?? summary.errors ?? 0);
+  const skippedCount = Number(summary.playlistsSkipped ?? summary.skippedCount ?? summary.skipped ?? 0);
+  const totalPlaylists = Number(
+    summary.playlistsProcessed
+    ?? summary.totalPlaylists
+    ?? (successCount + failedCount + skippedCount)
+    ?? fallbackTotal
+  );
+
+  return {
+    totalUsers: Number(summary.totalUsers ?? summary.usersProcessed ?? 0),
+    totalPlaylists: totalPlaylists || fallbackTotal,
+    successCount,
+    failedCount,
+    skippedCount
+  };
+}
+
+function mergeGenerationStats(target, stats) {
+  target.totalUsers = Math.max(target.totalUsers, Number(stats.totalUsers || 0));
+  target.totalPlaylists += Number(stats.totalPlaylists || 0);
+  target.successCount += Number(stats.successCount || 0);
+  target.failedCount += Number(stats.failedCount || 0);
+  target.skippedCount += Number(stats.skippedCount || 0);
+}
+
+function summarizeGenerationRun(aggregate) {
+  if (aggregate.failedCount > 0 && aggregate.successCount > 0) return 'partial';
+  if (aggregate.failedCount > 0 && aggregate.successCount === 0) return 'failed';
+  return 'success';
+}
+
 exports.regenerateAllSystemPlaylists = async (req, res, next) => {
+  const runLogService = require('../services/systemPlaylistRunLog.service');
+  let runId = null;
   try {
     const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
+    runId = await runLogService.startGenerationRun({
+      operationType: 'regenerate_all',
+      triggeredByUserId: req.user?.id || null,
+      metadata: { source: 'admin_system_playlists_page' }
+    });
+
+    const [[userStats]] = await pool.query(
+      `SELECT COUNT(*) AS totalUsers FROM users WHERE status = 'active' AND role = 'user'`
+    );
+    const activeUsers = Number(userStats?.totalUsers || 0);
     const results = {
       trending: 'pending',
       daily: 'pending',
@@ -3578,55 +3631,130 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       mood: 'pending',
       contextual: 'pending'
     };
+    const aggregate = {
+      totalUsers: activeUsers,
+      totalPlaylists: 0,
+      successCount: 0,
+      failedCount: 0,
+      skippedCount: 0
+    };
 
     try {
       const trendingService = require('../services/trendingPlaylist.service');
-      await trendingService.generateTrendingPlaylist();
+      const summary = await trendingService.generateTrendingPlaylist();
       await logSystemPlaylistRun({ system_key: 'trending_now', run_type: 'admin_all' });
+      mergeGenerationStats(aggregate, normalizeGenerationStats({
+        totalUsers: activeUsers,
+        totalPlaylists: 1,
+        successCount: summary?.status === 'failed' ? 0 : 1,
+        failedCount: summary?.status === 'failed' ? 1 : 0,
+        skippedCount: summary?.status === 'skipped' ? 1 : 0
+      }, 1));
       results.trending = 'success';
-    } catch (e) { results.trending = e.message; }
+    } catch (e) {
+      results.trending = e.message;
+      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: 1, successCount: 0, failedCount: 1, skippedCount: 0 });
+    }
 
     try {
       const dailyMixService = require('../services/dailyMix.service');
-      await dailyMixService.generateDailyMixesForAllUsers();
+      const summary = await dailyMixService.generateDailyMixesForAllUsers();
       for (let i = 1; i <= 6; i++) {
         await logSystemPlaylistRun({ system_key: `dailymix_0${i}`, run_type: 'admin_all' });
       }
+      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers * 6));
       results.daily = 'success';
-    } catch (e) { results.daily = e.message; }
+    } catch (e) {
+      results.daily = e.message;
+      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers * 6, successCount: 0, failedCount: activeUsers * 6, skippedCount: 0 });
+    }
 
     try {
       const weeklyMixService = require('../services/weeklyMix.service');
-      await weeklyMixService.generateWeeklyMixForAllUsers();
+      const summary = await weeklyMixService.generateWeeklyMixForAllUsers();
       await logSystemPlaylistRun({ system_key: 'weekly_mix', run_type: 'admin_all' });
+      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers));
       results.weekly = 'success';
-    } catch (e) { results.weekly = e.message; }
+    } catch (e) {
+      results.weekly = e.message;
+      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers, successCount: 0, failedCount: activeUsers, skippedCount: 0 });
+    }
 
     try {
       const moodMixService = require('../services/moodMix.service');
-      await moodMixService.generateMoodMixForAllUsers();
+      const summary = await moodMixService.generateMoodMixForAllUsers();
       await logSystemPlaylistRun({ system_key: 'moodmix', run_type: 'admin_all' });
+      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers));
       results.mood = 'success';
-    } catch (e) { results.mood = e.message; }
+    } catch (e) {
+      results.mood = e.message;
+      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers, successCount: 0, failedCount: activeUsers, skippedCount: 0 });
+    }
 
     try {
       const contextualService = require('../services/contextualMoodPlaylist.service');
-      await contextualService.generateContextualMoodPlaylistsForAllUsers();
+      const summary = await contextualService.generateContextualMoodPlaylistsForAllUsers();
       await logSystemPlaylistRun({ system_key: 'morning_vibes', run_type: 'admin_all' });
       await logSystemPlaylistRun({ system_key: 'afternoon_vibes', run_type: 'admin_all' });
       await logSystemPlaylistRun({ system_key: 'evening_vibes', run_type: 'admin_all' });
       await logSystemPlaylistRun({ system_key: 'night_vibes', run_type: 'admin_all' });
+      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers * 4));
       results.contextual = 'success';
-    } catch (e) { results.contextual = e.message; }
+    } catch (e) {
+      results.contextual = e.message;
+      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers * 4, successCount: 0, failedCount: activeUsers * 4, skippedCount: 0 });
+    }
+
+    const finalStatus = summarizeGenerationRun(aggregate);
+    const failedStages = Object.entries(results)
+      .filter(([, value]) => value !== 'success')
+      .map(([key, value]) => `${key}: ${value}`);
+
+    await runLogService.finishGenerationRun(runId, {
+      status: finalStatus,
+      totalUsers: aggregate.totalUsers,
+      totalPlaylists: aggregate.totalPlaylists,
+      successCount: aggregate.successCount,
+      failedCount: aggregate.failedCount,
+      skippedCount: aggregate.skippedCount,
+      errorMessage: failedStages.length ? failedStages.join('; ').slice(0, 2000) : null,
+      metadata: { results, aggregate }
+    });
 
     res.json({
       success: true,
       message: 'Hoàn tất quá trình tạo lại',
-      data: results
+      data: {
+        ...results,
+        runId,
+        status: finalStatus,
+        total: aggregate.totalPlaylists,
+        success: aggregate.successCount,
+        failed: aggregate.failedCount,
+        skipped: aggregate.skippedCount
+      }
     });
   } catch (error) {
     console.error('regenerateAllSystemPlaylists Error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi hệ thống khi tạo lại toàn bộ: ' + error.message });
+    if (runId) {
+      try {
+        await runLogService.finishGenerationRun(runId, {
+          status: 'failed',
+          errorMessage: error.message,
+          metadata: { error: error.message }
+        });
+      } catch (logErr) {
+        console.warn('Failed to close system playlist generation run:', logErr.message);
+      }
+    }
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi hệ thống khi tạo lại toàn bộ',
+      data: error.runningRun ? {
+        runningRunId: error.runningRun.id,
+        startedAt: error.runningRun.started_at
+      } : undefined
+    });
   }
 };
 
@@ -4648,19 +4776,12 @@ exports.getSystemPlaylistsQualityReport = async (req, res, next) => {
 
 exports.getSystemPlaylistsOperationSummary = async (req, res, next) => {
   try {
-    // Currently placeholders as there are no run logs
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const summary = await runLogService.getOperationSummary();
+    res.set('Cache-Control', 'no-store');
     res.json({
       success: true,
-      data: {
-        hasData: false,
-        errorRate24h: null,
-        avgGenerationTimeMs: null,
-        processingCount: 0,
-        latestRunAt: null,
-        latestRunBy: null,
-        nextRunAt: null,
-        message: 'Chưa có dữ liệu vận hành'
-      }
+      data: summary
     });
   } catch (error) {
     next(error);
@@ -4692,10 +4813,12 @@ exports.saveDashboardInsights = async (req, res, next) => {
 
 exports.getSystemPlaylistsActivityLog = async (req, res, next) => {
   try {
-    // Return empty array as there are no logs yet
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const logs = await runLogService.getActivityLog(req.query.limit || 20);
+    res.set('Cache-Control', 'no-store');
     res.json({
       success: true,
-      data: []
+      data: logs
     });
   } catch (error) {
     next(error);

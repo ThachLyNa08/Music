@@ -6,10 +6,10 @@
         <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi trạng thái và bảo trì dữ liệu các playlist hệ thống / tự động</p>
       </div>
       <div class="flex gap-2 mt-4 md:mt-0">
-        <button class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60" @click="confirmRegenerateAll" :disabled="isRegeneratingAll">
+        <button class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60" @click="confirmRegenerateAll" :disabled="isRegeneratingAll || runningJobs > 0">
           <MfIcon v-if="isRegeneratingAll" name="sync" class="spinning" size="18" />
           <MfIcon v-else name="auto_fix_high" size="18" />
-          {{ isRegeneratingAll ? 'Đang xử lý...' : 'Tạo lại tất cả' }}
+          {{ (isRegeneratingAll || runningJobs > 0) ? 'Đang xử lý...' : 'Tạo lại tất cả' }}
         </button>
       </div>
     </header>
@@ -35,11 +35,11 @@
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-slate-500 line-clamp-1">Tỷ Lệ Lỗi Tạo Playlist</p>
-            <p class="mt-1 leading-tight font-black tracking-tight text-cyan-600" :class="operationSummary?.errorRate24h != null ? 'text-2xl' : 'text-xl'">
-              {{ operationSummary?.errorRate24h != null ? operationSummary.errorRate24h + '%' : 'Chưa có dữ liệu' }}
+            <p class="mt-1 leading-tight font-black tracking-tight text-cyan-600" :class="operationFailureRateText ? 'text-2xl' : 'text-xl'">
+              {{ operationFailureRateText || 'Chưa có dữ liệu' }}
             </p>
-            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="operationSummary?.errorRate24h != null ? 'text-emerald-500' : 'text-slate-400'">
-              {{ operationSummary?.errorRate24h != null ? '↓ 1.2% so với hôm qua' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="operationFailureRateText ? 'text-emerald-500' : 'text-slate-400'">
+              {{ operationFailureRateText ? `Run gần nhất: ${formatRunStatus(operationSummary?.lastRunStatus)}` : 'Chưa có dữ liệu vận hành' }}
             </p>
           </div>
           <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-cyan-50 text-cyan-700 mt-0.5">24H</div>
@@ -53,10 +53,10 @@
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-slate-500 line-clamp-1">Thời Gian Tạo TB</p>
             <p class="mt-1 leading-tight font-black tracking-tight text-violet-600 text-2xl">
-              {{ operationSummary?.avgGenerationTimeMs != null ? operationSummary.avgGenerationTimeMs + 's' : '—' }}
+              {{ averageGenerationTimeText || '—' }}
             </p>
-            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="operationSummary?.avgGenerationTimeMs != null ? 'text-emerald-500' : 'text-slate-400'">
-              {{ operationSummary?.avgGenerationTimeMs != null ? '↓ 0.3s nhanh hơn trung bình' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+            <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="averageGenerationTimeText ? 'text-emerald-500' : 'text-slate-400'">
+              {{ averageGenerationTimeText ? 'Theo run thành công gần nhất' : 'Chưa có dữ liệu vận hành' }}
             </p>
           </div>
           <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700 mt-0.5">MS</div>
@@ -70,15 +70,15 @@
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-slate-500 line-clamp-1">Đang Xử Lý</p>
             <p class="mt-1 leading-tight font-black tracking-tight text-orange-600 text-2xl">
-              {{ operationSummary?.processingCount || 0 }}
+              {{ runningJobs }}
             </p>
             <div class="mt-2 mb-1 flex items-center gap-2">
               <div class="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                <div class="h-full bg-orange-500 rounded-full" :style="{ width: (operationSummary?.processingCount > 0 ? '50%' : '0%') }"></div>
+                <div class="h-full bg-orange-500 rounded-full" :style="{ width: (runningJobs > 0 ? '50%' : '0%') }"></div>
               </div>
             </div>
             <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-1">
-              {{ operationSummary?.processingCount > 0 ? 'Ước tính 3 phút nữa xong' : (operationSummary?.message || 'Chưa có dữ liệu vận hành') }}
+              {{ runningJobs > 0 ? 'Đang có tiến trình tạo lại playlist' : 'Không có job đang chạy' }}
             </p>
           </div>
           <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 mt-0.5">QUEUE</div>
@@ -91,13 +91,13 @@
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-slate-500 line-clamp-1">Tạo Lại Gần Nhất</p>
-            <p class="mt-1 leading-tight font-black tracking-tight text-slate-800" :class="operationSummary?.latestRunAt ? 'text-lg' : 'text-xl'">
-              {{ operationSummary?.latestRunAt || 'Chưa ghi nhận' }}
+            <p class="mt-1 leading-tight font-black tracking-tight text-slate-800" :class="lastRegeneratedText ? 'text-lg' : 'text-xl'">
+              {{ lastRegeneratedText || 'Chưa ghi nhận' }}
             </p>
             <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-2 leading-relaxed">
-              <template v-if="operationSummary?.latestRunAt">
-                <span class="text-slate-500">Bởi:</span> <span class="text-violet-600 font-medium">System Cron</span><br>
-                Lịch: Daily Mix 00:10, Trending 00:30, Mood 01:00, Vibes 01:15, Weekly Sun 07:00
+              <template v-if="lastRegeneratedText">
+                <span class="text-slate-500">Trạng thái:</span> <span class="text-violet-600 font-medium">{{ formatRunStatus(operationSummary?.lastRunStatus) }}</span><br>
+                Dữ liệu từ run regenerate gần nhất
               </template>
               <template v-else>
                 Chưa có dữ liệu vận hành
@@ -155,11 +155,20 @@
             <span>Chưa có lịch sử hoạt động.<br>Các lần tạo lại playlist sẽ xuất hiện tại đây sau khi hệ thống ghi log.</span>
           </div>
           <div v-else class="space-y-4 pr-2">
-            <div v-for="(log, idx) in activityLogs" :key="idx" class="flex gap-3 text-[13px]">
-              <div class="w-2 h-2 mt-1.5 rounded-full bg-slate-300 shrink-0"></div>
+            <div v-for="log in activityLogs" :key="log.id" class="flex gap-3 text-[13px]">
+              <div class="w-2 h-2 mt-1.5 rounded-full shrink-0" :class="runStatusDotClass(log.status)"></div>
               <div>
-                <div class="font-medium text-slate-800">{{ log.message }}</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">{{ log.created_at }} - bởi {{ log.actor }}</div>
+                <div class="font-medium text-slate-800">
+                  {{ formatOperationType(log.operationType) }} - {{ formatRunStatus(log.status) }}
+                </div>
+                <div class="text-[11px] text-slate-500 mt-0.5">
+                  {{ formatDateTime(log.startedAt) }} - bởi {{ log.triggeredBy || 'Admin' }}
+                </div>
+                <div class="text-[11px] text-slate-400 mt-0.5">
+                  {{ log.successCount }}/{{ log.totalPlaylists }} thành công
+                  <span v-if="log.failedCount">, {{ log.failedCount }} lỗi</span>
+                  <span v-if="log.durationMs">, {{ formatDurationMs(log.durationMs) }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -784,6 +793,17 @@ const activityLogs = ref([])
 const loadingOperation = ref(false)
 const loadingActivity = ref(false)
 
+const runningJobs = computed(() => Number(operationSummary.value?.runningJobs || 0))
+const operationFailureRateText = computed(() => {
+  if (operationSummary.value?.failureRate === null || operationSummary.value?.failureRate === undefined) return null
+  return `${(Number(operationSummary.value.failureRate) * 100).toFixed(1).replace(/\.0$/, '')}%`
+})
+const averageGenerationTimeText = computed(() => {
+  if (operationSummary.value?.averageGenerationTimeMs === null || operationSummary.value?.averageGenerationTimeMs === undefined) return null
+  return formatDurationMs(operationSummary.value.averageGenerationTimeMs)
+})
+const lastRegeneratedText = computed(() => formatDateTime(operationSummary.value?.lastRegeneratedAt))
+
 const qualityFilter = ref('all')
 const selectedPlaylists = ref([])
 const selectAll = ref(false)
@@ -1060,6 +1080,10 @@ async function regenerateSingle(item) {
 }
 
 function confirmRegenerateAll() {
+  if (isRegeneratingAll.value || runningJobs.value > 0) {
+    toast.showToast('Đang có tiến trình tạo lại playlist đang chạy', 'warning')
+    return
+  }
   showConfirmModal.value = true
 }
 
@@ -1070,10 +1094,20 @@ async function executeRegenerateAll() {
   try {
     const res = await api.post('/admin/system-playlists/regenerate-all')
     regenerateResult.value = res.data?.data || { success: 0, failed: 0, total: 0 }
-    fetchSummary()
-    fetchPlaylists(1)
+    await Promise.all([
+      fetchSummary(),
+      fetchOperationSummary(),
+      fetchActivityLogs(),
+      fetchQualityReport(),
+      fetchSystemKeys(),
+      fetchPlaylists(1)
+    ])
   } catch (err) {
-    toast.showToast('Lỗi tiến trình tạo lại hàng loạt', 'error')
+    toast.showToast(err.response?.data?.message || 'Lỗi tiến trình tạo lại hàng loạt', 'error')
+    await Promise.all([
+      fetchOperationSummary(),
+      fetchActivityLogs()
+    ])
   } finally {
     isRegeneratingAll.value = false
   }
@@ -1084,6 +1118,55 @@ function closeResultModal() {
 }
 
 // Utils
+function formatDateTime(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
+}
+
+function formatDurationMs(value) {
+  const ms = Number(value)
+  if (!Number.isFinite(ms) || ms < 0) return null
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  return `${minutes}m ${rest}s`
+}
+
+function formatRunStatus(status) {
+  const map = {
+    success: 'Thành công',
+    failed: 'Thất bại',
+    partial: 'Một phần',
+    running: 'Đang chạy'
+  }
+  return map[status] || 'Chưa có dữ liệu'
+}
+
+function formatOperationType(value) {
+  const map = {
+    regenerate_all: 'Tạo lại tất cả'
+  }
+  return map[value] || String(value || 'Tác vụ hệ thống').replaceAll('_', ' ')
+}
+
+function runStatusDotClass(status) {
+  if (status === 'success') return 'bg-emerald-500'
+  if (status === 'partial') return 'bg-amber-500'
+  if (status === 'failed') return 'bg-rose-500'
+  if (status === 'running') return 'bg-orange-500'
+  return 'bg-slate-300'
+}
+
 function formatStatus(status) {
   const map = {
     'ok': 'Hoạt động',

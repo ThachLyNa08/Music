@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS system_playlist_generation_runs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  operation_type VARCHAR(80) NOT NULL,
+  status ENUM('running','success','failed','partial') NOT NULL,
+  started_at DATETIME NOT NULL,
+  finished_at DATETIME NULL,
+  duration_ms BIGINT NULL,
+  total_users INT DEFAULT 0,
+  total_playlists INT DEFAULT 0,
+  success_count INT DEFAULT 0,
+  failed_count INT DEFAULT 0,
+  skipped_count INT DEFAULT 0,
+  error_message TEXT NULL,
+  triggered_by_user_id BIGINT NULL,
+  metadata JSON NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_status (status),
+  INDEX idx_operation_type (operation_type),
+  INDEX idx_started_at (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
