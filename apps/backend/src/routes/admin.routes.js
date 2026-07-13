@@ -8,10 +8,26 @@ const adminRecommendationController = require('../controllers/admin_recommendati
 const adminAiPlaylistTestController = require('../controllers/admin_ai_playlist_test.controller');
 const adminStemJobsController = require('../controllers/admin_stem_jobs.controller');
 const adminMusicDataToolsController = require('../controllers/admin_music_data_tools.controller');
+const adminArtistAccountController = require('../controllers/admin_artist_account.controller');
+const adminArtistSongReviewController = require('../controllers/admin_artist_song_review.controller');
+const adminArtistAlbumReviewController = require('../controllers/admin_artist_album_review.controller');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 const upload = require('../middleware/upload.middleware');
 
 router.use(authenticate, requireAdmin);
+
+// Admin Artist Song Reviews
+router.get('/artist-song-reviews/summary', adminArtistSongReviewController.getSummary);
+router.get('/artist-song-reviews', adminArtistSongReviewController.getArtistSongReviews);
+router.get('/artist-song-reviews/:songId', adminArtistSongReviewController.getArtistSongReviewDetail);
+router.post('/artist-song-reviews/:songId/approve', adminArtistSongReviewController.approveArtistSong);
+router.post('/artist-song-reviews/:songId/reject', adminArtistSongReviewController.rejectArtistSong);
+
+// Admin Artist Album Reviews
+router.get('/artist-album-reviews', adminArtistAlbumReviewController.getArtistAlbumReviews);
+router.get('/artist-album-reviews/:albumId', adminArtistAlbumReviewController.getArtistAlbumReviewDetail);
+router.post('/artist-album-reviews/:albumId/approve', adminArtistAlbumReviewController.approveArtistAlbum);
+router.post('/artist-album-reviews/:albumId/reject', adminArtistAlbumReviewController.rejectArtistAlbum);
 
 // Admin Lyrics Management
 const adminLyricsRoutes = require('./admin_lyrics.routes');
@@ -98,8 +114,8 @@ router.get('/songs/export', adminController.exportSongs);
 router.get('/songs', adminController.getAllSongs);
 router.get('/songs/:id/detail', adminController.getSongDetail);
 router.put(
-  '/songs/:id', 
-  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), 
+  '/songs/:id',
+  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]),
   adminController.updateSong
 );
 router.delete('/songs/:id', adminController.deleteSong);
@@ -136,6 +152,11 @@ router.get('/artists', adminController.getAllArtists);
 router.post('/artists/sync-missing-metadata', adminController.syncMissingArtistMetadata);
 router.post('/artists/sync-missing-bio', adminController.syncMissingArtistBio);
 router.get('/artists/metadata-issues', adminController.getArtistMetadataIssues);
+router.post('/artists/accounts/bulk-create', adminArtistAccountController.bulkCreateAccounts);
+router.post('/artists/:artistId/account/create', adminArtistAccountController.createAccount);
+router.post('/artists/:artistId/account/reset-temp-password', adminArtistAccountController.resetTempPassword);
+router.patch('/artists/:artistId/account/status', adminArtistAccountController.updateStatus);
+router.get('/artists/:artistId/account-status', adminArtistAccountController.getAccountStatus);
 router.post('/artists/:id/sync-metadata', adminController.syncArtistMetadata);
 router.post('/artists/:id/sync-bio', adminController.syncArtistBio);
 router.get('/artists/:id/detail', adminController.getArtistDetailFull);

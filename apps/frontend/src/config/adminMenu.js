@@ -32,6 +32,7 @@ export const adminMenu = [
     role: 'admin',
     children: [
       { key: 'songs', label: 'Bài hát', icon: 'music_note', route: { name: 'AdminSongs' }, role: 'admin' },
+      { key: 'artist-song-reviews', label: 'Duyệt nội dung', icon: 'rule', route: { name: 'AdminArtistSongReviews' }, role: 'admin', badgeKey: 'pendingArtistSongs' },
       { key: 'lyrics', label: 'Lời bài hát', icon: 'lyrics', route: { name: 'AdminLyrics' }, role: 'admin' },
       { key: 'artists', label: 'Nghệ sĩ', icon: 'person', route: { name: 'AdminArtists' }, role: 'admin' },
       { key: 'albums', label: 'Album', icon: 'album', route: { name: 'AdminAlbums' }, role: 'admin' },

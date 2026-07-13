@@ -29,7 +29,10 @@ api.interceptors.response.use(
       } catch {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
-        window.location.href = '/login'
+        const path = window.location.pathname
+        if (path.startsWith('/admin')) window.location.href = '/admin/login'
+        else if (path.startsWith('/artist')) window.location.href = '/artist/login'
+        else window.location.href = '/login'
       }
     }
     return Promise.reject(err)

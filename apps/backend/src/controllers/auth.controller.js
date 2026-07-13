@@ -6,6 +6,16 @@ const { pool }          = require('../config/database');
 const { setCache, deleteCache } = require('../config/redis');
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const { PERSONALIZED_SYSTEM_PLAYLISTS } = require('../services/systemPlaylist.service');
+const artistInvitationService = require('../services/artistAccountInvitation.service');
+// Legacy invitation flow is currently unused by direct Artist Account mode.
+
+let cachedUserColumns = null;
+async function getUserColumns() {
+  if (cachedUserColumns) return cachedUserColumns;
+  const [rows] = await pool.query('SHOW COLUMNS FROM users');
+  cachedUserColumns = new Set(rows.map(row => row.Field));
+  return cachedUserColumns;
+}
 
 // ── Helper: tạo cặp token ────────────────────────
 function generateTokens(user) {
@@ -160,6 +170,15 @@ exports.login = async (req, res, next) => {
     }
 
     // 4. Tạo token
+    if (user.role === 'artist') {
+      return res.status(403).json({
+        success: false,
+        code: 'ARTIST_LOGIN_REQUIRED',
+        message: 'T\u00e0i kho\u1ea3n ngh\u1ec7 s\u0129 vui l\u00f2ng \u0111\u0103ng nh\u1eadp t\u1ea1i Artist Studio.',
+        redirectTo: '/artist/login',
+      });
+    }
+
     const tokenPayload = {
       id: user.id,
       email: user.email,
@@ -195,6 +214,121 @@ exports.login = async (req, res, next) => {
   }
 };
 
+exports.artistLogin = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+    const userColumns = await getUserColumns();
+    const mustChangeExpr = userColumns.has('must_change_password') ? 'u.must_change_password' : '0 AS must_change_password';
+    const [rows] = await pool.query(
+      `SELECT u.id, u.email, u.password_hash, u.display_name, u.role, u.status, ${mustChangeExpr},
+              a.id AS artist_id, a.name AS artist_name
+       FROM users u
+       LEFT JOIN artists a ON a.user_id = u.id
+       WHERE u.email = ?
+       LIMIT 1`,
+      [email]
+    );
+
+    if (!rows.length) {
+      return res.status(401).json({ success: false, message: 'Email hoac mat khau khong dung' });
+    }
+
+    const user = rows[0];
+    if (user.role === 'admin') {
+      return res.status(403).json({ success: false, message: 'Vui long dang nhap tai trang quan tri.', redirectTo: '/admin/login' });
+    }
+    if (user.role !== 'artist') {
+      return res.status(403).json({ success: false, message: 'Day khong phai tai khoan nghe si.' });
+    }
+    if (user.status === 'locked') {
+      return res.status(403).json({ success: false, message: 'Tai khoan da bi khoa' });
+    }
+    if (!user.artist_id) {
+      return res.status(403).json({ success: false, message: 'Tai khoan nghe si chua lien ket ho so nghe si.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Email hoac mat khau khong dung' });
+    }
+
+    const tokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      artistId: user.artist_id,
+    };
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    });
+    const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+    });
+    await setCache(`refresh:${user.id}`, refreshToken, 30 * 24 * 3600);
+
+    const safeUser = {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      display_name: user.display_name,
+      role: user.role,
+      artistId: user.artist_id,
+      artistName: user.artist_name,
+      mustChangePassword: Number(user.must_change_password || 0) === 1,
+      must_change_password: Number(user.must_change_password || 0) === 1,
+    };
+    const redirectTo = safeUser.mustChangePassword ? '/artist/change-password' : '/artist/dashboard';
+
+    return res.json({
+      success: true,
+      message: 'Dang nhap Artist Studio thanh cong',
+      user: safeUser,
+      accessToken,
+      refreshToken,
+      redirectTo,
+      data: { user: safeUser, accessToken, refreshToken, redirectTo },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.verifyArtistInvitation = async (req, res, next) => {
+  try {
+    const data = await artistInvitationService.verifyInvitation(req.query.token);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Khong the xac minh loi moi',
+      code: err.code,
+    });
+  }
+};
+
+exports.activateArtistInvitation = async (req, res, next) => {
+  try {
+    const result = await artistInvitationService.activateInvitation(req.body);
+    return res.json({
+      success: true,
+      message: 'Kich hoat tai khoan nghe si thanh cong',
+      data: result,
+      redirectTo: result.redirectTo,
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Khong the kich hoat tai khoan nghe si',
+      code: err.code,
+    });
+  }
+};
+
 // ── POST /api/auth/refresh ───────────────────────
 exports.refreshToken = async (req, res, next) => {
   try {
@@ -219,8 +353,14 @@ exports.refreshToken = async (req, res, next) => {
     }
 
     // 3. Lấy thông tin user mới nhất
+    const userColumns = await getUserColumns();
+    const mustChangeExpr = userColumns.has('must_change_password') ? 'u.must_change_password' : '0 AS must_change_password';
     const [rows] = await pool.query(
-      'SELECT id, email, role, status, premium_expires_at FROM users WHERE id = ?',
+      `SELECT u.id, u.email, u.role, u.status, u.premium_expires_at, ${mustChangeExpr},
+              a.id AS artist_id
+       FROM users u
+       LEFT JOIN artists a ON a.user_id = u.id
+       WHERE u.id = ?`,
       [payload.id]
     );
     if (!rows.length || rows[0].status === 'locked') {
@@ -229,7 +369,14 @@ exports.refreshToken = async (req, res, next) => {
 
     const user = rows[0];
     const newAccessToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, premiumExpiresAt: user.premium_expires_at },
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        premiumExpiresAt: user.premium_expires_at,
+        artistId: user.artist_id || undefined,
+        mustChangePassword: Number(user.must_change_password || 0) === 1,
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
@@ -254,8 +401,10 @@ exports.logout = async (req, res, next) => {
 // ── GET /api/auth/me ─────────────────────────────
 exports.getMe = async (req, res, next) => {
   try {
+    const userColumns = await getUserColumns();
+    const mustChangeExpr = userColumns.has('must_change_password') ? 'must_change_password' : '0 AS must_change_password';
     const [rows] = await pool.query(
-      `SELECT id, email, display_name, avatar_url, role, status,
+      `SELECT id, email, display_name, avatar_url, role, status, ${mustChangeExpr},
               premium_plan_id, premium_expires_at, total_listen_sec, created_at
        FROM users WHERE id = ?`,
       [req.user.id]
@@ -264,6 +413,20 @@ exports.getMe = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
     }
     const user = rows[0];
+
+    if (user.role === 'artist') {
+      const [artistRows] = await pool.query(
+        'SELECT id, name FROM artists WHERE user_id = ? LIMIT 1',
+        [user.id]
+      );
+      if (artistRows.length) {
+        user.artistId = artistRows[0].id;
+        user.artist_id = artistRows[0].id;
+        user.artistName = artistRows[0].name;
+        user.artist_name = artistRows[0].name;
+      }
+      user.mustChangePassword = Number(user.must_change_password || 0) === 1;
+    }
 
     const [genres] = await pool.query('SELECT genre_id FROM user_genre_preferences WHERE user_id = ?', [user.id]);
     const [artists] = await pool.query('SELECT artist_id FROM user_artist_preferences WHERE user_id = ?', [user.id]);

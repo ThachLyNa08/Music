@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
+const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 
 function hasValidSyncedLyrics(text) {
   if (!text || !text.trim()) return false;
@@ -9,9 +10,9 @@ function hasValidSyncedLyrics(text) {
 exports.getSummary = async (req, res, next) => {
   try {
     const [[{ totalSongs }]] = await pool.query(`SELECT COUNT(*) AS totalSongs FROM songs`);
-    
+
     const [[lyricsStats]] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as songsWithLyrics,
         SUM(CASE WHEN sync_type = 'LINE_SYNCED' THEN 1 ELSE 0 END) as syncedLyricsCount,
         SUM(CASE WHEN sync_type = 'PLAIN_TEXT' THEN 1 ELSE 0 END) as plainLyricsCount,
@@ -82,9 +83,9 @@ exports.getList = async (req, res, next) => {
     const [[{ total }]] = await pool.query(countQuery, queryParams);
 
     const dataQuery = `
-      SELECT 
+      SELECT
         s.id as song_id, s.title, a.name as artist_name, al.title as album_name, s.cover_url,
-        sl.sync_type, sl.provider, sl.provider_lyric_id, 
+        sl.sync_type, sl.provider, sl.provider_lyric_id,
         sl.updated_at, sl.plain_lyrics, sl.synced_lyrics,
         IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
         IF(sl.synced_lyrics IS NOT NULL AND TRIM(sl.synced_lyrics) != '', 1, 0) as has_synced_lyrics,
@@ -98,7 +99,7 @@ exports.getList = async (req, res, next) => {
       ORDER BY s.id DESC
       LIMIT ? OFFSET ?
     `;
-    
+
     const [rows] = await pool.query(dataQuery, [...queryParams, parseInt(limit), parseInt(offset)]);
 
     const mappedRows = rows.map(row => {
@@ -117,6 +118,7 @@ exports.getList = async (req, res, next) => {
 
       return {
         ...rest,
+        cover_url: normalizeCoverUrl(rest.cover_url),
         effective_sync_type,
         lyrics_status
       };
@@ -140,7 +142,7 @@ exports.getList = async (req, res, next) => {
 exports.getDetail = async (req, res, next) => {
   try {
     const { songId } = req.params;
-    
+
     const [[song]] = await pool.query(`
       SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name, s.cover_url, s.duration_sec as duration
       FROM songs s
@@ -172,6 +174,7 @@ exports.getDetail = async (req, res, next) => {
     }
 
     song.lyrics = lyrics || null;
+    song.cover_url = normalizeCoverUrl(song.cover_url);
 
     res.json({ success: true, data: song });
   } catch (error) {
@@ -204,11 +207,11 @@ exports.updateLyrics = async (req, res, next) => {
 
     if (existingLyrics) {
       await pool.query(`
-        UPDATE song_lyrics 
-        SET 
-          plain_lyrics = ?, 
-          synced_lyrics = ?, 
-          sync_type = ?, 
+        UPDATE song_lyrics
+        SET
+          plain_lyrics = ?,
+          synced_lyrics = ?,
+          sync_type = ?,
           provider = 'MANUAL'
         WHERE song_id = ?
       `, [plain_lyrics || null, synced_lyrics || null, finalSyncType, songId]);
@@ -235,7 +238,7 @@ exports.exportAudit = async (req, res, next) => {
     const fs = require('fs');
     const path = require('path');
     const reportPath = path.join(__dirname, '../../../../datasets/processed/lyrics/low-quality-lyrics-report.csv');
-    
+
     if (fs.existsSync(reportPath)) {
       res.download(reportPath, 'low-quality-lyrics-report.csv');
     } else {
@@ -278,7 +281,7 @@ exports.exportLyrics = async (req, res, next) => {
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const dataQuery = `
-      SELECT 
+      SELECT
         s.id as song_id, s.title, a.name as artist_name,
         sl.provider, sl.sync_type, sl.updated_at,
         IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
@@ -292,7 +295,7 @@ exports.exportLyrics = async (req, res, next) => {
       ORDER BY s.id DESC
       LIMIT 10000
     `;
-    
+
     const [rows] = await pool.query(dataQuery, queryParams);
 
     const formattedRows = rows.map(row => {

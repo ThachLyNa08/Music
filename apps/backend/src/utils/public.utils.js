@@ -1,6 +1,7 @@
 function publicSongCondition(alias = 's') {
   return `
   ${alias}.is_active = TRUE
+  AND ${alias}.review_status = 'approved'
   AND (
     ${alias}.release_status = 'published'
     OR (
@@ -14,7 +15,8 @@ function publicSongCondition(alias = 's') {
 
 function publicAlbumCondition(alias = 'al') {
   return `
-  (
+  ${alias}.review_status = 'approved'
+  AND (
     ${alias}.release_status = 'published'
     OR (
       ${alias}.release_status = 'scheduled'

@@ -42,7 +42,7 @@ exports.createNotification = async ({ userId, title, message, type = 'system', l
 exports.createGlobalNotification = async ({ title, message, type = 'system', link = null, data = null }) => {
   try {
     const [users] = await pool.query('SELECT id FROM users WHERE status = "active"');
-    
+
     if (users.length === 0) return;
 
     for (const user of users) {
@@ -55,9 +55,33 @@ exports.createGlobalNotification = async ({ title, message, type = 'system', lin
       io.emit('notification:new', payload);
       io.emit('new_notification', payload);
     }
-    
+
   } catch (error) {
     console.error('Error creating global notification:', error);
+    throw error;
+  }
+};
+
+exports.createAdminNotification = async ({ title, message, type = 'system', link = null, data = null }) => {
+  try {
+    const [admins] = await pool.query('SELECT id FROM users WHERE role = "admin" AND status = "active"');
+    if (admins.length === 0) return;
+
+    for (const admin of admins) {
+      await insertNotification({ userId: admin.id, title, message, type, link, data });
+    }
+
+    const io = getIo();
+    if (io) {
+      const payload = { title, message, type, link, data, is_read: 0, created_at: new Date() };
+      for (const admin of admins) {
+        io.to(`user:${admin.id}`).emit('notification:new', payload);
+        io.to(`user:${admin.id}`).emit('new_notification', payload);
+      }
+      io.emit('admin:review_updated'); // Trigger data reload in AdminUI
+    }
+  } catch (error) {
+    console.error('Error creating admin notification:', error);
     throw error;
   }
 };

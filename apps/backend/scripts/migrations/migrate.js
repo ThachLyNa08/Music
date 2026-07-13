@@ -2,6 +2,7 @@ require('dotenv').config();
 const mysql = require('mysql2/promise');
 
 const DB_NAME = process.env.DB_NAME || 'musicflow';
+const CHAT_MESSAGE_TYPE_ENUM = "ENUM('text','song_share','playlist_share','album_share','artist_share','system') NOT NULL DEFAULT 'text'";
 
 async function columnExists(conn, tableName, columnName) {
   const [rows] = await conn.query(
@@ -37,6 +38,19 @@ async function indexExists(conn, tableName, indexName) {
        AND INDEX_NAME = ?
      LIMIT 1`,
     [tableName, indexName]
+  );
+  return rows.length > 0;
+}
+
+async function foreignKeyExists(conn, tableName, constraintName) {
+  const [rows] = await conn.query(
+    `SELECT 1
+     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND CONSTRAINT_NAME = ?
+     LIMIT 1`,
+    [tableName, constraintName]
   );
   return rows.length > 0;
 }
@@ -407,7 +421,7 @@ async function normalizeChatSchema(conn) {
       conversation_id INT UNSIGNED NOT NULL,
       sender_id INT UNSIGNED NOT NULL,
       body TEXT NOT NULL,
-      message_type ENUM('text','song_share') NOT NULL DEFAULT 'text',
+      message_type ${CHAT_MESSAGE_TYPE_ENUM},
       shared_song_id INT UNSIGNED NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       deleted_at DATETIME NULL,
@@ -419,31 +433,107 @@ async function normalizeChatSchema(conn) {
       CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  await conn.query("ALTER TABLE messages MODIFY COLUMN message_type ENUM('text','song_share') NOT NULL DEFAULT 'text'");
+  await conn.query(`ALTER TABLE messages MODIFY COLUMN message_type ${CHAT_MESSAGE_TYPE_ENUM}`);
   await addColumnIfMissing(conn, 'messages', 'shared_song_id', 'INT UNSIGNED NULL');
   await addColumnIfMissing(conn, 'messages', 'deleted_at', 'DATETIME NULL');
   await addIndexIfMissing(conn, 'messages', 'idx_messages_conversation_created_at', 'INDEX idx_messages_conversation_created_at (conversation_id, created_at)');
   await addIndexIfMissing(conn, 'messages', 'idx_messages_shared_song_id', 'INDEX idx_messages_shared_song_id (shared_song_id)');
   await addIndexIfMissing(conn, 'messages', 'idx_messages_sender_id', 'INDEX idx_messages_sender_id (sender_id)');
-  
+
   await addColumnIfMissing(conn, 'messages', 'reply_to_message_id', 'INT UNSIGNED NULL');
   await addIndexIfMissing(conn, 'messages', 'idx_messages_reply_to', 'INDEX idx_messages_reply_to (reply_to_message_id)');
-  
+
   // Add foreign key for reply_to_message_id if not exists
   const [fkRows] = await conn.query(`
-    SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
-    WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'messages' 
+    SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'messages'
       AND CONSTRAINT_NAME = 'fk_messages_reply_to'
   `);
   if (fkRows.length === 0) {
     await conn.query(`
-      ALTER TABLE messages 
-      ADD CONSTRAINT fk_messages_reply_to 
+      ALTER TABLE messages
+      ADD CONSTRAINT fk_messages_reply_to
       FOREIGN KEY (reply_to_message_id) REFERENCES messages(id) ON DELETE SET NULL
     `);
     console.log('Added foreign key fk_messages_reply_to');
   }
+}
+
+async function normalizeArtistAccountSchema(conn) {
+  console.log('007_artist_account_invitations');
+
+  await conn.query("ALTER TABLE users MODIFY COLUMN role ENUM('user','artist','admin') NOT NULL DEFAULT 'user'");
+  await addColumnIfMissing(conn, 'users', 'must_change_password', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing(conn, 'users', 'account_source', "VARCHAR(50) NOT NULL DEFAULT 'self_registered'");
+
+  await addColumnIfMissing(conn, 'artists', 'user_id', 'INT UNSIGNED NULL');
+  await addIndexIfMissing(conn, 'artists', 'unique_artists_user_id', 'UNIQUE KEY unique_artists_user_id (user_id)');
+
+  if (!(await foreignKeyExists(conn, 'artists', 'fk_artists_user_id'))) {
+    await conn.query(`
+      ALTER TABLE artists
+      ADD CONSTRAINT fk_artists_user_id
+      FOREIGN KEY (user_id) REFERENCES users(id)
+      ON DELETE SET NULL
+    `);
+    console.log('Added foreign key fk_artists_user_id');
+  }
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS artist_account_invitations (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      artist_id INT UNSIGNED NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      token_hash CHAR(64) NOT NULL,
+      status ENUM('pending','activated','expired','revoked') NOT NULL DEFAULT 'pending',
+      expires_at DATETIME NOT NULL,
+      sent_at DATETIME NULL,
+      activated_at DATETIME NULL,
+      revoked_at DATETIME NULL,
+      created_by_admin_id INT UNSIGNED NULL,
+      delivery_method ENUM('email','manual') NOT NULL DEFAULT 'email',
+      delivery_status ENUM('pending','sent','manual_required','failed') NOT NULL DEFAULT 'pending',
+      delivery_error TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      INDEX idx_artist_inv_artist_id (artist_id),
+      INDEX idx_artist_inv_email (email),
+      UNIQUE KEY unique_artist_inv_token_hash (token_hash),
+      INDEX idx_artist_inv_status (status),
+      INDEX idx_artist_inv_expires_at (expires_at),
+      CONSTRAINT fk_artist_inv_artist
+        FOREIGN KEY (artist_id) REFERENCES artists(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_artist_inv_created_by
+        FOREIGN KEY (created_by_admin_id) REFERENCES users(id)
+        ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+async function normalizeArtistSongSubmissionNoteSchema(conn) {
+  console.log('008_artist_song_submission_note');
+
+  await addColumnIfMissing(conn, 'songs', 'submission_note', 'TEXT NULL AFTER lyrics');
+}
+
+async function normalizeArtistAlbumReviewSchema(conn) {
+  console.log('009_artist_album_review_workflow');
+
+  await addColumnIfMissing(conn, 'albums', 'review_status', "ENUM('approved', 'pending_review', 'rejected') NOT NULL DEFAULT 'approved' AFTER release_status");
+  await addColumnIfMissing(conn, 'albums', 'submitted_by_artist_id', 'INT UNSIGNED NULL');
+  await addColumnIfMissing(conn, 'albums', 'submitted_by_user_id', 'INT UNSIGNED NULL');
+  await addColumnIfMissing(conn, 'albums', 'reviewed_by_admin_id', 'INT UNSIGNED NULL');
+  await addColumnIfMissing(conn, 'albums', 'submitted_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'albums', 'reviewed_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'albums', 'rejection_reason', 'TEXT NULL');
+  await addColumnIfMissing(conn, 'albums', 'submission_note', 'TEXT NULL');
+
+  await addIndexIfMissing(conn, 'albums', 'idx_album_review_status', 'INDEX idx_album_review_status (review_status)');
+  await addIndexIfMissing(conn, 'albums', 'idx_album_submitted_by_artist', 'INDEX idx_album_submitted_by_artist (submitted_by_artist_id)');
+  await addIndexIfMissing(conn, 'albums', 'idx_album_submitted_at', 'INDEX idx_album_submitted_at (submitted_at)');
 }
 
 async function main() {
@@ -464,6 +554,9 @@ async function main() {
     await normalizeArtistBioFallbackSchema(conn);
     await normalizeAlbumAdminSchema(conn);
     await normalizeChatSchema(conn);
+    await normalizeArtistAccountSchema(conn);
+    await normalizeArtistSongSubmissionNoteSchema(conn);
+    await normalizeArtistAlbumReviewSchema(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();

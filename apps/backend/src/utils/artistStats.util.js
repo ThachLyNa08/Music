@@ -6,9 +6,8 @@
  */
 exports.getArtistTotalPlaysQuery = (artistTableAlias = 'a') => {
   return `(
-    SELECT COUNT(lh.id)
-    FROM listening_history lh
-    JOIN songs s ON s.id = lh.song_id
-    WHERE s.artist_id = ${artistTableAlias}.id AND s.is_active = TRUE
+    SELECT COALESCE(SUM(COALESCE(s.play_count, 0)), 0)
+    FROM songs s
+    WHERE s.artist_id = ${artistTableAlias}.id
   )`;
 };

@@ -19,10 +19,10 @@
 
     <div class="p-4 md:p-6 flex flex-col space-y-6">
       <!-- Group Cards -->
-      <SongGroupCards 
-      :summary="store.groupsSummary" 
-      :selectedGroup="store.selectedGroup" 
-      @select-group="handleGroupSelect" 
+      <SongGroupCards
+      :summary="store.groupsSummary"
+      :selectedGroup="store.selectedGroup"
+      @select-group="handleGroupSelect"
     />
 
     <!-- Section Title based on Group -->
@@ -34,15 +34,15 @@
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative min-w-[320px] flex-1">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <input 
-            v-model="store.filters.search" 
-            @input="handleSearchInput" 
-            @keyup.enter="handleEnter" 
+          <input
+            v-model="store.filters.search"
+            @input="handleSearchInput"
+            @keyup.enter="handleEnter"
             @focus="showHistory = true"
             @blur="handleBlur"
-            type="text" 
-            placeholder="Tìm theo tên bài hát, nghệ sĩ, album..." 
-            class="admin-input pl-9 pr-8 w-full" 
+            type="text"
+            placeholder="Tìm theo tên bài hát, nghệ sĩ, album..."
+            class="admin-input pl-9 pr-8 w-full"
           />
         <button v-if="store.filters.search" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
           <MfIcon name="close" size="14" />
@@ -112,12 +112,12 @@
 
     <!-- Data Table -->
     <div class="mb-8 flex flex-col">
-      <AdminTableShell 
-        maxHeight="375px" 
+      <AdminTableShell
+        maxHeight="375px"
         style="min-height: 375px;"
-        :loading="store.loading.songs" 
-        :empty="!store.loading.songs && store.songs.length === 0" 
-        emptyTitle="Không tìm thấy bài hát nào" 
+        :loading="store.loading.songs"
+        :empty="!store.loading.songs && store.songs.length === 0"
+        emptyTitle="Không tìm thấy bài hát nào"
         emptyDescription="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
         <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
@@ -241,7 +241,7 @@
       @submit="submitForm"
     />
 
-    <ConfirmDialog 
+    <ConfirmDialog
       v-model:open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -570,14 +570,14 @@ async function submitForm(submitData) {
       statusMessage.value = 'Tải lên thành công!';
       toast.showToast('Thêm bài hát thành công!', 'success');
     }
-    
+
     // Re-fetch data from store
     await store.fetchGroupsSummary();
     await store.fetchSongs();
-    
+
     isError.value = false;
     setTimeout(() => { closeModal(); }, 1000);
-    
+
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.';
     isError.value = true;
@@ -609,7 +609,10 @@ function confirmDelete(song) {
     type: 'danger',
     action: async () => {
       try {
-        await store.deleteSong(song.id);
+        await api.delete(`/admin/songs/${song.id}`);
+        await store.fetchSongs();
+        await store.fetchGroupsSummary();
+        await store.fetchStatistics();
         toast.showToast('Xóa bài hát thành công!', 'success');
       } catch (err) {
         console.error('Lỗi khi xóa bài hát:', err);

@@ -5,91 +5,113 @@ import router from '@/router'
 import { usePlayerStore } from '@/stores/player'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user         = ref(null)
-  const accessToken  = ref(localStorage.getItem('accessToken') || null)
+  const user = ref(null)
+  const accessToken = ref(localStorage.getItem('accessToken') || null)
   const refreshToken = ref(localStorage.getItem('refreshToken') || null)
-  const loading      = ref(false)
+  const loading = ref(false)
 
   const isLoggedIn = computed(() => !!accessToken.value)
   const isAuthenticated = computed(() => !!accessToken.value)
-  const isAdmin    = computed(() => user.value?.role === 'admin')
-  const userRole   = computed(() => user.value?.role || 'guest')
-  const isPremium  = computed(() => {
+  const isAdmin = computed(() => user.value?.role === 'admin')
+  const isArtist = computed(() => user.value?.role === 'artist')
+  const userRole = computed(() => user.value?.role || 'guest')
+  const isPremium = computed(() => {
     const expiresAt = user.value?.premium_expires_at || user.value?.premium_expired_at
     if (!expiresAt) return false
     return new Date(expiresAt) > new Date()
   })
 
+  function setAuth({ accessToken: at, refreshToken: rt }) {
+    accessToken.value = at
+    refreshToken.value = rt
+    localStorage.setItem('accessToken', at)
+    if (rt) localStorage.setItem('refreshToken', rt)
+  }
+
+  function clearAuth() {
+    user.value = null
+    accessToken.value = null
+    refreshToken.value = null
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+  }
+
   async function login(email, password, loginContext = 'user') {
     loading.value = true
     try {
-      console.log('[AUTH] Gửi request đăng nhập:', email)
-      const { data } = await authApi.login({ email, password })
-      console.log('[AUTH] Đăng nhập thành công, nhận token:', !!data.data.accessToken)
-      
-      // Tạm lưu token vào localStorage để axios interceptor có thể gọi getMe()
-      // KHÔNG gọi setAuth() hay gán user.value ngay để tránh trigger watchers (App.vue, v.v.)
-      localStorage.setItem('accessToken', data.data.accessToken)
-      localStorage.setItem('refreshToken', data.data.refreshToken)
-      
-      let fetchedUser = null
-      try {
+      const { data } = loginContext === 'artist'
+        ? await authApi.artistLogin({ email, password })
+        : await authApi.login({ email, password })
+
+      const payload = data.data || data
+      setAuth(payload)
+
+      let fetchedUser = payload.user || data.user || null
+      if (!fetchedUser) {
         const meRes = await authApi.getMe()
         fetchedUser = meRes.data.data
-      } catch (err) {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
-        throw err
       }
-      
-      // Kiểm tra luồng Admin
+
       if (loginContext === 'admin') {
         if (fetchedUser?.role !== 'admin') {
-          localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
-          return { success: false, message: 'Tài khoản không có quyền quản trị.' }
+          clearAuth()
+          return { success: false, message: 'Tai khoan khong co quyen quan tri.' }
         }
-        
-        // Hợp lệ -> Cập nhật Pinia state chính thức
-        setAuth(data.data)
         user.value = fetchedUser
         await router.push('/admin/dashboard')
-      } 
-      // Kiểm tra luồng User
-      else {
-        if (fetchedUser?.role === 'admin') {
-          localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
-          return { success: false, message: 'Đây là tài khoản quản trị. Vui lòng đăng nhập tại trang Admin.', redirectTo: '/admin/login' }
-        }
-        
-        // Hợp lệ -> Cập nhật Pinia state chính thức
-        setAuth(data.data)
-        user.value = fetchedUser
-        
-        // Restore player session cho user
-        const player = usePlayerStore()
-        player.restorePlayerSession(user.value?.id)
-        
-        await router.push('/')
+        return { success: true }
       }
-      
-      console.log('[AUTH] Đã chuyển hướng xong')
+
+      if (loginContext === 'artist') {
+        if (fetchedUser?.role !== 'artist') {
+          clearAuth()
+          const message = fetchedUser?.role === 'admin'
+            ? 'Vui long dang nhap tai trang quan tri.'
+            : 'Day khong phai tai khoan nghe si.'
+          return { success: false, message, redirectTo: fetchedUser?.role === 'admin' ? '/admin/login' : '/login' }
+        }
+        user.value = fetchedUser
+        await router.push(payload.redirectTo || data.redirectTo || '/artist/dashboard')
+        return { success: true }
+      }
+
+      if (fetchedUser?.role === 'admin') {
+        clearAuth()
+        return {
+          success: false,
+          message: 'Day la tai khoan quan tri. Vui long dang nhap tai trang Admin.',
+          redirectTo: '/admin/login',
+        }
+      }
+      if (fetchedUser?.role === 'artist') {
+        clearAuth()
+        return {
+          success: false,
+          message: 'Day la tai khoan nghe si. Vui long dang nhap tai Artist Studio.',
+          redirectTo: '/artist/login',
+        }
+      }
+
+      user.value = fetchedUser
+      const player = usePlayerStore()
+      player.restorePlayerSession(user.value?.id)
+      await router.push('/')
       return { success: true }
     } catch (err) {
-      console.error('[AUTH] Lỗi đăng nhập:', err)
-      return { success: false, message: err.response?.data?.message || 'Đăng nhập thất bại' }
+      clearAuth()
+      return {
+        success: false,
+        code: err.response?.data?.code,
+        message: err.response?.data?.message || 'Dang nhap that bai',
+        redirectTo: err.response?.data?.redirectTo,
+      }
     } finally {
       loading.value = false
     }
   }
 
   function logoutSilently() {
-    user.value = null
-    accessToken.value = null
-    refreshToken.value = null
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
+    clearAuth()
   }
 
   async function register(payload) {
@@ -98,14 +120,11 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await authApi.register(payload)
       setAuth(data.data)
       await fetchMe()
-      if (isAdmin.value) {
-        router.push('/admin')
-      } else {
-        router.push('/')
-      }
+      if (isAdmin.value) router.push('/admin')
+      else router.push('/')
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Đăng ký thất bại' }
+      return { success: false, message: err.response?.data?.message || 'Dang ky that bai' }
     } finally {
       loading.value = false
     }
@@ -113,44 +132,28 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchMe() {
     try {
-      console.log('[AUTH] Đang fetch thông tin user mới nhất...')
       const { data } = await authApi.getMe()
       user.value = data.data
-      console.log('[AUTH] Đã set user state thành công:', user.value?.id)
-    } catch (err) {
-      console.error('[AUTH] Lỗi fetchMe, tiến hành logout:', err)
-      logout() 
+    } catch {
+      logout()
     }
   }
 
   async function logout() {
     const currentRoute = router.currentRoute.value.path
     const wasAdminPath = currentRoute.startsWith('/admin')
+    const wasArtistPath = currentRoute.startsWith('/artist')
 
     try { await authApi.logout() } catch {}
-    user.value = null
-    accessToken.value = null
-    refreshToken.value = null
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    
-    // Pause music and clear runtime without deleting session history
+    clearAuth()
+
     const player = usePlayerStore()
     player.stopPlayback()
     player.clearRuntimePlayer()
-    
-    if (wasAdminPath) {
-      router.push('/admin/login')
-    } else {
-      router.push('/login')
-    }
-  }
 
-  function setAuth({ accessToken: at, refreshToken: rt }) {
-    accessToken.value  = at
-    refreshToken.value = rt
-    localStorage.setItem('accessToken', at)
-    localStorage.setItem('refreshToken', rt)
+    if (wasAdminPath) router.push('/admin/login')
+    else if (wasArtistPath) router.push('/artist/login')
+    else router.push('/login')
   }
 
   function upgradeToPremium(expiredAt) {
@@ -160,6 +163,30 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, isAuthenticated, isAdmin, userRole, isPremium, loading,
-           login, register, logout, fetchMe, upgradeToPremium }
+  function markArtistPasswordChanged() {
+    if (user.value) {
+      user.value.mustChangePassword = false
+      user.value.must_change_password = false
+    }
+  }
+
+  return {
+    user,
+    accessToken,
+    refreshToken,
+    isLoggedIn,
+    isAuthenticated,
+    isAdmin,
+    isArtist,
+    userRole,
+    isPremium,
+    loading,
+    login,
+    register,
+    logout,
+    logoutSilently,
+    fetchMe,
+    upgradeToPremium,
+    markArtistPasswordChanged,
+  }
 })

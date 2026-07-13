@@ -29,6 +29,7 @@ app.use('/api/users',    require('./routes/user.routes'));
 app.use('/api/me',       require('./routes/user.routes')); // alias for /api/users/me/*
 app.use('/api/songs',    require('./routes/song.routes'));
 app.use('/api/artists',  require('./routes/artist.routes'));
+app.use('/api/artist',   require('./routes/artistStudio.routes'));
 app.use('/api/genres',   require('./routes/genre.routes'));
 app.use('/api/albums',   require('./routes/album.routes'));
 app.use('/api/playlists',require('./routes/playlist.routes'));

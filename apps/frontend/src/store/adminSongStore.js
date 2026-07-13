@@ -105,6 +105,16 @@ export const useAdminSongStore = defineStore('adminSong', {
       };
       this.applyFilters();
     },
+    async deleteSong(id) {
+      try {
+        await api.delete(`/admin/songs/${id}`);
+        await this.fetchSongs();
+        await this.fetchGroupsSummary();
+        await this.fetchStatistics();
+      } catch (err) {
+        throw err;
+      }
+    },
     async bulkUpdateStatus(songIds, status) {
       this.loading.bulk = true;
       try {

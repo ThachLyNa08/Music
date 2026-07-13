@@ -17,6 +17,7 @@ const {
 } = require('../services/adminDataQuality.service');
 const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.util');
 const { getArtistTotalPlaysQuery } = require('../utils/artistStats.util');
+const { getArtistStats } = require('../services/artistStats.service');
 const {
   effectiveReleaseStatusExpression,
   normalizeReleasePayload,
@@ -35,6 +36,17 @@ async function getTableColumns(tableName) {
   const columns = new Set(rows.map(row => row.Field));
   schemaCache.set(tableName, columns);
   return columns;
+}
+
+async function getOptionalTableColumns(tableName) {
+  try {
+    return await getTableColumns(tableName);
+  } catch (error) {
+    if (error && (error.code === 'ER_NO_SUCH_TABLE' || error.errno === 1146)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 function parsePositiveInt(value, fallback) {
@@ -244,9 +256,9 @@ exports.getDashboardStats = async (req, res) => {
       };
     } else {
       const [fallbackHot] = await pool.query(`
-        SELECT s.id, s.title, a.name as artist, s.play_count 
-        FROM songs s 
-        LEFT JOIN artists a ON s.artist_id = a.id 
+        SELECT s.id, s.title, a.name as artist, s.play_count
+        FROM songs s
+        LEFT JOIN artists a ON s.artist_id = a.id
         ORDER BY s.play_count DESC LIMIT 1
       `);
       if (fallbackHot && fallbackHot.length > 0) {
@@ -260,7 +272,7 @@ exports.getDashboardStats = async (req, res) => {
       }
     }
     const [[usersGrowthRow]] = await pool.query(`
-      SELECT 
+      SELECT
         SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
         SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
       FROM users
@@ -270,10 +282,10 @@ exports.getDashboardStats = async (req, res) => {
 
     // 2. Thống kê theo tháng (6 tháng gần nhất) - Doanh thu
     const [revenueByMonth] = await pool.query(`
-      SELECT 
-        DATE_FORMAT(paid_at, '%Y-%m') as month, 
-        SUM(amount) as revenue 
-      FROM payment_transactions 
+      SELECT
+        DATE_FORMAT(paid_at, '%Y-%m') as month,
+        SUM(amount) as revenue
+      FROM payment_transactions
       WHERE status = 'paid' AND paid_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
       GROUP BY month
       ORDER BY month ASC
@@ -348,9 +360,9 @@ exports.getDashboardStats = async (req, res) => {
 
     // 4. Danh sách user mới nhất (Ẩn email để bảo mật)
     const [latestUsers] = await pool.query(`
-      SELECT id, display_name, email, role, created_at 
-      FROM users 
-      ORDER BY created_at DESC 
+      SELECT id, display_name, email, role, created_at
+      FROM users
+      ORDER BY created_at DESC
       LIMIT 5
     `);
 
@@ -580,7 +592,6 @@ exports.getTopArtistTrends = async (req, res, next) => {
              ranked.avatar_url AS image,
              COALESCE(song_counts.song_count, 0) AS song_count,
              ranked.recent_plays,
-             ranked.recent_plays AS total_plays,
              ranked.recent_plays AS listens,
              ranked.raw_listen_events
       FROM (
@@ -611,7 +622,6 @@ exports.getTopArtistTrends = async (req, res, next) => {
       artist.avatar_url = resolveArtistAvatar(artist, req);
       artist.image = artist.avatar_url;
       artist.recent_plays = Number(artist.recent_plays || 0);
-      artist.total_plays = Number(artist.total_plays || 0);
       artist.listens = Number(artist.listens || 0);
       artist.raw_listen_events = Number(artist.raw_listen_events || 0);
       artist.song_count = Number(artist.song_count || 0);
@@ -742,7 +752,7 @@ exports.getAdminAlbumsStats = async (req, res, next) => {
     const { search = '', genreId = '', releaseYear = '', market = '' } = req.query;
     const { marketColumn } = await getAlbumSchemaInfo();
 
-    const where = [];
+    const where = ["al.review_status = 'approved'"];
     const params = [];
 
     if (search.trim()) {
@@ -820,7 +830,7 @@ exports.getAdminAlbums = async (req, res, next) => {
       ? `GROUP_CONCAT(DISTINCT NULLIF(s.\`${marketColumn}\`, '') ORDER BY s.\`${marketColumn}\` SEPARATOR ', ') AS market`
       : 'NULL AS market';
 
-    const where = [];
+    const where = ["al.review_status = 'approved'"];
     const params = [];
 
     if (search.trim()) {
@@ -861,7 +871,7 @@ exports.getAdminAlbums = async (req, res, next) => {
     }
 
     const [idRows] = await pool.query(`
-      SELECT al.id 
+      SELECT al.id
       FROM albums al
       JOIN artists a ON a.id = al.artist_id
       LEFT JOIN genres g ON g.id = al.genre_id
@@ -1042,7 +1052,7 @@ exports.getAvailableSongsForAlbum = async (req, res, next) => {
       JOIN artists a ON a.id = s.artist_id
       LEFT JOIN albums al ON al.id = s.album_id
       LEFT JOIN genres g ON g.id = s.genre_id
-      WHERE s.artist_id = ? AND s.is_active = TRUE
+      WHERE s.artist_id = ? AND s.is_active = TRUE AND s.review_status = 'approved'
       ORDER BY s.album_id IS NULL DESC, s.title ASC
     `, [artistId]);
 
@@ -1489,13 +1499,13 @@ exports.reorderAdminAlbumSongs = async (req, res, next) => {
 exports.getAllUsers = async (req, res, next) => {
   try {
     const [users] = await pool.query(`
-      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, 
+      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at,
              COALESCE((
-               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate)) 
-               FROM listening_history lh 
-               JOIN songs s ON s.id = lh.song_id 
+               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate))
+               FROM listening_history lh
+               JOIN songs s ON s.id = lh.song_id
                WHERE lh.user_id = u.id
-             ), 0) as total_listen_sec, 
+             ), 0) as total_listen_sec,
              (
                SELECT MAX(lh.listened_at)
                FROM listening_history lh
@@ -1505,6 +1515,7 @@ exports.getAllUsers = async (req, res, next) => {
              COUNT(p.id) as playlistCount
       FROM users u
       LEFT JOIN playlists p ON u.id = p.user_id
+      WHERE u.role = 'user'
       GROUP BY u.id
       ORDER BY u.created_at DESC
     `);
@@ -1554,13 +1565,13 @@ exports.updateUser = async (req, res, next) => {
     }
 
     const [[updatedUser]] = await pool.query(`
-      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, 
+      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at,
              COALESCE((
-               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate)) 
-               FROM listening_history lh 
-               JOIN songs s ON s.id = lh.song_id 
+               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate))
+               FROM listening_history lh
+               JOIN songs s ON s.id = lh.song_id
                WHERE lh.user_id = u.id
-             ), 0) as total_listen_sec, 
+             ), 0) as total_listen_sec,
              u.created_at,
              COUNT(p.id) as playlistCount
       FROM users u
@@ -1585,7 +1596,7 @@ exports.getEngagementSummary = async (req, res, next) => {
     const { id } = req.params;
 
     const [lhStats] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total_listens,
         MAX(listened_at) as last_listened_at
       FROM listening_history
@@ -1696,7 +1707,7 @@ exports.getListeningHeatmap = async (req, res, next) => {
     if (months > 12) months = 12;
 
     const [rows] = await pool.query(`
-      SELECT 
+      SELECT
         DATE(listened_at) as date,
         COUNT(*) as count,
         SUM(listen_duration)/60 as minutes
@@ -1740,7 +1751,7 @@ exports.getUserDetail = async (req, res, next) => {
 
     // 1. Lấy thông tin user cơ bản
     const [users] = await pool.query(
-      `SELECT id, email, display_name, avatar_url, role, status, 
+      `SELECT id, email, display_name, avatar_url, role, status,
               premium_plan_id, premium_expires_at, total_listen_sec, created_at
        FROM users WHERE id = ?`,
       [id]
@@ -1842,7 +1853,7 @@ exports.getUserDetail = async (req, res, next) => {
     const getTrendStats = async (tableName, dateColumn, extraWhere = '', sumColumn = null) => {
       const valExpr = sumColumn ? sumColumn : '1';
       const q = `
-        SELECT 
+        SELECT
           SUM(CASE WHEN ${dateColumn} >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN ${valExpr} ELSE 0 END) as this_week,
           SUM(CASE WHEN ${dateColumn} >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND ${dateColumn} < DATE_SUB(NOW(), INTERVAL 7 DAY) THEN ${valExpr} ELSE 0 END) as last_week
         FROM ${tableName}
@@ -2009,8 +2020,8 @@ exports.getUserDetail = async (req, res, next) => {
 
     // 8. Premium Transactions
     const recentTrx = await safeQuery(`
-      SELECT id, amount, status, created_at, plan_id 
-      FROM payment_transactions 
+      SELECT id, amount, status, created_at, plan_id
+      FROM payment_transactions
       WHERE user_id = ? ORDER BY created_at DESC LIMIT 5
     `, [id], []);
     result.premium.recentTransactions = recentTrx;
@@ -2143,7 +2154,7 @@ exports.getAllSongs = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      WHERE 1=1
+      WHERE s.review_status = 'approved'
     `;
     const params = [];
 
@@ -2202,11 +2213,11 @@ exports.getAllSongs = async (req, res, next) => {
                COALESCE(s.play_count, 0) AS stored_play_count,
                COALESCE(lh.history_plays, 0) AS history_plays,
                s.created_at,
-               CASE 
+               CASE
                  WHEN UPPER(g.name) LIKE 'KPOP%' THEN 'KPOP'
                  WHEN UPPER(g.name) LIKE 'VPOP%' THEN 'VPOP'
                  WHEN UPPER(g.name) LIKE 'USUK%' OR UPPER(g.name) LIKE 'US-UK%' THEN 'USUK'
-                 ELSE s.market 
+                 ELSE s.market
                END as market,
                g.name as genre, g.id as genre_id,
                a.name as artist, a.name as artist_name, a.id as artist_id,
@@ -2404,18 +2415,42 @@ exports.deleteSong = async (req, res, next) => {
     const { id } = req.params;
     await connection.beginTransaction();
 
-    // Explicitly delete from related tables first to avoid foreign key issues
-    await connection.query('DELETE FROM playlist_songs WHERE song_id = ?', [id]);
-    await connection.query('DELETE FROM song_likes WHERE song_id = ?', [id]);
-    await connection.query('DELETE FROM listening_history WHERE song_id = ?', [id]);
-    await connection.query('DELETE FROM stem_jobs WHERE song_id = ?', [id]);
-    await connection.query('DELETE FROM recommendations WHERE song_id = ?', [id]);
+    const [songs] = await connection.query('SELECT id FROM songs WHERE id = ? LIMIT 1', [id]);
+    if (!songs.length) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài hát' });
+    }
 
-    // Finally delete the song
+    const messagesColumns = await getOptionalTableColumns('messages');
+    if (messagesColumns?.has('shared_song_id')) {
+      await connection.query('UPDATE messages SET shared_song_id = NULL WHERE shared_song_id = ?', [id]);
+    }
+
+    const relationTables = [
+      'playlist_songs',
+      'song_likes',
+      'listening_history',
+      'stem_jobs',
+      'stem_separation_jobs',
+      'recommendations',
+      'song_audio_features',
+      'song_genres',
+      'song_lyrics',
+      'song_semantic_profiles',
+      'song_stems',
+    ];
+
+    for (const tableName of relationTables) {
+      const columns = await getOptionalTableColumns(tableName);
+      if (columns?.has('song_id')) {
+        await connection.query(`DELETE FROM \`${tableName}\` WHERE song_id = ?`, [id]);
+      }
+    }
+
     await connection.query('DELETE FROM songs WHERE id = ?', [id]);
 
     await connection.commit();
-    res.json({ success: true, message: 'Xóa bài hát thành công', deletedId: parseInt(id) });
+    res.json({ success: true, message: 'Xóa bài hát thành công', deletedId: parseInt(id, 10) });
   } catch (error) {
     await connection.rollback();
     console.error('deleteSong Error:', error);
@@ -2425,27 +2460,10 @@ exports.deleteSong = async (req, res, next) => {
   }
 };
 
-exports.deleteSong = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    await pool.query(
-      `UPDATE songs
-       SET is_active = 0,
-           release_status = 'hidden'
-       WHERE id = ?`,
-      [id]
-    );
-    res.json({ success: true, message: 'Da an bai hat thanh cong', hiddenId: parseInt(id, 10) });
-  } catch (error) {
-    console.error('deleteSong Error:', error);
-    next(error);
-  }
-};
-
 exports.getSongGroupsSummary = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as totalSongs_ALL,
         CAST(SUM(CASE WHEN s.is_active = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_ALL,
         CAST(COALESCE(SUM(s.play_count), 0) AS UNSIGNED) as totalListens_ALL,
@@ -2463,6 +2481,7 @@ exports.getSongGroupsSummary = async (req, res, next) => {
         CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_USUK
       FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
+      WHERE s.review_status = 'approved'
     `);
 
     const row = rows[0] || {};
@@ -2479,10 +2498,10 @@ exports.getSongGroupsSummary = async (req, res, next) => {
     });
 
     const queries = [
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s WHERE s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
     ];
 
     const [[topKpop], [topVpop], [topUsuk], [topAll]] = await Promise.all(queries);
@@ -2502,7 +2521,7 @@ exports.getSongGroupsSummary = async (req, res, next) => {
 exports.getSongStatistics = async (req, res, next) => {
   try {
     const { group } = req.query;
-    let whereClause = 'WHERE 1=1';
+    let whereClause = "WHERE s.review_status = 'approved'";
     let params = [];
     if (group && group !== 'ALL') {
       if (group === 'KPOP') {
@@ -2516,27 +2535,27 @@ exports.getSongStatistics = async (req, res, next) => {
 
     // Top Songs
     const [topSongs] = await pool.query(`
-      SELECT s.title, s.play_count as listens, a.name as artist 
-      FROM songs s 
+      SELECT s.title, s.play_count as listens, a.name as artist
+      FROM songs s
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      ${whereClause} 
+      ${whereClause}
       ORDER BY s.play_count DESC LIMIT 10
     `, params);
 
     // Genre Distribution
     const [genreDistribution] = await pool.query(`
-      SELECT g.name as label, COUNT(*) as count 
-      FROM songs s 
-      JOIN genres g ON s.genre_id = g.id 
-      ${whereClause} 
+      SELECT g.name as label, COUNT(*) as count
+      FROM songs s
+      JOIN genres g ON s.genre_id = g.id
+      ${whereClause}
       GROUP BY g.id
     `, params);
 
     // Added Over Time (last 12 months)
     const [addedOverTime] = await pool.query(`
-      SELECT DATE_FORMAT(s.created_at, '%Y-%m') as label, COUNT(*) as count 
-      FROM songs s 
+      SELECT DATE_FORMAT(s.created_at, '%Y-%m') as label, COUNT(*) as count
+      FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
       ${whereClause} AND s.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
       GROUP BY label ORDER BY label ASC
@@ -2544,17 +2563,17 @@ exports.getSongStatistics = async (req, res, next) => {
 
     // Status Distribution
     const [statusDistribution] = await pool.query(`
-      SELECT IF(s.is_active=1, 'Active', 'Inactive') as label, COUNT(*) as count 
-      FROM songs s 
+      SELECT IF(s.is_active=1, 'Active', 'Inactive') as label, COUNT(*) as count
+      FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
-      ${whereClause} 
+      ${whereClause}
       GROUP BY label
     `, params);
 
     // Missing Metadata Count
     const [[{ missingMetadataCount }]] = await pool.query(`
-      SELECT COUNT(*) as missingMetadataCount 
-      FROM songs s 
+      SELECT COUNT(*) as missingMetadataCount
+      FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
       ${whereClause} AND (s.audio_url IS NULL OR s.cover_url IS NULL OR s.artist_id IS NULL OR s.genre_id IS NULL)
     `, params);
@@ -2644,15 +2663,14 @@ exports.getAllTransactions = async (req, res, next) => {
 exports.getArtistSummary = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
-      SELECT 
-        COUNT(*) AS totalArtists,
-        SUM(CASE WHEN avatar_url IS NOT NULL AND avatar_url <> '' THEN 1 ELSE 0 END) AS artistsWithImage,
-        SUM(CASE WHEN avatar_url IS NULL OR avatar_url = '' THEN 1 ELSE 0 END) AS artistsMissingImage,
-        SUM(CASE WHEN bio IS NOT NULL AND bio <> '' THEN 1 ELSE 0 END) AS artistsWithBio,
-        SUM(CASE WHEN bio IS NULL OR bio = '' THEN 1 ELSE 0 END) AS artistsMissingBio,
-        COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN a.id END) AS artistsWithSongs
+      SELECT
+        COUNT(a.id) AS totalArtists,
+        SUM(CASE WHEN a.avatar_url IS NOT NULL AND a.avatar_url <> '' THEN 1 ELSE 0 END) AS artistsWithImage,
+        SUM(CASE WHEN a.avatar_url IS NULL OR a.avatar_url = '' THEN 1 ELSE 0 END) AS artistsMissingImage,
+        SUM(CASE WHEN a.bio IS NOT NULL AND a.bio <> '' THEN 1 ELSE 0 END) AS artistsWithBio,
+        SUM(CASE WHEN a.bio IS NULL OR a.bio = '' THEN 1 ELSE 0 END) AS artistsMissingBio,
+        (SELECT COUNT(DISTINCT s.artist_id) FROM songs s WHERE s.is_active = TRUE) AS artistsWithSongs
       FROM artists a
-      LEFT JOIN songs s ON a.id = s.artist_id
     `);
 
     return res.json({
@@ -2674,11 +2692,17 @@ exports.getArtistSummary = async (req, res, next) => {
 
 exports.getAllArtists = async (req, res, next) => {
   try {
+    const userColumns = await getTableColumns('users');
+    const hasMustChangePassword = userColumns.has('must_change_password');
+
     const [artists] = await pool.query(`
       SELECT a.id, a.name, a.bio, a.short_bio, a.genres_json, a.country,
              a.popularity, a.followers, a.spotify_artist_id, a.external_url,
              a.avatar_url, a.avatar_source, a.metadata_source, a.metadata_source_url,
-             a.metadata_fetched_at, a.region, a.created_at,
+             a.metadata_fetched_at, a.region, a.created_at, a.user_id,
+             u.status AS account_user_status,
+             u.email AS account_email,
+             ${hasMustChangePassword ? 'u.must_change_password' : '0 AS must_change_password'},
              COUNT(s.id) as song_count,
              ${getArtistTotalPlaysQuery('a')} as total_plays,
              ${getArtistTotalPlaysQuery('a')} as totalPlays,
@@ -2687,24 +2711,34 @@ exports.getAllArtists = async (req, res, next) => {
              CASE WHEN a.genres_json IS NULL THEN 1 ELSE 0 END AS missing_genres,
              CASE WHEN a.spotify_artist_id IS NULL OR a.spotify_artist_id = '' THEN 1 ELSE 0 END AS missing_spotify_id,
              (
-               SELECT g.name 
-               FROM songs s2 
-               JOIN genres g ON s2.genre_id = g.id 
-               WHERE s2.artist_id = a.id 
+               SELECT g.name
+               FROM songs s2
+               JOIN genres g ON s2.genre_id = g.id
+               WHERE s2.artist_id = a.id
                  AND s2.is_active = TRUE
-               GROUP BY g.id, g.name 
-               ORDER BY COUNT(s2.id) DESC 
+               GROUP BY g.id, g.name
+               ORDER BY COUNT(s2.id) DESC
                LIMIT 1
              ) as main_genre
       FROM artists a
+      LEFT JOIN users u ON u.id = a.user_id
       LEFT JOIN songs s ON s.artist_id = a.id AND s.is_active = TRUE
-      GROUP BY a.id
+      GROUP BY a.id, u.status, u.email${hasMustChangePassword ? ', u.must_change_password' : ''}
       ORDER BY a.created_at DESC
     `);
 
     // Giả sử có hàm parseGenresJson helper
     const parseGenresJson = (json) => {
       try { return JSON.parse(json); } catch (e) { return []; }
+    };
+
+    const resolveAccountStatus = (artist) => {
+      if (artist.user_id) {
+        if (artist.account_user_status === 'locked') return 'locked';
+        if (Number(artist.must_change_password) === 1) return 'temp_password';
+        return 'active';
+      }
+      return 'not_issued';
     };
 
     const artistsResult = artists.map(artist => ({
@@ -2725,11 +2759,15 @@ exports.getAllArtists = async (req, res, next) => {
       followers: artist.followers,
       spotify_artist_id: artist.spotify_artist_id,
       external_url: artist.external_url,
-      song_count: artist.song_count || 0,
+      song_count: Number(artist.song_count || 0),
       follower_count: artist.followers || 0,
-      total_plays: artist.total_plays || 0,
-      totalPlays: artist.totalPlays || 0,
+      total_plays: Number(artist.total_plays || 0),
+      totalPlays: Number(artist.totalPlays || 0),
       metadata_fetched_at: artist.metadata_fetched_at,
+      user_id: artist.user_id,
+      accountEmail: artist.account_email,
+      mustChangePassword: Number(artist.must_change_password || 0) === 1,
+      accountStatus: resolveAccountStatus(artist),
       created_at: artist.created_at
     }));
 
@@ -2860,9 +2898,14 @@ exports.getArtistDetailFull = async (req, res, next) => {
 
     result.artist = artistData;
 
+    const canonicalStats = await getArtistStats(id);
+    result.stats.totalListens = canonicalStats.totalPlays;
+    result.stats.totalPlays = canonicalStats.totalPlays;
+    result.stats.followerCount = canonicalStats.totalFollowers;
+
     // 2. Songs
     const songs = await safeQuery(`
-      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, 
+      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url,
              COALESCE(s.play_count, 0) as play_count, s.is_active, s.created_at, s.lyrics, s.tempo,
              s.album_id, al.title as album, g.name as genre
       FROM songs s
@@ -2876,10 +2919,9 @@ exports.getArtistDetailFull = async (req, res, next) => {
     result.songs = songs;
     result.stats.songCount = songs.length;
 
-    const countRes = await safeQuery('SELECT COUNT(*) as cnt, SUM(play_count) as total_listens FROM songs WHERE artist_id = ?', [id], [{ cnt: songs.length, total_listens: 0 }]);
+    const countRes = await safeQuery('SELECT COUNT(*) as cnt FROM songs WHERE artist_id = ?', [id], [{ cnt: songs.length }]);
     if (countRes.length > 0) {
       result.stats.songCount = countRes[0].cnt;
-      result.stats.totalListens = countRes[0].total_listens || 0;
     }
 
     result.topSongs = songs.slice(0, 10);
@@ -2951,7 +2993,7 @@ exports.getArtistDetailFull = async (req, res, next) => {
 
     // 3. Albums
     const albums = await safeQuery(`
-      SELECT al.id, al.title, 
+      SELECT al.id, al.title,
              COALESCE(
                NULLIF(al.cover_url, ''),
                (
@@ -3000,10 +3042,6 @@ exports.getArtistDetailFull = async (req, res, next) => {
         a.songs = albumSongs.filter(s => s.album_id === a.id);
       });
     }
-
-    // 4. Followers (Fallback if table doesn't exist)
-    const follows = await safeQuery('SELECT COUNT(*) as cnt FROM artist_follows WHERE artist_id = ?', [id], [{ cnt: 0 }]);
-    result.stats.followerCount = follows[0].cnt || 0;
 
     // 5. Data Quality
     songs.forEach(s => {
@@ -3058,6 +3096,11 @@ exports.getArtistDetails = async (req, res, next) => {
 
     const artistData = artists[0];
     artistData.avatar_url = resolveArtistAvatar(artistData, req);
+    const canonicalStats = await getArtistStats(id);
+    artistData.total_plays = canonicalStats.totalPlays;
+    artistData.totalPlays = canonicalStats.totalPlays;
+    artistData.song_count = canonicalStats.totalSongs;
+    artistData.follower_count = canonicalStats.totalFollowers;
 
     res.json({ success: true, data: { ...artistData, songs } });
   } catch (error) {
@@ -3224,17 +3267,17 @@ exports.getListeningAnalytics = async (req, res, next) => {
 exports.getSystemPlaylistsSummary = async (req, res, next) => {
   try {
     const [[totalRes]] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as totalSystemPlaylists,
         MAX(updated_at) as lastGeneratedAt
-      FROM playlists 
+      FROM playlists
       WHERE is_system = 1 OR type = 'system'
     `);
 
     const [statusStats] = await pool.query(`
       SELECT p.id,
              COUNT(ps.song_id) as song_count,
-             CASE 
+             CASE
                WHEN p.cover_url IS NULL OR p.cover_url = '' THEN 'missing_cover'
                WHEN COUNT(ps.song_id) = 0 THEN 'empty'
                ELSE 'ok'
@@ -3356,10 +3399,10 @@ exports.getSystemPlaylists = async (req, res, next) => {
     const validSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const query = `
-      SELECT p.id, p.name, p.description, p.system_key, p.type, p.cover_url, 
+      SELECT p.id, p.name, p.description, p.system_key, p.type, p.cover_url,
              p.user_id, u.display_name as owner_name, p.updated_at, p.created_at,
              COUNT(ps.song_id) as song_count,
-             CASE 
+             CASE
                WHEN p.cover_url IS NULL OR p.cover_url = '' THEN 'missing_cover'
                WHEN COUNT(ps.song_id) = 0 THEN 'empty'
                ELSE 'ok'
@@ -3379,7 +3422,7 @@ exports.getSystemPlaylists = async (req, res, next) => {
     const countQuery = `
       SELECT COUNT(*) as total FROM (
         SELECT p.id, COUNT(ps.song_id) as song_count,
-               CASE 
+               CASE
                  WHEN p.cover_url IS NULL OR p.cover_url = '' THEN 'missing_cover'
                  WHEN COUNT(ps.song_id) = 0 THEN 'empty'
                  ELSE 'ok'
@@ -3428,7 +3471,7 @@ exports.getUserPlaylists = async (req, res, next) => {
     if (!user) return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
 
     const query = `
-      SELECT p.id, p.name, p.description, p.type, p.system_key, p.cover_url, 
+      SELECT p.id, p.name, p.description, p.type, p.system_key, p.cover_url,
              p.created_at, p.updated_at, p.is_system,
              (SELECT COUNT(*) FROM playlist_songs ps WHERE ps.playlist_id = p.id) as song_count,
              (SELECT COALESCE(SUM(s.duration_sec), 0) FROM playlist_songs ps JOIN songs s ON ps.song_id = s.id WHERE ps.playlist_id = p.id) as total_duration,
@@ -3782,10 +3825,10 @@ exports.getAiStatus = async (req, res, next) => {
 
     const [[{ coldStartUsers }]] = await pool.query(`
       SELECT COUNT(*) as coldStartUsers FROM (
-        SELECT u.id 
-        FROM users u 
-        LEFT JOIN listening_history lh ON u.id = lh.user_id 
-        GROUP BY u.id 
+        SELECT u.id
+        FROM users u
+        LEFT JOIN listening_history lh ON u.id = lh.user_id
+        GROUP BY u.id
         HAVING COUNT(lh.id) < 10
       ) as t
     `);
@@ -4080,8 +4123,8 @@ exports.getSongDetail = async (req, res, next) => {
 
     // 1. Song Metadata
     const [songs] = await pool.query(`
-      SELECT s.id, s.title, s.artist_id, a.name as artist_name, 
-             s.album_id, al.title as album_title, s.genre_id, g.name as genre_name, 
+      SELECT s.id, s.title, s.artist_id, a.name as artist_name,
+             s.album_id, al.title as album_title, s.genre_id, g.name as genre_name,
              s.duration_sec as duration, s.audio_url, s.cover_url, s.lyrics, s.is_active,
              s.release_status, s.release_at, s.published_at,
              ${effectiveReleaseStatusExpression('s')} AS effective_release_status,
@@ -4284,7 +4327,7 @@ exports.getAllTransactions = async (req, res, next) => {
     }
 
     const [transactions] = await pool.query(`
-      SELECT 
+      SELECT
         t.id, COALESCE(t.order_code, t.payment_code) as order_code, t.amount, t.provider, t.status, t.created_at, t.paid_at,
         u.display_name as user_name, u.email as user_email,
         pp.name as plan_name
@@ -4491,7 +4534,7 @@ exports.exportAlbums = async (req, res, next) => {
     }
 
     const [idRows] = await pool.query(`
-      SELECT al.id 
+      SELECT al.id
       FROM albums al
       JOIN artists a ON a.id = al.artist_id
       LEFT JOIN genres g ON g.id = al.genre_id

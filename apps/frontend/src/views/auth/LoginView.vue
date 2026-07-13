@@ -14,10 +14,10 @@
       <div v-if="errorMsg" class="mb-8 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
         {{ errorMsg }}
         <div v-if="redirectTo" class="mt-2">
-          <RouterLink :to="redirectTo" class="text-[#1ed760] hover:text-[#25e96a] underline font-bold transition-colors">Đến trang đăng nhập Admin</RouterLink>
+          <RouterLink :to="redirectTo" class="text-[#1ed760] hover:text-[#25e96a] underline font-bold transition-colors">{{ redirectLabel }}</RouterLink>
         </div>
       </div>
-      
+
       <!-- Form -->
       <div class="space-y-6">
         <AuthInput
@@ -32,7 +32,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
           </template>
         </AuthInput>
-        
+
         <PasswordInput
           id="password"
           label="Mật khẩu"
@@ -40,17 +40,17 @@
           placeholder="••••••••"
           @enter="handleLogin"
         />
-        
+
         <div class="pt-4">
           <AuthButton :loading="loading" @click="handleLogin">
             Đăng nhập
           </AuthButton>
         </div>
       </div>
-      
+
       <div class="mt-8 text-center">
         <p class="text-[14px] font-medium text-white/50">
-          Bạn chưa có tài khoản? 
+          Bạn chưa có tài khoản?
           <RouterLink to="/register" class="text-[#1ed760] hover:text-[#25e96a] font-bold transition-colors">Đăng ký ngay</RouterLink>
         </p>
       </div>
@@ -73,15 +73,19 @@ const form = reactive({ email: '', password: '' })
 const loading  = ref(false)
 const errorMsg = ref('')
 const redirectTo = ref('')
+const redirectLabel = ref('Dang nhap Admin')
 
 async function handleLogin() {
   if (!form.email || !form.password) return
-  errorMsg.value = ''; redirectTo.value = ''; loading.value = true
+  errorMsg.value = ''; redirectTo.value = ''; redirectLabel.value = 'Dang nhap Admin'; loading.value = true
   const res = await auth.login(form.email, form.password, 'user')
   loading.value = false
   if (!res.success) {
     errorMsg.value = res.message
-    if (res.redirectTo) redirectTo.value = res.redirectTo
+    if (res.redirectTo) {
+      redirectTo.value = res.redirectTo
+      redirectLabel.value = res.code === 'ARTIST_LOGIN_REQUIRED' ? 'Dang nhap Artist Studio' : 'Dang nhap Admin'
+    }
   }
 }
 </script>

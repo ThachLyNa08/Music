@@ -8,6 +8,9 @@
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
+        <button type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors" @click="confirmBulkCreateAccounts">
+          Tạo tài khoản hàng loạt
+        </button>
         <AdminAddButton title="Thêm nghệ sĩ mới" @click="openAddModal" />
       </div>
     </header>
@@ -30,14 +33,14 @@
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative flex-1 min-w-[200px]">
           <MfIcon name="search" size="20" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <input 
-            v-model="searchQuery" 
+          <input
+            v-model="searchQuery"
             @keyup.enter="handleEnter"
             @focus="showHistory = true"
             @blur="handleBlur"
-            type="text" 
-            placeholder="Tìm theo tên nghệ sĩ..." 
-            class="admin-input pl-11 pr-10 w-full" 
+            type="text"
+            placeholder="Tìm theo tên nghệ sĩ..."
+            class="admin-input pl-11 pr-10 w-full"
           />
         <button v-if="searchQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
           <MfIcon name="close" size="18" />
@@ -58,34 +61,34 @@
         </div>
         <div class="relative w-full xl:w-48 xl:shrink-0" ref="genreDropdownRef">
           <div class="relative cursor-pointer" @click="genreDropdownOpen = true">
-            <input 
-              v-model="genreSearchText" 
+            <input
+              v-model="genreSearchText"
               @focus="genreDropdownOpen = true"
-              placeholder="Tất cả thể loại" 
-              class="admin-input pr-8 cursor-pointer text-sm w-full" 
+              placeholder="Tất cả thể loại"
+              class="admin-input pr-8 cursor-pointer text-sm w-full"
               :class="{ 'text-emerald-600 font-bold': filterMainGenre !== '' }"
             />
             <MfIcon name="expand_more" size="20" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }" />
           </div>
-        
+
         <div v-if="genreDropdownOpen" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg overflow-hidden flex flex-col">
           <ul class="max-h-[160px] overflow-y-auto custom-scrollbar py-1">
-            <li 
-              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors" 
+            <li
+              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors"
               :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === '' }"
               @click="selectGenre('')"
             >
               Tất cả thể loại
             </li>
-            <li 
-              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors" 
+            <li
+              class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors"
               :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === 'unclassified' }"
               @click="selectGenre('unclassified')"
             >
               Chưa phân loại
             </li>
-            <li 
-              v-for="g in filteredGenresList" 
+            <li
+              v-for="g in filteredGenresList"
               :key="g"
               class="px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-bg-card cursor-pointer transition-colors"
               :class="{ 'font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400': filterMainGenre === g }"
@@ -120,12 +123,12 @@
 
     <!-- Data Table and Pagination Wrapper -->
     <div class="flex flex-col gap-3">
-      <AdminTableShell 
-        maxHeight="442px" 
+      <AdminTableShell
+        maxHeight="442px"
         style="min-height: 442px;"
-        :loading="loading" 
-        :empty="!loading && paginatedArtists.length === 0" 
-        emptyTitle="Không tìm thấy nghệ sĩ nào" 
+        :loading="loading"
+        :empty="!loading && paginatedArtists.length === 0"
+        emptyTitle="Không tìm thấy nghệ sĩ nào"
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
         <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
@@ -136,6 +139,7 @@
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Khu vực / Thế hệ</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Số bài hát</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Tổng lượt nghe</th>
+                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Tài khoản</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-right sticky right-0 bg-gray-50 dark:bg-bg-card w-24 z-30 shadow-[-1px_0_0_0_#e2e8f0] dark:shadow-[-1px_0_0_0_#334155]">Hành động</th>
               </tr>
             </thead>
@@ -171,6 +175,16 @@
                 <td class="py-2.5 px-3 text-center text-sm font-semibold text-gray-600 dark:text-gray-300">
                   {{ formatNumber(artist.total_plays ?? artist.totalPlays ?? 0) }}
                 </td>
+                <td class="py-2.5 px-3 text-center">
+                  <div class="flex flex-col items-center gap-1">
+                    <span :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', getAccountStatusClass(artist.accountStatus)]">
+                      {{ getAccountStatusLabel(artist.accountStatus) }}
+                    </span>
+                    <span v-if="artist.accountEmail" class="max-w-[180px] truncate text-[11px] font-semibold text-gray-400" :title="artist.accountEmail">
+                      {{ artist.accountEmail }}
+                    </span>
+                  </div>
+                </td>
                 <td class="py-2.5 px-3 text-right sticky right-0 z-10 bg-white dark:bg-bg-surface group-hover:bg-gray-50 dark:group-hover:bg-bg-card transition-colors shadow-[-1px_0_0_0_#f3f4f6] dark:shadow-[-1px_0_0_0_#1e293b]">
                   <div class="flex justify-end">
                     <AdminActionMenu :actions="getArtistActions(artist)" />
@@ -192,7 +206,7 @@
     <Teleport to="body">
       <div v-if="isSlideOverOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
-        
+
         <div class="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
@@ -205,10 +219,10 @@
               <MfIcon name="close" size="24" />
             </button>
           </div>
-          
+
           <!-- Body -->
           <div class="flex-1 overflow-y-auto px-6 py-6 sm:px-8 custom-scrollbar">
-                
+
                 <!-- View Mode (Artist details + Songs) -->
                 <div v-if="mode === 'view' && currentViewArtist" class="space-y-6">
                   <div class="flex items-center gap-6 pb-6 border-b border-gray-100 dark:border-bg-border">
@@ -220,7 +234,7 @@
                       </span>
                     </div>
                   </div>
-                  
+
                   <div>
                     <h4 class="text-sm font-bold text-gray-900 dark:text-white mb-2 uppercase tracking-wider">Tiểu sử</h4>
                     <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{{ currentViewArtist.bio || 'Chưa có thông tin tiểu sử về nghệ sĩ này.' }}</p>
@@ -230,15 +244,15 @@
                     <div class="flex items-center justify-between mb-3">
                       <h4 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Danh sách Bài hát ({{ currentViewArtistSongs.length }})</h4>
                     </div>
-                    
+
                     <div v-if="loadingSongs" class="py-8 flex justify-center">
                       <div class="w-8 h-8 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
                     </div>
-                    
+
                     <div v-else-if="currentViewArtistSongs.length === 0" class="py-8 text-center text-gray-500 dark:text-gray-400 text-sm bg-gray-50 dark:bg-bg-card rounded-xl">
                       Nghệ sĩ này hiện chưa có bài hát nào trên hệ thống.
                     </div>
-                    
+
                     <div v-else class="space-y-3">
                       <div v-for="(song, idx) in currentViewArtistSongs" :key="song.id" class="flex items-center gap-4 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 dark:bg-bg-card dark:hover:bg-gray-800 transition-colors">
                         <span class="text-gray-400 dark:text-gray-500 font-bold w-4 text-right text-sm">{{ idx + 1 }}</span>
@@ -247,7 +261,7 @@
                           <p class="font-bold text-gray-900 dark:text-white text-sm truncate" :title="song.title">{{ song.title }}</p>
                           <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
                             <RouterLink v-if="song.album_id" :to="'/album/' + song.album_id" class="text-gray-500 hover:text-white hover:underline no-underline" @click.stop>{{ song.album }}</RouterLink>
-                            <span v-else>{{ song.album || 'Độc lập' }}</span> 
+                            <span v-else>{{ song.album || 'Độc lập' }}</span>
                             • {{ formatNumber(song.play_count) }} lượt nghe
                           </p>
                         </div>
@@ -286,14 +300,14 @@
                       <input type="file" ref="avatarInput" accept="image/*" @change="handleAvatar" hidden />
                       <MfIcon v-if="!form.avatar" name="account_circle" size="32" className="text-emerald-300 dark:text-emerald-500/50 group-hover:text-emerald-500 mb-2 transition-colors" />
                       <span v-if="!form.avatar" class="text-xs font-semibold text-gray-500 dark:text-gray-400">{{ mode === 'edit' ? 'Tải lên ảnh mới để thay thế' : 'Click để chọn JPG/PNG' }}</span>
-                      <span v-else class="text-sm font-bold text-teal-600 dark:text-teal-400 text-center break-all">🖼️ {{ form.avatar.name }}</span>
+                      <span v-else class="text-sm font-bold text-teal-600 dark:text-teal-400 text-center break-all">Ảnh {{ form.avatar.name }}</span>
                     </div>
                   </div>
 
                   <div v-if="statusMessage" :class="['p-3 rounded-xl text-sm font-bold text-center mt-auto', isError ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' : 'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400']">
                     {{ statusMessage }}
                   </div>
-                  
+
                   <button type="submit" hidden ref="submitBtn"></button>
                 </form>
               </div>
@@ -311,7 +325,33 @@
       </div>
     </Teleport>
 
-    <ConfirmDialog 
+    <Teleport to="body">
+      <div v-if="accountCreateModal.open" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeAccountCreateModal"></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-bg-surface shadow-2xl border border-gray-100 dark:border-bg-border overflow-hidden">
+          <div class="px-6 py-5 border-b border-gray-100 dark:border-bg-border">
+            <h2 class="text-lg font-extrabold text-gray-900 dark:text-white">Tạo tài khoản nghệ sĩ</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ accountCreateModal.artist?.name }}</p>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+            <p class="text-sm text-gray-600 dark:text-gray-300">Mật khẩu ban đầu là mật khẩu tạm thời chung được cấu hình trong hệ thống. Nghệ sĩ phải đổi mật khẩu trong lần đăng nhập đầu tiên.</p>
+            <label class="block">
+              <span class="block mb-1 text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">Email đăng nhập</span>
+              <input v-model.trim="accountCreateModal.email" type="email" class="admin-input w-full" placeholder="blackpink@artist.musicflow.local" @keyup.enter="submitAccountCreate" />
+            </label>
+            <p v-if="accountCreateModal.error" class="text-sm font-semibold text-rose-600">{{ accountCreateModal.error }}</p>
+          </div>
+          <div class="flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
+            <button type="button" class="px-4 py-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold" @click="closeAccountCreateModal">Hủy</button>
+            <button type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-60" :disabled="accountCreateModal.loading" @click="submitAccountCreate">
+              {{ accountCreateModal.loading ? 'Đang tạo...' : 'Tạo tài khoản' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <ConfirmDialog
       v-model:open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -330,6 +370,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
+import { artistAccountApi } from '@/api/artistAccount'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
@@ -355,8 +396,16 @@ const confirmState = ref({
   action: null
 })
 
+const accountCreateModal = reactive({
+  open: false,
+  artist: null,
+  email: '',
+  loading: false,
+  error: ''
+})
+
 function getArtistActions(artist) {
-  return [
+  const actions = [
     {
       label: 'Xem chi tiết',
       icon: 'visibility',
@@ -366,14 +415,154 @@ function getArtistActions(artist) {
       label: 'Chỉnh sửa',
       icon: 'edit',
       onClick: () => openEditModal(artist)
-    },
-    {
-      label: 'Xóa nghệ sĩ',
-      icon: 'delete',
-      danger: true,
-      onClick: () => confirmDelete(artist)
     }
   ]
+
+  if (artist.accountStatus === 'not_issued') {
+    actions.push({
+      label: 'Tạo tài khoản',
+      icon: 'person_add',
+      onClick: () => openAccountCreateModal(artist)
+    })
+  }
+
+  if (artist.accountStatus === 'temp_password' || artist.accountStatus === 'active') {
+    actions.push({
+      label: 'Đặt lại mật khẩu tạm',
+      icon: 'restart_alt',
+      onClick: () => confirmResetTempPassword(artist)
+    })
+    actions.push({
+      label: 'Khóa tài khoản',
+      icon: 'lock',
+      danger: true,
+      onClick: () => confirmUpdateAccountStatus(artist, 'locked')
+    })
+  }
+
+  if (artist.accountStatus === 'locked') {
+    actions.push({
+      label: 'Mở khóa tài khoản',
+      icon: 'lock_open',
+      onClick: () => confirmUpdateAccountStatus(artist, 'active')
+    })
+    actions.push({
+      label: 'Đặt lại mật khẩu tạm',
+      icon: 'restart_alt',
+      onClick: () => confirmResetTempPassword(artist)
+    })
+  }
+
+  actions.push({
+    label: 'Xóa nghệ sĩ',
+    icon: 'delete',
+    danger: true,
+    onClick: () => confirmDelete(artist)
+  })
+
+  return actions
+}
+
+function suggestedArtistEmail(artist) {
+  const slug = String(artist?.name || 'artist')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-') || 'artist'
+  return `${slug}@artist.musicflow.local`
+}
+
+function openAccountCreateModal(artist) {
+  accountCreateModal.open = true
+  accountCreateModal.artist = artist
+  accountCreateModal.email = suggestedArtistEmail(artist)
+  accountCreateModal.error = ''
+}
+
+function closeAccountCreateModal() {
+  accountCreateModal.open = false
+  accountCreateModal.artist = null
+  accountCreateModal.email = ''
+  accountCreateModal.error = ''
+}
+
+async function submitAccountCreate() {
+  const artist = accountCreateModal.artist
+  const email = accountCreateModal.email.trim()
+  if (!artist || !email) return
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    accountCreateModal.error = 'Email không hợp lệ.'
+    return
+  }
+
+  accountCreateModal.loading = true
+  accountCreateModal.error = ''
+  try {
+    const res = await artistAccountApi.createAccount(artist.id, { email })
+    artist.accountStatus = 'temp_password'
+    artist.accountEmail = res.data?.account?.email || email
+    artist.mustChangePassword = true
+    toastStore.showToast(`Đã tạo tài khoản Artist Studio cho ${artist.name}.`, 'success')
+    closeAccountCreateModal()
+  } catch (err) {
+    accountCreateModal.error = err.response?.data?.message || 'Không thể tạo tài khoản nghệ sĩ.'
+  } finally {
+    accountCreateModal.loading = false
+  }
+}
+
+function confirmResetTempPassword(artist) {
+  openConfirm({
+    title: 'Đặt lại mật khẩu tạm?',
+    message: `Tài khoản "${artist.name}" sẽ quay về mật khẩu tạm thời chung và bắt buộc đổi lại khi đăng nhập.`,
+    confirmText: 'Đặt lại',
+    type: 'default',
+    action: async () => {
+      await artistAccountApi.resetTempPassword(artist.id)
+      artist.accountStatus = 'temp_password'
+      artist.mustChangePassword = true
+      toastStore.showToast('Đã đặt lại mật khẩu tạm thời.', 'success')
+    }
+  })
+}
+
+function confirmUpdateAccountStatus(artist, status) {
+  openConfirm({
+    title: status === 'locked' ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?',
+    message: status === 'locked'
+      ? `Khóa tài khoản Artist Studio của "${artist.name}"?`
+      : `Mở khóa tài khoản Artist Studio của "${artist.name}"?`,
+    confirmText: status === 'locked' ? 'Khóa' : 'Mở khóa',
+    type: status === 'locked' ? 'danger' : 'default',
+    action: async () => {
+      await artistAccountApi.updateAccountStatus(artist.id, status)
+      artist.accountStatus = status === 'locked'
+        ? 'locked'
+        : artist.mustChangePassword
+          ? 'temp_password'
+          : 'active'
+      toastStore.showToast('Đã cập nhật trạng thái tài khoản.', 'success')
+    }
+  })
+}
+
+function confirmBulkCreateAccounts() {
+  openConfirm({
+    title: 'Tạo tài khoản hàng loạt?',
+    message: 'Hệ thống sẽ tạo tài khoản Artist Studio cho tất cả nghệ sĩ chưa có tài khoản. Mỗi nghệ sĩ có email đăng nhập riêng và dùng mật khẩu tạm thời chung. Nghệ sĩ bắt buộc đổi mật khẩu ở lần đăng nhập đầu tiên.',
+    confirmText: 'Tạo hàng loạt',
+    type: 'default',
+    action: async () => {
+      const res = await artistAccountApi.bulkCreateAccounts({ createFor: 'all_missing' })
+      const data = res.data || {}
+      toastStore.showToast(`Đã tạo ${data.created || 0}, bỏ qua ${data.skipped || 0}, lỗi ${data.failed || 0}.`, data.failed ? 'warning' : 'success')
+      await fetchArtists()
+    }
+  })
 }
 
 function openConfirm(options) {
@@ -385,6 +574,8 @@ async function handleConfirm() {
   confirmState.value.loading = true
   try {
     await confirmState.value.action()
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Không thể thực hiện thao tác.', 'error')
   } finally {
     confirmState.value.open = false
     confirmState.value.loading = false
@@ -530,7 +721,7 @@ async function handleExport() {
       },
       responseType: 'blob'
     })
-    
+
     const filename = getFilenameFromDisposition(
       response.headers?.['content-disposition'],
       'musicflow-artists.csv'
@@ -616,11 +807,11 @@ onMounted(async () => {
     searchQuery.value = route.query.search;
   }
   await fetchArtists()
-  
+
   if (route.query.edit) {
     const editId = parseInt(route.query.edit)
     let artistToEdit = artists.value.find(a => a.id === editId)
-    
+
     if (!artistToEdit) {
       try {
         const res = await api.get(`/admin/artists/${editId}`)
@@ -735,7 +926,7 @@ const filteredArtists = computed(() => {
 
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
-    result = result.filter(artist => 
+    result = result.filter(artist =>
       artist.name.toLowerCase().includes(q)
     )
   }
@@ -868,17 +1059,17 @@ async function submitForm() {
       })
       successMsg = 'Đã thêm nghệ sĩ mới!'
     }
-    
+
     isError.value = false
     closeModal()
-    
+
     // Show toast after modal closes
     setTimeout(() => {
       toastStore.showToast(successMsg, 'success')
     }, 300)
-    
+
     fetchArtists() // Reload list
-    
+
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.'
     isError.value = true
@@ -940,9 +1131,29 @@ function getRegionBadgeClass(region) {
   switch (region) {
     case 'KPOP': return 'bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400'
     case 'VPOP': return 'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400'
-    case 'US-UK': 
+    case 'US-UK':
     case 'USUK': return 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400'
     default: return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
   }
+}
+
+function getAccountStatusLabel(status) {
+  const labels = {
+    not_issued: 'Chưa cấp',
+    temp_password: 'Mật khẩu tạm thời',
+    active: 'Đang hoạt động',
+    locked: 'Đã khóa'
+  }
+  return labels[status] || 'Chưa cấp'
+}
+
+function getAccountStatusClass(status) {
+  const classes = {
+    active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    temp_password: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+    locked: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+    not_issued: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  }
+  return classes[status] || classes.not_issued
 }
 </script>

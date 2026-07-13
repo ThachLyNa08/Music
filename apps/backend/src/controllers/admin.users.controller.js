@@ -3,56 +3,58 @@ const { pool } = require('../config/database');
 exports.getUsersOverview = async (req, res, next) => {
   try {
     // KPI 1: Tổng thành viên
-    const [[{ totalUsers }]] = await pool.query('SELECT COUNT(*) as totalUsers FROM users');
-    
+    const [[{ totalUsers }]] = await pool.query('SELECT COUNT(*) as totalUsers FROM users WHERE role = "user"');
+
     // KPI 2: Đang hoạt động
-    const [[{ activeUsers }]] = await pool.query('SELECT COUNT(*) as activeUsers FROM users WHERE status = "active"');
-    
+    const [[{ activeUsers }]] = await pool.query('SELECT COUNT(*) as activeUsers FROM users WHERE status = "active" AND role = "user"');
+
     // KPI 3: Premium đang dùng
     const [[{ premiumUsers }]] = await pool.query(`
-      SELECT COUNT(DISTINCT user_id) as premiumUsers 
-      FROM user_subscriptions 
-      WHERE status = 'active' AND end_date > NOW()
+      SELECT COUNT(DISTINCT us.user_id) as premiumUsers
+      FROM user_subscriptions us
+      JOIN users u ON us.user_id = u.id
+      WHERE us.status = 'active' AND us.end_date > NOW() AND u.role = 'user'
     `);
-    
+
     // KPI 4: Mới tháng này
     const [[{ newUsersThisMonth }]] = await pool.query(`
-      SELECT COUNT(*) as newUsersThisMonth 
-      FROM users 
-      WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+      SELECT COUNT(*) as newUsersThisMonth
+      FROM users
+      WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01') AND role = 'user'
     `);
 
     // Premium Expiring Alert
     const [[{ premiumExpiringCount }]] = await pool.query(`
-      SELECT COUNT(DISTINCT user_id) as premiumExpiringCount
-      FROM user_subscriptions
-      WHERE status = 'active' AND end_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY)
+      SELECT COUNT(DISTINCT us.user_id) as premiumExpiringCount
+      FROM user_subscriptions us
+      JOIN users u ON us.user_id = u.id
+      WHERE us.status = 'active' AND us.end_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY) AND u.role = 'user'
     `);
 
     // 1. New users
-    const [newUsers] = await pool.query('SELECT id, display_name, created_at FROM users ORDER BY created_at DESC LIMIT 3');
-    
+    const [newUsers] = await pool.query('SELECT id, display_name, created_at FROM users WHERE role = "user" ORDER BY created_at DESC LIMIT 3');
+
     // 2. New playlists created by users
     const [newPlaylists] = await pool.query(`
-      SELECT p.name, p.created_at, u.display_name 
-      FROM playlists p 
-      JOIN users u ON p.user_id = u.id 
+      SELECT p.name, p.created_at, u.display_name
+      FROM playlists p
+      JOIN users u ON p.user_id = u.id
       WHERE p.is_system = 0 AND p.user_id IS NOT NULL
       ORDER BY p.created_at DESC LIMIT 3
     `);
 
     // 3. Recent listens
     const [recentListens] = await pool.query(`
-      SELECT u.id, u.display_name, s.title as song_title, lh.listened_at as created_at 
-      FROM listening_history lh 
-      JOIN users u ON lh.user_id = u.id 
-      JOIN songs s ON lh.song_id = s.id 
+      SELECT u.id, u.display_name, s.title as song_title, lh.listened_at as created_at
+      FROM listening_history lh
+      JOIN users u ON lh.user_id = u.id
+      JOIN songs s ON lh.song_id = s.id
       ORDER BY lh.listened_at DESC LIMIT 3
     `);
 
     // Combine and sort
     let allActivities = [];
-    
+
     newUsers.forEach(u => {
       allActivities.push({
         id: `nu_${u.id}`,
@@ -85,7 +87,7 @@ exports.getUsersOverview = async (req, res, next) => {
 
     // Sort by timestamp DESC
     allActivities.sort((a, b) => b.timestamp - a.timestamp);
-    
+
     // Take top 5
     allActivities = allActivities.slice(0, 5);
 
@@ -96,18 +98,18 @@ exports.getUsersOverview = async (req, res, next) => {
       const diffMins = Math.floor(diffMs / 60000);
       const diffHours = Math.floor(diffMins / 60);
       const diffDays = Math.floor(diffHours / 24);
-      
+
       let timeAgo = '';
       if (diffMins < 60) timeAgo = `${diffMins} phút trước`;
       else if (diffHours < 24) timeAgo = `${diffHours} giờ trước`;
       else timeAgo = `${diffDays} ngày trước`;
-      
+
       return { ...act, timeAgo };
     });
 
     // Top thành viên tích cực
     const [topUserRows] = await pool.query("SELECT id, display_name FROM users WHERE role = 'user' LIMIT 3");
-    
+
     const topUsers = topUserRows.map((u, index) => {
       let plays = 0, points = 0, playlists = 0;
       if (index === 0) { plays = 5102; points = 2450; playlists = 42; }
@@ -125,7 +127,7 @@ exports.getUsersOverview = async (req, res, next) => {
         initial: name.charAt(0).toUpperCase()
       };
     });
-    
+
     res.json({
       success: true,
       data: {

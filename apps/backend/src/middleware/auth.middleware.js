@@ -1,5 +1,6 @@
 // src/middleware/auth.middleware.js
 const jwt = require('jsonwebtoken');
+const { pool } = require('../config/database');
 
 // Xác thực JWT từ header Authorization: Bearer <token>
 function authenticate(req, res, next) {
@@ -50,4 +51,32 @@ function requirePremium(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, optionalAuthenticate, requireAdmin, requirePremium };
+async function requireArtist(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Khong co token xac thuc' });
+  }
+  if (req.user.role !== 'artist') {
+    return res.status(403).json({ success: false, message: 'Chi tai khoan nghe si moi duoc truy cap Artist Studio' });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT a.id, a.name, a.avatar_url, a.bio, a.region, a.user_id
+       FROM artists a
+       JOIN users u ON u.id = a.user_id
+       WHERE a.user_id = ? AND u.role = 'artist' AND u.status = 'active'
+       LIMIT 1`,
+      [req.user.id]
+    );
+    if (!rows.length) {
+      return res.status(403).json({ success: false, message: 'Tai khoan nghe si chua lien ket ho so hop le' });
+    }
+    req.artist = rows[0];
+    req.user.artistId = rows[0].id;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { authenticate, optionalAuthenticate, requireAdmin, requirePremium, requireArtist };

@@ -16,7 +16,7 @@
             <MfIcon name="album" filled size="28" />
           </span>
         </div>
-        
+
         <!-- Toggle button is now absolute -->
         <button class="sidebar-toggle" @click="toggleSidebar" :title="isSidebarCollapsed ? 'Mở rộng' : 'Thu nhỏ'">
           <MfIcon :name="isSidebarCollapsed ? 'chevron_right' : 'chevron_left'" size="20" />
@@ -64,8 +64,45 @@
       <header class="admin-topbar">
         <div class="page-title">{{ routeName }}</div>
 
-        <div class="user-menu" ref="userMenuRef">
-          <div class="admin-badge">Admin</div>
+        <div class="topbar-actions">
+          <div class="notification-wrapper" ref="notifRef">
+            <button class="bell-btn" @click.stop="toggleNotifDropdown">
+              <MfIcon name="notifications" size="22" />
+              <span v-if="notifStore.pendingReviewCount > 0" class="bell-badge">{{ notifStore.pendingReviewCount }}</span>
+            </button>
+            <div v-if="isNotifOpen" class="notif-dropdown">
+              <div class="notif-header">
+                <h4>Thông báo</h4>
+              </div>
+              <div class="notif-body">
+                <template v-if="notifStore.pendingReviewCount > 0">
+                  <RouterLink
+                    v-for="item in notifStore.latestPendingItems"
+                    :key="item.type + '_' + item.id"
+                    :to="{ name: 'AdminArtistSongReviews', query: { status: 'pending_review' } }"
+                    class="notif-item"
+                    @click="isNotifOpen = false"
+                  >
+                    <img :src="normalizeImageUrl(item.coverUrl) || 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'" class="notif-cover" />
+                    <div class="notif-info">
+                      <div class="notif-title"><span class="text-[10px] font-bold uppercase mr-1" :class="item.type === 'album' ? 'text-purple-500' : 'text-blue-500'">[{{ item.type === 'album' ? 'Album' : 'Bài hát' }}]</span>{{ item.title }}</div>
+                      <div class="notif-artist">{{ item.artistName }}</div>
+                      <div class="notif-time">{{ new Date(item.submittedAt).toLocaleString('vi-VN') }}</div>
+                    </div>
+                  </RouterLink>
+                </template>
+                <div v-else class="notif-empty">
+                  Không có nội dung chờ duyệt.
+                </div>
+              </div>
+              <div class="notif-footer" v-if="notifStore.pendingReviewCount > 0">
+                <RouterLink :to="{ name: 'AdminArtistSongReviews', query: { status: 'pending_review' } }" @click="isNotifOpen = false">Xem tất cả nội dung chờ duyệt</RouterLink>
+              </div>
+            </div>
+          </div>
+
+          <div class="user-menu" ref="userMenuRef">
+            <div class="admin-badge">Admin</div>
           <button class="user-avatar" type="button" @click.stop="toggleDropdown">
             {{ userInitial }}
           </button>
@@ -73,6 +110,7 @@
           <div v-if="isDropdownOpen" class="user-dropdown">
             <button class="dropdown-item logout" type="button" @click="handleLogout">Đăng xuất</button>
           </div>
+        </div>
         </div>
       </header>
 
@@ -92,6 +130,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { useAdminNotificationStore } from '@/stores/adminNotification'
+import { useNotificationStore } from '@/stores/notification'
+import { normalizeImageUrl } from '@/utils/imageUrl'
 import { adminMenu, findAdminMenuItemByRouteName } from '@/config/adminMenu'
 
 const STORAGE_KEY = 'musicflow.admin.openGroups'
@@ -99,12 +140,16 @@ const SIDEBAR_STORAGE_KEY = 'musicflow_admin_sidebar_collapsed'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
+const notifStore = useAdminNotificationStore()
+const globalNotifStore = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 
 const isSidebarCollapsed = ref(false)
 const isDropdownOpen = ref(false)
+const isNotifOpen = ref(false)
 const userMenuRef = ref(null)
+const notifRef = ref(null)
 const openGroups = ref(new Set())
 const badges = ref({})
 
@@ -205,7 +250,19 @@ function closeDropdown(e) {
   if (userMenuRef.value && !userMenuRef.value.contains(e.target)) {
     isDropdownOpen.value = false
   }
+  if (notifRef.value && !notifRef.value.contains(e.target)) {
+    isNotifOpen.value = false
+  }
 }
+
+function toggleNotifDropdown() {
+  isNotifOpen.value = !isNotifOpen.value
+  isDropdownOpen.value = false
+}
+
+watch(() => notifStore.pendingReviewCount, (val) => {
+  badges.value['pendingArtistSongs'] = val
+})
 
 watch(() => route.fullPath, openActiveGroup, { immediate: true })
 
@@ -216,10 +273,30 @@ onMounted(() => {
   document.documentElement.classList.remove('dark')
   document.body.classList.remove('dark')
   document.addEventListener('click', closeDropdown)
+  notifStore.fetchSummary()
+
+  // Listen to realtime updates for admin review queue
+  if (globalNotifStore.socket) {
+    globalNotifStore.socket.on('admin:review_updated', () => {
+      notifStore.fetchSummary()
+    })
+  } else {
+    // Retry attaching listener if socket is not ready yet
+    setTimeout(() => {
+      if (globalNotifStore.socket) {
+        globalNotifStore.socket.on('admin:review_updated', () => {
+          notifStore.fetchSummary()
+        })
+      }
+    }, 2000)
+  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
+  if (globalNotifStore.socket) {
+    globalNotifStore.socket.off('admin:review_updated')
+  }
   theme.applyTheme()
 })
 </script>
@@ -453,7 +530,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  z-index: 5;
+  z-index: 50;
 }
 
 .page-title {
@@ -559,5 +636,167 @@ onUnmounted(() => {
   .content-scroll {
     padding: 18px;
   }
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.notification-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bell-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #475569;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.bell-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 12px;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.notif-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notif-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.notif-body {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  text-decoration: none;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.2s ease;
+}
+
+.notif-item:hover {
+  background: #f8fafc;
+}
+
+.notif-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e2e8f0;
+}
+
+.notif-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-artist {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-time {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.notif-empty {
+  padding: 24px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.notif-footer {
+  padding: 10px 16px;
+  background: #f8fafc;
+  text-align: center;
+  border-top: 1px solid #e2e8f0;
+}
+
+.notif-footer a {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.notif-footer a:hover {
+  text-decoration: underline;
 }
 </style>

@@ -59,11 +59,34 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 0. Bài hát chờ duyệt -->
+        <div class="border border-slate-200 rounded-[14px] p-4 bg-white flex flex-col shadow-sm">
+          <div class="flex items-start justify-between mb-3">
+            <div class="flex items-start gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                <MfIcon name="song" size="16" />
+              </div>
+              <div>
+                <h3 class="font-bold text-[14px] text-slate-800 leading-tight">Bài hát chờ duyệt</h3>
+                <p class="text-[11px] text-slate-400 mt-1">
+                  <span v-if="notifStore.pendingReviewCount > 0"><b class="text-purple-600 font-bold">{{ notifStore.pendingReviewCount }}</b> bài cần kiểm tra</span>
+                  <span v-else>Không có bài hát chờ duyệt</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="flex-1 flex flex-col justify-end">
+            <button class="w-full py-2 bg-purple-50 text-purple-700 font-bold text-[13px] rounded-lg hover:bg-purple-100 flex items-center justify-center gap-1.5 transition-colors shadow-sm" @click="$router.push({ name: 'AdminArtistSongReviews', query: { status: 'pending_review' } })">
+              Xem ngay
+            </button>
+          </div>
+        </div>
+
         <!-- 1. AI Recommendation Status -->
         <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between mb-4 gap-2">
             <h3 class="font-bold text-slate-700 flex items-center gap-1.5 text-sm xl:text-[15px] whitespace-nowrap tracking-tight min-w-0">
-              <span class="text-amber-500 shrink-0">✨</span> 
+              <span class="text-amber-500 shrink-0">✨</span>
               <span class="truncate">AI Recommendation</span>
             </h3>
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiRecommendation?.hasArtifact ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
@@ -99,9 +122,9 @@
               </div>
             </div>
 
-            
 
-            
+
+
             <div class="flex gap-3 mt-4 pt-4 border-t border-slate-100">
               <button class="flex-1 py-2 bg-white border border-slate-200 text-slate-600 font-medium text-[13px] rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors shadow-sm" @click="fetchData">
                 <MfIcon name="refresh" size="14" /> Làm mới
@@ -110,7 +133,7 @@
                 <MfIcon name="settings" size="14" /> Xem chi tiết
               </button>
             </div>
-            
+
             <p class="text-[11px] text-center text-slate-400 mt-2">
               Cập nhật lần cuối: {{ formatRelativeTime(quickOperations.aiRecommendation.updatedAt) }}
             </p>
@@ -121,7 +144,7 @@
         </div>
 
         <!-- 2. Playlist tự động -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow col-span-1 md:col-span-2">
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between gap-2 mb-4">
             <div class="flex items-center gap-2">
               <MfIcon name="playlist" size="18" class="text-violet-500"/>
@@ -215,7 +238,7 @@
                     <span class="text-[11px] text-slate-400 truncate flex-[1.5]" :title="alert.desc">{{ alert.desc }}</span>
                     <!-- Progress Bar -->
                     <div class="flex-1 h-[2px] rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
-                      <div class="h-full rounded-full" 
+                      <div class="h-full rounded-full"
                         :class="{
                           'bg-transparent': alert.count === 0,
                           'bg-rose-500': alert.count > 0 && alert.type === 'error',
@@ -352,7 +375,7 @@
             <div class="donut-skeleton"></div>
           </article>
         </template>
-        <AdminGenreDonutChart 
+        <AdminGenreDonutChart
           v-else
           title="Thể loại nổi bật"
           description="Top thể loại theo lượt nghe."
@@ -565,14 +588,14 @@
       </aside>
     </div>
 
-    <ConfirmDialog 
-      v-model="showRegenerateConfirm" 
-      title="Tạo lại Playlist tự động" 
-      message="Quá trình này có thể mất thời gian để AI tạo lại dữ liệu playlist (Daily Mix, Weekly Mix, v.v.) cho toàn bộ người dùng. Bạn có chắc chắn muốn chạy ngay bây giờ?" 
-      confirmText="Tạo lại tất cả" 
-      cancelText="Hủy" 
-      type="primary" 
-      @confirm="regenerateSystemPlaylists" 
+    <ConfirmDialog
+      v-model="showRegenerateConfirm"
+      title="Tạo lại Playlist tự động"
+      message="Quá trình này có thể mất thời gian để AI tạo lại dữ liệu playlist (Daily Mix, Weekly Mix, v.v.) cho toàn bộ người dùng. Bạn có chắc chắn muốn chạy ngay bây giờ?"
+      confirmText="Tạo lại tất cả"
+      cancelText="Hủy"
+      type="primary"
+      @confirm="regenerateSystemPlaylists"
     />
     <teleport to="body">
       <div v-if="showInsightModal" class="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" @click.self="closeInsightModal">
@@ -629,7 +652,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import api from '@/api/axios'
 import {
   Chart as ChartJS,
@@ -648,11 +672,16 @@ import { Bar, Line } from 'vue-chartjs'
 import AdminGenreDonutChart from '@/components/admin/AdminGenreDonutChart.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
+import { useAdminNotificationStore } from '@/stores/adminNotification'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DashboardInsightOverlay from '@/components/admin/DashboardInsightOverlay.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement, Filler)
+
+const auth = useAuthStore()
+const router = useRouter()
+const notifStore = useAdminNotificationStore()
 
 const loading = ref(true)
 const error = ref(null)
@@ -1290,15 +1319,15 @@ function playlistStatusClass(key) {
   if (!quickOperations.value?.systemPlaylists) return 'bg-slate-50 text-slate-500'
   const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
   if (!pl || !pl.lastGeneratedAt) return 'bg-slate-50 text-slate-500'
-  
+
   if (pl.isStale) {
     const statusText = String(pl.statusLabel || '').toLowerCase()
-    if (statusText.includes('đến hạn') || statusText.includes('Ä‘áº¿n háº¡n')) {
+    if (statusText.includes('đến hạn')) {
       return 'bg-amber-50 text-amber-700'
     }
     return 'bg-rose-50 text-rose-600'
   }
-  
+
   switch(key) {
     case 'dailymix_01': return 'bg-emerald-50 text-emerald-700'
     case 'weekly_mix': return 'bg-blue-50 text-blue-700'
@@ -1316,17 +1345,17 @@ function formatPlaylistStatus(key) {
 
     const parts = text.split(separator).map(s => s.trim())
     const prefix = parts[0]?.toLowerCase() || ''
-    if (prefix.includes('hôm nay') || prefix.includes('hĂ´m nay')) return parts[0]
-    if (prefix.includes('đến hạn') || prefix.includes('Ä‘áº¿n háº¡n')) return parts[0]
-    return (parts[1] || text).replace('Lịch kế tiếp:', 'Lịch:').replace('Lá»‹ch káº¿ tiáº¿p:', 'Lá»‹ch:')
+    if (prefix.includes('hôm nay')) return parts[0]
+    if (prefix.includes('đến hạn')) return parts[0]
+    return (parts[1] || text).replace('Lịch kế tiếp:', 'Lịch:')
   }
 
   if (!quickOperations.value?.systemPlaylists) return 'Chưa có'
   const pl = quickOperations.value.systemPlaylists.find(p => p.systemKey === key || p.system_key === key)
   if (!pl) return 'Chưa có'
-  
+
   const rawText = pl.statusLabel || pl.displayDate || 'Cần tạo lại'
-  
+
   if (rawText.includes('·')) {
     const parts = rawText.split('·').map(s => s.trim())
     if (parts[0].toLowerCase().includes('hôm nay')) {

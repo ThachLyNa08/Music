@@ -1,6 +1,7 @@
 // src/routes/auth.routes.js
 const express = require('express');
 const { body }  = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const router  = express.Router();
 const authController = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -28,11 +29,20 @@ const loginRules = [
   body('password').notEmpty(),
 ];
 
+const artistAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // POST /api/auth/register
 router.post('/register', registerRules, authController.register);
 
 // POST /api/auth/login
 router.post('/login', loginRules, authController.login);
+
+router.post('/artist/login', artistAuthLimiter, loginRules, authController.artistLogin);
 
 // POST /api/auth/refresh  — cấp lại access token từ refresh token
 router.post('/refresh', authController.refreshToken);

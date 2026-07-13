@@ -36,7 +36,7 @@ exports.getAllArtists = async (req, res, next) => {
       LEFT JOIN genres g ON g.id = s.genre_id
       LEFT JOIN artist_follows af ON af.artist_id = a.id
     `;
-    
+
     let whereConditions = [];
     let queryParams = [];
 
@@ -73,7 +73,7 @@ exports.getAllArtists = async (req, res, next) => {
     if (whereConditions.length > 0) {
       query += ` WHERE ` + whereConditions.join(' AND ');
     }
-    
+
     query += ` GROUP BY a.id`;
 
     if (popular) {
@@ -87,6 +87,10 @@ exports.getAllArtists = async (req, res, next) => {
       success: true,
       data: artists.map(artist => ({
         ...artist,
+        song_count: Number(artist.song_count || 0),
+        total_plays: Number(artist.total_plays || 0),
+        totalPlays: Number(artist.totalPlays || 0),
+        follower_count: Number(artist.follower_count || 0),
         avatar_url: resolveArtistAvatar(artist, req),
         genres: parseGenresJson(artist.genres_json),
       })),
@@ -126,6 +130,10 @@ exports.getArtistById = async (req, res, next) => {
     const artist = artists[0];
     artist.genres = parseGenresJson(artist.genres_json);
     artist.avatar_url = resolveArtistAvatar(artist, req);
+    artist.song_count = Number(artist.song_count || 0);
+    artist.total_plays = Number(artist.total_plays || 0);
+    artist.totalPlays = Number(artist.totalPlays || 0);
+    artist.follower_count = Number(artist.follower_count || 0);
 
     // Kiểm tra user có đang follow không
     let is_following = false;
@@ -208,7 +216,7 @@ exports.getArtistById = async (req, res, next) => {
       HAVING al.album_type = 'album' AND total_tracks > 1 AND song_count > 0
       ORDER BY al.release_date DESC, al.created_at DESC
     `, [artistId]);
-    
+
     const albums = albumRows.map(row => ({
       ...row,
       cover_url: normalizeCoverUrl(row.cover_url, req)
@@ -237,7 +245,7 @@ exports.getArtistById = async (req, res, next) => {
       HAVING (al.album_type = 'single' OR (COALESCE(al.album_type, '') <> 'album' AND total_tracks <= 1)) AND song_count > 0
       ORDER BY al.release_date DESC, al.created_at DESC
     `, [artistId]);
-    
+
     const singles = singleRows.map(row => ({
       ...row,
       cover_url: normalizeCoverUrl(row.cover_url, req)
@@ -371,7 +379,7 @@ exports.getFollowedArtists = async (req, res, next) => {
     const userId = req.user.id;
 
     const [artists] = await pool.query(`
-      SELECT 
+      SELECT
         a.id, a.name, a.bio, a.short_bio, a.genres_json, a.country,
         a.popularity, a.followers, a.spotify_artist_id, a.external_url,
         a.avatar_url, a.avatar_source, a.metadata_source, a.metadata_source_url,
@@ -418,10 +426,10 @@ exports.getPopularArtistsGlobally = async (req, res, next) => {
     }
 
     const [artists] = await pool.query(`
-      SELECT 
-        a.id, 
-        a.name, 
-        a.avatar_url, 
+      SELECT
+        a.id,
+        a.name,
+        a.avatar_url,
         SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS listen_count,
         COUNT(DISTINCT s.id) AS song_count,
         SUM(lh.listen_duration) AS total_seconds
@@ -459,7 +467,7 @@ exports.getOnboardingArtists = async (req, res, next) => {
       SELECT a.id, a.name, a.avatar_url, a.country, a.genres_json, a.followers
       FROM artists a
     `;
-    
+
     let joins = [];
     let whereConditions = [];
     let queryParams = [];
@@ -492,12 +500,12 @@ exports.getOnboardingArtists = async (req, res, next) => {
             joinGenres = true;
           }
         });
-        
+
         if (joinGenres) {
           joins.push(`LEFT JOIN songs s ON s.artist_id = a.id AND s.is_active = TRUE`);
           joins.push(`LEFT JOIN genres g ON g.id = s.genre_id`);
         }
-        
+
         if (marketClauses.length > 0) {
           whereConditions.push(`(${marketClauses.join(' OR ')})`);
         }
@@ -511,7 +519,7 @@ exports.getOnboardingArtists = async (req, res, next) => {
     if (whereConditions.length > 0) {
       query += ` WHERE ` + whereConditions.join(' AND ');
     }
-    
+
     // Luôn GROUP BY để tránh trùng lặp khi JOIN
     query += ` GROUP BY a.id`;
 
@@ -520,7 +528,7 @@ exports.getOnboardingArtists = async (req, res, next) => {
     queryParams.push(limit);
 
     const [artists] = await pool.query(query, queryParams);
-    
+
     res.json({
       success: true,
       data: artists.map(artist => ({
