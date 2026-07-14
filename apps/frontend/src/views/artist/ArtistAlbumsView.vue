@@ -26,20 +26,15 @@
           <button v-if="searchQuery" @click="searchQuery = ''" class="clear-search-btn" title="Xóa">×</button>
         </div>
 
-        <div class="status-filters flex items-center gap-2 overflow-x-auto pb-1 -mb-1" style="flex: 1;">
-          <button @click="filterByStatus('')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === '' ? 'bg-white text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-white']">
-            Tất cả
-          </button>
-          <button @click="filterByStatus('approved')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'approved' ? 'bg-[#1ed760] text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-[#1ed760] hover:text-[#1ed760]']">
-            Đã duyệt
-          </button>
-          <button @click="filterByStatus('pending')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'pending' ? 'bg-yellow-500 text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-yellow-500 hover:text-yellow-500']">
-            Chờ duyệt
-          </button>
-          <button @click="filterByStatus('rejected')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'rejected' ? 'bg-red-500 text-white border-transparent' : 'bg-transparent text-white border-white/20 hover:border-red-500 hover:text-red-500']">
-            Từ chối
-          </button>
+        <div class="status-filters">
+          <select v-model="statusFilter" @change="filterByStatus(statusFilter)" class="select-dark" style="width: auto; min-width: 160px;">
+            <option value="">Tất cả trạng thái</option>
+            <option value="approved">Đã duyệt</option>
+            <option value="pending">Chờ duyệt</option>
+            <option value="rejected">Từ chối</option>
+          </select>
         </div>
+
         <div class="filters">
           <button @click="openUploadModal" class="btn-primary">
             Tạo album mới
@@ -50,73 +45,75 @@
       <!-- Album List -->
       <div class="songs-container">
         <div class="song-table-wrapper" :class="{ 'is-loading': loading }">
-          <table class="song-table" style="table-layout: fixed; min-width: 1000px;">
-            <colgroup>
-              <col style="width: 30%;">
-              <col style="width: 15%;">
-              <col style="width: 15%;">
-              <col style="width: 15%;">
-              <col style="width: 25%;">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>ALBUM</th>
-                <th class="text-center">SỐ BÀI HÁT</th>
-                <th class="text-center">NGÀY PHÁT HÀNH</th>
-                <th class="text-center">TRẠNG THÁI</th>
-                <th class="text-right">HÀNH ĐỘNG</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="filteredAlbums.length === 0 && !loading">
-                <td colspan="5">
-                  <div class="empty-state" style="border: none; background: transparent; padding: 100px 20px;">
-                    <span class="empty-icon">💿</span>
-                    <p>Không tìm thấy album nào.</p>
-                  </div>
-                </td>
-              </tr>
-              <tr v-for="album in paginatedAlbums" :key="album.id">
-                <td>
-                  <div class="song-info-cell">
-                    <img :src="normalizeImageUrl(album.coverUrl) || fallbackCover" @error="onImageError" class="song-cover-sm" alt="" />
-                    <span class="song-title-sm">{{ album.name }}</span>
-                  </div>
-                </td>
-                <td class="text-center">{{ album.songCount }}</td>
-                <td class="text-center"><span class="muted">{{ formatDate(album.releaseDate) }}</span></td>
-                <td class="text-center">
-                  <span class="status-badge" :class="getReviewStatusClass(album.reviewStatus)">
-                    {{ formatReviewStatus(album.reviewStatus) }}
-                  </span>
-                </td>
-                <td class="text-right actions-cell">
-                  <button @click="openDetailModal(album.id)" class="btn-icon">Chi tiết</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination -->
-        <div v-if="totalPages > 1" class="pagination-wrapper">
-          <div class="pagination-info">
-            Hiển thị {{ (currentPage - 1) * itemsPerPage + 1 }} -
-            {{ Math.min(currentPage * itemsPerPage, filteredAlbums.length) }}
-            trong số {{ filteredAlbums.length }} album
+          <div class="table-scroll-area">
+            <table class="song-table" style="table-layout: fixed; min-width: 1000px;">
+              <colgroup>
+                <col style="width: 30%;">
+                <col style="width: 15%;">
+                <col style="width: 15%;">
+                <col style="width: 15%;">
+                <col style="width: 25%;">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>ALBUM</th>
+                  <th class="text-center">SỐ BÀI HÁT</th>
+                  <th class="text-center">NGÀY PHÁT HÀNH</th>
+                  <th class="text-center">TRẠNG THÁI</th>
+                  <th class="text-right">HÀNH ĐỘNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="filteredAlbums.length === 0 && !loading">
+                  <td colspan="5">
+                    <div class="empty-state" style="border: none; background: transparent; padding: 100px 20px;">
+                      <span class="empty-icon">💿</span>
+                      <p>Không tìm thấy album nào.</p>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-for="album in paginatedAlbums" :key="album.id">
+                  <td>
+                    <div class="song-info-cell">
+                      <img :src="normalizeImageUrl(album.coverUrl) || fallbackCover" @error="onImageError" class="song-cover-sm" alt="" />
+                      <span class="song-title-sm">{{ album.name }}</span>
+                    </div>
+                  </td>
+                  <td class="text-center">{{ album.songCount }}</td>
+                  <td class="text-center"><span class="muted">{{ formatDate(album.releaseDate) }}</span></td>
+                  <td class="text-center">
+                    <span class="status-badge" :class="getReviewStatusClass(album.reviewStatus)">
+                      {{ formatReviewStatus(album.reviewStatus) }}
+                    </span>
+                  </td>
+                  <td class="text-right actions-cell">
+                    <button @click="openDetailModal(album.id)" class="btn-icon">Chi tiết</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div class="pagination-controls">
-            <button class="page-btn-icon" :disabled="currentPage === 1" @click="currentPage--">
-              <i class="fas fa-chevron-left"></i>
-            </button>
-            <div class="page-input-wrapper">
-              <span>Trang</span>
-              <input type="number" v-model.number="currentPageInput" @keyup.enter="goToPage" class="page-input" min="1" :max="totalPages" />
-              <span>/ {{ totalPages }}</span>
+
+          <!-- Pagination -->
+          <div v-if="totalPages > 1" class="pagination-wrapper">
+            <div class="pagination-info">
+              Hiển thị {{ (currentPage - 1) * itemsPerPage + 1 }} -
+              {{ Math.min(currentPage * itemsPerPage, filteredAlbums.length) }}
+              trong số {{ filteredAlbums.length }} album
             </div>
-            <button class="page-btn-icon" :disabled="currentPage === totalPages" @click="currentPage++">
-              <i class="fas fa-chevron-right"></i>
-            </button>
+            <div class="pagination-controls">
+              <button class="page-btn-icon" :disabled="currentPage === 1" @click="currentPage--">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div class="page-input-wrapper">
+                <span>Trang</span>
+                <input type="number" v-model.number="currentPageInput" @keyup.enter="goToPage" class="page-input" min="1" :max="totalPages" />
+                <span>/ {{ totalPages }}</span>
+              </div>
+              <button class="page-btn-icon" :disabled="currentPage === totalPages" @click="currentPage++">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -561,11 +558,10 @@ const closeDetailModal = () => {
   position: relative;
 }
 
-.input-dark {
+.input-dark, .select-dark {
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  padding: 0 12px;
   border-radius: var(--radius-sm);
   outline: none;
   font-family: inherit;
@@ -573,7 +569,42 @@ const closeDetailModal = () => {
   height: 36px;
   line-height: 34px;
   box-sizing: border-box;
+}
+
+.input-dark {
+  padding: 0 32px 0 12px;
   width: 100%;
+}
+
+.select-dark {
+  padding: 0 32px 0 12px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23a0a0b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.input-dark:focus, .select-dark:focus {
+  border-color: var(--accent);
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.clear-search-btn:hover {
+  color: var(--text-primary);
 }
 
 .filters {
@@ -601,9 +632,16 @@ const closeDetailModal = () => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   height: 500px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+.table-scroll-area {
+  flex: 1;
   overflow-y: auto;
   overflow-x: auto;
-  transition: opacity 0.2s;
 }
 
 .song-table {
@@ -698,9 +736,7 @@ const closeDetailModal = () => {
   padding: 16px;
   background: var(--bg-card);
   border-top: 1px solid var(--border);
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
+  flex-shrink: 0;
 }
 .pagination-info { font-size: 13px; color: var(--text-muted); }
 .pagination-controls { display: flex; align-items: center; gap: 8px; }

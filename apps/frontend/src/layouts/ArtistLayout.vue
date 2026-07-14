@@ -1,51 +1,107 @@
 <template>
   <div class="artist-shell">
     <aside class="artist-sidebar">
-      <div class="brand">
-        <div class="brand-mark">MF</div>
-        <div>
-          <div class="brand-title">Artist Studio</div>
-          <div class="brand-subtitle">MusicFlow</div>
+      <div class="logo-area">
+        <div class="logo-box">MF</div>
+        <div class="logo-text">
+          <span class="title">Artist Studio</span>
+          <span class="subtitle">MusicFlow</span>
         </div>
       </div>
 
-      <nav class="nav">
-        <RouterLink to="/artist/dashboard" class="nav-link" active-class="active">
+      <nav class="nav-section">
+        <div class="nav-label">Menu</div>
+
+        <RouterLink to="/artist/dashboard" class="nav-item" active-class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
           Tổng quan
         </RouterLink>
-        <RouterLink to="/artist/profile" class="nav-link" active-class="active">
+
+        <RouterLink to="/artist/profile" class="nav-item" active-class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
           Hồ sơ nghệ sĩ
         </RouterLink>
-        <RouterLink to="/artist/songs" class="nav-link" active-class="active">
+
+        <RouterLink to="/artist/songs" class="nav-item" active-class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13"/>
+            <circle cx="6" cy="18" r="3"/>
+            <circle cx="18" cy="16" r="3"/>
+          </svg>
           Bài hát
         </RouterLink>
-        <RouterLink to="/artist/albums" class="nav-link" active-class="active">
+
+        <RouterLink to="/artist/albums" class="nav-item" active-class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
           Album
         </RouterLink>
+
+
       </nav>
 
-      <div class="nav-spacer" style="flex: 1;"></div>
-      <button type="button" class="logout-btn" @click="auth.logout">
-        Đăng xuất
-      </button>
+      <div class="logout-area">
+        <button type="button" class="logout-btn" @click="handleLogout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Đăng xuất
+        </button>
+      </div>
     </aside>
 
     <main class="artist-main">
       <router-view />
     </main>
+
+    <ConfirmDialog
+      v-model:open="showLogoutConfirm"
+      title="Xác nhận đăng xuất"
+      message="Bạn có chắc chắn muốn đăng xuất khỏi Artist Studio?"
+      confirmText="Đăng xuất"
+      cancelText="Hủy"
+      type="danger"
+      theme="dark"
+      @confirm="performLogout"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const auth = useAuthStore()
+const showLogoutConfirm = ref(false)
+
+const handleLogout = () => {
+  showLogoutConfirm.value = true
+}
+
+const performLogout = () => {
+  auth.logout()
+}
 </script>
 
 <style scoped>
 .artist-shell {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -54,109 +110,157 @@ const auth = useAuthStore()
 
 .artist-sidebar {
   width: 220px;
-  min-height: 100vh;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
-  color: var(--text-primary);
-  padding: 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  padding: 28px 0;
   position: fixed;
   left: 0;
   top: 0;
+  height: 100vh;
   z-index: 100;
 }
 
-.brand {
+/* Logo Area */
+.logo-area {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-  padding: 0 8px;
+  gap: 14px;
+  padding: 0 24px;
+  margin-bottom: 36px;
 }
-
-.brand-mark {
-  width: 40px;
-  height: 40px;
+.logo-box {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, var(--accent), #00b894);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent), #00b894);
   font-weight: 800;
-  font-size: 14px;
-  color: #ffffff;
-}
-
-.brand-title {
   font-size: 15px;
-  font-weight: 700;
+  color: white;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.25);
 }
-
-.brand-subtitle {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.nav {
+.logo-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+}
+.logo-text .title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+.logo-text .subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
-.nav-link {
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-secondary);
-  transition: all 0.2s;
+/* Navigation */
+.nav-section {
+  flex: 1;
+  padding: 0 16px;
+}
+.nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 0 12px;
+  margin-bottom: 10px;
+}
+.nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-
-.nav-link:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
-}
-
-.nav-link.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.nav-link.muted {
-  color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-.logout-btn {
-  margin-top: auto;
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  color: var(--danger);
-  font-size: 14px;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 4px;
   cursor: pointer;
-  text-align: center;
-  border: 1px solid rgba(255, 71, 87, 0.2);
-  background: transparent;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  position: relative;
   transition: all 0.2s;
 }
+.nav-item:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.03);
+}
+.nav-item.active {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+}
+.nav-item svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+  flex-shrink: 0;
+}
 
+
+
+/* Logout */
+.logout-area {
+  padding: 0 16px;
+  margin-top: auto;
+  padding-top: 20px;
+}
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px;
+  background: transparent;
+  border: 1px solid rgba(255, 71, 87, 0.2);
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
 .logout-btn:hover {
   background: rgba(255, 71, 87, 0.1);
+  border-color: rgba(255, 71, 87, 0.3);
+}
+.logout-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .artist-main {
   flex: 1;
   padding: var(--main-py) var(--main-px);
   margin-left: 220px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 @media (max-width: 760px) {

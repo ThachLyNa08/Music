@@ -2,34 +2,45 @@
   <main class="artist-auth-page">
     <section class="login-panel">
       <div class="panel-heading">
-        <p class="eyebrow">MusicFlow Artist Studio</p>
-        <h1>Dang nhap nghe si</h1>
-        <p>Su dung tai khoan Artist Studio do Admin cap.</p>
+        <div class="logo-box">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <h1>MusicFlow Artist Studio</h1>
+        <p>Đăng nhập bằng tài khoản được Admin cấp</p>
       </div>
 
       <div v-if="errorMsg" class="error-box">
         {{ errorMsg }}
-        <RouterLink v-if="redirectTo" :to="redirectTo">Di den trang phu hop</RouterLink>
+        <RouterLink v-if="redirectTo" :to="redirectTo">Đi đến trang phù hợp</RouterLink>
       </div>
       <div v-if="tempPasswordNotice" class="notice-box">
-        Tai khoan dang su dung mat khau tam thoi. Vui long doi mat khau de tiep tuc.
+        Tài khoản đang sử dụng mật khẩu tạm thời. Vui lòng đổi mật khẩu để tiếp tục.
       </div>
 
       <form class="login-form" @submit.prevent="handleLogin">
-        <label>
+        <label class="input-label">
           Email
-          <input v-model.trim="form.email" type="email" autocomplete="email" required>
+          <input v-model.trim="form.email" type="email" autocomplete="email" placeholder="blackpink@artist.musicflow.local" required>
         </label>
 
-        <label>
-          Mat khau
-          <input v-model="form.password" type="password" autocomplete="current-password" required>
+        <label class="input-label">
+          Mật khẩu
+          <input v-model="form.password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required>
         </label>
 
-        <button type="submit" :disabled="loading || !form.email || !form.password">
-          {{ loading ? 'Dang dang nhap...' : 'Vao Artist Studio' }}
+        <div class="form-actions">
+          <label class="remember-me">
+            <input type="checkbox" v-model="form.remember">
+            Ghi nhớ đăng nhập
+          </label>
+          <a href="#" class="forgot-password">Quên mật khẩu?</a>
+        </div>
+
+        <button type="submit" class="submit-btn" :disabled="loading || !form.email || !form.password">
+          {{ loading ? 'Đang đăng nhập...' : 'Vào Artist Studio' }}
         </button>
       </form>
+
     </section>
   </main>
 </template>
@@ -40,7 +51,7 @@ import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
-const form = reactive({ email: '', password: '' })
+const form = reactive({ email: '', password: '', remember: false })
 const loading = ref(false)
 const errorMsg = ref('')
 const redirectTo = ref('')
@@ -69,100 +80,179 @@ async function handleLogin() {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #101827;
+  background: #0f141e;
   color: #ffffff;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
 }
 
 .login-panel {
-  width: min(100%, 430px);
-  background: #ffffff;
-  color: #111827;
-  border-radius: 8px;
-  padding: 32px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  width: min(100%, 420px);
+  background: #20293a;
+  border-radius: 16px;
+  padding: 40px 32px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
 .panel-heading {
-  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 32px;
 }
 
-.eyebrow {
-  margin: 0 0 8px;
-  color: #16a34a;
-  font-weight: 900;
-  font-size: 12px;
-  text-transform: uppercase;
+.logo-box {
+  width: 56px;
+  height: 56px;
+  background: #10b981;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  color: white;
+}
+
+.logo-box svg {
+  width: 28px;
+  height: 28px;
 }
 
 h1 {
   margin: 0 0 8px;
-  font-size: 28px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
 }
 
-.panel-heading p:last-child {
+.panel-heading p {
   margin: 0;
-  color: #64748b;
+  color: #94a3b8;
+  font-size: 14px;
 }
 
 .login-form {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
 
-label {
+.input-label {
   display: grid;
-  gap: 7px;
-  font-weight: 800;
+  gap: 8px;
+  font-weight: 600;
   font-size: 13px;
+  color: #f8fafc;
 }
 
-input {
-  border: 1px solid #d1d5db;
+input[type="email"],
+input[type="password"] {
+  border: 1px solid #334155;
+  background: #111827;
   border-radius: 8px;
-  padding: 12px 13px;
-  font-size: 15px;
-}
-
-button {
-  border: 0;
-  border-radius: 8px;
-  background: #16a34a;
+  padding: 12px 14px;
+  font-size: 14px;
   color: #ffffff;
-  padding: 13px 16px;
-  font-weight: 900;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+input[type="email"]::placeholder,
+input[type="password"]::placeholder {
+  color: #64748b;
+}
+
+input[type="email"]:focus,
+input[type="password"]:focus {
+  border-color: #10b981;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -4px;
+  margin-bottom: 4px;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 400;
   cursor: pointer;
 }
 
-button:disabled {
+.remember-me input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #10b981;
+  background: transparent;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.forgot-password {
+  font-size: 13px;
+  color: #10b981;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.forgot-password:hover {
+  color: #34d399;
+}
+
+.submit-btn {
+  border: 0;
+  border-radius: 8px;
+  background: #10b981;
+  color: #ffffff;
+  padding: 14px 16px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.submit-btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }
 
+/* Error/Notice Styles */
 .error-box {
   display: grid;
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   padding: 12px;
-  background: #fef2f2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 8px;
-  font-weight: 700;
+  font-weight: 500;
   font-size: 14px;
 }
 
 .error-box a {
-  color: #166534;
+  color: #f87171;
 }
 
 .notice-box {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   padding: 12px;
-  background: #fffbeb;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.2);
   border-radius: 8px;
-  font-weight: 700;
+  font-weight: 500;
   font-size: 14px;
 }
 </style>

@@ -14,26 +14,6 @@
         <p class="subtitle">Theo dõi và quản lý các bài hát thuộc hồ sơ nghệ sĩ của bạn.</p>
       </div>
 
-      <!-- KPI Summary -->
-      <div class="stats-grid">
-        <div class="artist-stat-card">
-          <div class="artist-stat-label">Tổng bài hát</div>
-          <div class="artist-stat-value">{{ formatNumber(summary.totalSongs) }}</div>
-        </div>
-        <div class="artist-stat-card">
-          <div class="artist-stat-label">Tổng lượt nghe</div>
-          <div class="artist-stat-value">{{ formatNumber(summary.totalPlays) }}</div>
-        </div>
-        <div class="artist-stat-card">
-          <div class="artist-stat-label text-success">Đủ metadata</div>
-          <div class="artist-stat-value">{{ formatNumber(summary.completeMetadata) }}</div>
-        </div>
-        <div class="artist-stat-card">
-          <div class="artist-stat-label text-warning">Thiếu dữ liệu</div>
-          <div class="artist-stat-value">{{ formatNumber(summary.missingAudio + summary.missingCover) }}</div>
-        </div>
-      </div>
-
       <!-- Toolbar -->
       <div class="toolbar" style="align-items: center;">
         <div class="search-box">
@@ -62,21 +42,16 @@
           </div>
         </div>
 
-        <div class="status-filters flex items-center gap-2 overflow-x-auto pb-1 -mb-1" style="flex: 1;">
-          <button @click="filterByStatus('')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === '' ? 'bg-white text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-white']">
-            Tất cả ({{ summary.totalSongs || 0 }})
-          </button>
-          <button @click="filterByStatus('approved')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'approved' ? 'bg-[#1ed760] text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-[#1ed760] hover:text-[#1ed760]']">
-            Đã duyệt ({{ summary.approvedCount || 0 }})
-          </button>
-          <button @click="filterByStatus('pending')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'pending' ? 'bg-yellow-500 text-black border-transparent' : 'bg-transparent text-white border-white/20 hover:border-yellow-500 hover:text-yellow-500']">
-            Chờ duyệt ({{ summary.pendingCount || 0 }})
-          </button>
-          <button @click="filterByStatus('rejected')" :class="['whitespace-nowrap px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors border', statusFilter === 'rejected' ? 'bg-red-500 text-white border-transparent' : 'bg-transparent text-white border-white/20 hover:border-red-500 hover:text-red-500']">
-            Từ chối ({{ summary.rejectedCount || 0 }})
-          </button>
+        <div class="status-filters">
+          <select v-model="statusFilter" @change="filterByStatus(statusFilter)" class="select-dark" style="width: auto; min-width: 160px;">
+            <option value="">Tất cả ({{ summary.totalSongs || 0 }})</option>
+            <option value="approved">Đã duyệt ({{ summary.approvedCount || 0 }})</option>
+            <option value="pending">Chờ duyệt ({{ summary.pendingCount || 0 }})</option>
+            <option value="rejected">Từ chối ({{ summary.rejectedCount || 0 }})</option>
+          </select>
         </div>
-        <div class="filters">
+
+        <div class="sort-filters">
           <select v-model="sortOption" @change="handleSearch" class="select-dark">
             <option value="newest">Mới nhất</option>
             <option value="most_played">Nghe nhiều nhất</option>
@@ -84,6 +59,9 @@
             <option value="title_asc">Tên (A-Z)</option>
             <option value="title_desc">Tên (Z-A)</option>
           </select>
+        </div>
+
+        <div class="filters">
           <button @click="openUploadModal" class="btn-primary">
             Upload bài hát mới
           </button>
