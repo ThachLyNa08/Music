@@ -1,14 +1,14 @@
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="close">
-      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden max-h-[calc(100vh-32px)] max-h-[calc(100dvh-32px)] slide-up">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-white">
+    <div v-if="isOpen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="close">
+      <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col bg-white rounded-3xl shadow-2xl overflow-hidden slide-up">
+        <header class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
           <h3 class="text-lg font-semibold text-slate-900">{{ title }}</h3>
           <button @click="close" class="text-slate-400 hover:text-slate-600 transition flex items-center justify-center rounded-full">
             <MfIcon name="close" size="20" />
           </button>
-        </div>
-        <div class="px-6 py-5 space-y-4 flex-1 overflow-y-auto bg-white">
+        </header>
+        <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4 bg-white">
         <div class="bg-slate-50 rounded-xl p-4 space-y-1">
           <p class="text-sm font-medium text-slate-900">{{ user?.name }}</p>
           <p class="text-xs text-slate-500">{{ user?.email }}</p>
@@ -50,16 +50,16 @@
           <label class="block text-sm font-medium text-slate-700 mb-1">Ghi chú admin</label>
           <textarea v-model="form.note" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none resize-none" placeholder="Không bắt buộc..."></textarea>
         </div>
-      </div>
-      <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 flex-shrink-0">
+        </div>
+        <footer class="shrink-0 px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
         <button @click="close" type="button" class="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-white transition" :disabled="loading">Hủy</button>
         <button @click="submit" type="button" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-medium hover:bg-slate-800 transition flex items-center gap-2" :disabled="loading">
           <span v-if="loading" class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
           Cập nhật Premium
         </button>
+        </footer>
       </div>
     </div>
-  </div>
   </Teleport>
 </template>
 

@@ -238,10 +238,9 @@
     </template>
 
     <Teleport to="body">
-      <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeModal"></div>
-        <div class="relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden">
-          <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/70 dark:bg-bg-card/60">
+      <div v-if="modalOpen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeModal" role="dialog" aria-modal="true">
+        <div class="mx-auto flex w-full max-w-5xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
+          <div class="shrink-0 flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/70 dark:bg-bg-card/60">
             <h2 class="text-xl font-extrabold text-gray-900 dark:text-white">{{ editingAlbum ? 'Chỉnh sửa album' : 'Thêm album' }}</h2>
             <button @click="closeModal" class="admin-icon-button text-gray-400 hover:text-gray-700 hover:bg-gray-200">
               <MfIcon name="close" size="24" />
@@ -459,7 +458,6 @@ const AlbumSongsTable = defineComponent({
               h('th', { class: 'py-2 px-3 min-w-[260px]' }, 'Bài hát'),
               h('th', { class: 'py-2 px-3' }, 'Nghệ sĩ'),
               h('th', { class: 'py-2 px-3 text-center' }, 'Phát hành'),
-              h('th', { class: 'py-2 px-3 text-right' }, 'Thời lượng'),
             ]),
           ]),
           h('tbody', { class: 'divide-y divide-gray-100 dark:divide-bg-border' }, props.songs.map((song, index) => (
@@ -473,7 +471,6 @@ const AlbumSongsTable = defineComponent({
               ]),
               h('td', { class: 'py-2 px-3 text-sm text-gray-600 dark:text-gray-300' }, song.artist_name || '-'),
               h('td', { class: 'py-2 px-3 text-center text-xs font-bold text-gray-500' }, song.effective_release_status || song.release_status || '-'),
-              h('td', { class: 'py-2 px-3 text-right text-sm text-gray-500' }, formatDuration(song.duration_sec)),
             ])
           ))),
         ]),

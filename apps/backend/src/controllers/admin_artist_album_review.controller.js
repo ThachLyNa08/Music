@@ -146,6 +146,7 @@ exports.approveArtistAlbum = async (req, res) => {
       SET
         review_status = 'approved',
         release_status = CASE WHEN release_date > NOW() THEN 'scheduled' ELSE 'published' END,
+        release_at = CASE WHEN release_date IS NOT NULL THEN release_date ELSE NULL END,
         reviewed_by_admin_id = ?,
         reviewed_at = NOW(),
         published_at = COALESCE(published_at, NOW()),

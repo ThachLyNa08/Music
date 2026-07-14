@@ -244,8 +244,8 @@
 
     <!-- Detail Drawer/Modal -->
     <Teleport to="body">
-      <div v-if="showDetail" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 lg:p-8 overflow-y-auto" @click.self="showDetail = false">
-        <div class="bg-slate-50 w-full max-w-[1200px] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-slide-up">
+      <div v-if="showDetail" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showDetail = false">
+        <div class="mx-auto flex w-full max-w-6xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden bg-slate-50 rounded-2xl shadow-2xl animate-slide-up">
         
         <!-- Modal Header -->
         <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-2xl shrink-0">

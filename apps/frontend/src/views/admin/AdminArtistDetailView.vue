@@ -286,18 +286,16 @@
 
     <!-- Edit Modal -->
     <Teleport to="body">
-      <div v-if="isEditModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeEditModal"></div>
-        
-        <div class="relative w-full max-w-2xl flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all">
-          <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
+      <div v-if="isEditModalOpen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeEditModal" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden">
+          <header class="shrink-0 flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
             <h2 class="text-xl font-extrabold text-gray-900 dark:text-white" id="modal-title">
               Chỉnh sửa thông tin Nghệ sĩ
             </h2>
             <button type="button" class="rounded-full p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none transition-colors" @click="closeEditModal">
               <MfIcon name="close" size="24" />
             </button>
-          </div>
+          </header>
           
           <div class="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
             <form @submit.prevent="submitForm" class="space-y-5">
@@ -336,13 +334,13 @@
             </form>
           </div>
           
-          <div class="flex flex-shrink-0 justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
+          <footer class="shrink-0 flex justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
             <button type="button" @click="closeEditModal" class="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-bg-card text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none shadow-sm">Hủy</button>
             <button type="button" @click="$refs.submitBtn.click()" :disabled="saving" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2">
               <div v-if="saving" class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
               {{ saving ? 'Đang lưu...' : 'Lưu thông tin' }}
             </button>
-          </div>
+          </footer>
         </div>
       </div>
     </Teleport>

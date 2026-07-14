@@ -61,7 +61,7 @@
           
           <!-- Follow/Unfollow Button -->
           <button 
-            class="follow-btn font-bold text-sm tracking-wide transition-all rounded-full px-6 py-2"
+            class="follow-btn font-bold text-sm tracking-wide transition-all rounded-full py-2 flex items-center justify-center w-[160px]"
             :class="{
               'border border-[#b3b3b3] text-white hover:border-white hover:scale-105': isFollowing,
               'bg-[#1ed760] text-black hover:bg-[#1fdf64] hover:scale-105': !isFollowing && !followLoading

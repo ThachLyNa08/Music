@@ -1,9 +1,7 @@
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" @click="$emit('close')"></div>
-      
-      <div class="relative w-full max-w-md bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-all text-center p-6">
+    <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="$emit('close')" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="mx-auto flex w-full max-w-md max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-y-auto text-center p-6">
         <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
           <svg class="w-8 h-8 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
         </div>

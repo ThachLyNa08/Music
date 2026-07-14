@@ -204,10 +204,8 @@
 
     <!-- Centered Modal (Edit/Add/View) -->
     <Teleport to="body">
-      <div v-if="isSlideOverOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
-
-        <div class="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl overflow-hidden transform transition-all">
+      <div v-if="isSlideOverOpen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true" @click.self="closeModal">
+        <div class="mx-auto flex w-full max-w-5xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
             <h2 class="text-xl font-extrabold text-gray-900 dark:text-white" id="modal-title">
@@ -326,14 +324,13 @@
     </Teleport>
 
     <Teleport to="body">
-      <div v-if="accountCreateModal.open" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="closeAccountCreateModal"></div>
-        <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-bg-surface shadow-2xl border border-gray-100 dark:border-bg-border overflow-hidden">
-          <div class="px-6 py-5 border-b border-gray-100 dark:border-bg-border">
+      <div v-if="accountCreateModal.open" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true" @click.self="closeAccountCreateModal">
+        <div class="mx-auto flex w-full max-w-md max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
+          <div class="shrink-0 px-6 py-5 border-b border-gray-100 dark:border-bg-border bg-white dark:bg-bg-card">
             <h2 class="text-lg font-extrabold text-gray-900 dark:text-white">Tạo tài khoản nghệ sĩ</h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ accountCreateModal.artist?.name }}</p>
           </div>
-          <div class="px-6 py-5 space-y-4">
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
             <p class="text-sm text-gray-600 dark:text-gray-300">Mật khẩu ban đầu là mật khẩu tạm thời chung được cấu hình trong hệ thống. Nghệ sĩ phải đổi mật khẩu trong lần đăng nhập đầu tiên.</p>
             <label class="block">
               <span class="block mb-1 text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">Email đăng nhập</span>
@@ -341,7 +338,7 @@
             </label>
             <p v-if="accountCreateModal.error" class="text-sm font-semibold text-rose-600">{{ accountCreateModal.error }}</p>
           </div>
-          <div class="flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
+          <div class="shrink-0 flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
             <button type="button" class="px-4 py-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold" @click="closeAccountCreateModal">Hủy</button>
             <button type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-60" :disabled="accountCreateModal.loading" @click="submitAccountCreate">
               {{ accountCreateModal.loading ? 'Đang tạo...' : 'Tạo tài khoản' }}

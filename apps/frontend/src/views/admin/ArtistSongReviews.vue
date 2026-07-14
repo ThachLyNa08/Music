@@ -241,20 +241,21 @@
     </div>
 
     <!-- Detail Modal -->
-    <div v-if="showDetailModal && selectedReview" class="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" @click.self="closeDetailModal">
-      <div class="bg-white dark:bg-bg-card rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden animate-fade-in-up">
+    <Teleport to="body">
+      <div v-if="showDetailModal && selectedReview" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeDetailModal">
+        <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden bg-white dark:bg-bg-surface rounded-2xl shadow-2xl animate-fade-in-up">
 
-        <div class="flex items-center justify-between p-5 border-b border-gray-100 dark:border-bg-border shrink-0">
-          <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <header class="shrink-0 flex items-center justify-between p-5 border-b border-gray-100 dark:border-bg-border">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <MfIcon :name="currentTab === 'songs' ? 'library_music' : 'album'" size="20" class="text-indigo-500" />
             Chi tiết {{ currentTab === 'songs' ? 'bài hát' : 'album' }}
           </h2>
           <button @click="closeDetailModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-bg-surface">
             <MfIcon name="close" size="20" />
           </button>
-        </div>
+          </header>
 
-        <div class="p-6 overflow-y-auto flex-1">
+          <div class="flex-1 overflow-y-auto p-6">
           <div class="flex flex-col md:flex-row gap-6">
             <!-- Left: Cover & Audio -->
             <div class="w-full md:w-[180px] shrink-0 flex flex-col gap-4">
@@ -364,8 +365,8 @@
           </div>
         </div>
 
-        <div class="p-5 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-surface flex justify-between shrink-0" v-if="!isRejecting">
-          <button @click="closeDetailModal" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-sm transition-colors" :disabled="submitting">Đóng</button>
+          <footer class="shrink-0 p-5 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-surface flex justify-between" v-if="!isRejecting">
+            <button @click="closeDetailModal" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-sm transition-colors" :disabled="submitting">Đóng</button>
 
           <div class="flex gap-2" v-if="selectedReview.reviewStatus === 'pending_review'">
             <button @click="isRejecting = true" class="px-4 py-2 text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors shadow-sm" :disabled="submitting">Từ chối</button>
@@ -373,9 +374,10 @@
               <MfIcon name="check" size="16" /> Duyệt & Public
             </button>
           </div>
+          </footer>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Confirm Dialog -->
     <ConfirmDialog

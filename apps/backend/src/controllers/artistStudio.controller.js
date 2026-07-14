@@ -1121,6 +1121,11 @@ exports.createAlbum = async (req, res, next) => {
       placeholders.push('?');
       values.push(releaseDate || null);
     }
+    if (albumColumns.has('release_at')) {
+      fields.push('release_at');
+      placeholders.push('?');
+      values.push(releaseDate || null);
+    }
     if (albumColumns.has('submission_note')) {
       fields.push('submission_note');
       placeholders.push('?');

@@ -215,115 +215,122 @@
     </div>
 
     <!-- Edit User Modal -->
-    <div v-if="showEditUserModal" class="modal-overlay">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2>Chỉnh sửa hồ sơ</h2>
-          <button class="close-btn" @click="showEditUserModal = false">&times;</button>
-        </div>
-        <form @submit.prevent="submitEditUser" class="modal-body">
-          <div class="form-group">
-            <label>Tên hiển thị</label>
-            <input type="text" v-model="editUser.display_name" class="form-input" required />
-          </div>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" v-model="editUser.email" class="form-input" required />
-          </div>
-          <div class="form-group">
-            <label>Vai trò</label>
-            <select v-model="editUser.role" class="form-input" required style="background-color: white;">
-              <option value="user">Thành viên</option>
-              <option value="admin">Quản trị viên (Admin)</option>
-            </select>
-          </div>
-          <div v-if="editError" class="error-text" style="color: #d63031; font-size: 13px; font-weight: 600;">
-            {{ editError }}
-          </div>
-          <div class="modal-footer">
+    <Teleport to="body">
+      <div v-if="showEditUserModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showEditUserModal = false">
+        <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
+          <header class="shrink-0 flex justify-between items-center px-6 py-5 border-b border-slate-100 dark:border-bg-border bg-white dark:bg-bg-card">
+            <h2 class="text-xl font-extrabold text-gray-900 dark:text-white">Chỉnh sửa hồ sơ</h2>
+            <button class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="showEditUserModal = false"><MfIcon name="close" size="24" /></button>
+          </header>
+          <form @submit.prevent="submitEditUser" class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div class="form-group">
+              <label>Tên hiển thị</label>
+              <input type="text" v-model="editUser.display_name" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" v-model="editUser.email" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Vai trò</label>
+              <select v-model="editUser.role" class="form-input" required style="background-color: white;">
+                <option value="user">Thành viên</option>
+                <option value="admin">Quản trị viên (Admin)</option>
+              </select>
+            </div>
+            <div v-if="editError" class="error-text" style="color: #d63031; font-size: 13px; font-weight: 600;">
+              {{ editError }}
+            </div>
+          </form>
+          <footer class="shrink-0 flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
             <button type="button" class="btn-secondary" @click="showEditUserModal = false">Hủy</button>
-            <button type="submit" class="btn-primary" :disabled="savingUser">
+            <button type="button" @click="$refs.editSubmitBtn?.click()" class="btn-primary" :disabled="savingUser">
               {{ savingUser ? 'Đang lưu...' : 'Lưu thay đổi' }}
             </button>
-          </div>
-        </form>
+            <button type="submit" ref="editSubmitBtn" class="hidden" @click="submitEditUser"></button>
+          </footer>
+        </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Premium Manager Modal -->
-    <div v-if="showPremiumModal" class="modal-overlay">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2>Gia hạn Gói Premium</h2>
-          <button class="close-btn" @click="showPremiumModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="user-preview">
-            <span class="user-preview-title">Thành viên:</span>
-            <span class="user-preview-name">{{ selectedUser.display_name }} ({{ selectedUser.email }})</span>
-          </div>
-          
-          <div class="form-group">
-            <label>Chọn thời gian gia hạn</label>
-            <div class="premium-options">
-              <button class="btn-premium-opt" @click="setPremiumExpiry(30)">+30 ngày (1 tháng)</button>
-              <button class="btn-premium-opt" @click="setPremiumExpiry(90)">+90 ngày (3 tháng)</button>
-              <button class="btn-premium-opt" @click="setPremiumExpiry(365)">+365 ngày (1 năm)</button>
-              <button class="btn-premium-opt cancel" @click="setPremiumExpiry(0)">Hủy gói Premium</button>
+    <Teleport to="body">
+      <div v-if="showPremiumModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showPremiumModal = false">
+        <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
+          <header class="shrink-0 flex justify-between items-center px-6 py-5 border-b border-slate-100 dark:border-bg-border bg-white dark:bg-bg-card">
+            <h2 class="text-xl font-extrabold text-gray-900 dark:text-white">Gia hạn Gói Premium</h2>
+            <button class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="showPremiumModal = false"><MfIcon name="close" size="24" /></button>
+          </header>
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div class="user-preview">
+              <span class="user-preview-title">Thành viên:</span>
+              <span class="user-preview-name">{{ selectedUser.display_name }} ({{ selectedUser.email }})</span>
+            </div>
+            
+            <div class="form-group">
+              <label>Chọn thời gian gia hạn</label>
+              <div class="premium-options">
+                <button class="btn-premium-opt" @click="setPremiumExpiry(30)">+30 ngày (1 tháng)</button>
+                <button class="btn-premium-opt" @click="setPremiumExpiry(90)">+90 ngày (3 tháng)</button>
+                <button class="btn-premium-opt" @click="setPremiumExpiry(365)">+365 ngày (1 năm)</button>
+                <button class="btn-premium-opt cancel" @click="setPremiumExpiry(0)">Hủy gói Premium</button>
+              </div>
+            </div>
+
+            <div class="form-group custom-date">
+              <label>Hoặc chọn ngày hết hạn cụ thể</label>
+              <input type="date" v-model="customExpiryDate" class="form-input" />
             </div>
           </div>
-
-          <div class="form-group custom-date">
-            <label>Hoặc chọn ngày hết hạn cụ thể</label>
-            <input type="date" v-model="customExpiryDate" class="form-input" />
-          </div>
-
-          <div class="modal-footer">
+          <footer class="shrink-0 flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
             <button class="btn-secondary" @click="showPremiumModal = false">Đóng</button>
             <button class="btn-primary" @click="saveCustomPremiumExpiry" :disabled="savingPremium">
               {{ savingPremium ? 'Đang lưu...' : 'Xác nhận thay đổi' }}
             </button>
-          </div>
+          </footer>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Add User Modal -->
-    <div v-if="showAddUserModal" class="modal-overlay">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2>Thêm Thành viên mới</h2>
-          <button class="close-btn" @click="showAddUserModal = false">&times;</button>
-        </div>
-        <form @submit.prevent="submitAddUser" class="modal-body">
-          <div class="form-group">
-            <label>Tên hiển thị</label>
-            <input type="text" v-model="newUser.display_name" class="form-input" required />
-          </div>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" v-model="newUser.email" class="form-input" required />
-          </div>
-          <div class="form-group">
-            <label>Mật khẩu</label>
-            <input type="password" v-model="newUser.password" class="form-input" required />
-          </div>
-          <div class="form-group">
-            <label>Vai trò</label>
-            <select v-model="newUser.role" class="form-input" required style="background-color: white;">
-              <option value="user">Người dùng</option>
-              <option value="admin">Quản trị viên (Admin)</option>
-            </select>
-          </div>
-          <div class="modal-footer">
+    <Teleport to="body">
+      <div v-if="showAddUserModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showAddUserModal = false">
+        <div class="mx-auto flex w-full max-w-2xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white dark:bg-bg-surface shadow-2xl">
+          <header class="shrink-0 flex justify-between items-center px-6 py-5 border-b border-slate-100 dark:border-bg-border bg-white dark:bg-bg-card">
+            <h2 class="text-xl font-extrabold text-gray-900 dark:text-white">Thêm Thành viên mới</h2>
+            <button class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="showAddUserModal = false"><MfIcon name="close" size="24" /></button>
+          </header>
+          <form @submit.prevent="submitAddUser" class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div class="form-group">
+              <label>Tên hiển thị</label>
+              <input type="text" v-model="newUser.display_name" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" v-model="newUser.email" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Mật khẩu</label>
+              <input type="password" v-model="newUser.password" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Vai trò</label>
+              <select v-model="newUser.role" class="form-input" required style="background-color: white;">
+                <option value="user">Người dùng</option>
+                <option value="admin">Quản trị viên (Admin)</option>
+              </select>
+            </div>
+          </form>
+          <footer class="shrink-0 flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-bg-card border-t border-gray-100 dark:border-bg-border">
             <button type="button" class="btn-secondary" @click="showAddUserModal = false">Hủy</button>
-            <button type="submit" class="btn-primary" :disabled="savingUser">
+            <button type="button" @click="$refs.addSubmitBtn?.click()" class="btn-primary" :disabled="savingUser">
               {{ savingUser ? 'Đang thêm...' : 'Thêm thành viên' }}
             </button>
-          </div>
-        </form>
+            <button type="submit" ref="addSubmitBtn" class="hidden" @click="submitAddUser"></button>
+          </footer>
+        </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Confirm Dialog -->
     <ConfirmDialog 

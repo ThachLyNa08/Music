@@ -257,10 +257,10 @@ exports.deleteGenre = async (req, res, next) => {
       });
     }
 
-    // Xoá mềm (chuyển sang hidden) thay vì xoá cứng để an toàn
-    await pool.query('UPDATE genres SET status = "hidden" WHERE id = ?', [id]);
+    // Xoá cứng vì đã kiểm tra không có liên kết (bài hát, sở thích người dùng)
+    await pool.query('DELETE FROM genres WHERE id = ?', [id]);
 
-    res.json({ success: true, message: 'Đã ẩn thể loại' });
+    res.json({ success: true, message: 'Đã xóa thể loại hoàn toàn' });
   } catch (err) {
     next(err);
   }

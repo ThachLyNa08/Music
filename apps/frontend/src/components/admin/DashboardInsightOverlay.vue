@@ -1,6 +1,6 @@
 <template>
   <teleport to="body">
-    <div v-if="show" class="fixed inset-0 z-[99999] report-overlay flex items-center justify-center p-4 md:p-6 lg:p-8 bg-slate-900/50" style="backdrop-filter: blur(8px);" role="dialog" aria-modal="true">
+    <div v-if="show" class="fixed inset-0 z-[9999] report-overlay flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="$emit('close')" role="dialog" aria-modal="true">
       
       <template v-if="isLoading">
         <div class="relative z-10 flex flex-col items-center justify-center p-8 text-center w-full">
@@ -14,7 +14,7 @@
         </div>
       </template>
 
-      <div v-else class="relative z-10 w-full max-w-[1400px] h-full max-h-[calc(100vh-48px)] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-slate-200/60" style="background-color: #f5f5f7;">
+      <div v-else class="mx-auto flex w-full max-w-[1400px] max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col rounded-2xl shadow-2xl overflow-hidden border border-slate-200/60" style="background-color: #f5f5f7;">
         
         <!-- Header cố định -->
         <div class="db-header shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between" style="margin-bottom: 0;">

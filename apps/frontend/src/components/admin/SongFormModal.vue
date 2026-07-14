@@ -1,21 +1,17 @@
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <!-- Overlay -->
-      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" @click="handleClose"></div>
-
+    <div v-if="isOpen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="handleClose" aria-labelledby="modal-title" role="dialog" aria-modal="true">
       <!-- Modal Panel -->
-      <div class="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-bg-card rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-all animate-fade-in-up">
-        
+      <div class="mx-auto flex w-full max-w-4xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col bg-white dark:bg-bg-card rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-bg-border bg-gray-50 dark:bg-bg-surface shrink-0">
+        <header class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-bg-border bg-gray-50 dark:bg-bg-surface">
           <h2 class="text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white" id="modal-title">
             {{ isEditing ? 'Chỉnh sửa Bài hát' : 'Thêm Bài hát Mới' }}
           </h2>
           <button type="button" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors focus:outline-none" @click="handleClose">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
-        </div>
+        </header>
 
         <!-- Body -->
         <div class="flex-1 overflow-y-auto p-6 sm:p-8">

@@ -1,19 +1,19 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[99999] flex items-center justify-center p-4 transition-opacity" :class="themeClasses.overlay" @click="handleOverlayClick">
-      <div class="w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl transition-all transform" :class="themeClasses.panel" @click.stop>
+    <div v-if="open" class="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 transition-opacity" :class="themeClasses.overlay" @click="handleOverlayClick">
+      <div class="mx-auto flex w-full max-w-md max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col rounded-2xl overflow-hidden shadow-2xl transition-all transform" :class="themeClasses.panel" @click.stop>
         <div class="px-6 pt-6 pb-4 flex justify-between items-center">
           <h3 class="text-lg font-bold m-0" :class="themeClasses.title">{{ title }}</h3>
           <button v-if="!loading" class="w-8 h-8 flex items-center justify-center rounded-full text-2xl leading-none transition-colors border-none bg-transparent cursor-pointer" :class="themeClasses.close" @click="close">&times;</button>
         </div>
         
-        <div class="px-6 pb-6">
+        <div class="flex-1 overflow-y-auto px-6 pb-6">
           <slot>
             <p class="m-0 text-[15px] leading-relaxed" :class="themeClasses.message">{{ message }}</p>
           </slot>
         </div>
         
-        <div class="px-6 py-4 flex justify-end gap-3" :class="themeClasses.footer">
+        <div class="shrink-0 px-6 py-4 flex justify-end gap-3" :class="themeClasses.footer">
           <button class="px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer border" :class="themeClasses.cancel" @click="close" :disabled="loading">
             {{ cancelText }}
           </button>

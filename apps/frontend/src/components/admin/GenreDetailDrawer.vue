@@ -1,15 +1,11 @@
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6 flex items-center justify-center animate-fade-in">
-      
-      <!-- Backdrop click area -->
-      <div class="absolute inset-0 cursor-pointer" @click="$emit('close')"></div>
-
+    <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6 animate-fade-in" @click.self="$emit('close')">
       <!-- Card -->
-      <div class="relative bg-white dark:bg-bg-surface shadow-2xl rounded-[24px] flex flex-col border border-gray-100 dark:border-bg-border overflow-hidden w-full max-w-[900px] max-h-full md:max-h-[86vh] animate-modal-pop">
+      <div class="mx-auto flex w-full max-w-4xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col bg-white dark:bg-bg-surface rounded-2xl shadow-2xl border border-gray-100 dark:border-bg-border overflow-hidden animate-modal-pop">
         
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-gray-100 dark:border-bg-border flex items-center justify-between shrink-0 bg-gray-50/50 dark:bg-bg-card/50">
+        <header class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/50">
           <h2 class="text-lg font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
             <MfIcon name="info" size="20" class="text-indigo-500" />
             Chi tiết thể loại
@@ -31,7 +27,7 @@
               <MfIcon name="close" size="20" />
             </button>
           </div>
-        </div>
+        </header>
 
         <!-- Loading State -->
         <div v-if="loading" class="flex-1 flex flex-col items-center justify-center min-h-[300px]">

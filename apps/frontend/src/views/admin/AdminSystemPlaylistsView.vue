@@ -467,46 +467,54 @@
     </div> <!-- End px-6 wrapper -->
 
     <!-- Regenerate Result Modal -->
-    <div class="modal-backdrop" v-if="regenerateResult">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Kết quả Tạo Lại</h3>
-        </div>
-        <div class="modal-body">
-          <div class="result-stats flex gap-4 mb-4">
-            <div class="stat-box success">
-              <span class="block text-2xl font-bold">{{ regenerateResult.success }}</span>
-              <span class="text-xs uppercase text-slate-500">Thành công</span>
+    <Teleport to="body">
+      <div v-if="regenerateResult" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeResultModal">
+        <div class="mx-auto flex w-full max-w-xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header class="shrink-0 flex items-center px-6 py-5 border-b border-slate-100 bg-white">
+            <h3 class="text-xl font-bold">Kết quả Tạo Lại</h3>
+          </header>
+          <div class="flex-1 overflow-y-auto px-6 py-5">
+            <div class="flex gap-4 mb-4">
+              <div class="flex-1 bg-green-50 text-green-700 p-4 rounded-xl text-center">
+                <span class="block text-2xl font-bold">{{ regenerateResult.success }}</span>
+                <span class="text-xs uppercase opacity-80">Thành công</span>
+              </div>
+              <div class="flex-1 bg-red-50 text-red-700 p-4 rounded-xl text-center">
+                <span class="block text-2xl font-bold">{{ regenerateResult.failed }}</span>
+                <span class="text-xs uppercase opacity-80">Thất bại</span>
+              </div>
+              <div class="flex-1 bg-blue-50 text-blue-700 p-4 rounded-xl text-center">
+                <span class="block text-2xl font-bold">{{ regenerateResult.total }}</span>
+                <span class="text-xs uppercase opacity-80">Tổng cộng</span>
+              </div>
             </div>
-            <div class="stat-box failed">
-              <span class="block text-2xl font-bold">{{ regenerateResult.failed }}</span>
-              <span class="text-xs uppercase text-slate-500">Thất bại</span>
-            </div>
-            <div class="stat-box total">
-              <span class="block text-2xl font-bold">{{ regenerateResult.total }}</span>
-              <span class="text-xs uppercase text-slate-500">Tổng cộng</span>
+            <div v-if="regenerateResult.errors && regenerateResult.errors.length > 0" class="mt-4 bg-slate-50 p-4 rounded-xl">
+              <h4 class="font-bold text-slate-800 mb-2">Chi tiết lỗi:</h4>
+              <ul class="text-sm text-red-600 space-y-1 pl-4 list-disc">
+                <li v-for="(err, idx) in regenerateResult.errors" :key="idx">{{ err }}</li>
+              </ul>
             </div>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-action primary" @click="closeResultModal">Đóng</button>
+          <footer class="shrink-0 flex justify-end px-6 py-4 border-t border-slate-100 bg-white">
+            <button class="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold" @click="closeResultModal">Đóng</button>
+          </footer>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Modal Chi Tiết Playlist -->
     <Teleport to="body">
-      <div v-if="drawerItem" class="detail-modal-overlay" @click="closeDetailModal">
-        <div class="detail-modal-container" @click.stop>
-          <div class="detail-modal-header">
-            <h3>Chi tiết Playlist</h3>
-            <button class="btn-icon" @click="closeDetailModal" :disabled="isRegeneratingSingle">
+      <div v-if="drawerItem" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeDetailModal">
+        <div class="mx-auto flex w-full max-w-lg max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header class="shrink-0 flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white">
+            <h3 class="text-xl font-bold">Chi tiết Playlist</h3>
+            <button class="text-gray-400 hover:text-gray-700" @click="closeDetailModal" :disabled="isRegeneratingSingle">
               <MfIcon name="close" size="24" />
             </button>
-          </div>
+          </header>
           
-          <div class="detail-modal-body">
-            <div class="detail-modal-cover mb-6">
+          <div class="flex-1 overflow-y-auto px-6 py-5">
+            <div class="w-full aspect-square rounded-xl overflow-hidden mb-6 shadow-md border border-slate-100 bg-slate-50">
               <AdminCoverThumb 
                 :src="getPlaylistCover(drawerItem)" 
                 size="custom"
@@ -518,21 +526,21 @@
             <h2 class="text-xl font-bold mb-1">{{ drawerItem.name }}</h2>
             <p class="text-sm text-slate-500 mb-4">{{ drawerItem.description || 'Không có mô tả' }}</p>
             
-            <div class="flex flex-col gap-2 text-sm text-slate-700 mb-6">
-              <div><span class="font-semibold w-28 inline-block">System Key:</span> <span class="system-key-badge">{{ drawerItem.system_key || 'N/A' }}</span></div>
+            <div class="flex flex-col gap-2 text-sm text-slate-700 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div><span class="font-semibold w-28 inline-block">System Key:</span> <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-mono border border-indigo-100">{{ drawerItem.system_key || 'N/A' }}</span></div>
               <div><span class="font-semibold w-28 inline-block">Trạng thái:</span> <span class="status-badge" :class="drawerItem.status">{{ formatStatus(drawerItem.status) }}</span></div>
-              <div><span class="font-semibold w-28 inline-block">Số bài hát:</span> {{ drawerItem.song_count }}</div>
+              <div><span class="font-semibold w-28 inline-block">Số bài hát:</span> <span class="font-mono bg-white px-2 py-0.5 rounded border">{{ drawerItem.song_count }}</span></div>
               <div><span class="font-semibold w-28 inline-block">Cập nhật lúc:</span> {{ drawerItem.updated_at ? new Date(drawerItem.updated_at).toLocaleString('vi-VN') : 'N/A' }}</div>
               <div v-if="drawerItem.user_id"><span class="font-semibold w-28 inline-block">Owner:</span> {{ drawerItem.owner_name || 'User #' + drawerItem.user_id }}</div>
             </div>
 
             <h4 class="font-bold text-slate-800 mb-3 border-b pb-2">Danh sách bài hát</h4>
-            <div v-if="drawerItem.user_id" class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center text-center gap-3">
+            <div v-if="drawerItem.user_id" class="bg-violet-50 border border-violet-100 rounded-xl p-5 flex flex-col items-center text-center gap-3">
               <div>
-                <div class="text-slate-800 font-semibold">Danh sách bài hát được quản lý theo từng người dùng</div>
-                <div class="text-slate-500 text-sm mt-1">Để xem đầy đủ bài hát trong playlist này, vui lòng mở trang chi tiết người dùng.</div>
+                <div class="text-violet-900 font-semibold">Quản lý nội bộ theo người dùng</div>
+                <div class="text-violet-600 text-sm mt-1">Để xem đầy đủ bài hát, vui lòng mở trang chi tiết người dùng.</div>
               </div>
-              <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors" @click="goToUserDetail(drawerItem.user_id)">
+              <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors mt-2 shadow-sm" @click="goToUserDetail(drawerItem.user_id)">
                 <MfIcon name="open_in_new" size="16" />
                 Xem tại Admin User Detail
               </button>
@@ -542,46 +550,46 @@
             </div>
           </div>
           
-          <div class="detail-modal-footer">
-            <button class="btn-action primary" @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
-              <MfIcon v-if="isRegeneratingSingle" name="sync" class="spinning" size="18" />
+          <footer class="shrink-0 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
+              <MfIcon v-if="isRegeneratingSingle" name="sync" class="animate-spin" size="18" />
               <MfIcon v-else name="sync" size="18" /> 
               {{ isRegeneratingSingle ? 'Đang xử lý...' : 'Tạo lại Playlist này' }}
             </button>
-          </div>
+          </footer>
         </div>
       </div>
     </Teleport>
 
     <!-- Modal Chi tiết Chất lượng -->
     <Teleport to="body">
-      <div v-if="qualityDetailItem" class="detail-modal-overlay flex items-center justify-center p-4 z-[9999]" @click="closeQualityDetail">
-        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative" @click.stop>
-          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+      <div v-if="qualityDetailItem" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeQualityDetail">
+        <div class="mx-auto flex w-full max-w-3xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header class="shrink-0 p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
               <MfIcon name="analytics" class="text-indigo-600" />
               Chi tiết Đánh giá: <span class="text-indigo-600 font-mono">{{ qualityDetailItem.system_key }}</span>
             </h3>
-            <button class="btn-icon" @click="closeQualityDetail">
+            <button class="text-gray-400 hover:text-gray-700" @click="closeQualityDetail">
               <MfIcon name="close" size="24" />
             </button>
-          </div>
+          </header>
           
-          <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
-            <div class="flex items-center gap-4 mb-6">
-              <div class="px-4 py-2 rounded-lg font-bold text-sm"
+          <div class="flex-1 overflow-y-auto px-6 py-5">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+              <div class="px-4 py-2 rounded-lg font-bold text-sm inline-block"
                    :class="{'bg-green-100 text-green-800': qualityDetailItem.status === 'GOOD', 'bg-amber-100 text-amber-800': qualityDetailItem.status === 'WARNING', 'bg-rose-100 text-rose-800': qualityDetailItem.status === 'BAD'}">
                 Trạng thái: {{ qualityDetailItem.status === 'GOOD' ? 'Đạt' : qualityDetailItem.status === 'WARNING' ? 'Cảnh báo' : qualityDetailItem.status === 'BAD' ? 'Lỗi' : qualityDetailItem.status }}
               </div>
-              <div class="text-sm text-slate-500" v-if="qualityDetailItem.warnings">
-                <strong class="text-amber-600">Cảnh báo:</strong> {{ qualityDetailItem.warnings }}
+              <div class="text-sm text-slate-500 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100" v-if="qualityDetailItem.warnings">
+                <strong class="text-amber-700">Cảnh báo:</strong> {{ qualityDetailItem.warnings }}
               </div>
             </div>
 
             <!-- Ngưỡng áp dụng -->
-            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-sm">
-              <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">Ngưỡng áp dụng</h4>
-              <ul class="list-disc pl-5 text-slate-600 space-y-1">
+            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-5 mb-6 text-sm">
+              <h4 class="font-bold text-indigo-900 mb-2 border-b border-indigo-100 pb-2">Ngưỡng áp dụng</h4>
+              <ul class="list-disc pl-5 text-indigo-800 space-y-1">
                 <li>Nghệ sĩ tối đa: <strong>30%</strong> (ổn)</li>
                 <li>Thể loại tối đa: <strong>65% hoặc 75%</strong> tùy loại playlist</li>
                 <li>Overlap cảnh báo: <strong>70%</strong></li>
