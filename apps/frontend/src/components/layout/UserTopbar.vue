@@ -31,6 +31,11 @@
         </div>
       </div>
 
+      <!-- Banner container -->
+      <div class="flex-1 flex justify-center px-2 items-center">
+        <PremiumReminderBanner />
+      </div>
+
       <div class="flex items-center gap-2">
         <div class="relative" ref="notiMenuRef">
           <button
@@ -172,6 +177,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import { usePlayerStore } from '@/stores/player'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import PremiumReminderBanner from '@/components/common/PremiumReminderBanner.vue'
 import api from '@/api/axios'
 
 defineProps({

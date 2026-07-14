@@ -84,7 +84,9 @@ exports.getPremiumSummary = async (req, res, next) => {
     const [expiringTimeline] = await pool.query(`
       SELECT 
         u.id, u.display_name, u.email, u.avatar_url, 
-        u.premium_expires_at, p.name as plan_name
+        u.premium_expires_at, p.name as plan_name,
+        EXISTS(SELECT 1 FROM premium_reminder_logs prl WHERE prl.user_id = u.id AND prl.subscription_end_date = u.premium_expires_at AND prl.reminder_type = 'auto_7d') as autoReminderSent,
+        EXISTS(SELECT 1 FROM premium_reminder_logs prl WHERE prl.user_id = u.id AND prl.subscription_end_date = u.premium_expires_at AND prl.reminder_type = 'manual_admin') as manualReminderSent
       FROM users u
       LEFT JOIN premium_plans p ON u.premium_plan_id = p.id
       WHERE u.premium_expires_at > NOW() AND u.premium_expires_at <= DATE_ADD(NOW(), INTERVAL 90 DAY)
@@ -479,5 +481,55 @@ exports.exportPremium = async (req, res, next) => {
   } catch (error) {
     console.error('exportPremium Error:', error);
     res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.remindExpiring = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const adminId = req.user?.id; // Assuming requireAdmin middleware puts user in req.user
+    
+    // Check if user has active premium and is within 7 days of expiry
+    const [users] = await pool.query(
+      'SELECT id, premium_expires_at FROM users WHERE id = ? AND premium_expires_at > NOW() AND premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Người dùng không trong diện sắp hết hạn Premium (hoặc không tồn tại, đã hết hạn, hoặc còn quá hạn > 7 ngày).'
+      });
+    }
+
+    const user = users[0];
+    const msLeft = new Date(user.premium_expires_at) - new Date();
+    const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+
+    // Send manual reminder
+    const premiumReminderService = require('../services/premiumReminder.service');
+    const sent = await premiumReminderService.sendPremiumReminder({
+      userId: user.id,
+      subscriptionEndDate: user.premium_expires_at,
+      daysLeft,
+      reminderType: 'manual_admin',
+      adminId
+    });
+
+    if (!sent) {
+      return res.status(400).json({
+        success: false,
+        code: 'MANUAL_REMINDER_ALREADY_SENT',
+        message: 'Admin đã gửi nhắc nhở thủ công cho kỳ Premium này.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Đã gửi nhắc nhở gia hạn Premium.'
+    });
+  } catch (error) {
+    console.error('remindExpiring Error:', error);
+    next(error);
   }
 };

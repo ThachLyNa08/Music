@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const axios = require('axios');
+const premiumReminderService = require('./premiumReminder.service');
 
 const AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -54,6 +55,14 @@ if (process.env.AI_RETRAIN_ENABLED === 'true') {
 } else {
   console.log('[CRON] AI retrain disabled. Set AI_RETRAIN_ENABLED=true to enable it.');
 }
+
+// ---------------------------------------------------------------------------
+// Premium Expiry Reminder
+// ---------------------------------------------------------------------------
+cron.schedule('0 8 * * *', () => {
+  console.log('[CRON] Running premium auto reminder job...');
+  premiumReminderService.runAutoReminderJob();
+});
 
 // ---------------------------------------------------------------------------
 // Recommendation scheduler (Daily Mix + Weekly Mix)

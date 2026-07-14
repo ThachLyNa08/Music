@@ -103,6 +103,7 @@ router.get('/premium/users', adminPremiumController.getPremiumUsers);
 router.get('/premium/plans', adminPremiumController.getPremiumPlans);
 router.post('/premium/users/:id/update', adminPremiumController.updatePremium);
 router.post('/premium/users/:id/cancel', adminPremiumController.cancelPremium);
+router.post('/premium/users/:userId/remind-expiring', adminPremiumController.remindExpiring);
 
 // Quản lý bài hát
 router.get('/songs/groups/summary', adminController.getSongGroupsSummary);

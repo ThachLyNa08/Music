@@ -184,9 +184,23 @@
                 
                 <div class="flex justify-between items-center text-[11px]">
                   <span class="text-gray-500 dark:text-rose-200/70">Hết hạn: {{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</span>
-                  <button class="text-rose-600 dark:text-rose-400 font-medium hover:underline flex items-center gap-0.5">
-                    Nhắc nhở &rarr;
-                  </button>
+                  <div class="flex items-center gap-1.5">
+                    <span v-if="user.autoReminderSent" class="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[10px] font-bold" title="Hệ thống đã tự động gửi lời nhắc">
+                      Đã tự động nhắc
+                    </span>
+                    <button 
+                      v-if="!user.manualReminderSent"
+                      @click="openReminderConfirm(user)"
+                      class="text-rose-600 dark:text-rose-400 font-medium hover:underline flex items-center gap-0.5"
+                      :disabled="sendingReminders[user.id]"
+                    >
+                      <span v-if="sendingReminders[user.id]">Đang gửi...</span>
+                      <span v-else>Nhắc nhở &rarr;</span>
+                    </button>
+                    <span v-else class="text-rose-400 dark:text-rose-500 font-medium opacity-80 cursor-not-allowed" title="Admin đã gửi nhắc nhở thủ công cho kỳ Premium này.">
+                      Đã nhắc thủ công
+                    </span>
+                  </div>
                 </div>
               </div>
               
@@ -744,6 +758,41 @@ function openPremiumModal(user, type) {
   selectedUser.value = user
   premiumActionType.value = type
   showPremiumModal.value = true
+}
+
+const sendingReminders = ref({})
+
+function openReminderConfirm(user) {
+  openConfirm({
+    title: 'Gửi nhắc nhở Premium?',
+    message: `Bạn có chắc muốn gửi thông báo nhắc nhở gia hạn Premium cho ${user.display_name} không? Người dùng sẽ nhận thông báo trong hệ thống.`,
+    confirmText: 'Gửi nhắc nhở',
+    type: 'primary',
+    action: () => handleSendReminder(user.id)
+  })
+}
+
+async function handleSendReminder(userId) {
+  confirmState.value.loading = true
+  sendingReminders.value[userId] = true
+  try {
+    const res = await api.post(`/admin/premium/users/${userId}/remind-expiring`)
+    if (res.data.success) {
+      toast.showToast('Đã gửi nhắc nhở cho người dùng.', 'success')
+      fetchSummary()
+    }
+  } catch (error) {
+    if (error.response?.data?.code === 'MANUAL_REMINDER_ALREADY_SENT') {
+      toast.showToast(error.response.data.message, 'warning')
+      fetchSummary()
+    } else {
+      toast.showToast(error.response?.data?.message || 'Không thể gửi nhắc nhở lúc này.', 'error')
+    }
+  } finally {
+    confirmState.value.loading = false
+    confirmState.value.open = false
+    sendingReminders.value[userId] = false
+  }
 }
 
 function openConfirm(options) {
