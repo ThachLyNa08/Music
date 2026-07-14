@@ -27,12 +27,6 @@
           {{ greetingSubtitle }}
         </p>
 
-        <div class="hero-actions">
-          <button class="btn-primary home-primary-btn" @click="$emit('play', featuredItem)">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-            <span>Phát ngay</span>
-          </button>
-        </div>
       </div>
       
     </div>
@@ -187,38 +181,7 @@ const greetingSubtitle = computed(() => {
   font-weight: 650;
 }
 
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-}
 
-.btn-primary,
-.btn-secondary {
-  height: 44px;
-  border-radius: 999px;
-  padding: 0 22px;
-  border: 0;
-  font-size: 15px;
-  font-weight: 850;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-}
-
-.btn-primary:hover,
-.btn-secondary:hover {
-  transform: translateY(-2px) scale(1.015);
-}
-
-.btn-primary:active,
-.btn-secondary:active {
-  transform: scale(0.96);
-}
 
 @media (max-height: 780px) {
   .home-hero {
@@ -230,22 +193,13 @@ const greetingSubtitle = computed(() => {
     font-size: clamp(30px, 4vw, 46px);
   }
 
-  .hero-actions {
-    margin-top: 16px;
-  }
 
-  .btn-primary,
-  .btn-secondary {
-    height: 40px;
-    padding: 0 18px;
-    font-size: 14px;
-  }
 }
 
 @media (max-width: 768px) {
   .home-hero {
-    min-height: 320px;
-    padding: 24px;
+    min-height: 240px;
+    padding: 24px 16px;
   }
 
   .home-hero-video-overlay {
@@ -271,14 +225,6 @@ const greetingSubtitle = computed(() => {
     font-size: 15px;
   }
 
-  .hero-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
 
-  .btn-primary,
-  .btn-secondary {
-    width: 100%;
-  }
 }
 </style>

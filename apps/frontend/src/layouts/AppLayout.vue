@@ -1,7 +1,15 @@
 <template>
   <div class="user-layout-surface min-h-screen w-full overflow-x-hidden text-gray-200 font-sans">
+    <!-- SIDEBAR DRAWER OVERLAY -->
+    <div 
+      v-if="isLeftSidebarOpen"
+      class="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm md:hidden"
+      @click="isLeftSidebarOpen = false"
+    ></div>
+
     <!-- SIDEBAR -->
-    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[80] hidden w-[220px] flex-col overflow-y-auto border-r border-white/10 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl md:flex">
+    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[90] flex w-[280px] md:w-[220px] flex-col overflow-y-auto border-r border-white/10 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl transition-transform duration-300 md:translate-x-0"
+           :class="isLeftSidebarOpen ? 'translate-x-0' : '-translate-x-full'">
       <!-- Brand -->
       <div class="mb-5 flex h-20 items-center gap-3 px-2">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-500/20 shadow-lg shadow-violet-950/30">
@@ -14,7 +22,7 @@
       </div>
 
       <!-- Nav -->
-      <nav class="flex flex-col gap-1.5">
+      <nav class="flex flex-col gap-1.5" @click="isLeftSidebarOpen = false">
         <RouterLink 
           v-for="item in navItems" 
           :key="item.to" 
@@ -39,7 +47,7 @@
       <div class="flex-1" />
 
       <!-- Playlists section -->
-      <div class="py-4">
+      <div class="py-4" @click="isLeftSidebarOpen = false">
         <div class="px-4 pb-2 pt-5 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Thư viện</div>
         
         <RouterLink to="/liked-songs" class="flex items-center gap-3 rounded-2xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/liked-songs') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
@@ -93,8 +101,8 @@
 
     <!-- RIGHT SIDEBAR -->
     <aside
-      class="fixed right-0 top-0 bottom-[80px] z-[90] flex flex-col w-[320px] max-w-[calc(100vw-24px)] overflow-hidden border-l border-white/10 bg-[#070a12]/95 backdrop-blur-xl shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
-      :class="isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'"
+      class="fixed inset-x-0 bottom-[80px] z-[90] flex flex-col w-full max-h-[75vh] md:max-h-none md:inset-auto md:right-0 md:top-0 md:bottom-[80px] md:w-[320px] overflow-hidden md:border-l border-t md:border-t-0 border-white/10 rounded-t-2xl md:rounded-none bg-[#070a12]/95 backdrop-blur-xl shadow-[0_-18px_45px_rgba(0,0,0,0.38)] md:shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
+      :class="isRightSidebarOpen ? 'translate-y-0 md:translate-y-0 md:translate-x-0' : 'translate-y-full md:translate-y-0 md:translate-x-full'"
     >
       <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
         <h3 class="text-sm font-bold text-white m-0">Danh sách chờ</h3>
@@ -186,16 +194,19 @@
     </aside>
 
     <!-- PLAYER BAR -->
-    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[80px] items-center justify-between border-t border-white/10 bg-[#05070d]/95 px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[64px] md:h-[80px] items-center justify-between border-t border-white/10 bg-[#05070d]/95 px-3 md:px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
       <!-- Now playing -->
-      <div class="flex items-center gap-3 min-w-[200px] flex-1">
-        <div class="w-[52px] h-[52px] rounded-[4px] bg-white/10 flex items-center justify-center shrink-0 overflow-hidden group shadow-lg">
+      <div class="flex items-center gap-2 md:gap-3 min-w-0 md:min-w-[200px] flex-1">
+        <div class="w-10 h-10 md:w-[52px] md:h-[52px] rounded-[4px] bg-white/10 flex items-center justify-center shrink-0 overflow-hidden group shadow-lg">
           <img v-if="player.currentSong?.cover_url" :src="$formatImageUrl(player.currentSong.cover_url)" @error="event => event.target.src = '/default-cover.png'" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           <MfIcon v-else name="music_note" size="24" className="text-gray-600" />
         </div>
         <div class="flex flex-col min-w-0">
           <span class="text-sm font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis hover:underline cursor-pointer" @click="player.currentSong && $router.push(`/song/${player.currentSong.id}`)">{{ player.currentSong?.title || 'Chưa phát gì' }}</span>
-          <span class="text-xs font-medium text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis hover:underline hover:text-white cursor-pointer" @click="player.currentSong?.artist_id && $router.push(`/artist/${player.currentSong.artist_id}`)">{{ player.currentSong?.artist_name || player.currentSong?.artist || '---' }}</span>
+          <div class="flex items-center gap-1 text-xs font-medium text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">
+            <span class="hover:underline hover:text-white cursor-pointer truncate" @click="player.currentSong?.artist_id && $router.push(`/artist/${player.currentSong.artist_id}`)">{{ player.currentSong?.artist_name || player.currentSong?.artist || '---' }}</span>
+            <span class="md:hidden shrink-0" v-if="player.currentSong">· {{ formatTime(displayCurrentTime) }} / {{ formatTime(player.duration) }}</span>
+          </div>
         </div>
         <LikeButton
           v-if="player.currentSong"
@@ -208,10 +219,10 @@
       </div>
 
       <!-- Controls -->
-      <div class="flex flex-col items-center gap-1.5 flex-[2] max-w-[640px]">
-        <div class="flex items-center gap-4">
+      <div class="flex flex-row md:flex-col items-center gap-2 md:gap-1.5 md:flex-[2] md:max-w-[640px] shrink-0">
+        <div class="flex items-center gap-1 md:gap-4">
           <!-- Shuffle -->
-          <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200" 
+          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200" 
             :class="player.shuffle ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'" 
             @click="player.toggleShuffle()" 
             :title="player.shuffle ? 'Tắt phát ngẫu nhiên' : 'Bật phát ngẫu nhiên'">
@@ -219,23 +230,23 @@
           </button>
           
           <!-- Previous -->
-          <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.prev()" title="Previous">
+          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.prev()" title="Previous">
             <MfIcon name="skip_previous" size="20" />
           </button>
           
           <!-- Play/Pause -->
-          <button class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer" @click="player.togglePlay()" title="Play/Pause">
+          <button class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer mx-1" @click="player.togglePlay()" title="Play/Pause">
             <MfIcon v-if="!player.isPlaying" name="play_arrow" filled size="24" className="ml-0.5" />
             <MfIcon v-else name="pause" filled size="24" />
           </button>
           
           <!-- Next -->
-          <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.next()" title="Next">
+          <button class="bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.next()" title="Next">
             <MfIcon name="skip_next" size="20" />
           </button>
           
           <!-- Repeat -->
-          <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 relative" 
+          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 relative" 
             :class="player.repeat !== 'none' ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'" 
             :title="player.repeat === 'none' ? 'Bật lặp lại' : player.repeat === 'all' ? 'Đang lặp danh sách' : 'Đang lặp một bài'"
             @click="player.toggleRepeat()">
@@ -247,29 +258,32 @@
         </div>
         
         <!-- Progress -->
-        <div class="flex items-center gap-2 w-full max-w-[500px]">
-          <span class="text-[11px] font-semibold text-gray-400 min-w-[36px] text-right">{{ formatTime(displayCurrentTime) }}</span>
+        <div class="absolute top-[-8px] left-0 right-0 h-[16px] md:relative md:top-auto md:left-auto md:right-auto md:h-1 flex items-center gap-2 w-full md:max-w-[500px] z-50">
+          <span class="hidden md:block text-[11px] font-semibold text-gray-400 min-w-[36px] text-right">{{ formatTime(displayCurrentTime) }}</span>
           <div
             ref="progressBarRef"
-            class="flex-1 h-1 bg-white/15 rounded-full cursor-pointer relative group flex items-center touch-none select-none"
+            class="flex-1 h-full cursor-pointer relative group flex items-center touch-none select-none"
             @pointerdown="startSeekDrag"
           >
-            <div class="absolute left-0 h-full bg-white rounded-full transition-colors group-hover:bg-[#1ed760]" :style="`width:${displayPct}%`">
-              <div class="absolute -right-1.5 -translate-y-1/2 top-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-opacity"></div>
+            <!-- Track -->
+            <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] md:h-1 bg-white/15 md:rounded-full"></div>
+            <!-- Fill -->
+            <div class="absolute left-0 top-1/2 -translate-y-1/2 h-[2px] md:h-1 bg-[#1ed760] md:bg-white md:rounded-full transition-colors group-hover:bg-[#1ed760] z-10" :style="`width:${displayPct}%`">
+              <div class="hidden md:block absolute -right-1.5 -translate-y-1/2 top-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-opacity"></div>
             </div>
           </div>
-          <span class="text-[11px] font-semibold text-gray-400 min-w-[36px]">{{ formatTime(player.duration) }}</span>
+          <span class="hidden md:block text-[11px] font-semibold text-gray-400 min-w-[36px]">{{ formatTime(player.duration) }}</span>
         </div>
       </div>
 
       <!-- Right controls -->
-      <div class="flex items-center gap-3 flex-1 justify-end">
+      <div class="flex items-center gap-1 md:gap-3 flex-none md:flex-1 justify-end shrink-0">
         <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" :class="{ 'text-[#1ed760]': isRightSidebarOpen }" @click="isRightSidebarOpen = !isRightSidebarOpen" title="Danh sách chờ">
           <MfIcon name="queue_music" size="20" />
         </button>
         
         <button
-          class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white"
+          class="hidden sm:block bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white"
           :class="{ 'text-[#1ed760]': isActive('/karaoke') }"
           title="Mở Karaoke"
           aria-label="Mở Karaoke"
@@ -278,15 +292,15 @@
           <MfIcon name="mic_external_on" size="20" />
         </button>
         
-        <div class="flex items-center gap-1 group relative">
+        <div class="hidden md:flex items-center gap-1 group relative">
           <MfIcon :name="player.volume === 0 ? 'volume_off' : 'volume_up'" size="20" className="text-gray-500 group-hover:text-white transition-colors" />
-          <div class="w-[96px] h-1 bg-white/15 rounded-full relative cursor-pointer group-hover:bg-white/30">
+          <div class="w-[80px] lg:w-[96px] h-1 bg-white/15 rounded-full relative cursor-pointer group-hover:bg-white/30">
             <input type="range" min="0" max="100" :value="player.volume * 100" @input="player.setVolume($event.target.value / 100)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
             <div class="absolute left-0 h-full bg-white rounded-full group-hover:bg-[#1ed760] transition-colors" :style="`width:${player.volume * 100}%`"></div>
           </div>
         </div>
         
-        <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" @click="player.isNowPlayingExpanded = true" title="Now Playing">
+        <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" @click="player.isNowPlayingExpanded = true" title="Mở rộng">
           <MfIcon name="open_in_full" size="20" />
         </button>
       </div>
@@ -334,15 +348,21 @@ const displayPct = computed(() => {
 const messageUnreadCount = computed(() => messagesStore.unreadCount)
 const messageUnreadLabel = computed(() => messageUnreadCount.value > 99 ? '99+' : String(messageUnreadCount.value))
 
+const isLeftSidebarOpen = ref(false)
 const isRightSidebarOpen = ref(false)
 
 function onToggleQueueEvent() {
   isRightSidebarOpen.value = !isRightSidebarOpen.value
 }
+function onToggleSidebarEvent() {
+  isLeftSidebarOpen.value = !isLeftSidebarOpen.value
+}
 window.addEventListener('mf:toggle-queue', onToggleQueueEvent)
+window.addEventListener('mf:toggle-sidebar', onToggleSidebarEvent)
 
 onUnmounted(() => {
   window.removeEventListener('mf:toggle-queue', onToggleQueueEvent)
+  window.removeEventListener('mf:toggle-sidebar', onToggleSidebarEvent)
 })
 
 const upcomingSongs = computed(() => {

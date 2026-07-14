@@ -8,8 +8,20 @@
     <div class="flex h-full items-center justify-between px-4 md:px-8">
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex gap-1.5">
+          <!-- Mobile Sidebar Toggle -->
           <button
-            class="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 transition hover:bg-white/[0.10] hover:text-white"
+            class="flex md:hidden h-10 w-10 items-center justify-center rounded-full text-slate-200 transition hover:bg-white/[0.10] hover:text-white mr-1"
+            type="button"
+            @click="toggleSidebar"
+            aria-label="Menu"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+          </button>
+          
+          <button
+            class="hidden md:flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 transition hover:bg-white/[0.10] hover:text-white"
             type="button"
             @click="goBack"
             aria-label="Back"
@@ -19,7 +31,7 @@
             </svg>
           </button>
           <button
-            class="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 transition hover:bg-white/[0.10] hover:text-white"
+            class="hidden md:flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-slate-200 transition hover:bg-white/[0.10] hover:text-white"
             type="button"
             @click="goForward"
             aria-label="Forward"
@@ -217,6 +229,10 @@ function goBack() {
 
 function goForward() {
   router.forward()
+}
+
+function toggleSidebar() {
+  window.dispatchEvent(new Event('mf:toggle-sidebar'))
 }
 
 function goProfile() {

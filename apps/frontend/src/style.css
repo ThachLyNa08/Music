@@ -175,14 +175,20 @@
   }
 
   .user-horizontal-row {
-    @apply grid gap-4 overflow-hidden;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    grid-template-rows: 1fr;
-    grid-auto-rows: 0;
+    @apply flex overflow-x-auto gap-4 pb-4 md:pb-0 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0;
+  }
+  
+  @media (min-width: 768px) {
+    .user-horizontal-row {
+      @apply grid overflow-hidden;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      grid-template-rows: 1fr;
+      grid-auto-rows: 0;
+    }
   }
 
   .user-horizontal-card {
-    @apply min-w-0 h-full;
+    @apply min-w-[140px] w-[140px] md:min-w-0 md:w-auto md:h-full flex-shrink-0 md:flex-shrink;
   }
 
   .user-playlist-card-size {
