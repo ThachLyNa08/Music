@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col user-page-bg pb-4" v-if="!loadingData && playlist">
     <!-- Header Hero Section -->
-    <section class="relative overflow-hidden w-full px-6 py-6 md:px-12 md:py-8 mb-8 border-b border-white/5 shadow-xl bg-[#090B14]">
+    <section class="relative overflow-hidden w-full px-6 py-3 md:px-10 md:py-4 mb-4 border-b border-white/5 shadow-xl bg-[#090B14]">
       <!-- Blurred Background Cover -->
       <img 
         :src="getPlaylistCover(playlist)"
@@ -16,7 +16,7 @@
 
       <div class="relative z-10 flex flex-col lg:flex-row items-center lg:items-center gap-6 md:gap-8 max-w-[1400px] mx-auto">
         <!-- Foreground Cover -->
-        <div class="w-[160px] h-[160px] lg:w-[200px] lg:h-[200px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
+        <div class="w-[100px] h-[100px] lg:w-[130px] lg:h-[130px] rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.6)] border border-white/10 flex-shrink-0 overflow-hidden">
           <CoverImage :src="getPlaylistCover(playlist)" class="w-full h-full object-cover" />
         </div>
 
@@ -27,7 +27,7 @@
             <span v-else class="opacity-80">{{ playlist.is_public ? 'Playlist Công Khai' : 'Playlist Riêng Tư' }}</span>
           </div>
 
-          <h1 class="text-4xl md:text-5xl lg:text-[64px] font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ playlist.name }}</h1>
+          <h1 class="text-2xl md:text-3xl lg:text-4xl font-black leading-[1.1] text-white tracking-tight drop-shadow-lg truncate pb-1">{{ playlist.name }}</h1>
           
           <p class="text-gray-300 font-medium text-sm lg:text-base mt-1 line-clamp-2 max-w-3xl">
             {{ playlist.description || (isSystemPlaylist ? 'Playlist được tạo tự động bởi MusicFlow.' : 'Không có mô tả.') }}
@@ -55,47 +55,47 @@
           </div>
           
           <!-- Action Buttons -->
-          <div class="playlist-actions mt-4 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-            <PlaybackButton v-if="songs.length > 0" class="mr-2" :is-playing="isCurrentPlaylistPlaying" @click="togglePlaylistPlayback" />
+          <div class="playlist-actions mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-3">
+            <PlaybackButton v-if="songs.length > 0" size="sm" class="mr-1" :is-playing="isCurrentPlaylistPlaying" @click="togglePlaylistPlayback" />
             
             <template v-if="canEditMetadata">
-              <button class="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg cursor-pointer" @click="editPlaylist" title="Sửa playlist">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              <button class="w-11 h-11 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg cursor-pointer" @click="editPlaylist" title="Sửa playlist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
-              <button class="w-14 h-14 rounded-full bg-red-500/10 backdrop-blur-md border border-red-500/30 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white hover:scale-105 transition-all shadow-lg cursor-pointer" @click="deletePlaylist" title="Xóa playlist">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <button class="w-11 h-11 rounded-full bg-red-500/10 backdrop-blur-md border border-red-500/30 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white hover:scale-105 transition-all shadow-lg cursor-pointer" @click="deletePlaylist" title="Xóa playlist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </template>
             
-            <button v-if="canCloneForEditing" class="w-14 h-14 rounded-full bg-indigo-500/10 backdrop-blur-md border border-indigo-500/30 text-indigo-300 flex items-center justify-center hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-105 transition-all shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" @click="handleClone" :disabled="isCloning" title="Tạo bản sao để chỉnh sửa">
-              <svg v-if="isCloning" class="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+            <button v-if="canCloneForEditing" class="w-11 h-11 rounded-full bg-indigo-500/10 backdrop-blur-md border border-indigo-500/30 text-indigo-300 flex items-center justify-center hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-105 transition-all shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" @click="handleClone" :disabled="isCloning" title="Tạo bản sao để chỉnh sửa">
+              <svg v-if="isCloning" class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
             </button>
             <template v-else-if="isSystemPlaylist">
               <button 
                 type="button"
-                class="w-14 h-14 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-11 h-11 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="isSaving"
                 @click="toggleSavePlaylist"
                 :title="playlist.is_saved ? 'Đã lưu vào thư viện' : 'Lưu vào thư viện'"
               >
                 <!-- Check icon if saved -->
-                <svg v-if="playlist.is_saved" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" class="text-[#1ed760]">
+                <svg v-if="playlist.is_saved" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" class="text-[#1ed760]">
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                 </svg>
                 <!-- Plus icon if not saved -->
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                 </svg>
               </button>
             </template>
             <button 
               type="button"
-              class="w-14 h-14 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer"
+              class="w-11 h-11 rounded-full border border-white/10 bg-white/10 text-white flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all shadow-lg backdrop-blur-md cursor-pointer"
               title="Chia sẻ playlist"
               @click="isShareModalOpen = true"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
             </button>
