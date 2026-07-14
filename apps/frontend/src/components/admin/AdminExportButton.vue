@@ -41,17 +41,17 @@ defineEmits(['click'])
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
+  padding: 6px 14px;
   background-color: white;
   color: #475569; /* text-slate-600 */
   border: 1px solid #e2e8f0; /* border-slate-200 */
   border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  height: 40px;
-  min-width: 130px;
+  height: 36px;
+  min-width: 120px;
   overflow: hidden;
   white-space: nowrap;
 }

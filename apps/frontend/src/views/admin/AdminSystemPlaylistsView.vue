@@ -317,8 +317,8 @@
 
       <!-- Tra cứu nâng cao -->
       <div>
-        <AdminFilterBar class="!mb-0">
-        <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+          <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
           <AdminSearchInput
             v-model="filters.q"
             compact
@@ -327,7 +327,9 @@
             historyKey="admin-playlist-q-history"
             @search="handleSearch"
           />
+          </div>
           
+          <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
           <AdminSearchInput
             v-model="filters.owner"
             compact
@@ -336,7 +338,9 @@
             historyKey="admin-playlist-owner-history"
             @search="handleSearch"
           />
-
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3 w-full xl:w-auto xl:shrink-0">
           <SearchableCombobox
             v-model="filters.system_key"
             :options="[{ key: 'all', label: 'Tất cả Loại System Key' }, ...systemKeysOptions]"
@@ -345,21 +349,20 @@
             placeholder="Tất cả Loại System Key"
             maxHeightClass="max-h-[128px]"
             compact
-            class="w-full xl:w-56 xl:shrink-0"
+            class="w-full xl:w-56"
             @change="handleSearch"
           />
 
-          <select v-model="filters.status" class="admin-input !h-9 text-xs w-full xl:w-44 xl:shrink-0 cursor-pointer" @change="handleSearch">
+          <select v-model="filters.status" class="admin-input !h-9 min-w-0 truncate text-xs w-full xl:w-44 cursor-pointer" @change="handleSearch">
             <option value="all">Tất cả trạng thái</option>
             <option value="need_update">Cần xử lý</option>
             <option value="active">Bình thường</option>
             <option value="empty">Trống bài hát</option>
             <option value="missing_cover">Thiếu ảnh bìa</option>
           </select>
-
-          <AdminResetButton @click="resetFilters" class="xl:shrink-0 !h-9 !w-9" />
+          </div>
+          <AdminResetButton @click="resetFilters" class="!h-9 !w-9" />
         </div>
-      </AdminFilterBar>
     </div>
 
     <!-- Bulk Action Bar -->
@@ -670,7 +673,6 @@ import { getPlaylistCover } from '@/utils/imageUrl'
 import SearchableCombobox from '@/components/common/SearchableCombobox.vue'
 import AdminSearchInput from '@/components/admin/AdminSearchInput.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'

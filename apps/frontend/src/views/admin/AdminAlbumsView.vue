@@ -80,8 +80,8 @@
         </div>
       </header>
 
-      <div class="p-4 md:p-6 flex flex-col space-y-6">
-        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5 shrink-0">
+      <div class="p-4 md:p-6 flex flex-col gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 shrink-0">
         <AdminKpiCard
           v-for="item in kpiCards"
           :key="item.title"
@@ -92,9 +92,9 @@
         />
       </div>
 
-      <AdminFilterBar>
-        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-          <div class="relative flex-1 min-w-[200px]">
+      <div>
+        <div class="flex flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center w-full">
+          <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
           <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input 
             v-model="filters.search" 
@@ -123,15 +123,16 @@
             </ul>
           </div>
           </div>
-          <div class="w-full xl:w-40 xl:shrink-0 relative" ref="filterGenreDropdownRef">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full xl:w-auto xl:shrink-0">
+          <div class="relative w-full xl:w-40" ref="filterGenreDropdownRef">
             <input 
               v-model="filterGenreSearch" 
             @focus="showGenreDropdown = true"
             @blur="handleFilterGenreBlur"
-            class="admin-input pr-8 text-sm cursor-pointer"
+            class="admin-input pr-8 text-sm cursor-pointer w-full min-w-0 truncate"
             :placeholder="selectedFilterGenreName"
           />
-          <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+          <div @mousedown.prevent="showGenreDropdown = !showGenreDropdown" class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer p-1 z-10">
             <MfIcon name="expand_more" size="18" />
           </div>
           <div v-if="showGenreDropdown" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg max-h-[160px] overflow-y-auto">
@@ -144,31 +145,27 @@
               <div v-if="filterAvailableGenres.length === 0" class="px-4 py-3 text-sm text-gray-500 italic">Không tìm thấy</div>
             </div>
           </div>
-          <div class="w-full xl:w-40 xl:shrink-0">
-            <select v-model="filters.sortPlays" class="admin-input w-full cursor-pointer">
+          <select v-model="filters.sortPlays" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
               <option value="">Lượt nghe mặc định</option>
               <option value="desc">Lượt nghe giảm dần</option>
             <option value="asc">Lượt nghe tăng dần</option>
           </select>
-          </div>
-          <div class="w-full xl:w-40 xl:shrink-0">
-            <select v-model="filters.releaseStatus" class="admin-input w-full cursor-pointer">
+          <select v-model="filters.releaseStatus" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
               <option value="">Tất cả trạng thái</option>
             <option value="draft">Nháp</option>
             <option value="scheduled">Lên lịch</option>
             <option value="published">Đã phát hành</option>
             <option value="hidden">Đã ẩn</option>
           </select>
-        </div>
-        <div v-if="meta.supportsMarketFilter" class="w-full xl:w-40 xl:shrink-0">
-            <select v-model="filters.market" class="admin-input w-full cursor-pointer">
+          <select v-if="meta.supportsMarketFilter" v-model="filters.market" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
               <option value="">Tất cả khu vực</option>
               <option v-for="market in meta.markets" :key="market" :value="market">{{ market }}</option>
             </select>
           </div>
-          <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" class="xl:shrink-0" />
+          <AdminResetButton :disabled="isInitialLoading || isPageLoading" @click="resetFilters" />
         </div>
-      </AdminFilterBar>
+      </div>
+
 
       <div class="flex-1 flex flex-col">
         <AdminTableShell 
@@ -233,7 +230,7 @@
           </table>
         </AdminTableShell>
         <div v-if="pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
-          <span class="hidden md:inline text-sm font-medium text-gray-500">Hiển thị {{ pageStart }} - {{ pageEnd }} trong {{ pagination.total }} album</span>
+          <span class="hidden md:inline text-xs font-medium text-gray-500">Hiển thị {{ pageStart }} - {{ pageEnd }} trong {{ pagination.total }} album</span>
           <AdminPagination :currentPage="pagination.page" :totalPages="pagination.totalPages" :disabled="isInitialLoading || isPageLoading" @update:currentPage="setPage" />
         </div>
       </div>
@@ -430,7 +427,7 @@ import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import { useToastStore } from '@/stores/toast'
 

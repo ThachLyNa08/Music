@@ -7,15 +7,14 @@
     <Teleport to="body">
       <div v-if="isOpen" 
            ref="menuRef"
-           class="fixed w-48 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-xl z-[80] overflow-hidden" 
+           class="fixed w-40 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-xl z-[80] overflow-hidden" 
            :style="menuStyle">
         <div class="py-1">
           <button v-for="(action, index) in actions" :key="index" 
                   @click.stop="handleAction(action)" 
-                  class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                  class="w-full text-left px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
                   :class="colorClasses(action)"
                   :disabled="action.disabled">
-            <MfIcon :name="action.icon" size="18" />
             {{ action.label }}
           </button>
         </div>

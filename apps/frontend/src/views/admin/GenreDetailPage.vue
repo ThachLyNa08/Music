@@ -1,7 +1,7 @@
 <template>
-  <div class="h-full flex flex-col bg-gray-50 dark:bg-bg-base overflow-hidden">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0">
     <!-- Header / Breadcrumb -->
-    <div class="px-6 py-4 bg-white dark:bg-bg-surface border-b border-gray-200 dark:border-bg-border flex items-center justify-between shrink-0 sticky top-0 z-10">
+    <div class="px-6 py-4 bg-white dark:bg-bg-surface border-b border-gray-200 dark:border-bg-border flex items-center justify-between shrink-0 sticky -top-6 pt-10 z-30">
       <div class="flex items-center gap-4">
         <router-link 
           to="/admin/genres" 
@@ -189,7 +189,7 @@
               </h3>
               
               <div v-if="topSongs.length > 0" class="overflow-x-auto">
-                <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
+                <table class="w-full text-left text-xs text-gray-600 dark:text-gray-300">
                   <thead class="text-xs uppercase bg-gray-50 dark:bg-bg-card text-gray-500 border-b border-gray-200 dark:border-bg-border">
                     <tr>
                       <th class="px-4 py-3 w-10 text-center">#</th>

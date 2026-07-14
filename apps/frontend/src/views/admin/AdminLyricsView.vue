@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminExportButton from '@/components/admin/AdminExportButton.vue'
@@ -277,26 +276,26 @@ onMounted(() => {
         <h1 class="text-2xl font-bold text-slate-900">Quản lý lời bài hát</h1>
         <p class="text-sm text-slate-500 mt-1">Xem, kiểm tra và chỉnh sửa lời bài hát trong hệ thống</p>
       </div>
-      <div class="flex items-center gap-3">
-        <button @click="fetchSummary(); fetchSongs(pagination.page)" class="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
-          <MfIcon name="refresh" size="18" class="mr-2" />
+      <div class="flex items-center gap-2 md:gap-3">
+        <button @click="fetchSummary(); fetchSongs(pagination.page)" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition">
+          <MfIcon name="refresh" size="18" class="mr-1.5" />
           Refresh
         </button>
-        <button @click="exportBacklog" class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition shadow-sm">
-          <MfIcon name="download" size="18" class="mr-2" />
+        <button @click="exportBacklog" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-white bg-primary rounded-xl hover:bg-primary-dark transition shadow-sm">
+          <MfIcon name="download" size="18" class="mr-1.5" />
           Export Backlog
         </button>
-        <button @click="exportAudit" class="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm">
-          <MfIcon name="policy" size="18" class="mr-2" />
+        <button @click="exportAudit" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm">
+          <MfIcon name="policy" size="18" class="mr-1.5" />
           Export Audit
         </button>
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>
 
-    <div class="flex-1 overflow-y-auto p-6 flex flex-col">
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
       <!-- KPI Cards -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-6">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <AdminKpiCard
           v-for="item in kpiCards"
           :key="item.title"
@@ -310,9 +309,9 @@ onMounted(() => {
       </div>
 
       <!-- Filters -->
-      <AdminFilterBar>
-        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-          <div class="relative min-w-[280px] flex-1">
+      <div>
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+          <div class="relative w-full xl:flex-1 xl:min-w-[280px]">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input 
               v-model="searchInput" 
@@ -341,25 +340,28 @@ onMounted(() => {
               </ul>
             </div>
           </div>
-          <select v-model="filters.status" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+          <div class="grid grid-cols-2 gap-3 w-full xl:w-auto xl:shrink-0">
+          <select v-model="filters.status" class="admin-input min-w-0 truncate w-full xl:w-44 cursor-pointer">
             <option value="all">Tất cả trạng thái</option>
             <option value="missing">Thiếu lyrics</option>
             <option value="has_lyrics">Có lyrics</option>
             <option value="synced">Lyrics đồng bộ</option>
             <option value="plain">Lyrics thường</option>
           </select>
-          <select v-model="filters.provider" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+          <select v-model="filters.provider" class="admin-input min-w-0 truncate w-full xl:w-44 cursor-pointer">
             <option value="all">Tất cả provider</option>
             <option value="LRCLIB">LRCLIB</option>
             <option value="MANUAL">Manual</option>
           </select>
-          <AdminResetButton @click="resetFilters" class="xl:shrink-0" />
+          </div>
+          <AdminResetButton @click="resetFilters" />
         </div>
-      </AdminFilterBar>
+      </div>
 
-      <!-- Table -->
-      <AdminTableShell maxHeight="375px" style="min-height: 375px;" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
-        <table class="w-full text-left text-sm whitespace-nowrap table-fixed min-w-[900px]">
+      <!-- Table and Pagination Wrapper -->
+      <div class="flex flex-col gap-3">
+        <AdminTableShell maxHeight="375px" style="min-height: 375px;" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
+        <table class="w-full text-left text-xs whitespace-nowrap table-fixed min-w-[900px]">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
               <th class="px-4 py-3 font-semibold text-black uppercase text-xs w-20">Cover</th>
@@ -396,11 +398,11 @@ onMounted(() => {
         </table>
       </AdminTableShell>
 
-      <!-- Pagination -->
-      <div class="py-4 flex items-center justify-between" v-if="pagination.total > 0">
-        <p class="text-sm text-slate-500">{{ displayRange }}</p>
-        <div v-if="pagination.totalPages > 1">
-          <AdminPagination :limit="20" :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
+        <div class="flex items-center justify-between" v-if="pagination.total > 0">
+          <p class="text-xs text-slate-500">{{ displayRange }}</p>
+          <div v-if="pagination.totalPages > 1">
+            <AdminPagination :limit="20" :currentPage="pagination.page" :totalPages="pagination.totalPages" @update:currentPage="p => { pagination.page = p; fetchSongs(p); }" />
+          </div>
         </div>
       </div>
     </div>

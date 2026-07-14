@@ -6,16 +6,16 @@
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Nghệ sĩ</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Quản lý danh sách ca sĩ, band nhạc và các nghệ sĩ trên hệ thống</p>
       </div>
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
-        <button type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors" @click="confirmBulkCreateAccounts">
+        <button type="button" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm" @click="confirmBulkCreateAccounts">
           Tạo tài khoản hàng loạt
         </button>
         <AdminAddButton title="Thêm nghệ sĩ mới" @click="openAddModal" />
       </div>
     </header>
 
-    <div class="p-6 flex flex-col space-y-5">
+    <div class="p-6 flex flex-col gap-4">
       <!-- KPI Cards -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 shrink-0">
         <AdminKpiCard
@@ -29,9 +29,9 @@
       </div>
 
       <!-- Filters & Search -->
-    <AdminFilterBar>
-      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-        <div class="relative flex-1 min-w-[200px]">
+    <div>
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+        <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
           <MfIcon name="search" size="20" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
           <input
             v-model="searchQuery"
@@ -59,7 +59,8 @@
           </ul>
         </div>
         </div>
-        <div class="relative w-full xl:w-48 xl:shrink-0" ref="genreDropdownRef">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 w-full xl:w-auto xl:flex xl:flex-row xl:items-center xl:gap-3 xl:shrink-0">
+        <div class="relative w-full xl:w-44" ref="genreDropdownRef">
           <div class="relative cursor-pointer" @click="genreDropdownOpen = true">
             <input
               v-model="genreSearchText"
@@ -68,7 +69,9 @@
               class="admin-input pr-8 cursor-pointer text-sm w-full"
               :class="{ 'text-emerald-600 font-bold': filterMainGenre !== '' }"
             />
-            <MfIcon name="expand_more" size="20" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }" />
+            <div @mousedown.prevent="genreDropdownOpen = !genreDropdownOpen" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer p-1 z-10 transition-transform duration-200" :class="{ 'rotate-180': genreDropdownOpen }">
+              <MfIcon name="expand_more" size="20" />
+            </div>
           </div>
 
         <div v-if="genreDropdownOpen" class="absolute z-50 w-full mt-1 bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl shadow-lg overflow-hidden flex flex-col">
@@ -102,25 +105,22 @@
           </ul>
         </div>
         </div>
-        <div class="w-full xl:w-48 xl:shrink-0">
-          <select v-model="filterSongCount" class="admin-input w-full cursor-pointer">
-            <option value="all">Tất cả bài hát</option>
-            <option value="0">Chưa có bài hát</option>
-            <option value="1-10">1 - 10 bài</option>
-            <option value="11-50">11 - 50 bài</option>
-            <option value=">50">Trên 50 bài</option>
-          </select>
-        </div>
-        <div class="w-full xl:w-48 xl:shrink-0">
-          <select v-model="filterRegion" class="admin-input w-full cursor-pointer">
-            <option value="">Tất cả khu vực</option>
-            <option v-for="r in regionsList" :key="r" :value="r">{{ r }}</option>
-          </select>
-        </div>
-        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
+        <select v-model="filterSongCount" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
+          <option value="">Tất cả số bài hát</option>
+          <option value="0">Chưa có bài hát</option>
+          <option value="1-10">1 - 10 bài</option>
+          <option value="11-50">11 - 50 bài</option>
+          <option value=">50">Trên 50 bài</option>
+        </select>
+        <select v-model="filterRegion" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
+          <option value="">Tất cả khu vực</option>
+          <option v-for="r in regionsList" :key="r" :value="r">{{ r }}</option>
+        </select>
       </div>
-    </AdminFilterBar>
-
+      <AdminResetButton :disabled="loading" @click="resetFilters" />
+    </div>
+    </div>
+    
     <!-- Data Table and Pagination Wrapper -->
     <div class="flex flex-col gap-3">
       <AdminTableShell
@@ -131,7 +131,7 @@
         emptyTitle="Không tìm thấy nghệ sĩ nào"
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
             <thead>
               <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 w-48">Metadata</th>
@@ -197,7 +197,7 @@
 
       <!-- Pagination -->
       <div class="flex items-center justify-between" v-if="totalPages > 1">
-        <span class="text-sm text-slate-500 hidden md:block">Hiển thị {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredArtists.length) }} trong {{ filteredArtists.length }} nghệ sĩ</span>
+        <span class="text-xs text-slate-500 hidden md:block">Hiển thị {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredArtists.length) }} trong {{ filteredArtists.length }} nghệ sĩ</span>
         <AdminPagination v-model:currentPage="currentPage" :totalPages="totalPages" />
       </div>
     </div>
@@ -373,7 +373,7 @@ import api from '@/api/axios'
 import { artistAccountApi } from '@/api/artistAccount'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminExportButton from '@/components/admin/AdminExportButton.vue'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'

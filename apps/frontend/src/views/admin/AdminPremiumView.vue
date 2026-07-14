@@ -217,7 +217,7 @@
     </div>
 
     <!-- Filters & Search -->
-    <AdminFilterBar class="relative z-30">
+    <div class="mb-3 relative z-30">
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative min-w-[280px] flex-1">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -229,7 +229,7 @@
             @focus="showHistory = true"
             type="text" 
             placeholder="Tìm theo tên, email hoặc ID..." 
-            class="admin-input !py-2 !pl-8 !pr-8 !text-xs !rounded-lg w-full" 
+            class="admin-input !pl-8 !pr-8 w-full" 
             :disabled="isInitialLoading"
           />
           <button v-if="filterForm.q" @click="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -251,18 +251,18 @@
             </ul>
           </div>
         </div>
-        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isPlansLoading">
+        <select v-model="filterForm.plan" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isPlansLoading">
           <option value="Tất cả">{{ isPlansLoading ? 'Đang tải gói...' : 'Tất cả gói' }}</option>
           <option v-for="plan in plans" :key="plan.id" :value="plan.name">{{ plan.name }}</option>
         </select>
-        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
+        <select v-model="filterForm.status" @change="handleFilterChange" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="Tất cả Premium">Tất cả Premium</option>
           <option value="Đang hoạt động">Đang hoạt động</option>
           <option value="Sắp hết hạn">Sắp hết hạn</option>
           <option value="Đã hết hạn">Đã hết hạn</option>
           <option value="Chưa Premium">Chưa Premium</option>
         </select>
-        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input !py-2 !px-3 !text-xs !rounded-lg w-full xl:w-48 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
+        <select v-model="filterForm.sort" @change="handleFilterChange" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer" :disabled="isInitialLoading">
           <option value="">Sắp xếp mặc định</option>
           <option value="Hết hạn gần nhất">Hết hạn gần nhất</option>
           <option value="Mới nâng cấp gần đây">Mới nâng cấp gần đây</option>
@@ -271,7 +271,7 @@
         </select>
         <AdminResetButton :disabled="isInitialLoading || isTableLoading" @click="resetFilters" class="xl:shrink-0 !h-[34px] !w-[34px] !rounded-lg" />
       </div>
-    </AdminFilterBar>
+    </div>
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
@@ -400,7 +400,7 @@ import PremiumManageModal from '@/components/admin/PremiumManageModal.vue'
 import PremiumDetailModal from '@/components/admin/PremiumDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 

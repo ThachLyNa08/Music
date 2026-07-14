@@ -1,5 +1,5 @@
 <template>
-  <div class="relative rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col" :style="maxHeight ? { maxHeight } : {}">
+  <div class="relative rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col w-full min-w-0" :style="maxHeight ? { maxHeight } : {}">
     <!-- Loading Overlay -->
     <div v-if="loading" class="absolute inset-0 bg-white/60 dark:bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-[1px]">
       <div class="w-8 h-8 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>

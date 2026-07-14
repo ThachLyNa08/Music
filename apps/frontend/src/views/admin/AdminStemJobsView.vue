@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <div class="px-6 flex flex-col space-y-6">
+    <div class="px-6 flex flex-col gap-4">
       <!-- KPI Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       <AdminKpiCard
@@ -72,7 +72,7 @@
 
     <!-- Main Content -->
     <div class="flex flex-col gap-3">
-      <AdminFilterBar class="!mb-0">
+      <div>
         <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
           <div class="relative min-w-[320px] flex-1">
             <MfIcon
@@ -149,7 +149,7 @@
             <MfIcon name="refresh" class="h-4 w-4" />
           </button>
         </div>
-      </AdminFilterBar>
+      </div>
 
       <div class="flex flex-col gap-3">
         <!-- Table -->
@@ -286,7 +286,7 @@ import MfIcon from '@/components/common/MfIcon.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'

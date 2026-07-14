@@ -1,16 +1,12 @@
 <template>
-  <div>
-    <!-- Backdrop -->
-    <div 
-      class="fixed inset-0 bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm z-40 animate-fade-in"
-      @click="$emit('close')"
-    ></div>
-
-    <!-- Modal Container -->
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 pointer-events-none">
+  <Teleport to="body">
+    <div class="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6 flex items-center justify-center animate-fade-in">
       
+      <!-- Backdrop click area -->
+      <div class="absolute inset-0 cursor-pointer" @click="$emit('close')"></div>
+
       <!-- Card -->
-      <div class="bg-white dark:bg-bg-surface shadow-2xl rounded-[24px] flex flex-col pointer-events-auto border border-gray-100 dark:border-bg-border overflow-hidden w-[calc(100vw-24px)] md:w-[760px] lg:w-[900px] max-h-[90vh] md:max-h-[86vh] animate-modal-pop">
+      <div class="relative bg-white dark:bg-bg-surface shadow-2xl rounded-[24px] flex flex-col border border-gray-100 dark:border-bg-border overflow-hidden w-full max-w-[900px] max-h-full md:max-h-[86vh] animate-modal-pop">
         
         <!-- Header -->
         <div class="px-6 py-4 border-b border-gray-100 dark:border-bg-border flex items-center justify-between shrink-0 bg-gray-50/50 dark:bg-bg-card/50">
@@ -191,7 +187,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>

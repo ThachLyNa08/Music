@@ -22,32 +22,34 @@
       />
     </div>
 
-    <div class="space-y-6 pb-10">
+    <div class="flex flex-col gap-4 pb-10">
       <!-- Filters & Search -->
-    <AdminFilterBar>
-      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-        <div class="relative min-w-[280px] flex-1">
+    <div>
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+        <div class="relative w-full xl:flex-1 xl:min-w-[280px]">
           <MfIcon name="search" size="15" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9 w-full !text-xs !py-1.5" />
+          <input v-model="searchQuery" type="text" placeholder="Tìm thành viên theo tên, email..." class="admin-input pl-9 w-full" />
         </div>
-        <select v-model="filterRole" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
-          <option value="">Tất cả vai trò</option>
-          <option value="user">Người dùng thường</option>
-          <option value="admin">Quản trị viên (Admin)</option>
-        </select>
-        <select v-model="filterStatus" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
-          <option value="">Tất cả trạng thái</option>
-          <option value="active">Hoạt động</option>
-          <option value="locked">Bị khóa</option>
-        </select>
-        <select v-model="filterPremium" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !text-xs !py-1.5">
-          <option value="">Tất cả Premium</option>
-          <option value="active">Đang có Premium</option>
-          <option value="inactive">Không có Premium</option>
-        </select>
-        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0 scale-90" />
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 w-full xl:w-auto xl:shrink-0">
+          <select v-model="filterRole" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
+            <option value="">Tất cả vai trò</option>
+            <option value="user">Người dùng thường</option>
+            <option value="admin">Quản trị viên (Admin)</option>
+          </select>
+          <select v-model="filterStatus" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
+            <option value="">Tất cả trạng thái</option>
+            <option value="active">Hoạt động</option>
+            <option value="locked">Bị khóa</option>
+          </select>
+          <select v-model="filterPremium" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
+            <option value="">Tất cả Premium</option>
+            <option value="active">Đang có Premium</option>
+            <option value="inactive">Không có Premium</option>
+          </select>
+        </div>
+        <AdminResetButton :disabled="loading" @click="resetFilters" />
       </div>
-    </AdminFilterBar>
+    </div>
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
@@ -58,7 +60,7 @@
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
         maxHeight="420px"
       >
-        <table class="w-full text-center border-collapse text-sm whitespace-nowrap table-fixed">
+        <table class="w-full text-center border-collapse text-xs whitespace-nowrap table-fixed">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
               <th class="px-3 py-3 font-semibold text-black uppercase text-[11px] w-[22%] text-left">Thành viên</th>
@@ -117,9 +119,9 @@
 
       <!-- Pagination -->
       <div v-if="totalPages > 1 || filteredUsers.length > 0" class="flex items-center justify-between mt-4">
-        <div class="flex items-center gap-2 text-sm text-slate-500">
+        <div class="flex items-center gap-1.5 text-xs text-slate-500">
           <label>Hiển thị:</label>
-          <select v-model="pageSize" @change="currentPage = 1" class="px-2 py-1 text-sm border border-slate-300 rounded-lg focus:outline-none">
+          <select v-model="pageSize" @change="currentPage = 1" class="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none">
             <option :value="10">10</option>
             <option :value="20">20</option>
             <option :value="50">50</option>
@@ -345,7 +347,7 @@ import { normalizeImageUrl } from '@/utils/imageUrl'
 import { useToastStore } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
 import AdminAddButton from '@/components/admin/AdminAddButton.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'

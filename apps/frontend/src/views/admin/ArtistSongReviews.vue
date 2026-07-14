@@ -32,7 +32,7 @@
       </div>
     </div>
 
-    <div class="p-4 md:p-6 flex flex-col space-y-6">
+    <div class="p-4 md:p-6 flex flex-col gap-4">
       <!-- KPI Cards -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-2">
         <AdminKpiCard
@@ -59,7 +59,7 @@
       </div>
 
       <!-- Filter Bar -->
-      <AdminFilterBar class="!mb-3 !p-2">
+      <div>
         <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
           <div class="relative min-w-[320px] flex-1">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
@@ -68,24 +68,24 @@
               @keyup.enter="handleSearch"
               type="text"
               placeholder="Tìm theo tên..."
-              class="admin-input pl-8 pr-8 w-full !text-[13px] !py-1.5"
+              class="admin-input pl-8 pr-8 w-full"
             />
             <button v-if="searchQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
               <MfIcon name="close" size="14" />
             </button>
           </div>
-          <select v-model="statusFilter" @change="handleSearch" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer !text-[13px] !py-1.5 !pl-3">
+          <select v-model="statusFilter" @change="handleSearch" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer !pl-3">
             <option value="all">Tất cả trạng thái</option>
             <option value="pending_review">Chờ duyệt</option>
             <option value="approved">Đã duyệt</option>
             <option value="rejected">Bị từ chối</option>
           </select>
-          <select v-model="sortOption" @change="handleSearch" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer !text-[13px] !py-1.5 !pl-3">
+          <select v-model="sortOption" @change="handleSearch" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer !pl-3">
             <option value="newest">Mới nhất</option>
             <option value="oldest">Cũ nhất</option>
           </select>
         </div>
-      </AdminFilterBar>
+      </div>
 
       <div v-if="errorMsg" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
         {{ errorMsg }}
@@ -399,7 +399,6 @@ import { adminArtistAlbumReviewsApi } from '@/api/adminArtistAlbumReviews'
 import { useAdminNotificationStore } from '@/stores/adminNotification'
 import { useNotificationStore } from '@/stores/notification'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'

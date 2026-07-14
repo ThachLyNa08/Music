@@ -260,9 +260,9 @@ h1, h2,
     border-radius: 0.75rem;
     border: 1px solid rgb(229 231 235);
     background: white;
-    padding: 0.625rem 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
     color: rgb(17 24 39);
     outline: none;
     transition: all 0.2s ease;

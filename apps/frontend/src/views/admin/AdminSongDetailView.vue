@@ -204,7 +204,7 @@
                   <h3 class="text-sm font-bold text-gray-900 dark:text-white">Người nghe gần đây (10 lượt)</h3>
                 </div>
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left text-sm" v-if="analytics.recentListeners.length > 0">
+                  <table class="w-full text-left text-xs" v-if="analytics.recentListeners.length > 0">
                     <thead class="bg-gray-50 dark:bg-bg-card/50 text-gray-900 dark:text-gray-200">
                       <tr>
                         <th class="px-4 py-3 font-semibold">User ID</th>
@@ -245,7 +245,7 @@
             <div v-if="currentTab === 'metadata'" class="tab-pane">
               <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-5 shadow-sm">
                 <div class="overflow-hidden">
-                  <table class="w-full text-sm text-left">
+                  <table class="w-full text-xs text-left">
                     <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
                       <tr>
                         <td class="py-3 font-semibold text-gray-700 dark:text-gray-300 w-1/3">Song ID</td>
@@ -290,7 +290,7 @@
             <!-- PLAYLISTS -->
             <div v-if="currentTab === 'playlists'" class="tab-pane">
               <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-0 shadow-sm overflow-hidden">
-                <table class="w-full text-left text-sm" v-if="relations.playlists.length > 0">
+                <table class="w-full text-left text-xs" v-if="relations.playlists.length > 0">
                   <thead class="bg-gray-50 dark:bg-bg-card/50 text-gray-500 dark:text-gray-400">
                     <tr>
                       <th class="px-4 py-3 font-semibold">Playlist ID</th>

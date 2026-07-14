@@ -22,7 +22,7 @@
       </div>
     </header>
 
-    <div class="p-4 md:p-6 flex flex-col space-y-6">
+    <div class="p-4 md:p-6 flex flex-col gap-4">
       <!-- Stat Cards -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-2">
         <AdminKpiCard
@@ -95,9 +95,9 @@
 
     <!-- Filters & Bulk Actions -->
     <div class="flex flex-col xl:flex-row justify-between gap-3 mb-2">
-      <AdminFilterBar class="flex-1 !mb-0">
-        <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-          <div class="relative flex-1 min-w-[200px]">
+      <div class="flex-1">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+          <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input 
               v-model="filters.search"
@@ -127,10 +127,11 @@
             </ul>
           </div>
           </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 w-full xl:w-auto xl:shrink-0">
           <select 
             v-model="filters.data_status"
             @change="fetchGenres"
-            class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer"
+            class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer"
           >
             <option value="all">Tất cả dữ liệu</option>
             <option value="has_data">Có dữ liệu</option>
@@ -139,7 +140,7 @@
           <select 
             v-model="filters.taxonomy_flag"
             @change="fetchGenres"
-            class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer"
+            class="admin-input min-w-0 truncate w-full xl:w-44 cursor-pointer"
           >
             <option value="all">Mọi cờ Taxonomy</option>
             <option value="cold_start">Dùng Cold Start</option>
@@ -149,15 +150,16 @@
           <select 
             v-model="filters.featured"
             @change="fetchGenres"
-            class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer"
+            class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer"
           >
             <option value="all">Tất cả Featured</option>
             <option value="true">Được Featured</option>
             <option value="false">Không Featured</option>
           </select>
-          <AdminResetButton :disabled="isLoading" @click="resetFilters" class="xl:shrink-0" />
         </div>
-      </AdminFilterBar>
+        <AdminResetButton :disabled="isLoading" @click="resetFilters" />
+        </div>
+      </div>
 
       <!-- Bulk Actions -->
       <div v-if="selectedGenres.length > 0" class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm animate-fade-in">
@@ -193,7 +195,7 @@
         emptyTitle="Không tìm thấy thể loại nào" 
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap table-fixed">
           <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
             <tr>
               <th class="py-3 px-2 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 z-30 bg-gray-50 dark:bg-bg-card">
@@ -361,7 +363,7 @@ import api from '@/api/axios';
 import { useToastStore } from '@/stores/toast';
 import AdminAddButton from '@/components/admin/AdminAddButton.vue';
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue';
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue';
+
 import AdminExportButton from '@/components/admin/AdminExportButton.vue';
 import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob';
 import AdminTableShell from '@/components/admin/AdminTableShell.vue';
@@ -369,6 +371,10 @@ import AdminPagination from '@/components/admin/AdminPagination.vue';
 import AdminResetButton from '@/components/admin/AdminResetButton.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
+import GenreFormModal from '@/components/admin/GenreFormModal.vue';
+import GenreMergeModal from '@/components/admin/GenreMergeModal.vue';
+import GenreDetailDrawer from '@/components/admin/GenreDetailDrawer.vue';
+import GenreSongsDrawer from '@/components/admin/GenreSongsDrawer.vue';
 
 const toast = useToastStore();
 

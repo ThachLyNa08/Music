@@ -13,7 +13,7 @@
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>
-    <div class="p-6 flex flex-col space-y-6">
+    <div class="p-6 flex flex-col gap-4">
       <!-- Overview Stats Cards -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
       <AdminKpiCard 
@@ -62,9 +62,9 @@
       </button>
     </div>
 
-    <AdminFilterBar>
-      <div class="flex w-full flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center">
-        <div class="relative min-w-[240px] flex-1">
+    <div>
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+        <div class="relative w-full xl:flex-1 xl:min-w-[240px]">
           <MfIcon name="search" size="18" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input 
             v-model="filterForm.q" 
@@ -95,28 +95,30 @@
             </ul>
           </div>
         </div>
-        <select v-model="filterForm.status" @change="applyFilters" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 w-full xl:w-auto xl:shrink-0">
+        <select v-model="filterForm.status" @change="applyFilters" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
           <option value="">Tất cả trạng thái</option>
           <option value="paid">Đã thanh toán</option>
           <option value="pending">Đang chờ</option>
           <option value="expired">Hết hạn</option>
           <option value="cancelled">Đã hủy</option>
         </select>
-        <select v-model="filterForm.gateway" @change="applyFilters" class="admin-input w-full xl:w-36 xl:shrink-0 cursor-pointer">
+        <select v-model="filterForm.gateway" @change="applyFilters" class="admin-input min-w-0 truncate w-full xl:w-36 cursor-pointer">
           <option value="">Tất cả cổng</option>
           <option value="sepay">SePay</option>
           <option value="momo">MoMo</option>
           <option value="vnpay">VNPay</option>
         </select>
-        <select v-model="filterForm.plan" @change="applyFilters" class="admin-input w-full xl:w-36 xl:shrink-0 cursor-pointer">
+        <select v-model="filterForm.plan" @change="applyFilters" class="admin-input min-w-0 truncate w-full xl:w-36 cursor-pointer">
           <option value="">Tất cả gói</option>
           <option value="BASIC">Gói Cơ Bản</option>
           <option value="PLUS">Gói Nâng Cao</option>
           <option value="PREMIUM">Gói Cao Cấp</option>
         </select>
-        <AdminResetButton :disabled="loading" @click="resetFilters" class="xl:shrink-0" />
       </div>
-    </AdminFilterBar>
+      <AdminResetButton :disabled="loading" @click="resetFilters" />
+      </div>
+    </div>
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
@@ -135,7 +137,7 @@
         maxHeight="450px"
         class="h-[450px]"
       >
-        <table class="w-full text-left border-collapse text-sm whitespace-nowrap table-fixed">
+        <table class="w-full text-left border-collapse text-xs whitespace-nowrap table-fixed">
           <thead>
             <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
               <th class="py-3 px-4 font-bold text-black dark:text-white w-[15%]">Mã Đơn hàng</th>
@@ -239,7 +241,7 @@ import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
 import PaymentDetailModal from '@/components/admin/PaymentDetailModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
-import AdminFilterBar from '@/components/admin/AdminFilterBar.vue'
+
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 import MfIcon from '@/components/common/MfIcon.vue'

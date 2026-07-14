@@ -7,7 +7,7 @@
       v-model="internalValue"
       :placeholder="placeholder" 
       class="admin-input pl-9 pr-8 w-full"
-      :class="[compact ? '!h-9 text-xs' : '!h-10 text-sm']"
+      :class="[compact ? '!h-8 text-[11px]' : '']"
       @input="onInput"
       @focus="onFocus"
       @keydown.enter="saveToHistoryAndSearch"

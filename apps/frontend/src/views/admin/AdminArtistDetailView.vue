@@ -249,7 +249,7 @@
           
           <!-- Phân trang bài hát -->
           <div v-if="totalSongPages > 1" class="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
-            <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-medium hidden md:inline">
               Hiển thị {{ (currentSongPage - 1) * songsPerPage + 1 }} - {{ Math.min(currentSongPage * songsPerPage, songs.length) }} trong {{ songs.length }} bài hát
             </span>
             <AdminPagination v-model:currentPage="currentSongPage" :totalPages="totalSongPages" />

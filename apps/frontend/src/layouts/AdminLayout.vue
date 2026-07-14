@@ -1,6 +1,7 @@
 <template>
   <div class="admin-shell">
-    <aside class="admin-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="closeMobileSidebar"></div>
+    <aside class="admin-sidebar" :class="{ 'collapsed': isSidebarCollapsed, 'mobile-open': isMobileSidebarOpen }">
       <div class="brand">
         <div class="brand-left" v-if="!isSidebarCollapsed">
           <span class="brand-icon">
@@ -48,6 +49,7 @@
               class="nav-item"
               :class="{ active: isItemActive(item) }"
               :title="isSidebarCollapsed ? item.label : ''"
+              @click="closeMobileSidebar"
             >
               <MfIcon v-show="isSidebarCollapsed" :name="item.icon" size="18" />
               <span class="text-label" v-show="!isSidebarCollapsed">{{ item.label }}</span>
@@ -60,9 +62,14 @@
       <div class="spacer"></div>
     </aside>
 
-    <main class="admin-main">
+    <main class="admin-main min-w-0 overflow-x-hidden">
       <header class="admin-topbar">
-        <div class="page-title">{{ routeName }}</div>
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" @click="isMobileSidebarOpen = true">
+            <MfIcon name="menu" size="24" />
+          </button>
+          <div class="page-title">{{ routeName }}</div>
+        </div>
 
         <div class="topbar-actions">
           <div class="notification-wrapper" ref="notifRef">
@@ -146,12 +153,17 @@ const router = useRouter()
 const route = useRoute()
 
 const isSidebarCollapsed = ref(false)
+const isMobileSidebarOpen = ref(false)
 const isDropdownOpen = ref(false)
 const isNotifOpen = ref(false)
 const userMenuRef = ref(null)
 const notifRef = ref(null)
 const openGroups = ref(new Set())
 const badges = ref({})
+
+function closeMobileSidebar() {
+  isMobileSidebarOpen.value = false
+}
 
 function readSidebarState() {
   const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY)
@@ -321,7 +333,7 @@ onUnmounted(() => {
   border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  z-index: 10;
+  z-index: 60;
   transition: width 0.3s ease-in-out;
   flex-shrink: 0;
   position: relative;
@@ -798,5 +810,99 @@ onUnmounted(() => {
 
 .notif-footer a:hover {
   text-decoration: underline;
+}
+
+/* Responsive Mobile & Tablet */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 55;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  margin-right: 12px;
+  color: #475569;
+}
+.mobile-menu-btn:hover {
+  color: #0f172a;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .sidebar-backdrop {
+    display: block;
+  }
+  
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    z-index: 60;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.1);
+    height: 100vh;
+  }
+
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* When on mobile, hide the desktop collapse toggle button */
+  .sidebar-toggle {
+    display: none !important;
+  }
+  
+  /* Ensure sidebar is always fully expanded on mobile */
+  .admin-sidebar.collapsed,
+  .admin-sidebar.mobile-open,
+  .admin-sidebar {
+    width: 260px !important;
+  }
+  
+  .admin-sidebar .brand {
+    padding: 0 20px !important;
+    justify-content: flex-start !important;
+  }
+
+  .admin-sidebar .brand-left {
+    display: flex !important;
+    justify-content: flex-start !important;
+  }
+
+  .admin-sidebar .text-label,
+  .admin-sidebar .chevron,
+  .admin-sidebar .nav-badge {
+    display: inline-flex !important;
+  }
+  
+  .admin-sidebar .nav-children {
+    padding-left: 10px !important;
+  }
+  
+  .admin-sidebar .nav-item {
+    padding: 0 10px 0 40px !important;
+    justify-content: flex-start !important;
+  }
+
+  .mobile-menu-btn {
+    display: block;
+  }
+  
+  .admin-topbar {
+    padding: 0 16px;
+  }
 }
 </style>

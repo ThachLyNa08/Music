@@ -9,15 +9,15 @@
       <div class="flex gap-2 mt-4 md:mt-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
         <!-- Optional Bulk Upload Button -->
-        <button class="flex items-center gap-2 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm">
-          <MfIcon name="upload" size="16" />
+        <button class="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 text-[13px] font-medium bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 rounded-xl transition-all shadow-sm">
+          <MfIcon name="upload" size="18" />
           Upload hàng loạt
         </button>
         <AdminAddButton title="Thêm bài hát" @click="openAddModal" />
       </div>
     </header>
 
-    <div class="p-4 md:p-6 flex flex-col space-y-6">
+    <div class="p-4 md:p-6 flex flex-col gap-4">
       <!-- Group Cards -->
       <SongGroupCards
       :summary="store.groupsSummary"
@@ -30,9 +30,9 @@
       {{ store.selectedGroup === 'ALL' ? 'Tất cả bài hát' : `Bài hát ${groupLabel(store.selectedGroup)}` }}
     </h2>
 
-    <AdminFilterBar>
-      <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-        <div class="relative min-w-[320px] flex-1">
+    <div>
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
+        <div class="relative w-full xl:flex-1 xl:min-w-[320px]">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
           <input
             v-model="store.filters.search"
@@ -62,39 +62,44 @@
           </ul>
         </div>
       </div>
-      <select v-model="store.filters.genreId" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
-          <option value="">Tất cả thể loại</option>
-          <option v-for="g in formData.genres" :key="g.id" :value="g.id">{{ g.name }}</option>
-        </select>
-        <select v-model="store.filters.status" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full xl:w-auto xl:shrink-0">
+        <AdminSearchSelect 
+          v-model="store.filters.genreId"
+          :options="formData.genres"
+          allLabel="Tất cả thể loại"
+          @change="store.applyFilters"
+          class="w-full xl:w-36"
+        />
+        <select v-model="store.filters.status" @change="store.applyFilters" class="admin-input min-w-0 truncate w-full xl:w-36 cursor-pointer">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Đang hoạt động</option>
           <option value="inactive">Đã ẩn</option>
         </select>
-        <select v-model="store.filters.releaseStatus" @change="store.applyFilters" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer">
+        <select v-model="store.filters.releaseStatus" @change="store.applyFilters" class="admin-input min-w-0 truncate w-full xl:w-36 cursor-pointer">
           <option value="">Tất cả phát hành</option>
           <option value="draft">Nháp</option>
           <option value="scheduled">Lên lịch</option>
           <option value="published">Đã phát hành</option>
           <option value="hidden">Đã ẩn</option>
         </select>
-        <select v-model="store.filters.sortBy" @change="store.applyFilters" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer">
+        <select v-model="store.filters.sortBy" @change="store.applyFilters" class="admin-input min-w-0 truncate w-full xl:w-36 cursor-pointer">
           <option value="created_at">Mới nhất</option>
           <option value="play_count">Lượt nghe</option>
           <option value="title">Tên bài hát</option>
           <option value="duration_sec">Thời lượng</option>
         </select>
-        <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" class="xl:shrink-0" />
       </div>
-    </AdminFilterBar>
+      <AdminResetButton :disabled="store.loading.songs" @click="store.resetFilters" />
+      </div>
+    </div>
 
     <!-- Bulk Actions -->
-    <div v-if="selectedSongIds.length > 0" class="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-3 mb-5 flex items-center justify-between animate-fade-in-up">
-      <div class="flex items-center gap-2">
+    <div v-if="selectedSongIds.length > 0" class="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-3 mb-5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 animate-fade-in-up">
+      <div class="flex items-center gap-2 shrink-0">
         <span class="bg-indigo-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{{ selectedSongIds.length }}</span>
         <span class="text-sm font-bold text-indigo-700 dark:text-indigo-400">bài hát được chọn</span>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button @click="handleBulkStatus('active')" class="px-3 py-1.5 text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-500/30">Hiển thị</button>
         <button @click="handleBulkStatus('inactive')" class="px-3 py-1.5 text-xs font-bold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">Ẩn</button>
         <div class="h-6 w-px bg-indigo-200 dark:bg-indigo-500/30 mx-1"></div>
@@ -111,10 +116,10 @@
     </div>
 
     <!-- Data Table -->
-    <div class="mb-8 flex flex-col">
+    <div class="flex flex-col">
       <AdminTableShell
-        maxHeight="375px"
-        style="min-height: 375px;"
+        maxHeight="500px"
+        style="min-height: 500px;"
         :loading="store.loading.songs"
         :empty="!store.loading.songs && store.songs.length === 0"
         emptyTitle="Không tìm thấy bài hát nào"
@@ -200,7 +205,7 @@
 
       <!-- Pagination -->
       <div v-if="store.pagination.totalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-card/30">
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ store.pagination.page }} / {{ store.pagination.totalPages }}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 font-medium hidden md:inline">Trang {{ store.pagination.page }} / {{ store.pagination.totalPages }}</span>
         <AdminPagination :currentPage="store.pagination.page" :totalPages="store.pagination.totalPages" @update:currentPage="page => store.setPage(page)" />
       </div>
     </div>
@@ -209,9 +214,9 @@
     <MetadataIssuesPanel v-if="metadataIssues.length > 0" :issues="metadataIssues" />
 
     <!-- Thống kê bài hát -->
-    <div v-if="store.statistics" class="mt-8">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Thống kê & Phân tích</h2>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div v-if="store.statistics">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Thống kê & Phân tích</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TopSongsChart :data="store.statistics.topSongs" />
         <GenreDistributionChart :data="store.statistics.genreDistribution" />
       </div>
@@ -271,6 +276,7 @@ import AdminExportButton from '@/components/admin/AdminExportButton.vue';
 import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob';
 import AdminTableShell from '@/components/admin/AdminTableShell.vue';
 import AdminActionMenu from '@/components/admin/AdminActionMenu.vue';
+import AdminSearchSelect from '@/components/admin/AdminSearchSelect.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 import { useToastStore } from '@/stores/toast';
 
