@@ -67,6 +67,7 @@
           :loading="loading"
           :disabled="loading || saving || refining"
           :show-llm-toggle="showDebug"
+          :quota="quota"
           @update:useLLM="useLLM = $event"
           @submit="handlePreview"
         />
@@ -250,7 +251,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { aiPlaylistApi } from '@/api/aiPlaylist'
 import { useToastStore } from '@/stores/toast'
@@ -280,6 +281,18 @@ const saveName = ref('')
 const saveDescription = ref('Playlist được tạo từ AI Playlist.')
 const visibility = ref('private')
 const savedPlaylist = ref(null)
+const quota = ref(null)
+
+onMounted(async () => {
+  try {
+    const res = await aiPlaylistApi.getQuota()
+    if (res.data?.success) {
+      quota.value = res.data.quota
+    }
+  } catch (err) {
+    console.error('Failed to load quota', err)
+  }
+})
 
 const aiPlaylistCoverUrl = computed(() => formatImageUrl('/uploads/playlist_cover/ai_playlist.png'))
 const generatedTitle = computed(() => previewData.value ? suggestPlaylistName(previewData.value.intent, prompt.value, previewData.value.meta) : 'AI Playlist')
@@ -440,9 +453,15 @@ async function handlePreview(extra = {}) {
       ...extra
     })
     previewData.value = normalizeResponse(data)
+    if (data.quota) {
+      quota.value = data.quota
+    }
     toast.showToast('Đã tạo preview playlist', 'success')
   } catch (error) {
     errorMessage.value = error.response?.data?.message || 'Không thể tạo playlist preview'
+    if (error.response?.data?.quota) {
+      quota.value = error.response.data.quota
+    }
     toast.showToast(errorMessage.value, 'error')
   } finally {
     loading.value = false

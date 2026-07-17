@@ -27,5 +27,9 @@ export const aiPlaylistApi = {
 
   getSuggestions() {
     return axios.get('/ai-playlists/suggestions')
+  },
+
+  getQuota() {
+    return axios.get('/ai-playlists/quota')
   }
 }

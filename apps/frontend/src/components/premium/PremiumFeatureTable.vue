@@ -36,7 +36,7 @@ const features = [
   { name: 'Nghe nhạc không quảng cáo', free: false, premium: true },
   { name: 'Chất lượng âm thanh', free: true, freeText: 'Tiêu chuẩn', premium: true, premiumText: 'Cao nhất (320kbps / Lossless)' },
   { name: 'Tải beat/nhạc nền karaoke', free: false, premium: true },
-  { name: 'AI Playlist Generator', free: false, premium: true },
+  { name: 'Tạo AI Playlist', free: true, freeText: '3 lượt/ngày', premium: true },
   { name: 'AI Stem Separation (Tách lời/nhạc)', free: false, premium: true },
   { name: 'Ưu tiên xử lý AI', free: false, premium: true },
   { name: 'Huy hiệu Premium trên hồ sơ', free: false, premium: true }

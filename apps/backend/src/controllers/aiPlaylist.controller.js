@@ -1,5 +1,16 @@
 const intentService = require('../services/aiPlaylistIntent.service');
 const aiPlaylistService = require('../services/aiPlaylist.service');
+const quotaService = require('../services/aiPlaylistQuota.service');
+
+exports.getQuota = async (req, res) => {
+    try {
+        const quota = await quotaService.getQuotaStatus(req.user.id);
+        res.json({ success: true, quota });
+    } catch (error) {
+        console.error('getQuota Error:', error);
+        res.status(500).json({ success: false, message: 'Có lỗi xảy ra khi lấy thông tin quota' });
+    }
+};
 
 function parseUseLLM(value) {
     return value === true || value === 'true';
@@ -40,19 +51,57 @@ exports.previewPlaylist = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Vui lòng nhập prompt hợp lệ' });
         }
 
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const quotaBefore = await quotaService.getQuotaStatus(userId);
+
+        if (!quotaBefore.isPremium && quotaBefore.remaining <= 0) {
+            return res.status(429).json({
+                success: false,
+                code: 'AI_PLAYLIST_DAILY_LIMIT_REACHED',
+                message: 'Bạn đã dùng hết 3 lượt tạo AI Playlist miễn phí hôm nay. Nâng cấp Premium để tạo không giới hạn hoặc quay lại vào ngày mai.',
+                quota: quotaBefore
+            });
+        }
+
         const preview = await aiPlaylistService.previewAiPlaylist({
             prompt,
             targetCount,
-            userId: req.user?.id || null,
+            userId,
             useLLM: parseUseLLM(useLLM),
             previousSongIds,
             avoidPreviousSongs: Array.isArray(previousSongIds) && previousSongIds.length > 0,
             req
         });
 
-        return res.json(preview);
+        if (!preview?.songs?.length) {
+            return res.json({
+                ...preview,
+                quota: quotaBefore
+            });
+        }
+
+        const quotaAfter = await quotaService.consumeQuota(userId);
+
+        return res.json({
+            ...preview,
+            quota: quotaAfter
+        });
     } catch (error) {
         console.error('previewPlaylist Error:', error);
+        
+        if (error.code === 'AI_PLAYLIST_DAILY_LIMIT_REACHED') {
+            return res.status(429).json({
+                success: false,
+                code: error.code,
+                message: error.message,
+                quota: error.quota
+            });
+        }
+
         return res.status(error.statusCode || 500).json({
             success: false,
             message: error.message || 'Có lỗi xảy ra khi tạo playlist AI'

@@ -121,7 +121,7 @@
         </div>
       </header>
 
-      <div class="content-scroll">
+      <div class="content-scroll" ref="contentScrollRef">
         <router-view v-slot="{ Component, route: currentRoute }">
           <transition name="page-slide" mode="out-in">
             <component :is="Component" :key="currentRoute.path" />
@@ -158,6 +158,7 @@ const isDropdownOpen = ref(false)
 const isNotifOpen = ref(false)
 const userMenuRef = ref(null)
 const notifRef = ref(null)
+const contentScrollRef = ref(null)
 const openGroups = ref(new Set())
 const badges = ref({})
 
@@ -277,6 +278,12 @@ watch(() => notifStore.pendingReviewCount, (val) => {
 })
 
 watch(() => route.fullPath, openActiveGroup, { immediate: true })
+
+watch(() => route.path, () => {
+  if (contentScrollRef.value) {
+    contentScrollRef.value.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+})
 
 onMounted(() => {
   readSidebarState()

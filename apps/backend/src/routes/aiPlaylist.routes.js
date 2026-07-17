@@ -15,6 +15,8 @@ const validate = (req, res, next) => {
 
 router.get('/suggestions', aiPlaylistController.getSuggestions);
 
+router.get('/quota', authenticate, aiPlaylistController.getQuota);
+
 router.post('/intent/preview',
     authenticate,
     body('prompt').isString().trim().isLength({ min: 1, max: 1000 }).withMessage('Prompt không hợp lệ'),

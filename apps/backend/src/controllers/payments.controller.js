@@ -442,7 +442,7 @@ exports.getMyPremium = async (req, res, next) => {
         source,
         benefits: [
           "Nghe nhạc chất lượng cao",
-          "Tạo playlist AI cá nhân hóa",
+          "Tạo AI Playlist không giới hạn mỗi ngày",
           "Tải instrumental sau khi tách giọng",
           "Ưu tiên xử lý Stem Separation/Karaoke AI",
           "Không giới hạn số playlist cá nhân",

@@ -470,7 +470,7 @@ exports.getProfile = async (req, res, next) => {
       `SELECT u.email, u.status AS user_status,
               ${mustChangeExpr},
               a.id AS artist_id, a.name AS artist_name, a.bio, a.avatar_url,
-              a.short_bio, a.country
+              a.short_bio, a.country, a.region
        FROM users u
        JOIN artists a ON a.user_id = u.id
        WHERE u.id = ? AND u.role = 'artist'
@@ -492,7 +492,7 @@ exports.getProfile = async (req, res, next) => {
         bio: row.bio || row.short_bio,
         avatarUrl: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.avatar_url }, req),
         coverUrl: null, // Chua co cover_url trong DB
-        market: row.country,
+        market: row.region || row.country,
         generation: null, // Chua co trong DB
         contactEmail: null,
         managementCompany: null,

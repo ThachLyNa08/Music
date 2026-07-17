@@ -63,8 +63,12 @@
       </div>
     </aside>
 
-    <main class="artist-main">
-      <router-view />
+    <main class="artist-main" ref="artistMainRef">
+      <router-view v-slot="{ Component, route: currentRoute }">
+        <transition name="page-slide-up" mode="out-in">
+          <component :is="Component" :key="currentRoute.path" />
+        </transition>
+      </router-view>
     </main>
 
     <ConfirmDialog
@@ -81,13 +85,21 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const auth = useAuthStore()
 const showLogoutConfirm = ref(false)
+const route = useRoute()
+const artistMainRef = ref(null)
+
+watch(() => route.path, () => {
+  if (artistMainRef.value) {
+    artistMainRef.value.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+})
 
 const handleLogout = () => {
   showLogoutConfirm.value = true
@@ -279,6 +291,22 @@ const performLogout = () => {
     margin-left: 0;
     padding: var(--main-py) var(--main-px);
   }
+}
+
+/* Page Transition */
+.page-slide-up-enter-active,
+.page-slide-up-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(15px);
+}
+
+.page-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-15px);
 }
 </style>
 

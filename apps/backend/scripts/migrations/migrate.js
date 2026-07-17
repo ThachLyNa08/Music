@@ -536,6 +536,26 @@ async function normalizeArtistAlbumReviewSchema(conn) {
   await addIndexIfMissing(conn, 'albums', 'idx_album_submitted_at', 'INDEX idx_album_submitted_at (submitted_at)');
 }
 
+async function normalizeAiPlaylistDailyUsageSchema(conn) {
+  console.log('010_ai_playlist_daily_usage');
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS ai_playlist_daily_usage (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL,
+      usage_date DATE NOT NULL,
+      used_count INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_ai_playlist_daily_usage_user_date (user_id, usage_date),
+      INDEX idx_ai_playlist_daily_usage_user_date (user_id, usage_date),
+      CONSTRAINT fk_ai_playlist_daily_usage_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
 async function main() {
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -557,6 +577,7 @@ async function main() {
     await normalizeArtistAccountSchema(conn);
     await normalizeArtistSongSubmissionNoteSchema(conn);
     await normalizeArtistAlbumReviewSchema(conn);
+    await normalizeAiPlaylistDailyUsageSchema(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();
