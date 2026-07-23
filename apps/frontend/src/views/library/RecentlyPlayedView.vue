@@ -17,14 +17,14 @@
         <div class="w-[100px] h-[100px] lg:w-[140px] lg:h-[140px] rounded-2xl shadow-2xl border border-white/10 flex-shrink-0 overflow-hidden">
           <CoverImage :src="getPlaylistCover({ system_key: 'recently_played' })" class="w-full h-full object-cover" />
         </div>
-        
+
         <div class="flex flex-col gap-1.5 min-w-0 flex-1">
           <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-white/70">Playlist</span>
           <h1 class="text-4xl lg:text-[56px] font-black leading-[1.1] text-white tracking-tight mb-1 drop-shadow-lg">Nghe Gần Đây</h1>
           <div class="flex items-center gap-2 text-xs md:text-sm text-white/60 font-semibold mb-2">
             <span class="text-white font-bold">{{ auth.user?.display_name || 'Người dùng' }}</span>
           </div>
-          
+
           <div class="flex items-center gap-3 mt-2">
             <span class="text-xs md:text-[13px] font-semibold text-white/70 uppercase tracking-wide">Thời gian:</span>
             <div class="relative group">
@@ -58,7 +58,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Error State -->
       <div v-else-if="error" class="flex flex-col items-center justify-center py-20 text-center">
         <svg class="w-16 h-16 text-red-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -67,7 +67,7 @@
         <p class="text-red-400 text-lg mb-4">{{ error }}</p>
         <button @click="fetchRecentlyPlayed" class="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-semibold transition">Thử lại</button>
       </div>
-      
+
       <!-- Empty State -->
       <div v-else-if="groupedHistory.length === 0" class="empty-state flex flex-col items-center justify-center py-32 text-center">
         <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6">
@@ -81,9 +81,9 @@
       <!-- History Groups -->
       <div v-else>
         <div v-for="group in groupedHistory" :key="group.date" class="history-group mb-10">
-          
+
           <!-- Group Header -->
-          <div 
+          <div
             class="group-header flex items-center justify-between cursor-pointer hover:bg-white/5 p-3 -mx-3 rounded-xl transition duration-200"
             @click="toggleGroup(group)"
           >
@@ -101,7 +101,7 @@
               <svg v-else class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </div>
           </div>
-          
+
           <!-- Song List for Group -->
           <div v-show="group.expanded" class="mt-4">
             <!-- Table Header -->
@@ -186,8 +186,32 @@ todayStart.setHours(0, 0, 0, 0)
 const yesterdayStart = new Date(todayStart)
 yesterdayStart.setDate(todayStart.getDate() - 1)
 
-function getDateKeyAndLabel(dateStr) {
-  const d = new Date(dateStr)
+function isValidDate(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime())
+}
+
+function getSafePlayedAt(item) {
+  if (typeof item === 'string') return item;
+  return (
+    item.played_at ||
+    item.listened_at ||
+    item.created_at ||
+    item.updated_at ||
+    null
+  )
+}
+
+function getDateKeyAndLabel(item) {
+  const rawDate = getSafePlayedAt(item)
+  const d = rawDate ? new Date(rawDate) : null
+
+  if (!isValidDate(d)) {
+    return {
+      key: 'unknown',
+      label: 'Không rõ thời gian'
+    }
+  }
+
   const ts = d.getTime()
   if (ts >= todayStart.getTime()) {
     return { key: 'today', label: 'Hôm nay' }
@@ -205,10 +229,12 @@ const groupsState = ref({})
 const groupedHistory = computed(() => {
   const groups = {}
   const seenSongIds = new Set()
-  
-  rawHistory.value.forEach(song => {
-    const { key, label } = getDateKeyAndLabel(song.listened_at)
-    
+
+  const safeHistory = Array.isArray(rawHistory.value) ? rawHistory.value : []
+
+  safeHistory.forEach(song => {
+    const { key, label } = getDateKeyAndLabel(song)
+
     // Deduplicate by combining date key and song id
     const compositeKey = `${key}-${song.id}`
     if (seenSongIds.has(compositeKey)) return
@@ -218,7 +244,7 @@ const groupedHistory = computed(() => {
       // Default expand 'today' or any first group if no state
       const isToday = key === 'today'
       const isExpanded = groupsState.value[key] !== undefined ? groupsState.value[key] : isToday
-      
+
       groups[key] = {
         key,
         label,
@@ -228,10 +254,10 @@ const groupedHistory = computed(() => {
         expanded: isExpanded
       }
     }
-    song.timeAgo = formatTimeAgo(song.listened_at)
+    song.timeAgo = formatTimeAgo(getSafePlayedAt(song) || '')
     groups[key].songs.push(song)
   })
-  
+
   return Object.values(groups)
 })
 
@@ -280,13 +306,14 @@ function formatDuration(song) {
 function formatTimeAgo(dateString) {
   if (!dateString) return ''
   const date = new Date(dateString)
+  if (!isValidDate(date)) return ''
   const now = new Date()
   const diffSec = Math.floor((now - date) / 1000)
-  
+
   if (diffSec < 60) return `${diffSec} giây trước`
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`
-  
+
   return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -308,8 +335,8 @@ function handleAddToQueue(song) { player.addToQueue(song) }
 function handleGoToSong(song) { router.push(`/song/${song.id || song.song_id}`) }
 function handleGoToArtist(song) { if (song.artist_id) router.push(`/artist/${song.artist_id}`) }
 function handleGoToAlbum(song) { if (song.album_id) router.push(`/album/${song.album_id}`) }
-function handleShare(song) { 
-  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`) 
+function handleShare(song) {
+  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`)
 }
 </script>
 

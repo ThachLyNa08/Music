@@ -3,6 +3,8 @@ const spotifyService = require('../services/spotify.service');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const { VALID_SYSTEM_KEYS } = require('../services/systemPlaylist.service');
 const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
+const systemPlaylistTempoService = require('../services/systemPlaylistTempo.service');
+const { getSystemPlaylistTempoMetadata } = require('../config/systemPlaylistTempo.config');
 
 function isValidSystemPlaylist(playlist) {
   return (
@@ -105,11 +107,18 @@ function dedupePlaylists(playlists) {
     });
 }
 
+const playlistsCache = new Map();
+const PLAYLISTS_CACHE_TTL = 3 * 60 * 1000;
+
+function clearPlaylistCache(userId) {
+  playlistsCache.delete(`user_${userId}`);
+}
+
 exports.createPlaylist = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { name, description, is_public } = req.body;
-    
+
     if (!name) return res.status(400).json({ success: false, message: 'Tên playlist là bắt buộc' });
 
     let coverUrl = null;
@@ -118,11 +127,12 @@ exports.createPlaylist = async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO playlists (user_id, name, description, cover_url, is_public) 
+      `INSERT INTO playlists (user_id, name, description, cover_url, is_public)
        VALUES (?, ?, ?, ?, ?)`,
       [userId, name, description || '', coverUrl, is_public === 'true' || is_public === true ? 1 : 0]
     );
 
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Tạo playlist thành công', playlist_id: result.insertId });
   } catch (err) {
     next(err);
@@ -132,7 +142,12 @@ exports.createPlaylist = async (req, res, next) => {
 exports.getMyPlaylists = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    
+    const cacheKey = `user_${userId}`;
+    const cached = playlistsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < PLAYLISTS_CACHE_TTL)) {
+      return res.json({ success: true, data: cached.data });
+    }
+
     // Get playlists
     const [playlists] = await pool.query(
       `SELECT p.id, p.user_id, p.name, p.description, p.type, p.is_public, p.created_at, p.updated_at, p.cover_url, p.is_system, p.system_key,
@@ -195,10 +210,10 @@ exports.getMyPlaylists = async (req, res, next) => {
       }
       pl.song_ids = pl.song_ids ? pl.song_ids.split(',').map(Number) : [];
     });
-    
+
     // Get saved albums/singles
     const [savedAlbums] = await pool.query(`
-      SELECT 
+      SELECT
         al.id,
         al.title AS name,
         al.title,
@@ -227,7 +242,7 @@ exports.getMyPlaylists = async (req, res, next) => {
         )
       ORDER BY ula.saved_at DESC
     `, [userId]);
-    
+
     const normalizedAlbums = savedAlbums.map(album => ({
       id: album.id,
       name: album.name,
@@ -239,7 +254,7 @@ exports.getMyPlaylists = async (req, res, next) => {
       is_saved: true,
       item_type: 'album'
     }));
-    
+
     // Combine playlists and saved albums, sort by most recent
     const libraryItems = [...filteredPlaylists, ...normalizedAlbums]
       .sort((a, b) => {
@@ -247,7 +262,8 @@ exports.getMyPlaylists = async (req, res, next) => {
         const dateB = new Date(b.saved_at || b.updated_at || b.created_at || 0);
         return dateB - dateA;
       });
-    
+
+    playlistsCache.set(cacheKey, { data: libraryItems, timestamp: Date.now() });
     res.json({ success: true, data: libraryItems });
   } catch (err) {
     next(err);
@@ -276,26 +292,27 @@ exports.getPlaylistDetail = async (req, res, next) => {
                  LIMIT 1
                )
              ) AS effective_cover_url
-      FROM playlists p 
+      FROM playlists p
       LEFT JOIN users u ON p.user_id = u.id
       LEFT JOIN user_saved_playlists usp ON usp.playlist_id = p.id AND usp.user_id = ?
       WHERE p.id = ?
     `, [userId, id]);
+
     if (playlists.length === 0) return res.status(404).json({ success: false, message: 'Playlist không tồn tại' });
-    
+
     const playlist = playlists[0];
     playlist.cover_url = normalizeCoverUrl(playlist.cover_url, req);
     playlist.effective_cover_url = normalizeCoverUrl(playlist.effective_cover_url, req);
-    
+
     const isOwner = String(playlist.user_id) === String(userId);
     const isSystem = playlist.is_system === 1 || playlist.is_system === true || !!playlist.system_key || playlist.type === 'system';
-    
+
     if (isSystem) {
       playlist.creator_name = 'MusicFlow';
     } else {
       playlist.creator_name = playlist.creator_name || 'Người dùng';
     }
-    
+
     const isSaved = Boolean(playlist.saved_playlist_id);
 
     playlist.is_owner = isOwner;
@@ -311,8 +328,20 @@ exports.getPlaylistDetail = async (req, res, next) => {
     }
 
     const songs = await getPlaylistSongs(pool, id, userId);
+    const tempoMetadata = getSystemPlaylistTempoMetadata(playlist.system_key);
+    const enriched = await systemPlaylistTempoService.enrichSystemPlaylistSongs(songs, playlist.system_key);
 
-    res.json({ success: true, data: { ...playlist, songs } });
+    res.json({
+      success: true,
+      data: {
+        ...playlist,
+        ...tempoMetadata,
+        audioFeatureCoverage: enriched.tempoStats.audioFeatureCoverage,
+        avgBpm: enriched.tempoStats.avgBpm,
+        tempoDistribution: enriched.tempoStats.tempoDistribution,
+        songs: enriched.songs
+      }
+    });
   } catch (err) {
     next(err);
   }
@@ -335,6 +364,14 @@ exports.addSongToPlaylist = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Không thể thêm bài hát vào playlist hệ thống' });
     }
 
+    if (typeof song_id === 'object' && song_id !== null) {
+      song_id = song_id.id || song_id.song_id || song_id.songId;
+    }
+
+    if (!song_id || String(song_id).includes('[object Object]')) {
+      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    }
+
     if (isNaN(song_id)) {
       song_id = await spotifyService.resolveSpotifyTrack(song_id);
     } else {
@@ -352,6 +389,7 @@ exports.addSongToPlaylist = async (req, res, next) => {
     // Update timestamp
     await pool.query(`UPDATE playlists SET updated_at = NOW() WHERE id = ?`, [id]);
 
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Đã thêm bài hát vào playlist' });
   } catch (err) {
     next(err);
@@ -441,6 +479,7 @@ exports.reorderPlaylistSongs = async (req, res, next) => {
     await conn.commit();
 
     const songs = await getPlaylistSongs(pool, id, userId);
+    clearPlaylistCache(userId);
     res.json({ success: true, data: { songs } });
   } catch (err) {
     try {
@@ -458,7 +497,7 @@ exports.removeSongFromPlaylist = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    let { song_id } = req.params;
+    let song_id = req.params.song_id || req.body?.song_id;
 
     const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
     if (playlists.length === 0 || String(playlists[0].user_id) !== String(userId)) {
@@ -471,6 +510,14 @@ exports.removeSongFromPlaylist = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Chỉ có thể chỉnh sửa playlist thủ công' });
     }
 
+    if (typeof song_id === 'object' && song_id !== null) {
+      song_id = song_id.id || song_id.song_id || song_id.songId;
+    }
+
+    if (!song_id || String(song_id).includes('[object Object]')) {
+      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    }
+
     if (isNaN(song_id)) {
       song_id = await spotifyService.resolveSpotifyTrack(song_id);
     } else {
@@ -478,6 +525,7 @@ exports.removeSongFromPlaylist = async (req, res, next) => {
     }
 
     await pool.query(`DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?`, [id, song_id]);
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Đã xóa bài hát khỏi playlist' });
   } catch (err) {
     next(err);
@@ -539,6 +587,7 @@ exports.updatePlaylist = async (req, res, next) => {
       );
     }
 
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Đã cập nhật playlist' });
   } catch (err) {
     next(err);
@@ -566,6 +615,7 @@ exports.deletePlaylist = async (req, res, next) => {
     await pool.query(`DELETE FROM ai_playlists WHERE playlist_id = ?`, [id]);
     await pool.query(`DELETE FROM playlists WHERE id = ?`, [id]);
 
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Đã xóa playlist' });
   } catch (err) {
     next(err);
@@ -587,6 +637,7 @@ exports.savePlaylistToLibrary = async (req, res, next) => {
       [userId, id]
     );
 
+    clearPlaylistCache(userId);
     res.json({ success: true, is_saved: true, message: 'Đã thêm playlist vào thư viện' });
   } catch (err) {
     next(err);
@@ -603,6 +654,7 @@ exports.removeSavedPlaylistFromLibrary = async (req, res, next) => {
       [userId, id]
     );
 
+    clearPlaylistCache(userId);
     res.json({ success: true, is_saved: false, message: 'Đã xóa playlist khỏi thư viện' });
   } catch (err) {
     require('fs').writeFileSync('error_log.txt', err.stack || err.toString());
@@ -665,6 +717,7 @@ exports.clonePlaylist = async (req, res, next) => {
     );
 
     await conn.commit();
+    clearPlaylistCache(userId);
     res.json({ success: true, message: 'Đã tạo bản sao playlist', playlist_id: newPlaylistId });
   } catch (err) {
     try {

@@ -14,7 +14,7 @@ class SpotifyService {
     this.stateSecret = process.env.SPOTIFY_STATE_SECRET || process.env.JWT_SECRET || this.clientSecret;
     this.token = null;
     this.tokenExpiresAt = null;
-    
+
     const fs = require('fs');
     const path = require('path');
     this.tokensFilePath = path.join(__dirname, '..', '..', 'spotify_tokens.json');
@@ -278,6 +278,11 @@ class SpotifyService {
   }
 
   async getTrack(trackId) {
+    if (!trackId || typeof trackId !== 'string' || trackId.includes('[object Object]') || trackId === 'undefined' || trackId === 'null') {
+      const spotifyError = new Error('ID bài hát Spotify không hợp lệ');
+      spotifyError.statusCode = 400;
+      throw spotifyError;
+    }
     const token = await this.getAccessToken();
     try {
       const response = await axios.get(`${SPOTIFY_API_URL}/tracks/${trackId}`, {
@@ -293,8 +298,13 @@ class SpotifyService {
   }
 
   async resolveSpotifyTrack(trackId, conn = null) {
+    if (!trackId || typeof trackId !== 'string' || trackId.includes('[object Object]') || trackId === 'undefined' || trackId === 'null') {
+      const error = new Error('ID bài hát Spotify không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
     const db = conn || require('../config/database').pool;
-    const cleanId = trackId.replace('spotify:track:', '');
+    const cleanId = String(trackId).replace('spotify:track:', '');
     const spotifyUri = `spotify:track:${cleanId}`;
 
     // 1. Kiểm tra bài hát đã tồn tại trong DB chưa
@@ -305,7 +315,7 @@ class SpotifyService {
 
     // 2. Lấy thông tin bài hát từ Spotify
     const track = await this.getTrack(cleanId);
-    
+
     // 3. Tìm hoặc tạo Artist
     const artistName = track.artists.map(a => a.name).join(', ');
     let [artists] = await db.query('SELECT id FROM artists WHERE name = ? LIMIT 1', [artistName]);

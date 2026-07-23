@@ -90,6 +90,14 @@ export const useNotificationStore = defineStore('notification', {
 
       this.socket.on('notification:new', handleNewNotification)
       this.socket.on('new_notification', handleNewNotification)
+
+      this.socket.on('artist:review_status_changed', (payload) => {
+        const { type, title, status } = payload
+        const typeStr = type === 'song' ? 'Bài hát' : 'Album'
+        const statusStr = status === 'approved' ? 'đã được duyệt' : 'đã bị từ chối'
+        useToastStore().showToast(`${typeStr} "${title || ''}" ${statusStr}`, status === 'approved' ? 'success' : 'error')
+        window.dispatchEvent(new CustomEvent('artist:review_status_changed'))
+      })
     },
     disconnectSocket() {
       if (this.socket) {

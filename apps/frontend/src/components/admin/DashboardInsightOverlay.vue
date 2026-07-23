@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <div v-if="show" class="fixed inset-0 z-[9999] report-overlay flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="$emit('close')" role="dialog" aria-modal="true">
-      
+
       <template v-if="isLoading">
         <div class="relative z-10 flex flex-col items-center justify-center p-8 text-center w-full">
           <div class="mb-6 grid h-16 w-16 place-items-center rounded-2xl bg-white/10 text-white border border-white/20 backdrop-blur-md shadow-lg">
@@ -15,16 +15,16 @@
       </template>
 
       <div v-else class="mx-auto flex w-full max-w-[1400px] max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col rounded-2xl shadow-2xl overflow-hidden border border-slate-200/60" style="background-color: #f5f5f7;">
-        
+
         <!-- Header cố định -->
         <div class="db-header shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between" style="margin-bottom: 0;">
           <div class="flex-1 min-w-0">
             <h2 class="text-xl font-bold text-slate-800 truncate">Báo cáo phân tích Dashboard</h2>
             <p class="text-sm text-slate-500 mt-1.5 flex items-center">
-              Kỳ phân tích: 
+              Kỳ phân tích:
               <span class="font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md mx-1.5 border border-blue-100/50 shadow-sm">
                 {{ periodLabel || '--' }}
-              </span> 
+              </span>
               · Nền tảng Âm nhạc
             </p>
           </div>
@@ -94,8 +94,8 @@
                 <path class="chart-area" :d="trendAreaPath" fill="url(#chart-fill)"/>
                 <path class="chart-line" :d="trendPath" filter="url(#chart-line-glow)"/>
 
-                <circle v-for="pt in trendCircles" :key="pt.x" :cx="pt.x" :cy="pt.y" r="4" 
-                        class="chart-dot" 
+                <circle v-for="pt in trendCircles" :key="pt.x" :cx="pt.x" :cy="pt.y" r="4"
+                        class="chart-dot"
                         filter="url(#chart-dot-glow)"
                         @mouseenter="showTooltip(pt)"
                         @mouseleave="hideTooltip"
@@ -119,12 +119,12 @@
             </div>
           </div>
 
-          <AdminGenreDonutChart 
+          <AdminGenreDonutChart
             title="Phân bố thể loại"
             description="Top thể loại theo lượt nghe."
             :data="safeReport.chartData.genres"
             nameKey="name"
-            valueKey="listens"
+            valueKey="listen_count"
             :centerLabel="totalGenresListens ? formatNumber(totalGenresListens) : '0'"
             centerSubLabel="lượt nghe"
             emptyText="Chưa có đủ dữ liệu thể loại trong kỳ phân tích."
@@ -165,8 +165,8 @@
 
               <template v-for="h in [6, 9, 12, 15, 18, 21]" :key="h">
                 <div class="heatmap-label">{{ h }}h</div>
-                <div v-for="d in [2,3,4,5,6,7,1]" :key="d+'-'+h" 
-                     class="heatmap-cell" 
+                <div v-for="d in [2,3,4,5,6,7,1]" :key="d+'-'+h"
+                     class="heatmap-cell"
                      :style="{ background: getHeatmapColor(d, h) }"
                      :title="`Thứ ${d===1?'CN':d} - ${h}h: ${getHeatmapValue(d, h)} lượt`">
                 </div>
@@ -194,7 +194,7 @@
               <tbody>
                 <tr v-for="c in safeReport.chartData.retentionCohorts" :key="c.week">
                   <td>Tuần {{ c.week }}</td>
-                  <td v-for="(val, idx) in c.retention" :key="idx" 
+                  <td v-for="(val, idx) in c.retention" :key="idx"
                       class="cohort-cell" :class="getCohortClass(val, c.totalUsers)">
                     {{ c.totalUsers ? Math.round((val / c.totalUsers) * 100) : 0 }}%
                   </td>
@@ -330,6 +330,8 @@ let loadingTextTimer = null;
 
 const safeReport = computed(() => {
   const raw = props.report || {};
+  const durationStats = raw.chartData?.durationStats || {};
+  const avgListenSec = Number(durationStats.avgListenSec ?? durationStats.avgListenDurationSeconds ?? 0);
   return {
     kpis: raw.kpis || { totalListens: 0, activeUsers: 0, newUsers: 0, avgCompletionRate: 0, premiumRevenue: 0 },
     chartData: {
@@ -338,7 +340,7 @@ const safeReport = computed(() => {
       top5Songs: Array.isArray(raw.chartData?.top5Songs) ? raw.chartData.top5Songs : [],
       heatmap: Array.isArray(raw.chartData?.heatmap) ? raw.chartData.heatmap : [],
       dataQuality: raw.chartData?.dataQuality || { totalSongs: 0, hasAudio: 0, hasCover: 0 },
-      durationStats: raw.chartData?.durationStats || { avgListenSec: 0 },
+      durationStats: { ...durationStats, avgListenSec, avgListenDurationSeconds: avgListenSec },
       retentionCohorts: Array.isArray(raw.chartData?.retentionCohorts) ? raw.chartData.retentionCohorts : [],
       funnel: Array.isArray(raw.chartData?.funnel) ? raw.chartData.funnel : []
     },
@@ -369,7 +371,7 @@ const trendPath = computed(() => {
     const y = 240 - (t.listens / maxTrendValue.value) * 210;
     return {x, y};
   });
-  
+
   let d = `M${pts[0].x},${pts[0].y}`;
   for (let i = 1; i < pts.length; i++) {
     const prev = pts[i - 1];
@@ -420,7 +422,7 @@ const trendLabels = computed(() => {
 });
 
 const totalGenresListens = computed(() => {
-  return safeReport.value.chartData.genres.reduce((sum, g) => sum + Number(g.listens || 0), 0);
+  return safeReport.value.chartData.genres.reduce((sum, g) => sum + Number(g.listen_count || g.listens || 0), 0);
 });
 
 // Top 5 songs width
@@ -568,8 +570,8 @@ function downloadPdf() {
             padding: 0 !important;
           }
           @media print {
-            .db-panel, .kpi-card { 
-              break-inside: avoid; 
+            .db-panel, .kpi-card {
+              break-inside: avoid;
               page-break-inside: avoid;
             }
             /* Phân trang PDF chuẩn 3 trang */

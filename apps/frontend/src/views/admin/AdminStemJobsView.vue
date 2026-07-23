@@ -1,17 +1,17 @@
 <template>
   <div class="flex-1 flex flex-col relative full-bleed min-h-0 pb-10">
     <!-- Header -->
-    <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm mb-6">
+    <header class="sticky -top-6 py-4 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm mb-4">
       <div class="flex items-center justify-between gap-4 w-full">
         <div>
           <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Stem Jobs</h1>
           <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi tiến trình tách vocal/instrumental phục vụ tính năng Karaoke</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Làm mới" @click="fetchData">
+          <button class="btn-secondary flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Làm mới" @click="fetchData">
             <MfIcon name="sync" size="20" :class="{ 'animate-spin': loadingSummary || loadingList }" />
           </button>
-          <button class="btn-secondary flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport" :disabled="exportLoading">
+          <button class="btn-secondary flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition" title="Xuất báo cáo" @click="exportReport" :disabled="exportLoading">
             <MfIcon v-if="exportLoading" name="sync" size="20" class="animate-spin" />
             <MfIcon v-else name="download" size="20" />
           </button>
@@ -21,7 +21,7 @@
 
     <div class="px-6 flex flex-col gap-4">
       <!-- KPI Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
       <AdminKpiCard
         title="Tổng Job"
         :value="summary?.total || 0"
@@ -84,7 +84,7 @@
               v-model="filters.q"
               type="text"
               placeholder="Tìm theo tên bài hát, ca sĩ..."
-              class="h-10 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-10 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+              class="h-9 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-10 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
               @input="debounceSearch"
               @focus="showHistory = true"
               @blur="onSearchBlur"
@@ -102,8 +102,8 @@
             </button>
 
             <!-- Lịch sử tìm kiếm Dropdown -->
-            <div 
-              v-if="showHistory && searchHistory.length > 0" 
+            <div
+              v-if="showHistory && searchHistory.length > 0"
               class="absolute left-0 right-0 top-[calc(100%+8px)] bg-white rounded-xl border border-slate-200 shadow-lg z-50 overflow-hidden"
             >
               <div class="px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 flex justify-between items-center border-b border-slate-100">
@@ -111,8 +111,8 @@
                 <button @click.stop="clearHistory" class="text-violet-600 hover:text-violet-700 transition-colors">Xóa tất cả</button>
               </div>
               <ul class="max-h-64 overflow-y-auto">
-                <li 
-                  v-for="term in searchHistory" 
+                <li
+                  v-for="term in searchHistory"
                   :key="term"
                   @click="selectHistory(term)"
                   class="px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer flex items-center gap-3 transition-colors group"
@@ -129,7 +129,7 @@
 
           <select
             v-model="filters.status"
-            class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 xl:w-56 xl:shrink-0 cursor-pointer"
+            class="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 xl:w-56 xl:shrink-0 cursor-pointer"
             @change="handleSearch"
           >
             <option value="all">Tất cả trạng thái</option>
@@ -141,7 +141,7 @@
 
           <button
             type="button"
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
             title="Làm mới"
             @click="resetFilters"
             :disabled="loadingList"
@@ -153,10 +153,10 @@
 
       <div class="flex flex-col gap-3">
         <!-- Table -->
-      <AdminTableShell 
-        :loading="loadingList" 
-        :empty="!loadingList && items.length === 0" 
-        emptyTitle="Chưa có job tách stem nào" 
+      <AdminTableShell
+        :loading="loadingList"
+        :empty="!loadingList && items.length === 0"
+        emptyTitle="Chưa có job tách stem nào"
         emptySubtitle="Chưa có bài hát nào được đưa vào hàng đợi."
         maxHeight="440px"
         class="h-[440px] !flex-none"
@@ -164,69 +164,69 @@
         <table class="w-full text-left border-separate border-spacing-0 whitespace-nowrap table-fixed min-w-[1000px]">
           <thead class="bg-slate-50">
             <tr class="text-xs text-slate-900 uppercase tracking-wider font-bold">
-              <th class="p-4 font-semibold w-16 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">ID</th>
-              <th class="p-4 font-semibold sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Bài hát</th>
-              <th class="p-4 font-semibold text-center w-32 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Trạng thái</th>
-              <th class="p-4 font-semibold w-36 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">File Stems</th>
-              <th class="p-4 font-semibold w-44 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Cập nhật lúc</th>
-              <th class="p-4 font-semibold w-48 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Lỗi (nếu có)</th>
-              <th class="p-4 font-semibold text-center w-28 sticky right-0 top-0 bg-slate-50 z-30 border-b border-slate-200 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
+              <th class="py-2 px-3 font-semibold w-16 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">ID</th>
+              <th class="py-2 px-3 font-semibold sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Bài hát</th>
+              <th class="py-2 px-3 font-semibold text-center w-32 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Trạng thái</th>
+              <th class="py-2 px-3 font-semibold w-36 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">File Stems</th>
+              <th class="py-2 px-3 font-semibold w-44 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Cập nhật lúc</th>
+              <th class="py-2 px-3 font-semibold w-48 sticky top-0 bg-slate-50 z-10 border-b border-slate-200">Lỗi (nếu có)</th>
+              <th class="py-2 px-3 font-semibold text-center w-28 sticky right-0 top-0 bg-slate-50 z-30 border-b border-slate-200 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
             </tr>
           </thead>
           <tbody class="bg-white">
             <tr v-for="item in items" :key="item.stem_id" class="hover:bg-slate-50 transition-colors group">
-              <td class="p-4 text-sm font-medium text-slate-500 border-b border-slate-100">#{{ item.stem_id }}</td>
-              <td class="p-4 border-b border-slate-100">
+              <td class="py-2 px-3 text-xs font-medium text-slate-500 border-b border-slate-100">#{{ item.stem_id }}</td>
+              <td class="py-2 px-3 border-b border-slate-100">
                 <div class="flex items-center gap-3">
-                  <img v-if="item.cover_url" :src="item.cover_url" class="w-10 h-10 rounded-lg object-cover shadow-sm shrink-0" alt="" />
-                  <div v-else class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                  <img v-if="item.cover_url" :src="item.cover_url" class="w-8 h-8 rounded-lg object-cover shadow-sm shrink-0" alt="" />
+                  <div v-else class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
                     <MfIcon name="music_note" class="text-slate-400" size="18" />
                   </div>
                   <div class="min-w-0 max-w-[250px]">
-                    <div class="font-bold text-slate-900 text-sm truncate" :title="item.title">{{ item.title }}</div>
-                    <div class="text-xs text-slate-500 truncate" :title="item.artist_name">{{ item.artist_name }}</div>
+                    <div class="font-bold text-slate-900 text-xs truncate" :title="item.title">{{ item.title }}</div>
+                    <div class="text-[11px] text-slate-500 truncate" :title="item.artist_name">{{ item.artist_name }}</div>
                   </div>
                 </div>
               </td>
-              <td class="p-4 text-center border-b border-slate-100">
+              <td class="py-2 px-3 text-center border-b border-slate-100">
                 <div class="flex flex-col items-center gap-1.5">
-                  <span :class="getStatusBadgeClass(item.status)" class="inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-md uppercase border">
+                  <span :class="getStatusBadgeClass(item.status)" class="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded uppercase border">
                     {{ item.status }}
                   </span>
-                  <div v-if="item.status === 'pending' && isPendingLong(item.updated_at)" 
+                  <div v-if="item.status === 'pending' && isPendingLong(item.updated_at)"
                        class="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1 cursor-help"
                        title="Job đã nằm trong hàng chờ lâu. Hãy kiểm tra AI service hoặc worker xử lý stem.">
                     <MfIcon name="warning" size="12" /> Pending lâu
                   </div>
                 </div>
               </td>
-              <td class="p-4 text-xs border-b border-slate-100">
+              <td class="py-2 px-3 text-xs border-b border-slate-100">
                 <div class="flex flex-col gap-1.5">
                   <div class="flex items-center gap-1.5" :class="item.has_vocals_file ? 'text-emerald-600' : 'text-slate-400'">
-                    <MfIcon :name="item.has_vocals_file ? 'check_circle' : 'cancel'" size="14" /> 
-                    <span>Vocals</span>
+                    <MfIcon :name="item.has_vocals_file ? 'check_circle' : 'cancel'" size="12" />
+                    <span class="text-[11px]">Vocals</span>
                   </div>
                   <div class="flex items-center gap-1.5" :class="item.has_instrumental_file ? 'text-emerald-600' : 'text-slate-400'">
-                    <MfIcon :name="item.has_instrumental_file ? 'check_circle' : 'cancel'" size="14" /> 
-                    <span>Instrumental</span>
+                    <MfIcon :name="item.has_instrumental_file ? 'check_circle' : 'cancel'" size="12" />
+                    <span class="text-[11px]">Instrumental</span>
                   </div>
-                  <div v-if="item.status === 'completed' && (!item.has_vocals_file || !item.has_instrumental_file)" 
+                  <div v-if="item.status === 'completed' && (!item.has_vocals_file || !item.has_instrumental_file)"
                        class="text-[10px] text-amber-700 font-bold mt-1 bg-amber-50 px-1.5 py-0.5 rounded w-fit border border-amber-200 inline-flex items-center gap-1">
                     <MfIcon name="warning" size="12" /> Thiếu file
                   </div>
                 </div>
               </td>
-              <td class="p-4 text-xs text-slate-600 border-b border-slate-100">
+              <td class="py-2 px-3 text-[11px] text-slate-600 border-b border-slate-100">
                 <div v-if="item.completed_at" class="flex items-center gap-1.5 text-slate-500" title="Hoàn thành lúc">
-                  <MfIcon name="check_circle" size="14" class="text-emerald-500 shrink-0" />
+                  <MfIcon name="check_circle" size="12" class="text-emerald-500 shrink-0" />
                   <span class="truncate">{{ formatDate(item.completed_at) }}</span>
                 </div>
                 <div v-else class="flex items-center gap-1.5 text-slate-500" title="Cập nhật lúc">
-                  <MfIcon name="update" size="14" class="text-slate-400 shrink-0" />
+                  <MfIcon name="clock" size="12" class="text-slate-400 shrink-0" />
                   <span class="truncate">{{ formatDate(item.updated_at) }}</span>
                 </div>
               </td>
-              <td class="p-4 text-xs border-b border-slate-100">
+              <td class="py-2 px-3 text-[11px] border-b border-slate-100">
                 <div v-if="item.error_message" class="flex items-start gap-1 group/error">
                   <div class="text-rose-600 max-w-[200px] truncate" :title="item.error_message">
                     {{ item.error_message }}
@@ -237,7 +237,7 @@
                 </div>
                 <span v-else class="text-slate-400 italic">-</span>
               </td>
-              <td class="p-4 text-center sticky right-0 bg-white group-hover:bg-slate-50 transition-colors z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.02)] border-b border-slate-100">
+              <td class="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-slate-50 transition-colors z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.02)] border-b border-slate-100">
                 <div class="flex justify-center">
                   <AdminActionMenu :actions="getJobActions(item)" />
                 </div>
@@ -246,15 +246,15 @@
           </tbody>
         </table>
       </AdminTableShell>
-      
+
       <!-- Pagination -->
       <div v-if="pagination.totalPages > 1 || items.length > 0" class="flex justify-between items-center px-2">
         <div class="text-sm text-slate-500 font-medium">
           Tổng số: <span class="font-bold text-slate-700">{{ pagination.total }}</span> job
         </div>
-        <AdminPagination 
-          :currentPage="pagination.page" 
-          :totalPages="pagination.totalPages" 
+        <AdminPagination
+          :currentPage="pagination.page"
+          :totalPages="pagination.totalPages"
           :limit="pagination.limit"
           @update:currentPage="changePage"
         />
@@ -264,7 +264,7 @@
   </div>
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -387,22 +387,22 @@ async function exportReport() {
       },
       responseType: 'blob'
     })
-    
+
     const url = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
     link.href = url
-    
+
     // Parse filename from headers if exists, otherwise default
     let filename = 'stem_jobs.csv'
     const disposition = response.headers['content-disposition']
     if (disposition && disposition.includes('attachment')) {
       const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
       const matches = filenameRegex.exec(disposition)
-      if (matches != null && matches[1]) { 
+      if (matches != null && matches[1]) {
         filename = matches[1].replace(/['"]/g, '')
       }
     }
-    
+
     link.setAttribute('download', filename)
     document.body.appendChild(link)
     link.click()
@@ -537,7 +537,7 @@ function getJobActions(item) {
       onClick: () => goToSong(item.song_id)
     }
   ]
-  
+
   if (item.vocals_url) {
     actions.push({
       label: 'Copy Vocals',
@@ -545,7 +545,7 @@ function getJobActions(item) {
       onClick: () => copyPath(item.vocals_url)
     })
   }
-  
+
   if (item.instrumental_url) {
     actions.push({
       label: 'Copy Instrumental',
@@ -553,7 +553,7 @@ function getJobActions(item) {
       onClick: () => copyPath(item.instrumental_url)
     })
   }
-  
+
   if (item.status === 'failed') {
     actions.push({
       label: 'Retry Job',
@@ -569,7 +569,7 @@ function getJobActions(item) {
       onClick: () => requestRetry(item)
     })
   }
-  
+
   return actions
 }
 
@@ -581,7 +581,7 @@ function requestRetry(job) {
 
 async function executeRetry() {
   if (!confirmState.jobId) return
-  
+
   confirmState.loading = true
   try {
     const res = await api.post(`/admin/stem-jobs/${confirmState.jobId}/retry`)

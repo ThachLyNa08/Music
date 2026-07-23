@@ -1,6 +1,6 @@
 <template>
   <div class="p-4 md:p-6 bg-gray-50 dark:bg-bg-base min-h-screen text-gray-800 dark:text-text-base font-sans">
-    
+
     <!-- Loading State -->
     <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
       <div class="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
@@ -31,7 +31,7 @@
           <div class="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 shadow-lg rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
             <img :src="$formatImageUrl(song.cover_url)" @error="e => e.target.src = '/default-cover.png'" class="w-full h-full object-cover" />
           </div>
-          
+
           <div class="flex-1 flex flex-col justify-center">
             <div class="flex items-start justify-between gap-4">
               <div>
@@ -100,7 +100,7 @@
       <!-- 3. DATA QUALITY -->
       <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl p-5 shadow-sm mb-6">
         <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 border-b border-gray-100 dark:border-bg-border pb-2">Chất lượng Dữ liệu</h3>
-        
+
         <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
           <div class="quality-item flex flex-col gap-1">
             <span class="text-xs text-gray-500">Audio File</span>
@@ -135,9 +135,26 @@
         </div>
       </div>
 
+      <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-2xl p-5 shadow-sm mb-6">
+        <div class="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-bg-border pb-2 mb-4">
+          <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Audio Features</h3>
+          <span v-if="audioFeatures" class="badge-ok">Analyzed</span>
+          <span v-else class="badge-info">Chưa có</span>
+        </div>
+        <div v-if="audioFeatures" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div v-for="item in audioFeatureItems" :key="item.label" class="quality-item flex flex-col gap-1">
+            <span class="text-xs text-gray-500">{{ item.label }}</span>
+            <span class="text-sm font-bold text-gray-900 dark:text-white">{{ item.value }}</span>
+          </div>
+        </div>
+        <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+          Bài hát này chưa có đặc trưng âm thanh. Trang vẫn hoạt động bình thường và recommendation sẽ dùng điểm trung lập cho tempo layer.
+        </p>
+      </div>
+
       <!-- 4. TABS NAVIGATION -->
       <div class="flex overflow-x-auto gap-2 mb-6 border-b border-gray-200 dark:border-bg-border pb-px hide-scrollbar">
-        <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id" 
+        <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
           class="px-4 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors focus:outline-none"
           :class="currentTab === tab.id ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'">
           {{ tab.label }}
@@ -148,7 +165,7 @@
       <div class="tab-content relative min-h-[300px]">
         <transition name="slide-up" mode="out-in">
           <div :key="currentTab">
-            
+
             <!-- TỔNG QUAN -->
             <div v-if="currentTab === 'overview'" class="tab-pane">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -160,7 +177,7 @@
                   </div>
                   <div v-else class="h-64 flex items-center justify-center text-gray-400">Không đủ dữ liệu 30 ngày</div>
                 </div>
-                
+
                 <!-- Cột phải: Top Info -->
                 <div class="bg-white dark:bg-bg-surface border border-gray-100 dark:border-bg-border rounded-xl p-5 shadow-sm flex flex-col gap-4">
                   <div>
@@ -353,7 +370,7 @@
         </transition>
       </div>
     </div>
-    
+
     <!-- Optional: Import SongFormModal directly if we want editing here. But usually redirected to list, or just reused. -->
     <SongFormModal
       v-if="formData.artists.length > 0"
@@ -369,7 +386,7 @@
     />
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       v-model:open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -432,6 +449,7 @@ const error = ref(null);
 const song = ref(null);
 const summary = ref({});
 const quality = ref({});
+const audioFeatures = ref(null);
 const analytics = ref({ listensByDay: [], listensByHour: [], recentListeners: [] });
 const relations = ref({ playlists: [], sameArtistSongs: [], sameAlbumSongs: [] });
 const adminActions = ref({});
@@ -470,6 +488,7 @@ async function fetchSongDetail(id) {
     song.value = data.song;
     summary.value = data.summary;
     quality.value = data.quality;
+    audioFeatures.value = data.audioFeatures || null;
     analytics.value = data.analytics;
     relations.value = data.relations;
     adminActions.value = data.adminActions;
@@ -539,6 +558,27 @@ const hourlyChartData = computed(() => {
     }]
   };
 });
+
+function formatNullableMetric(value, suffix = '') {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'N/A'
+  const n = Number(value)
+  return `${Number.isInteger(n) ? n : n.toFixed(3)}${suffix}`
+}
+
+const audioFeatureItems = computed(() => {
+  const f = audioFeatures.value || {}
+  return [
+    { label: 'Raw BPM', value: formatNullableMetric(f.rawBpm) },
+    { label: 'Normalized BPM', value: formatNullableMetric(f.normalizedBpm) },
+    { label: 'Tempo Bucket', value: f.tempoBucket || 'N/A' },
+    { label: 'Energy', value: formatNullableMetric(f.energyScore) },
+    { label: 'Danceability', value: formatNullableMetric(f.danceabilityScore) },
+    { label: 'Beat Confidence', value: formatNullableMetric(f.beatConfidence) },
+    { label: 'Tempo Stability', value: formatNullableMetric(f.tempoStability) },
+    { label: 'Extractor', value: f.extractor || 'N/A' },
+    { label: 'Extracted At', value: f.extractedAt ? new Date(f.extractedAt).toLocaleString('vi-VN') : 'N/A' },
+  ]
+})
 
 // Utilities
 function formatDuration(sec) {

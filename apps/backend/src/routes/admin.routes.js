@@ -19,12 +19,16 @@ router.use(authenticate, requireAdmin);
 // Admin Artist Song Reviews
 router.get('/artist-song-reviews/summary', adminArtistSongReviewController.getSummary);
 router.get('/artist-song-reviews', adminArtistSongReviewController.getArtistSongReviews);
+router.post('/artist-song-reviews/bulk-approve', adminArtistSongReviewController.bulkApproveArtistSongs);
+router.post('/artist-song-reviews/bulk-reject', adminArtistSongReviewController.bulkRejectArtistSongs);
 router.get('/artist-song-reviews/:songId', adminArtistSongReviewController.getArtistSongReviewDetail);
 router.post('/artist-song-reviews/:songId/approve', adminArtistSongReviewController.approveArtistSong);
 router.post('/artist-song-reviews/:songId/reject', adminArtistSongReviewController.rejectArtistSong);
 
 // Admin Artist Album Reviews
 router.get('/artist-album-reviews', adminArtistAlbumReviewController.getArtistAlbumReviews);
+router.post('/artist-album-reviews/bulk-approve', adminArtistAlbumReviewController.bulkApproveArtistAlbums);
+router.post('/artist-album-reviews/bulk-reject', adminArtistAlbumReviewController.bulkRejectArtistAlbums);
 router.get('/artist-album-reviews/:albumId', adminArtistAlbumReviewController.getArtistAlbumReviewDetail);
 router.post('/artist-album-reviews/:albumId/approve', adminArtistAlbumReviewController.approveArtistAlbum);
 router.post('/artist-album-reviews/:albumId/reject', adminArtistAlbumReviewController.rejectArtistAlbum);
@@ -58,6 +62,7 @@ router.get('/system-playlists/operation-summary', adminController.getSystemPlayl
 router.get('/system-playlists/activity-log', adminController.getSystemPlaylistsActivityLog);
 router.get('/system-playlists/quality-report', adminController.getSystemPlaylistsQualityReport);
 router.post('/system-playlists/regenerate-all', adminController.regenerateAllSystemPlaylists);
+router.post('/system-playlists/regenerate-scope', adminController.regenerateSystemPlaylistsScope);
 router.get('/system-playlists/system-keys', adminController.getSystemKeys);
 router.get('/system-playlists', adminController.getSystemPlaylists);
 router.get('/system-playlists/:id', adminController.getSystemPlaylistDetail);
@@ -183,6 +188,7 @@ router.patch('/genres/bulk-action', adminGenreController.bulkActionGenres);
 router.post('/genres/merge', adminGenreController.mergeGenres);
 router.post('/genres/bulk-assign', adminGenreController.bulkAssignGenre);
 router.get('/genres/export', adminGenreController.exportGenres);
+router.get('/genres/options', adminGenreController.getGenreOptions);
 router.get('/genres/:id/songs', adminGenreController.getGenreSongs);
 router.get('/genres/:id/detail', adminGenreController.getGenreDetailFull);
 router.patch('/genres/:id/taxonomy-flags', adminGenreController.updateTaxonomyFlags);

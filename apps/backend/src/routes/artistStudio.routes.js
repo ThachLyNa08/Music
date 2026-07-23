@@ -25,4 +25,7 @@ router.get('/albums', artistStudioController.getAlbums);
 router.post('/albums', upload.single('cover'), artistStudioController.createAlbum);
 router.get('/albums/:id', artistStudioController.getAlbumDetail);
 
+router.post('/songs/:id/resubmit', upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), artistStudioController.resubmitSong);
+router.post('/albums/:id/resubmit', upload.single('cover'), artistStudioController.resubmitAlbum);
+
 module.exports = router;

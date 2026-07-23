@@ -273,9 +273,20 @@ function toggleNotifDropdown() {
   isDropdownOpen.value = false
 }
 
+const handleReviewUpdated = () => {
+  notifStore.fetchSummary()
+}
+
 watch(() => notifStore.pendingReviewCount, (val) => {
   badges.value['pendingArtistSongs'] = val
-})
+}, { immediate: true })
+
+watch(() => globalNotifStore.socket, (s) => {
+  if (s) {
+    s.off('admin:review_updated', handleReviewUpdated)
+    s.on('admin:review_updated', handleReviewUpdated)
+  }
+}, { immediate: true })
 
 watch(() => route.fullPath, openActiveGroup, { immediate: true })
 
@@ -293,28 +304,12 @@ onMounted(() => {
   document.body.classList.remove('dark')
   document.addEventListener('click', closeDropdown)
   notifStore.fetchSummary()
-
-  // Listen to realtime updates for admin review queue
-  if (globalNotifStore.socket) {
-    globalNotifStore.socket.on('admin:review_updated', () => {
-      notifStore.fetchSummary()
-    })
-  } else {
-    // Retry attaching listener if socket is not ready yet
-    setTimeout(() => {
-      if (globalNotifStore.socket) {
-        globalNotifStore.socket.on('admin:review_updated', () => {
-          notifStore.fetchSummary()
-        })
-      }
-    }, 2000)
-  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
   if (globalNotifStore.socket) {
-    globalNotifStore.socket.off('admin:review_updated')
+    globalNotifStore.socket.off('admin:review_updated', handleReviewUpdated)
   }
   theme.applyTheme()
 })
@@ -514,21 +509,36 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
-  background: #ef4444;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 900;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  transition: all 0.2s ease;
 }
 
 .nav-badge.small {
   margin-left: auto;
-  min-width: 20px;
-  height: 20px;
-  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.nav-group-btn:hover .nav-badge,
+.nav-item:hover .nav-badge,
+.nav-item.active .nav-badge {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
 }
 
 .spacer { flex: 1; }
@@ -691,18 +701,20 @@ onUnmounted(() => {
 
 .bell-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 3px;
+  right: 3px;
   background: #ef4444;
   color: white;
-  font-size: 10px;
-  font-weight: 800;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  font-size: 9.5px;
+  font-weight: 700;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
 }
 
 .notif-dropdown {
@@ -851,7 +863,7 @@ onUnmounted(() => {
   .sidebar-backdrop {
     display: block;
   }
-  
+
   .admin-sidebar {
     position: fixed;
     top: 0;
@@ -871,14 +883,14 @@ onUnmounted(() => {
   .sidebar-toggle {
     display: none !important;
   }
-  
+
   /* Ensure sidebar is always fully expanded on mobile */
   .admin-sidebar.collapsed,
   .admin-sidebar.mobile-open,
   .admin-sidebar {
     width: 260px !important;
   }
-  
+
   .admin-sidebar .brand {
     padding: 0 20px !important;
     justify-content: flex-start !important;
@@ -894,11 +906,11 @@ onUnmounted(() => {
   .admin-sidebar .nav-badge {
     display: inline-flex !important;
   }
-  
+
   .admin-sidebar .nav-children {
     padding-left: 10px !important;
   }
-  
+
   .admin-sidebar .nav-item {
     padding: 0 10px 0 40px !important;
     justify-content: flex-start !important;
@@ -907,7 +919,7 @@ onUnmounted(() => {
   .mobile-menu-btn {
     display: block;
   }
-  
+
   .admin-topbar {
     padding: 0 16px;
   }

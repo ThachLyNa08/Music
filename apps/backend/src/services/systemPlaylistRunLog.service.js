@@ -1,43 +1,87 @@
 const { pool } = require('../config/database');
 
+async function columnExists(tableName, columnName) {
+  const [rows] = await pool.query(
+    `SELECT 1
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+  return rows.length > 0;
+}
+
+async function addColumnIfMissing(tableName, columnName, definition) {
+  if (await columnExists(tableName, columnName)) return;
+  await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+}
+
 async function ensureLogTableExists() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_playlist_runs (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       system_key VARCHAR(100) NOT NULL,
+      playlist_id INT UNSIGNED NULL,
+      user_id INT UNSIGNED NULL,
       run_type ENUM('scheduled', 'manual', 'admin_all', 'script') NOT NULL DEFAULT 'scheduled',
       source_start_date DATE NULL,
       source_end_date DATE NULL,
       scheduled_for DATETIME NULL,
       started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       finished_at DATETIME NULL,
-      status ENUM('success', 'failed', 'skipped') NOT NULL DEFAULT 'success',
+      status ENUM('success', 'failed', 'partial', 'skipped') NOT NULL DEFAULT 'success',
       playlist_count INT DEFAULT 0,
       song_count INT DEFAULT 0,
+      songs_added INT DEFAULT 0,
+      songs_removed INT DEFAULT 0,
+      total_songs INT DEFAULT 0,
       overlap_ratio DECIMAL(5,2) NULL,
+      error_message TEXT NULL,
       message TEXT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_system_key_created_at (system_key, created_at),
       INDEX idx_scheduled_for (scheduled_for)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    ALTER TABLE system_playlist_runs
+    MODIFY status ENUM('success', 'failed', 'partial', 'skipped') NOT NULL DEFAULT 'success'
+  `);
+  await addColumnIfMissing('system_playlist_runs', 'playlist_id', 'playlist_id INT UNSIGNED NULL AFTER system_key');
+  await addColumnIfMissing('system_playlist_runs', 'user_id', 'user_id INT UNSIGNED NULL AFTER playlist_id');
+  await addColumnIfMissing('system_playlist_runs', 'songs_added', 'songs_added INT DEFAULT 0 AFTER song_count');
+  await addColumnIfMissing('system_playlist_runs', 'songs_removed', 'songs_removed INT DEFAULT 0 AFTER songs_added');
+  await addColumnIfMissing('system_playlist_runs', 'total_songs', 'total_songs INT DEFAULT 0 AFTER songs_removed');
+  await addColumnIfMissing('system_playlist_runs', 'error_message', 'error_message TEXT NULL AFTER overlap_ratio');
 }
 
 async function logSystemPlaylistRun(data) {
   const [result] = await pool.query(
-    `INSERT INTO system_playlist_runs 
-     (system_key, run_type, source_start_date, source_end_date, scheduled_for, status, playlist_count, song_count, overlap_ratio, message, finished_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    `INSERT INTO system_playlist_runs
+     (system_key, playlist_id, user_id, run_type, source_start_date, source_end_date, scheduled_for,
+      started_at, status, playlist_count, song_count, songs_added, songs_removed, total_songs,
+      overlap_ratio, error_message, message, finished_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     [
-      data.system_key, 
-      data.run_type || 'scheduled', 
-      data.source_start_date || null, 
-      data.source_end_date || null, 
+      data.system_key,
+      data.playlist_id || null,
+      data.user_id || null,
+      data.run_type || 'scheduled',
+      data.source_start_date || null,
+      data.source_end_date || null,
       data.scheduled_for || null,
+      data.started_at || null,
       data.status || 'success',
       data.playlist_count || 0,
       data.song_count || 0,
+      data.songs_added || 0,
+      data.songs_removed || 0,
+      data.total_songs || data.song_count || 0,
       data.overlap_ratio !== undefined ? data.overlap_ratio : null,
+      data.error_message || null,
       data.message || null
     ]
   );
@@ -82,8 +126,29 @@ async function getRunningGenerationRun(operationType = 'regenerate_all') {
   return rows[0] || null;
 }
 
+async function markStaleRunningGenerationRuns(operationType, staleMinutes = 60) {
+  await ensureGenerationRunsTableExists();
+  const safeMinutes = Math.max(5, Math.min(Number(staleMinutes) || 60, 24 * 60));
+  await pool.query(
+    `UPDATE system_playlist_generation_runs
+     SET status = 'failed',
+         finished_at = NOW(),
+         duration_ms = TIMESTAMPDIFF(MICROSECOND, started_at, NOW()) DIV 1000,
+         error_message = COALESCE(error_message, ?)
+     WHERE operation_type = ?
+       AND status = 'running'
+       AND started_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
+    [
+      `Marked stale after ${safeMinutes} minutes`,
+      operationType,
+      safeMinutes
+    ]
+  );
+}
+
 async function startGenerationRun({ operationType = 'regenerate_all', triggeredByUserId = null, metadata = null } = {}) {
   await ensureGenerationRunsTableExists();
+  await markStaleRunningGenerationRuns(operationType, 60);
   const running = await getRunningGenerationRun(operationType);
   if (running) {
     const err = new Error('Đang có tiến trình tạo lại playlist đang chạy');
@@ -103,6 +168,31 @@ async function startGenerationRun({ operationType = 'regenerate_all', triggeredB
     ]
   );
   return result.insertId;
+}
+
+async function updateGenerationRunProgress(runId, data = {}) {
+  await ensureGenerationRunsTableExists();
+  await pool.query(
+    `UPDATE system_playlist_generation_runs
+     SET total_users = ?,
+         total_playlists = ?,
+         success_count = ?,
+         failed_count = ?,
+         skipped_count = ?,
+         error_message = ?,
+         metadata = ?
+     WHERE id = ? AND status = 'running'`,
+    [
+      Number(data.totalUsers || 0),
+      Number(data.totalPlaylists || 0),
+      Number(data.successCount || 0),
+      Number(data.failedCount || 0),
+      Number(data.skippedCount || 0),
+      data.errorMessage || null,
+      data.metadata ? JSON.stringify(data.metadata) : null,
+      runId
+    ]
+  );
 }
 
 async function finishGenerationRun(runId, data = {}) {
@@ -224,7 +314,9 @@ module.exports = {
   logSystemPlaylistRun,
   ensureGenerationRunsTableExists,
   getRunningGenerationRun,
+  markStaleRunningGenerationRuns,
   startGenerationRun,
+  updateGenerationRunProgress,
   finishGenerationRun,
   getOperationSummary,
   getActivityLog

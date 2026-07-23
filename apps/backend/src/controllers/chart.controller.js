@@ -70,6 +70,8 @@ async function hydrateLikedState(rows, userId) {
   }));
 }
 
+const weeklyChartCache = new Map();
+
 async function getRegionChart(region, limit, userId) {
   const config = REGION_CONFIG[region];
   const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 50);
@@ -89,34 +91,37 @@ async function getRegionChart(region, limit, userId) {
       al.title AS album_title,
       al.title AS album,
       g.name AS genre_name,
-      COUNT(lh.id) AS weekly_plays
-    FROM songs s
+      wc.weekly_plays
+    FROM (
+      SELECT song_id, COUNT(id) AS weekly_plays
+      FROM listening_history
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      GROUP BY song_id
+    ) wc
+    JOIN songs s ON s.id = wc.song_id
     JOIN artists a ON s.artist_id = a.id
     LEFT JOIN albums al ON s.album_id = al.id
     LEFT JOIN genres g ON s.genre_id = g.id
-    LEFT JOIN listening_history lh
-      ON lh.song_id = s.id
-      AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     WHERE ${publicSongCondition('s')}
       AND ${config.condition}
-    GROUP BY s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.play_count,
-             s.artist_id, a.name, s.album_id, al.title, al.cover_url, g.name
-    ORDER BY weekly_plays DESC, s.play_count DESC, s.created_at DESC
+    ORDER BY wc.weekly_plays DESC, s.play_count DESC, s.created_at DESC
     LIMIT ?
   `, [safeLimit]);
 
   const [previousRows] = await pool.query(`
-    SELECT s.id, COUNT(lh.id) AS previous_plays
-    FROM songs s
+    SELECT s.id, pwc.previous_plays
+    FROM (
+      SELECT song_id, COUNT(id) AS previous_plays
+      FROM listening_history
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+        AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+      GROUP BY song_id
+    ) pwc
+    JOIN songs s ON pwc.song_id = s.id
     LEFT JOIN genres g ON s.genre_id = g.id
-    JOIN listening_history lh
-      ON lh.song_id = s.id
-      AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-      AND lh.listened_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
     WHERE ${publicSongCondition('s')}
       AND ${config.condition}
-    GROUP BY s.id
-    ORDER BY previous_plays DESC, s.play_count DESC
+    ORDER BY pwc.previous_plays DESC, s.play_count DESC
     LIMIT 50
   `);
 
@@ -144,23 +149,70 @@ exports.getWeeklyCharts = async (req, res, next) => {
   try {
     const userId = getUserId(req);
     const region = String(req.query.region || '').toUpperCase();
-    const limit = req.query.limit || 5;
+    const limit = parseInt(req.query.limit || '5', 10);
+    const cacheKey = `weekly:${region || 'all'}:${limit}`;
 
-    if (region && REGION_CONFIG[region]) {
-      const data = await getRegionChart(region, limit, userId);
-      return res.json({ success: true, data });
+    // Memory cache
+    const cached = weeklyChartCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < 15 * 60 * 1000)) { // 15 mins TTL
+      // Cache hit, hydrate user likes for fast return
+      let data;
+      if (region && REGION_CONFIG[region]) {
+        data = await hydrateLikedState(cached.data, userId);
+      } else {
+        data = {
+          vn: await hydrateLikedState(cached.data.vn, userId),
+          usuk: await hydrateLikedState(cached.data.usuk, userId),
+          kpop: await hydrateLikedState(cached.data.kpop, userId)
+        };
+      }
+      return res.json({ success: true, data, cached: true });
     }
 
-    const [vn, usuk, kpop] = await Promise.all([
-      getRegionChart('VN', limit, userId),
-      getRegionChart('USUK', limit, userId),
-      getRegionChart('KPOP', limit, userId)
-    ]);
+    try {
+      let dataToCache;
+      if (region && REGION_CONFIG[region]) {
+        const rawData = await getRegionChart(region, limit, null);
+        dataToCache = rawData;
+        weeklyChartCache.set(cacheKey, { timestamp: Date.now(), data: dataToCache });
+        const finalData = await hydrateLikedState(rawData, userId);
+        return res.json({ success: true, data: finalData });
+      }
 
-    res.json({
-      success: true,
-      data: { vn, usuk, kpop }
-    });
+      const [vn, usuk, kpop] = await Promise.all([
+        getRegionChart('VN', limit, null),
+        getRegionChart('USUK', limit, null),
+        getRegionChart('KPOP', limit, null)
+      ]);
+
+      dataToCache = { vn, usuk, kpop };
+      weeklyChartCache.set(cacheKey, { timestamp: Date.now(), data: dataToCache });
+
+      res.json({
+        success: true,
+        data: {
+          vn: await hydrateLikedState(vn, userId),
+          usuk: await hydrateLikedState(usuk, userId),
+          kpop: await hydrateLikedState(kpop, userId)
+        }
+      });
+    } catch (e) {
+      if (cached) {
+        // Return stale cache if error occurs
+        let data;
+        if (region && REGION_CONFIG[region]) {
+          data = await hydrateLikedState(cached.data, userId);
+        } else {
+          data = {
+            vn: await hydrateLikedState(cached.data.vn, userId),
+            usuk: await hydrateLikedState(cached.data.usuk, userId),
+            kpop: await hydrateLikedState(cached.data.kpop, userId)
+          };
+        }
+        return res.json({ success: true, data, stale: true });
+      }
+      throw e;
+    }
   } catch (err) {
     next(err);
   }

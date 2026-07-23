@@ -6,7 +6,7 @@
       :show-view-all="false"
     />
 
-    <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6">
       <WeeklyChartCard
         v-for="chart in visibleCharts"
         :key="chart.region"

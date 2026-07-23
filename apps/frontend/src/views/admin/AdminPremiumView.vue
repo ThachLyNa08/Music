@@ -13,11 +13,11 @@
     <div class="space-y-4 pb-8">
       <!-- Overview Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-      <AdminKpiCard 
-        title="Người dùng Premium" 
-        :value="summary?.totalPremiumUsers ?? 0" 
-        icon="workspace_premium" 
-        tone="indigo" 
+      <AdminKpiCard
+        title="Người dùng Premium"
+        :value="summary?.totalPremiumUsers ?? 0"
+        icon="workspace_premium"
+        tone="indigo"
         :loading="isSummaryLoading"
         iconPosition="left"
         compact
@@ -31,12 +31,12 @@
           </span>
         </template>
       </AdminKpiCard>
-      
-      <AdminKpiCard 
-        title="Sắp hết hạn (7 ngày)" 
-        :value="summary?.expiringSoonUsers ?? 0" 
-        icon="history" 
-        tone="amber" 
+
+      <AdminKpiCard
+        title="Sắp hết hạn (7 ngày)"
+        :value="summary?.expiringSoonUsers ?? 0"
+        icon="history"
+        tone="amber"
         :loading="isSummaryLoading"
         iconPosition="left"
         compact
@@ -50,12 +50,12 @@
           </span>
         </template>
       </AdminKpiCard>
-      
-      <AdminKpiCard 
-        title="Doanh thu tháng này" 
-        :value="formatCurrency(summary?.monthlyPremiumRevenue)" 
-        icon="payments" 
-        tone="blue" 
+
+      <AdminKpiCard
+        title="Doanh thu tháng này"
+        :value="formatCurrency(summary?.monthlyPremiumRevenue)"
+        icon="payments"
+        tone="blue"
         :loading="isSummaryLoading"
         iconPosition="left"
         compact
@@ -75,12 +75,12 @@
           </span>
         </template>
       </AdminKpiCard>
-      
-      <AdminKpiCard 
-        title="Giao dịch đang chờ" 
-        :value="summary?.pendingPremiumTransactions ?? 0" 
-        icon="history" 
-        tone="slate" 
+
+      <AdminKpiCard
+        title="Giao dịch đang chờ"
+        :value="summary?.pendingPremiumTransactions ?? 0"
+        icon="history"
+        tone="slate"
         :loading="isSummaryLoading"
         iconPosition="left"
         compact
@@ -96,160 +96,28 @@
       </AdminKpiCard>
     </div>
 
-    <!-- NEW DISTRIBUTION AND TIMELINE SECTIONS -->
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
-      <!-- Plan Distribution -->
-      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
-        <div class="flex items-center gap-2 mb-1">
-          <MfIcon name="category" size="18" class="text-indigo-500" />
-          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Phân bổ gói Premium</h3>
-        </div>
-        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">{{ summary?.activePremiumUsers || 0 }} người dùng đang đăng ký</p>
-        
-        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
-          <div v-for="i in 3" :key="i">
-            <div class="flex justify-between mb-2">
-              <div class="w-32 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              <div class="w-12 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            </div>
-            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-          </div>
-        </div>
-        <div v-else-if="summary?.planDistribution?.length" class="space-y-4">
-          <div v-for="(plan, index) in summary.planDistribution" :key="plan.id">
-            <div class="flex justify-between items-center mb-1">
-              <div class="flex items-center">
-                <span class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ plan.name }}</span>
-              </div>
-              <div class="text-[11px] font-medium">
-                <span class="text-gray-900 dark:text-white font-bold">{{ plan.user_count }}</span>
-                <span class="text-gray-400 ml-1">({{ summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0 }}%)</span>
-              </div>
-            </div>
-            <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
-              <div class="h-2 rounded-full" :class="getPlanColorClass(index, 'bg')" :style="{ width: `${summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0}%` }"></div>
-            </div>
-            <div class="text-[10px] text-gray-400 mt-1.5">
-              {{ formatCurrency(plan.price) }} / {{ plan.duration_days >= 30 ? Math.round(plan.duration_days / 30) + ' tháng' : plan.duration_days + ' ngày' }} 
-              <span v-if="plan.price > 0 && plan.user_count > 0">&middot; Tổng thu ước tính: {{ formatCurrency(plan.price * plan.user_count) }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="text-center py-6 text-sm text-gray-400">Không có dữ liệu phân bổ gói.</div>
-      </div>
 
-      <!-- Timeline -->
-      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
-        <div class="flex items-center gap-2 mb-1">
-          <MfIcon name="clock" size="18" class="text-indigo-500" />
-          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Timeline hết hạn Premium</h3>
-        </div>
-        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">Dự kiến gia hạn trong 90 ngày tới</p>
-        
-        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
-          <div v-for="i in 4" :key="i" class="flex gap-3 items-start">
-            <div class="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 mt-1"></div>
-            <div class="flex-1 flex justify-between">
-              <div>
-                <div class="w-24 h-4 bg-gray-200 dark:bg-gray-700 rounded mb-1"></div>
-                <div class="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              </div>
-              <div class="w-16 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            </div>
-          </div>
-        </div>
-        <div v-else-if="summary?.expiringTimeline?.length">
-          <div class="space-y-3 max-h-[260px] overflow-y-auto no-scrollbar pr-2">
-            <template v-for="(user, index) in summary.expiringTimeline" :key="user.id">
-              <!-- Thẻ nhắc nhở (Dưới 7 ngày) -->
-              <div v-if="getDaysRemaining(user.premium_expires_at) <= 7" class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3">
-                <div class="flex items-center justify-between mb-2.5">
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
-                      {{ user.display_name.charAt(0).toUpperCase() }}
-                    </div>
-                    <div class="min-w-0">
-                      <p class="text-sm font-bold text-gray-900 dark:text-rose-100 truncate">{{ user.display_name }}</p>
-                      <p class="text-[11px] text-gray-500 dark:text-rose-200/70 truncate">{{ user.email }}</p>
-                    </div>
-                  </div>
-                  <div class="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-bold shrink-0">
-                    {{ getDaysRemainingText(user.premium_expires_at) }}
-                  </div>
-                </div>
-                
-                <div class="w-full bg-rose-200 dark:bg-rose-800/50 rounded-full h-1 mb-2">
-                  <div class="bg-rose-500 h-1 rounded-full" :style="{ width: getProgressWidth(user.premium_expires_at) }"></div>
-                </div>
-                
-                <div class="flex justify-between items-center text-[11px]">
-                  <span class="text-gray-500 dark:text-rose-200/70">Hết hạn: {{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</span>
-                  <div class="flex items-center gap-1.5">
-                    <span v-if="user.autoReminderSent" class="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[10px] font-bold" title="Hệ thống đã tự động gửi lời nhắc">
-                      Đã tự động nhắc
-                    </span>
-                    <button 
-                      v-if="!user.manualReminderSent"
-                      @click="openReminderConfirm(user)"
-                      class="text-rose-600 dark:text-rose-400 font-medium hover:underline flex items-center gap-0.5"
-                      :disabled="sendingReminders[user.id]"
-                    >
-                      <span v-if="sendingReminders[user.id]">Đang gửi...</span>
-                      <span v-else>Nhắc nhở &rarr;</span>
-                    </button>
-                    <span v-else class="text-rose-400 dark:text-rose-500 font-medium opacity-80 cursor-not-allowed" title="Admin đã gửi nhắc nhở thủ công cho kỳ Premium này.">
-                      Đã nhắc thủ công
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Timeline bình thường (Trên 7 ngày) -->
-              <div v-else class="flex items-start gap-3 relative mt-2 pl-1">
-                <!-- Vertical line -->
-                <div v-if="index !== summary.expiringTimeline.length - 1 && getDaysRemaining(summary.expiringTimeline[index+1]?.premium_expires_at) > 7" class="absolute left-[9px] top-4 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
-                
-                <div class="w-3 h-3 rounded-full mt-1 ring-[3px] ring-white dark:ring-bg-card shrink-0 z-10" :class="getTimelineColorClass(user.premium_expires_at)"></div>
-                <div class="flex-1 min-w-0 pb-3">
-                  <div class="flex justify-between items-start">
-                    <div>
-                      <p class="text-xs font-semibold text-gray-900 dark:text-white truncate">{{ user.display_name }}</p>
-                      <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">{{ user.plan_name || 'Premium' }}</p>
-                    </div>
-                    <div class="text-right shrink-0 ml-2">
-                      <p class="text-xs font-bold" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</p>
-                      <p class="text-[10px] font-medium" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ getDaysRemainingText(user.premium_expires_at) }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-        <div v-else class="text-center py-6 text-sm text-gray-400">Không có người dùng nào sắp hết hạn.</div>
-      </div>
-    </div>
 
     <!-- Filters & Search -->
     <div class="mb-3 relative z-30">
       <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
         <div class="relative min-w-[280px] flex-1">
           <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input 
+          <input
             ref="searchInputRef"
-            v-model="filterForm.q" 
+            v-model="filterForm.q"
             @input="onSearchInput"
             @keyup.enter="handleEnterSearch"
             @focus="showHistory = true"
-            type="text" 
-            placeholder="Tìm theo tên, email hoặc ID..." 
-            class="admin-input !pl-8 !pr-8 w-full" 
+            type="text"
+            placeholder="Tìm theo tên, email hoặc ID..."
+            class="admin-input !pl-8 !pr-8 w-full"
             :disabled="isInitialLoading"
           />
           <button v-if="filterForm.q" @click="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <MfIcon name="close" size="16" />
           </button>
-          
+
           <!-- Search History Dropdown -->
           <div v-if="showHistory && searchHistory.length > 0" class="search-history-dropdown absolute top-full left-0 right-0 mt-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg shadow-lg z-50 overflow-hidden py-1">
             <ul class="max-h-60 overflow-y-auto">
@@ -289,10 +157,10 @@
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
-      <AdminTableShell 
-        :loading="isInitialLoading || isTableLoading" 
-        :empty="!(isInitialLoading || isTableLoading) && users.length === 0" 
-        emptyTitle="Không tìm thấy người dùng" 
+      <AdminTableShell
+        :loading="isInitialLoading || isTableLoading"
+        :empty="!(isInitialLoading || isTableLoading) && users.length === 0"
+        emptyTitle="Không tìm thấy người dùng"
         emptySubtitle="Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm."
         maxHeight="432px"
       >
@@ -369,8 +237,142 @@
     </div>
     </div>
 
+    <!-- NEW DISTRIBUTION AND TIMELINE SECTIONS (Moved below table) -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4 mt-6">
+      <!-- Plan Distribution -->
+      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
+        <div class="flex items-center gap-2 mb-1">
+          <MfIcon name="category" size="18" class="text-indigo-500" />
+          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Phân bổ gói Premium</h3>
+        </div>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">{{ summary?.activePremiumUsers || 0 }} người dùng đang đăng ký</p>
+
+        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
+          <div v-for="i in 3" :key="i">
+            <div class="flex justify-between mb-2">
+              <div class="w-32 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div class="w-12 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+          </div>
+        </div>
+        <div v-else-if="summary?.planDistribution?.length" class="space-y-4">
+          <div v-for="(plan, index) in summary.planDistribution" :key="plan.id">
+            <div class="flex justify-between items-center mb-1">
+              <div class="flex items-center">
+                <span class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ plan.name }}</span>
+              </div>
+              <div class="text-[11px] font-medium">
+                <span class="text-gray-900 dark:text-white font-bold">{{ plan.user_count }}</span>
+                <span class="text-gray-400 ml-1">({{ summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0 }}%)</span>
+              </div>
+            </div>
+            <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+              <div class="h-2 rounded-full" :class="getPlanColorClass(index, 'bg')" :style="{ width: `${summary.activePremiumUsers ? Math.round((plan.user_count / summary.activePremiumUsers) * 100) : 0}%` }"></div>
+            </div>
+            <div class="text-[10px] text-gray-400 mt-1.5">
+              {{ formatCurrency(plan.price) }} / {{ plan.duration_days >= 30 ? Math.round(plan.duration_days / 30) + ' tháng' : plan.duration_days + ' ngày' }}
+              <span v-if="plan.price > 0 && plan.user_count > 0">&middot; Tổng thu ước tính: {{ formatCurrency(plan.price * plan.user_count) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-center py-6 text-sm text-gray-400">Không có dữ liệu phân bổ gói.</div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="bg-white dark:bg-bg-card rounded-2xl border border-gray-200 dark:border-bg-border p-5 shadow-sm">
+        <div class="flex items-center gap-2 mb-1">
+          <MfIcon name="clock" size="18" class="text-indigo-500" />
+          <h3 class="font-bold text-sm text-gray-900 dark:text-white">Timeline hết hạn Premium</h3>
+        </div>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-5">Dự kiến gia hạn trong 90 ngày tới</p>
+
+        <div v-if="isSummaryLoading" class="animate-pulse space-y-4">
+          <div v-for="i in 4" :key="i" class="flex gap-3 items-start">
+            <div class="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 mt-1"></div>
+            <div class="flex-1 flex justify-between">
+              <div>
+                <div class="w-24 h-4 bg-gray-200 dark:bg-gray-700 rounded mb-1"></div>
+                <div class="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+              <div class="w-16 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="summary?.expiringTimeline?.length">
+          <div class="space-y-3 max-h-[260px] overflow-y-auto no-scrollbar pr-2">
+            <template v-for="(user, index) in summary.expiringTimeline" :key="user.id">
+              <!-- Thẻ nhắc nhở (Dưới 7 ngày) -->
+              <div v-if="getDaysRemaining(user.premium_expires_at) <= 7" class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3">
+                <div class="flex items-center justify-between mb-2.5">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
+                      {{ user.display_name.charAt(0).toUpperCase() }}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-sm font-bold text-gray-900 dark:text-rose-100 truncate">{{ user.display_name }}</p>
+                      <p class="text-[11px] text-gray-500 dark:text-rose-200/70 truncate">{{ user.email }}</p>
+                    </div>
+                  </div>
+                  <div class="px-2 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-bold shrink-0">
+                    {{ getDaysRemainingText(user.premium_expires_at) }}
+                  </div>
+                </div>
+
+                <div class="w-full bg-rose-200 dark:bg-rose-800/50 rounded-full h-1 mb-2">
+                  <div class="bg-rose-500 h-1 rounded-full" :style="{ width: getProgressWidth(user.premium_expires_at) }"></div>
+                </div>
+
+                <div class="flex justify-between items-center text-[11px]">
+                  <span class="text-gray-500 dark:text-rose-200/70">Hết hạn: {{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</span>
+                  <div class="flex items-center gap-1.5">
+                    <span v-if="user.autoReminderSent" class="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[10px] font-bold" title="Hệ thống đã tự động gửi lời nhắc">
+                      Đã tự động nhắc
+                    </span>
+                    <button
+                      v-if="!user.manualReminderSent"
+                      @click="openReminderConfirm(user)"
+                      class="text-rose-600 dark:text-rose-400 font-medium hover:underline flex items-center gap-0.5"
+                      :disabled="sendingReminders[user.id]"
+                    >
+                      <span v-if="sendingReminders[user.id]">Đang gửi...</span>
+                      <span v-else>Nhắc nhở &rarr;</span>
+                    </button>
+                    <span v-else class="text-rose-400 dark:text-rose-500 font-medium opacity-80 cursor-not-allowed" title="Admin đã gửi nhắc nhở thủ công cho kỳ Premium này.">
+                      Đã nhắc thủ công
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline bình thường (Trên 7 ngày) -->
+              <div v-else class="flex items-start gap-3 relative mt-2 pl-1">
+                <!-- Vertical line -->
+                <div v-if="index !== summary.expiringTimeline.length - 1 && getDaysRemaining(summary.expiringTimeline[index+1]?.premium_expires_at) > 7" class="absolute left-[9px] top-4 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
+
+                <div class="w-3 h-3 rounded-full mt-1 ring-[3px] ring-white dark:ring-bg-card shrink-0 z-10" :class="getTimelineColorClass(user.premium_expires_at)"></div>
+                <div class="flex-1 min-w-0 pb-3">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <p class="text-xs font-semibold text-gray-900 dark:text-white truncate">{{ user.display_name }}</p>
+                      <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">{{ user.plan_name || 'Premium' }}</p>
+                    </div>
+                    <div class="text-right shrink-0 ml-2">
+                      <p class="text-xs font-bold" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ new Date(user.premium_expires_at).toLocaleDateString('vi-VN') }}</p>
+                      <p class="text-[10px] font-medium" :class="getTimelineTextColorClass(user.premium_expires_at)">{{ getDaysRemainingText(user.premium_expires_at) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div v-else class="text-center py-6 text-sm text-gray-400">Không có người dùng nào sắp hết hạn.</div>
+      </div>
+    </div>
+
     <!-- Modals -->
-    <PremiumManageModal 
+    <PremiumManageModal
       :isOpen="showPremiumModal"
       :user="selectedUser"
       :plans="plans"
@@ -386,16 +388,17 @@
       @action="handleDetailAction"
     />
 
-    <ConfirmDialog 
+    <ConfirmDialog
       :open="confirmState.open"
       :title="confirmState.title"
-      :message="confirmState.message"
       :confirmText="confirmState.confirmText"
       :type="confirmState.type"
       :loading="confirmState.loading"
       @confirm="handleConfirm"
       @cancel="confirmState.open = false"
-    />
+    >
+      <p class="mb-4 text-[15px] text-gray-600 dark:text-gray-300 leading-relaxed">{{ confirmState.message }}</p>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -587,9 +590,13 @@ function getPremiumActions(u) {
       onClick: () => openDetailModal(u)
     },
     {
-      label: u.plan_id ? 'Gia hạn thêm' : 'Kích hoạt Premium',
-      icon: 'add',
-      onClick: () => openPremiumModal(u, u.plan_id ? 'extend' : 'activate')
+      label: getDaysRemaining(u.premium_expires_at) <= 7 ? 'Nhắc gia hạn' : 'Chưa cần nhắc',
+      icon: 'notifications_active',
+      onClick: () => {
+        if (getDaysRemaining(u.premium_expires_at) <= 7) {
+          openReminderConfirm(u)
+        }
+      }
     },
     {
       label: 'Mở hồ sơ',
@@ -597,16 +604,8 @@ function getPremiumActions(u) {
       onClick: () => goToDetail(u.user_id)
     }
   ]
-  
-  if (u.premium_status === 'active' || u.premium_status === 'expiring_soon') {
-    actions.push({
-      label: 'Hủy Premium',
-      icon: 'cancel',
-      danger: true,
-      onClick: () => cancelPremium(u)
-    })
-  }
-  
+
+
   return actions
 }
 
@@ -671,7 +670,7 @@ async function handleExport() {
       },
       responseType: 'blob'
     })
-    
+
     const filename = getFilenameFromDisposition(
       response.headers?.['content-disposition'],
       'musicflow-premium.csv'
@@ -810,36 +809,19 @@ async function handleConfirm() {
   }
 }
 
-function cancelPremium(user) {
-  openConfirm({
-    title: 'Hủy gói Premium?',
-    message: `Bạn có chắc muốn hủy gói Premium của người dùng "${user.name}"? Người dùng sẽ trở về tài khoản thường ngay lập tức.`,
-    confirmText: 'Hủy Premium',
-    type: 'danger',
-    action: async () => {
-      try {
-        await api.post(`/admin/premium/users/${user.user_id}/cancel`, { note: 'Admin cancelled' })
-        toast.showToast('Đã hủy Premium thành công', 'success')
-        fetchData()
-      } catch (err) {
-        console.error('Lỗi khi hủy premium:', err)
-        toast.showToast(err.response?.data?.message || 'Không thể hủy gói Premium', 'error')
-      }
-    }
-  })
-}
+
 
 onMounted(async () => {
   loadSearchHistory()
   document.addEventListener('click', handleClickOutside)
-  
+
   // Parallel fetch for initial load
   await Promise.allSettled([
     fetchSummary(),
     fetchPlans(),
     fetchUsers()
   ])
-  
+
   isInitialLoading.value = false
 })
 
@@ -1023,7 +1005,7 @@ onUnmounted(() => {
   overflow-x: auto;
   box-shadow: 0 10px 30px rgba(0,0,0,0.02);
   border: 1px solid #f0f2f5;
-  min-height: 520px; 
+  min-height: 520px;
   position: relative;
 }
 

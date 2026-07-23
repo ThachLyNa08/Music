@@ -158,14 +158,16 @@ async function getLyricsBySongId(songId) {
     lines = plainLyricsToLines(plainLyrics);
   }
 
-  console.log('[LyricsAPI]', {
-    songId: numericSongId,
-    hasRow: !!lyric,
-    hasPlainLyrics: !!plainLyrics,
-    hasSyncedLyrics: !!syncedLyrics,
-    provider,
-    syncType
-  });
+  if (process.env.DEBUG_LYRICS === 'true') {
+    console.log('[LyricsAPI]', {
+      songId: numericSongId,
+      hasRow: !!lyric,
+      hasPlainLyrics: !!plainLyrics,
+      hasSyncedLyrics: !!syncedLyrics,
+      provider,
+      syncType
+    });
+  }
 
   return {
     error: false,

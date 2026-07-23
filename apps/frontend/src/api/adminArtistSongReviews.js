@@ -5,5 +5,7 @@ export const adminArtistSongReviewsApi = {
   getReviews: (params) => api.get('/admin/artist-song-reviews', { params }),
   getReviewDetail: (songId) => api.get(`/admin/artist-song-reviews/${songId}`),
   approveSong: (songId) => api.post(`/admin/artist-song-reviews/${songId}/approve`),
-  rejectSong: (songId, reason) => api.post(`/admin/artist-song-reviews/${songId}/reject`, { reason })
+  rejectSong: (songId, reason, allowResubmit) => api.post(`/admin/artist-song-reviews/${songId}/reject`, { reason, allowResubmit }),
+  bulkApproveSongs: (ids) => api.post('/admin/artist-song-reviews/bulk-approve', { ids }),
+  bulkRejectSongs: (payload) => api.post('/admin/artist-song-reviews/bulk-reject', typeof payload === 'object' && !Array.isArray(payload) ? payload : { ids: payload })
 }

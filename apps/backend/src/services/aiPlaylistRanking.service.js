@@ -4,6 +4,12 @@ const { normalizeText } = require('./aiPlaylistIntent.service');
 const modelService = require('./recommendationModel.service');
 const { buildAiPlaylistSongReason } = require('./aiPlaylistReason.service');
 const semanticProfileService = require('./songSemanticProfile.service');
+const {
+    computeTempoMatchScore,
+    computeEnergyMatchScore,
+    computeDanceabilityMatchScore,
+    buildTempoReason
+} = require('../utils/tempoFeature.util');
 
 const DEFAULT_WEIGHTS = Object.freeze({
     semanticRag: 0.20,
@@ -161,6 +167,31 @@ function scoreAudioFeature(song, intent) {
 
     if (!scores.length) return 0.5;
     return clamp01(scores.reduce((sum, value) => sum + value, 0) / scores.length);
+}
+
+function scoreTempoAware(song, intent) {
+    const tempoIntent = intent?.tempoIntent;
+    if (!tempoIntent) {
+        return {
+            tempoMatch: 0.5,
+            energyMatch: 0.5,
+            danceabilityMatch: 0.5,
+            reason: null
+        };
+    }
+
+    const feature = {
+        tempo_bucket: song.tempo_bucket || song.tempo_level,
+        normalized_bpm: song.normalized_bpm || song.bpm,
+        energy_score: song.energy_score,
+        danceability_score: song.danceability_score || song.danceability
+    };
+    return {
+        tempoMatch: computeTempoMatchScore(feature, tempoIntent),
+        energyMatch: computeEnergyMatchScore(feature, tempoIntent),
+        danceabilityMatch: computeDanceabilityMatchScore(feature, tempoIntent),
+        reason: buildTempoReason(feature, tempoIntent)
+    };
 }
 
 function scorePenalty(song, intent) {
@@ -379,6 +410,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         const intentMatch = scoreIntentMatch(song, intent);
         const bprScore = bpr.scores.get(song.id) || 0;
         const audioFeature = scoreAudioFeature(song, intent);
+        const tempoAware = scoreTempoAware(song, intent);
         const userHistory = scoreUserHistory(song, history, intent);
         const popularity = scorePopularity(song, normPopularity[index], intent);
         const penalty = scorePenalty(song, intent);
@@ -390,6 +422,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.intentMatch * intentMatch
             + DEFAULT_WEIGHTS.bpr * bprScore
             + DEFAULT_WEIGHTS.audioFeature * audioFeature
+            + (intent?.tempoIntent ? 0.12 * tempoAware.tempoMatch + 0.08 * tempoAware.energyMatch + 0.05 * tempoAware.danceabilityMatch : 0)
             + DEFAULT_WEIGHTS.userHistory * userHistory
             + DEFAULT_WEIGHTS.popularity * popularity
             + DEFAULT_WEIGHTS.semantic * semantic
@@ -405,12 +438,16 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
                 intentMatch: Number(intentMatch.toFixed(4)),
                 bpr: Number(bprScore.toFixed(4)),
                 audioFeature: Number(audioFeature.toFixed(4)),
+                tempoMatch: Number(tempoAware.tempoMatch.toFixed(4)),
+                energyMatch: Number(tempoAware.energyMatch.toFixed(4)),
+                danceabilityMatch: Number(tempoAware.danceabilityMatch.toFixed(4)),
                 userHistory: Number(userHistory.toFixed(4)),
                 popularity: Number(popularity.toFixed(4)),
                 semantic: Number(semantic.toFixed(4)),
                 diversity: Number(diversity.toFixed(4)),
                 penalty: Number(penalty.toFixed(4))
-            }
+            },
+            tempoReason: tempoAware.reason
         };
     });
 
@@ -421,6 +458,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.intentMatch * song.scoreBreakdown.intentMatch
             + DEFAULT_WEIGHTS.bpr * song.scoreBreakdown.bpr
             + DEFAULT_WEIGHTS.audioFeature * song.scoreBreakdown.audioFeature
+            + (intent?.tempoIntent ? 0.12 * song.scoreBreakdown.tempoMatch + 0.08 * song.scoreBreakdown.energyMatch + 0.05 * song.scoreBreakdown.danceabilityMatch : 0)
             + DEFAULT_WEIGHTS.userHistory * song.scoreBreakdown.userHistory
             + DEFAULT_WEIGHTS.popularity * song.scoreBreakdown.popularity
             + DEFAULT_WEIGHTS.semantic * song.scoreBreakdown.semantic
@@ -436,7 +474,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         };
         return {
             ...rounded,
-            reason: buildAiPlaylistSongReason(rounded, intent, rounded.scoreBreakdown)
+            reason: rounded.tempoReason || buildAiPlaylistSongReason(rounded, intent, rounded.scoreBreakdown)
         };
     });
 
@@ -449,6 +487,8 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         rankingMeta: {
             strategy,
             weights: DEFAULT_WEIGHTS,
+            tempoAware: Boolean(intent?.tempoIntent),
+            detectedTempoIntent: intent?.tempoIntent || null,
             bprAvailable: bpr.bprAvailable,
             userInModel: bpr.userInModel
         }

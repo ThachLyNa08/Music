@@ -15,6 +15,7 @@ const {
     sanitizeAiPlaylistIntent,
     clampTargetCount
 } = require('../utils/aiPlaylistIntentSchema');
+const { detectTempoIntent } = require('../utils/tempoFeature.util');
 
 function normalizeText(value) {
     return String(value || '')
@@ -361,6 +362,19 @@ function applyRuleBasedIntent(prompt, targetCount) {
     applyNegativeRules(intent, normalizedPrompt);
     detectSeedAndArtists(intent, prompt, normalizedPrompt);
     inferPlaylistGoal(intent, normalizedPrompt);
+
+    const tempoIntent = detectTempoIntent(prompt);
+    if (tempoIntent) {
+        intent.softPreferences.tempo = tempoIntent.tempoBucket;
+        intent.softPreferences.energy = tempoIntent.energyTarget;
+        intent.softPreferences.activity = tempoIntent.activity === 'workout' ? 'gym' : tempoIntent.activity;
+        intent.tempoIntent = tempoIntent;
+        addMatchedKeywords(intent, `tempo_intent:${tempoIntent.tempoBucket}`, [tempoIntent.label]);
+        if (tempoIntent.activity === 'focus') addUnique(intent.softPreferences.mood, 'focus');
+        if (tempoIntent.activity === 'relax') addUnique(intent.softPreferences.mood, 'chill');
+        if (tempoIntent.activity === 'party') addUnique(intent.softPreferences.mood, 'party');
+        if (tempoIntent.activity === 'workout') addUnique(intent.softPreferences.mood, 'energetic');
+    }
 
     if (hasPhrase(normalizedPrompt, 'nhe hon')) {
         intent.softPreferences.energy = intent.softPreferences.energy === 'high' ? 'medium' : 'low';

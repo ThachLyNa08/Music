@@ -238,7 +238,7 @@
                 <tr v-for="row in filteredQualityRows" :key="row.system_key" class="transition group hover:bg-slate-50">
                   <td class="px-2 py-2 font-semibold text-slate-800">{{ row.system_key }}</td>
                   <td class="px-2 py-2">
-                    <span class="px-2 py-0.5 rounded text-[11px] font-bold" 
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold"
                           :class="{'bg-green-100 text-green-700': row.status === 'GOOD', 'bg-amber-100 text-amber-700': row.status === 'WARNING', 'bg-rose-100 text-rose-700': row.status === 'BAD'}">
                       {{ row.status === 'GOOD' ? 'Đạt' : row.status === 'WARNING' ? 'Cảnh báo' : row.status === 'BAD' ? 'Lỗi' : row.status }}
                     </span>
@@ -328,7 +328,7 @@
             @search="handleSearch"
           />
           </div>
-          
+
           <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
           <AdminSearchInput
             v-model="filters.owner"
@@ -339,7 +339,7 @@
             @search="handleSearch"
           />
           </div>
-          
+
           <div class="grid grid-cols-2 gap-3 w-full xl:w-auto xl:shrink-0">
           <SearchableCombobox
             v-model="filters.system_key"
@@ -390,6 +390,7 @@
             <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] text-right w-[10%]">Số bài</th>
             <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[15%]">Trạng thái</th>
             <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[10%]">Cập nhật</th>
+            <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] w-[14%]">Tempo-aware</th>
             <th class="px-3 py-2.5 font-semibold text-black uppercase text-[11px] text-right w-[10%] sticky right-0 bg-slate-50 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Actions</th>
           </tr>
         </thead>
@@ -423,6 +424,13 @@
             <td class="px-3 py-2 text-[11px] text-slate-500">
               {{ item.updated_at ? new Date(item.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}
             </td>
+            <td class="px-3 py-2">
+              <div v-if="item.tempoAware" class="flex flex-col gap-0.5">
+                <span class="w-max rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 ring-1 ring-emerald-100">Applied</span>
+                <span class="text-[10px] text-slate-500">{{ formatBpm(item.avgBpm) }} · {{ formatQualityPercent(item.audioFeatureCoverage?.ratio) }}</span>
+              </div>
+              <span v-else class="text-[10px] text-slate-400">-</span>
+            </td>
             <td class="px-3 py-2 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition shadow-[-4px_0_10px_rgba(0,0,0,0.02)] z-10">
               <AdminActionMenu :actions="getToolsActions(item)" />
             </td>
@@ -442,12 +450,12 @@
         </select>
       </div>
 
-      <AdminPagination 
+      <AdminPagination
         :limit="filters.limit"
-        :currentPage="currentPage" 
-        :totalPages="totalPages" 
+        :currentPage="currentPage"
+        :totalPages="totalPages"
         :disabled="loading"
-        @update:currentPage="changePage" 
+        @update:currentPage="changePage"
       />
     </div>
 
@@ -512,11 +520,11 @@
               <MfIcon name="close" size="24" />
             </button>
           </header>
-          
+
           <div class="flex-1 overflow-y-auto px-6 py-5">
             <div class="w-full aspect-square rounded-xl overflow-hidden mb-6 shadow-md border border-slate-100 bg-slate-50">
-              <AdminCoverThumb 
-                :src="getPlaylistCover(drawerItem)" 
+              <AdminCoverThumb
+                :src="getPlaylistCover(drawerItem)"
                 size="custom"
                 rounded="lg"
                 alt="Cover lớn"
@@ -525,12 +533,16 @@
             </div>
             <h2 class="text-xl font-bold mb-1">{{ drawerItem.name }}</h2>
             <p class="text-sm text-slate-500 mb-4">{{ drawerItem.description || 'Không có mô tả' }}</p>
-            
+
             <div class="flex flex-col gap-2 text-sm text-slate-700 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
               <div><span class="font-semibold w-28 inline-block">System Key:</span> <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-mono border border-indigo-100">{{ drawerItem.system_key || 'N/A' }}</span></div>
               <div><span class="font-semibold w-28 inline-block">Trạng thái:</span> <span class="status-badge" :class="drawerItem.status">{{ formatStatus(drawerItem.status) }}</span></div>
               <div><span class="font-semibold w-28 inline-block">Số bài hát:</span> <span class="font-mono bg-white px-2 py-0.5 rounded border">{{ drawerItem.song_count }}</span></div>
               <div><span class="font-semibold w-28 inline-block">Cập nhật lúc:</span> {{ drawerItem.updated_at ? new Date(drawerItem.updated_at).toLocaleString('vi-VN') : 'N/A' }}</div>
+              <div v-if="drawerItem.tempoAware"><span class="font-semibold w-28 inline-block">Tempo-aware:</span> <span class="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold border border-emerald-100">Applied</span></div>
+              <div v-if="drawerItem.tempoAware"><span class="font-semibold w-28 inline-block">Audio coverage:</span> {{ formatQualityPercent(drawerItem.audioFeatureCoverage?.ratio) }}</div>
+              <div v-if="drawerItem.tempoAware"><span class="font-semibold w-28 inline-block">Avg BPM:</span> {{ formatBpm(drawerItem.avgBpm) }}</div>
+              <div v-if="drawerItem.tempoAware"><span class="font-semibold w-28 inline-block">Tempo:</span> {{ formatTempoDistribution(drawerItem.tempoDistribution) }}</div>
               <div v-if="drawerItem.user_id"><span class="font-semibold w-28 inline-block">Owner:</span> {{ drawerItem.owner_name || 'User #' + drawerItem.user_id }}</div>
             </div>
 
@@ -549,11 +561,11 @@
               <div class="text-slate-500 text-sm">Không xác định được người dùng sở hữu playlist này.</div>
             </div>
           </div>
-          
+
           <footer class="shrink-0 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
               <MfIcon v-if="isRegeneratingSingle" name="sync" class="animate-spin" size="18" />
-              <MfIcon v-else name="sync" size="18" /> 
+              <MfIcon v-else name="sync" size="18" />
               {{ isRegeneratingSingle ? 'Đang xử lý...' : 'Tạo lại Playlist này' }}
             </button>
           </footer>
@@ -574,7 +586,7 @@
               <MfIcon name="close" size="24" />
             </button>
           </header>
-          
+
           <div class="flex-1 overflow-y-auto px-6 py-5">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
               <div class="px-4 py-2 rounded-lg font-bold text-sm inline-block"
@@ -873,6 +885,21 @@ function formatQualityPercent(val) {
   return `${(Number(val) * 100).toFixed(1).replace(/\.0$/, '')}%`
 }
 
+function formatBpm(val) {
+  const bpm = Number(val)
+  if (!Number.isFinite(bpm) || bpm <= 0) return 'N/A BPM'
+  return `${Math.round(bpm)} BPM`
+}
+
+function formatTempoDistribution(value) {
+  if (!value) return 'N/A'
+  const total = ['slow', 'medium', 'fast'].reduce((sum, key) => sum + Number(value[key] || 0), 0)
+  if (!total) return 'N/A'
+  return ['slow', 'medium', 'fast']
+    .map((key) => `${key} ${Math.round((Number(value[key] || 0) / total) * 100)}%`)
+    .join(', ')
+}
+
 function openQualityDetail(row) {
   qualityDetailItem.value = row
   document.body.style.overflow = 'hidden'
@@ -907,35 +934,35 @@ const kpiCards = computed(() => {
   const activePlaylists = total - s.empty_playlists - s.missing_cover_playlists
 
   return [
-    { 
-      title: 'Tổng Playlist', 
-      value: formatNumber(total), 
-      subtitle: 'Hệ thống', 
+    {
+      title: 'Tổng Playlist',
+      value: formatNumber(total),
+      subtitle: 'Hệ thống',
       tone: 'purple',
-      meta: '100%' 
+      meta: '100%'
     },
-    { 
-      title: 'Đang Hoạt Động', 
-      value: formatNumber(activePlaylists), 
-      subtitle: 'Trạng thái bình thường', 
+    {
+      title: 'Đang Hoạt Động',
+      value: formatNumber(activePlaylists),
+      subtitle: 'Trạng thái bình thường',
       tone: 'green',
       meta: percent(activePlaylists, total)
     },
-    { 
-      title: 'Playlist Trống', 
-      value: formatNumber(s.empty_playlists), 
-      subtitle: '0 bài hát', 
-      tone: 'amber', 
+    {
+      title: 'Playlist Trống',
+      value: formatNumber(s.empty_playlists),
+      subtitle: '0 bài hát',
+      tone: 'amber',
       meta: percent(s.empty_playlists, total),
-      onClick: () => setFilter('empty') 
+      onClick: () => setFilter('empty')
     },
-    { 
-      title: 'Thiếu Ảnh Bìa', 
-      value: formatNumber(s.missing_cover_playlists), 
-      subtitle: 'Cần cập nhật cover', 
-      tone: 'rose', 
+    {
+      title: 'Thiếu Ảnh Bìa',
+      value: formatNumber(s.missing_cover_playlists),
+      subtitle: 'Cần cập nhật cover',
+      tone: 'rose',
       meta: percent(s.missing_cover_playlists, total),
-      onClick: () => setFilter('missing_cover') 
+      onClick: () => setFilter('missing_cover')
     },
   ]
 })
@@ -1326,17 +1353,17 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
 }
-.stat-label { 
-  color: #0f172a; 
-  font-size: 12px; 
-  font-weight: 700; 
-  text-transform: uppercase; 
+.stat-label {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
   line-height: 1.4;
 }
-.stat-value { 
-  font-size: 32px; 
-  font-weight: 800; 
-  line-height: 1.1; 
+.stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
   word-break: break-word;
 }
 .stat-meta { font-size: 12px; color: #94a3b8; }

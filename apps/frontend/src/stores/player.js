@@ -35,10 +35,19 @@ export const usePlayerStore = defineStore('player', () => {
     playlistId: null,
     seedSongId: null
   })
-  const hasReportedCurrent = ref(false)
   const currentListenStartAt = ref(Date.now())
   const currentListenSongId = ref(null)
   const currentHistoryId = ref(null)
+  const hasReportedCurrent = computed(() => Boolean(currentPlaySession.value?.hasTrackedListen))
+  const currentPlaySession = ref({
+    sessionId: null,
+    songId: null,
+    startedAt: null,
+    maxPlayedSeconds: 0,
+    hasTrackedListen: false,
+    trackInFlight: false,
+    hasEnded: false
+  })
   let trackingTimer = null
   let isTrackingCurrentSong = false
   let isAutoContinuing = false
@@ -215,7 +224,7 @@ export const usePlayerStore = defineStore('player', () => {
       const saved = localStorage.getItem(key)
       if (!saved) return
       const state = JSON.parse(saved)
-      
+
       // Bỏ qua nếu dữ liệu quá cũ (24h)
       if (Date.now() - state.savedAt > 24 * 60 * 60 * 1000) return
 
@@ -229,14 +238,14 @@ export const usePlayerStore = defineStore('player', () => {
       repeat.value = state.repeatMode || 'none'
       playbackSource.value = state.source || 'unknown'
       playbackContext.value = state.playbackContext || normalizePlaybackContext(currentSong.value, playbackSource.value)
-      
+
       // Khôi phục currentTime khi audio sẵn sàng
       const restoredTime = state.currentTime || 0
       if (restoredTime > 0) {
         audio.value.currentTime = restoredTime
         currentTime.value = restoredTime
       }
-      
+
       isPlaying.value = false
       if (currentSong.value?.audio_url) {
         if (currentSong.value.audio_url.startsWith('http')) {
@@ -257,15 +266,26 @@ export const usePlayerStore = defineStore('player', () => {
   // ----------------------------
 
   async function trackCurrentSong(options = {}) {
-    if (!currentSong.value || hasReportedCurrent.value) return
-    if (currentSong.value.id !== currentListenSongId.value) return
-    if (isTrackingCurrentSong) return
+    if (!currentSong.value || !currentPlaySession.value) return
+    const songId = getSongId(currentSong.value)
+    if (!songId) return
 
-    isTrackingCurrentSong = true
+    const session = currentPlaySession.value
+    const normSongId = String(songId)
 
-    const listenDuration = Math.floor((Date.now() - currentListenStartAt.value) / 1000)
+    if (session.songId && String(session.songId) !== normSongId) return
+    if (session.hasTrackedListen && !options.completed && !options.skipped && !options.force) return
+    if (session.trackInFlight && !options.force) return
+
+    session.trackInFlight = true
+
     const songDuration = currentSong.value.duration_sec || duration.value || 0
-    const completionRate = songDuration > 0 ? listenDuration / songDuration : 0
+    const listenDuration = Math.max(
+      session.maxPlayedSeconds,
+      Math.floor(currentTime.value || 0),
+      Math.floor((Date.now() - (session.startedAt || Date.now())) / 1000)
+    )
+    const completionRate = songDuration > 0 ? (listenDuration / songDuration) : 0
 
     const shouldTrack =
       listenDuration >= 5 ||
@@ -275,35 +295,50 @@ export const usePlayerStore = defineStore('player', () => {
       options.in_progress
 
     if (!shouldTrack) {
-      isTrackingCurrentSong = false
+      session.trackInFlight = false
       return
     }
 
-    const songId = getSongId(currentSong.value)
-    const skipAt = options.skipped ? Math.floor(currentTime.value) : null
-    const source = playbackSource.value || 'unknown'
+    const isCompleted = Boolean(options.completed || completionRate >= 0.8)
+    const isSkipped = Boolean(options.skipped || (!isCompleted && listenDuration < 30 && completionRate < 0.3))
+    const source = playbackSource.value || 'player'
 
     try {
-      const response = await api.post(`/songs/${songId}/listen`, {
+      const response = await api.post('/listening-history/track', {
+        songId: Number(songId),
         history_id: currentHistoryId.value,
+        playedSeconds: listenDuration,
         listen_duration: listenDuration,
+        durationSeconds: Math.floor(songDuration),
         song_duration: Math.floor(songDuration),
         completion_rate: completionRate,
-        is_completed: options.completed || completionRate >= 0.8,
-        is_skipped: options.skipped || (listenDuration < 30 && completionRate < 0.3),
-        skip_at_sec: skipAt,
+        completed: isCompleted,
+        is_completed: isCompleted,
+        skipped: isSkipped,
+        is_skipped: isSkipped,
         source: source,
         in_progress: options.in_progress || false
       })
-      
-      if (response.data?.success && response.data?.data?.history_id) {
-        currentHistoryId.value = response.data.data.history_id
+
+      if (response.data?.success) {
+        session.hasTrackedListen = true
+
+        const returnedHistoryId = response.data?.data?.history_id || response.data?.history_id
+        if (returnedHistoryId) {
+          currentHistoryId.value = returnedHistoryId
+        }
+
+        const newCount = response.data?.playCount ?? response.data?.data?.play_count
+        if (newCount !== undefined && newCount !== null) {
+          currentSong.value.play_count = newCount
+          currentSong.value.playCount = newCount
+        }
       }
-      console.log(`[Tracking] Recorded listen for song ${songId}: listen=${listenDuration}s, rate=${completionRate.toFixed(2)}, skip=${skipAt}, source=${source}`)
+      console.log(`[Tracking] Recorded listen for song ${songId}: listen=${listenDuration}s, rate=${completionRate.toFixed(2)}, counted=${response.data?.counted}, alreadyCounted=${response.data?.alreadyCounted}`)
     } catch (err) {
       console.warn('Failed to record song listen:', err)
     } finally {
-      isTrackingCurrentSong = false
+      session.trackInFlight = false
     }
 
     if (!options.in_progress) {
@@ -311,24 +346,70 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  audio.value.addEventListener('timeupdate', () => {
+  function handleTimeUpdate() {
     if (!isSpotifyActive.value) {
       currentTime.value = audio.value.currentTime
+
+      if (currentSong.value && currentPlaySession.value) {
+        const session = currentPlaySession.value
+        const songIdStr = String(getSongId(currentSong.value) || '')
+
+        if (session.songId === songIdStr) {
+          const sec = Math.floor(audio.value.currentTime)
+          if (sec > session.maxPlayedSeconds) {
+            session.maxPlayedSeconds = sec
+          }
+
+          const songDuration = duration.value || currentSong.value.duration_sec || 0
+          const completionRate = songDuration > 0 ? (sec / songDuration) : 0
+
+          const isEligible = sec >= 30 || completionRate >= 0.5
+
+          if (isEligible && !session.hasTrackedListen && !session.trackInFlight) {
+            session.trackInFlight = true
+            trackCurrentSong({ in_progress: false })
+          }
+        }
+      }
+
       const now = Date.now()
       if (now - lastPersistAt > 3000) {
         savePlayerSession()
         lastPersistAt = now
       }
     }
-  })
-  audio.value.addEventListener('loadedmetadata', () => {
+  }
+
+  function handleLoadedMetadata() {
     if (!isSpotifyActive.value) duration.value = audio.value.duration
-  })
-  audio.value.addEventListener('ended', handleTrackEnded)
-  audio.value.addEventListener('play', () => isPlaying.value = true)
-  audio.value.addEventListener('pause', () => {
+  }
+
+  function handleAudioPlay() {
+    isPlaying.value = true
+  }
+
+  function handleAudioPause() {
     if (!isSpotifyActive.value) isPlaying.value = false
-  })
+  }
+
+  let isAudioListenersAttached = false
+  function attachAudioListeners() {
+    if (isAudioListenersAttached || !audio.value) return
+    audio.value.removeEventListener('timeupdate', handleTimeUpdate)
+    audio.value.removeEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.value.removeEventListener('ended', handleTrackEnded)
+    audio.value.removeEventListener('play', handleAudioPlay)
+    audio.value.removeEventListener('pause', handleAudioPause)
+
+    audio.value.addEventListener('timeupdate', handleTimeUpdate)
+    audio.value.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.value.addEventListener('ended', handleTrackEnded)
+    audio.value.addEventListener('play', handleAudioPlay)
+    audio.value.addEventListener('pause', handleAudioPause)
+    isAudioListenersAttached = true
+  }
+
+  attachAudioListeners()
 
   async function getSpotifyToken() {
     const { data } = await spotifyApi.getPlayerToken()
@@ -447,8 +528,20 @@ export const usePlayerStore = defineStore('player', () => {
   async function playSong(song, newQueue = null, sourceOrIndex = null, context = null) {
     if (!song) return
 
-    if (currentSong.value && !hasReportedCurrent.value) {
-      await trackCurrentSong({ skipped: true })
+    const prevSession = currentPlaySession.value
+    if (currentSong.value && prevSession?.songId && !prevSession.hasTrackedListen && !prevSession.trackInFlight) {
+      await trackCurrentSong({ skipped: true, force: true })
+    }
+
+    const normSongId = String(getSongId(song))
+    currentPlaySession.value = {
+      sessionId: Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      songId: normSongId,
+      startedAt: Date.now(),
+      maxPlayedSeconds: 0,
+      hasTrackedListen: false,
+      trackInFlight: false,
+      hasEnded: false
     }
 
     const explicitIndex = Number.isInteger(sourceOrIndex) ? sourceOrIndex : null
@@ -595,7 +688,7 @@ export const usePlayerStore = defineStore('player', () => {
         if (shuffleOrder.value[i] > index) shuffleOrder.value[i]--
       }
     }
-    
+
     if (index === queueIndex.value) {
       next()
     } else if (index < queueIndex.value) {
@@ -756,6 +849,16 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function replayCurrentSong() {
     if (!currentSong.value) return
+    const normSongId = String(getSongId(currentSong.value))
+    currentPlaySession.value = {
+      sessionId: Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      songId: normSongId,
+      startedAt: Date.now(),
+      maxPlayedSeconds: 0,
+      hasTrackedListen: false,
+      trackInFlight: false,
+      hasEnded: false
+    }
     currentListenStartAt.value = Date.now()
     currentListenSongId.value = getSongId(currentSong.value)
     currentHistoryId.value = null
@@ -776,8 +879,12 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function handleTrackEnded() {
-    if (currentSong.value && !hasReportedCurrent.value) {
-      await trackCurrentSong({ completed: true })
+    const session = currentPlaySession.value
+    if (currentSong.value && session) {
+      if (!session.hasTrackedListen && !session.trackInFlight) {
+        await trackCurrentSong({ completed: true, force: true })
+      }
+      session.hasEnded = true
     }
 
     if (repeat.value === 'one') {
@@ -862,7 +969,7 @@ export const usePlayerStore = defineStore('player', () => {
       const firstAddedIndex = queue.value.length
       queue.value = [...queue.value, ...additions]
       playbackContext.value = context
-      
+
       if (shuffle.value) {
         const newIndices = additions.map((_, i) => firstAddedIndex + i)
         for (let i = newIndices.length - 1; i > 0; i--) {
@@ -944,28 +1051,30 @@ export const usePlayerStore = defineStore('player', () => {
 
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', () => {
-      if (currentSong.value && !hasReportedCurrent.value) {
+      const session = currentPlaySession.value
+      if (currentSong.value && session && !session.hasTrackedListen && !session.trackInFlight) {
         const songId = getSongId(currentSong.value)
-        const listenDuration = Math.floor((Date.now() - currentListenStartAt.value) / 1000)
+        if (!songId) return
         const songDuration = currentSong.value.duration_sec || duration.value || 0
-        const completionRate = songDuration > 0 ? listenDuration / songDuration : 0
-        
-        const shouldTrack = listenDuration >= 30 || completionRate >= 0.5
-        if (!shouldTrack) return
-
-        const skipAt = Math.floor(currentTime.value)
-        const source = playbackSource.value || 'unknown'
-        if (localStorage.getItem('accessToken')) {
-          api.post(`/songs/${songId}/listen`, {
-            history_id: currentHistoryId.value,
-            listen_duration: listenDuration,
-            song_duration: Math.floor(songDuration),
-            completion_rate: completionRate,
-            is_completed: completionRate >= 0.8,
-            is_skipped: (listenDuration < 30 && completionRate < 0.3),
-            skip_at_sec: skipAt,
-            source: source
-          }).catch(err => console.warn(err))
+        const listenDuration = Math.max(session.maxPlayedSeconds, Math.floor(currentTime.value || 0))
+        const completionRate = songDuration > 0 ? (listenDuration / songDuration) : 0
+        if (listenDuration >= 30 || completionRate >= 0.5) {
+          if (localStorage.getItem('accessToken')) {
+            api.post('/listening-history/track', {
+              songId: Number(songId),
+              history_id: currentHistoryId.value,
+              playedSeconds: listenDuration,
+              listen_duration: listenDuration,
+              durationSeconds: Math.floor(songDuration),
+              song_duration: Math.floor(songDuration),
+              completion_rate: completionRate,
+              completed: completionRate >= 0.8,
+              is_completed: completionRate >= 0.8,
+              skipped: listenDuration < 30 && completionRate < 0.3,
+              is_skipped: listenDuration < 30 && completionRate < 0.3,
+              source: playbackSource.value || 'player'
+            }).catch(err => console.warn(err))
+          }
         }
       }
     })

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { pool } = require('../config/database');
 const { uploadsRoot } = require('../utils/uploadPathResolver');
 const { tableExists, columnExists } = require('../utils/dbIntrospection');
@@ -64,6 +65,264 @@ function emptySummary() {
       delta: 0
     },
     warnings: [],
+  };
+}
+
+const projectRoot = path.resolve(__dirname, '../../../..');
+const DEBUG_DASHBOARD = process.env.DEBUG_DASHBOARD === 'true';
+
+function dashboardDebugLog(...args) {
+  if (DEBUG_DASHBOARD) console.log(...args);
+}
+
+function safeReadJsonFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    if (DEBUG_DASHBOARD) {
+      console.warn(`[Dashboard] Failed to read ${filePath}: ${error.message}`);
+    }
+    return null;
+  }
+}
+
+function pickMetric(raw, ...keys) {
+  for (const key of keys) {
+    if (raw && raw[key] !== undefined && raw[key] !== null) return Number(raw[key]);
+  }
+  return null;
+}
+
+function getDashboardRecommendationSummary() {
+  const v4ModelPath = path.join(projectRoot, 'storage', 'recommendation', 'models', 'v4', 'best_model_v4.json');
+  const v4MetricsPath = path.join(projectRoot, 'storage', 'recommendation', 'evaluation', 'v4', 'metrics_v4.json');
+  const v4ImportLogPath = path.join(projectRoot, 'storage', 'recommendation', 'evaluation', 'v4', 'import_v4_to_db_log.json');
+
+  const bestModel = safeReadJsonFile(v4ModelPath);
+  const allMetrics = safeReadJsonFile(v4MetricsPath);
+  const importLog = safeReadJsonFile(v4ImportLogPath);
+  const modelMetrics = bestModel?.metrics || allMetrics?.['LightGCN Hybrid'] || {};
+
+  return {
+    status: fs.existsSync(v4ModelPath) ? 'active' : 'offline',
+    strategy: 'lightgcn_hybrid_v4',
+    strategyLabel: 'LightGCN Hybrid V4',
+    benchmarkLabel: 'LightGCN Hybrid V4',
+    coreModel: 'LightGCN Hybrid V4',
+    version: 'V4',
+    hasArtifact: fs.existsSync(v4ModelPath),
+    artifactPath: 'storage/recommendation/models/v4/best_model_v4.json',
+    updatedAt: fs.existsSync(v4ModelPath) ? fs.statSync(v4ModelPath).mtime : null,
+    training: {
+      trainedUsers: Number(importLog?.imported_users || 2000),
+      users: Number(importLog?.imported_users || 2000),
+      interactions: Number(importLog?.imported_interactions || 603435)
+    },
+    metrics: {
+      precisionAt10: pickMetric(modelMetrics, 'Precision@10', 'precisionAt10'),
+      recallAt10: pickMetric(modelMetrics, 'Recall@10', 'recallAt10'),
+      ndcgAt10: pickMetric(modelMetrics, 'NDCG@10', 'ndcgAt10'),
+      hitRateAt10: pickMetric(modelMetrics, 'HitRate@10', 'hitRateAt10'),
+      coverageAt20: pickMetric(modelMetrics, 'Coverage@20', 'coverageAt20')
+    }
+  };
+}
+
+function normalizeSystemPlaylistKey(key) {
+  return String(key || '').trim().toLowerCase();
+}
+
+function getSystemPlaylistScheduleGroup(key) {
+  const normalized = normalizeSystemPlaylistKey(key);
+  if (/^dailymix_0[1-6]$/.test(normalized) || /^daily_mix_0[1-6]$/.test(normalized)) return 'dailyMix';
+  if (['weekly_mix', 'weeklymix'].includes(normalized)) return 'weekly';
+  if (['favorite_songs', 'recently_played'].includes(normalized)) return 'behaviorBased';
+  if (['moodmix', 'mood_mix', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes', 'trending_now'].includes(normalized)) return 'daily';
+  return 'other';
+}
+
+function emptySystemPlaylistGroups() {
+  return {
+    daily: { total: 0, lastRunAt: null, status: 'scheduled', label: 'Hằng ngày' },
+    weekly: { total: 0, lastRunAt: null, status: 'scheduled', label: 'Theo tuần' },
+    behaviorBased: { total: 0, lastRunAt: null, status: 'behavior_based', label: 'Theo hành vi' },
+    dailyMix: { total: 0, lastRunAt: null, status: 'scheduled', label: 'Daily Mix' }
+  };
+}
+
+async function getDashboardSystemPlaylistSummary() {
+  const groups = emptySystemPlaylistGroups();
+  const empty = {
+    totalSystemPlaylists: 0,
+    emptySystemPlaylists: 0,
+    missingCover: 0,
+    lastUpdatedAt: null,
+    lastRunStatus: null,
+    lastRegeneratedAt: null,
+    hasRecentRunLog: false,
+    schedulerEnabled: process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false',
+    groups,
+    latestRunLogAt: null,
+    items: [],
+    error: null
+  };
+
+  try {
+    if (!(await tableExists('playlists'))) return empty;
+
+    const systemWhere = "(p.type = 'system' OR p.is_system = 1 OR p.system_key IS NOT NULL)";
+    const [[summary]] = await pool.query(`
+      SELECT COUNT(*) AS totalSystemPlaylists,
+             SUM(CASE WHEN p.cover_url IS NULL OR TRIM(p.cover_url) = '' THEN 1 ELSE 0 END) AS missingCover,
+             MAX(COALESCE(p.updated_at, p.created_at)) AS lastUpdatedAt
+      FROM playlists p
+      WHERE ${systemWhere}
+    `);
+
+    const [[emptyRow]] = await pool.query(`
+      SELECT COUNT(*) AS emptySystemPlaylists
+      FROM (
+        SELECT p.id
+        FROM playlists p
+        LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id
+        WHERE ${systemWhere}
+        GROUP BY p.id
+        HAVING COUNT(ps.song_id) = 0
+      ) x
+    `);
+
+    const [items] = await pool.query(`
+      SELECT COALESCE(p.system_key, CONCAT('playlist_', p.id)) AS systemKey,
+             MAX(p.name) AS name,
+             COUNT(DISTINCT p.id) AS totalInstances,
+             COUNT(ps.song_id) AS songCount,
+             MAX(COALESCE(p.updated_at, p.created_at)) AS lastGeneratedAt,
+             SUM(CASE WHEN p.cover_url IS NULL OR TRIM(p.cover_url) = '' THEN 1 ELSE 0 END) AS missingCover
+      FROM playlists p
+      LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id
+      WHERE ${systemWhere}
+      GROUP BY COALESCE(p.system_key, CONCAT('playlist_', p.id))
+      ORDER BY lastGeneratedAt DESC
+      LIMIT 12
+    `);
+
+    let operationSummary = null;
+    const groupRunMap = emptySystemPlaylistGroups();
+    let latestRunLogAt = null;
+    try {
+      const runLogService = require('./systemPlaylistRunLog.service');
+      operationSummary = await runLogService.getOperationSummary();
+    } catch (error) {
+      operationSummary = null;
+    }
+
+    if (await tableExists('system_playlist_runs')) {
+      const [runRows] = await pool.query(`
+        SELECT system_key, MAX(finished_at) AS lastRunAt
+        FROM system_playlist_runs
+        WHERE finished_at IS NOT NULL
+        GROUP BY system_key
+      `);
+      for (const row of runRows) {
+        const groupKey = getSystemPlaylistScheduleGroup(row.system_key);
+        if (!groupRunMap[groupKey] || !row.lastRunAt) continue;
+        if (!groupRunMap[groupKey].lastRunAt || new Date(row.lastRunAt) > new Date(groupRunMap[groupKey].lastRunAt)) {
+          groupRunMap[groupKey].lastRunAt = row.lastRunAt;
+        }
+        if (!latestRunLogAt || new Date(row.lastRunAt) > new Date(latestRunLogAt)) {
+          latestRunLogAt = row.lastRunAt;
+        }
+      }
+    }
+
+    if (operationSummary?.lastRegeneratedAt && (!latestRunLogAt || new Date(operationSummary.lastRegeneratedAt) > new Date(latestRunLogAt))) {
+      latestRunLogAt = operationSummary.lastRegeneratedAt;
+    }
+
+    const normalizedItems = items.map(row => {
+      const groupKey = getSystemPlaylistScheduleGroup(row.systemKey);
+      return {
+        systemKey: row.systemKey,
+        system_key: row.systemKey,
+        scheduleGroup: groupKey,
+        name: row.name || row.systemKey,
+        totalInstances: Number(row.totalInstances || 0),
+        songCount: Number(row.songCount || 0),
+        lastGeneratedAt: row.lastGeneratedAt || null,
+        missingCover: Number(row.missingCover || 0),
+        isEmpty: Number(row.songCount || 0) === 0,
+        statusLabel: row.lastGeneratedAt ? `Cập nhật ${new Date(row.lastGeneratedAt).toLocaleDateString('vi-VN')}` : 'Chưa có log tạo gần đây'
+      };
+    });
+
+    for (const item of normalizedItems) {
+      if (!groups[item.scheduleGroup]) continue;
+      groups[item.scheduleGroup].total += Number(item.totalInstances || 0);
+      if (groupRunMap[item.scheduleGroup]?.lastRunAt) {
+        groups[item.scheduleGroup].lastRunAt = groupRunMap[item.scheduleGroup].lastRunAt;
+      }
+      groups[item.scheduleGroup].status = groups[item.scheduleGroup].lastRunAt ? 'has_log' : groups[item.scheduleGroup].status;
+    }
+
+    return {
+      totalSystemPlaylists: Number(summary?.totalSystemPlaylists || 0),
+      emptySystemPlaylists: Number(emptyRow?.emptySystemPlaylists || 0),
+      missingCover: Number(summary?.missingCover || 0),
+      lastUpdatedAt: summary?.lastUpdatedAt || null,
+      lastRegeneratedAt: operationSummary?.lastRegeneratedAt || null,
+      lastRunStatus: operationSummary?.lastRunStatus || null,
+      hasRecentRunLog: Boolean(latestRunLogAt),
+      schedulerEnabled: process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false',
+      groups,
+      latestRunLogAt,
+      items: normalizedItems,
+      error: null
+    };
+  } catch (error) {
+    return { ...empty, error: error.message || 'Không tải được trạng thái playlist tự động' };
+  }
+}
+
+function getDashboardQuickOperationsLite({ pendingTransactions = 0, systemPlaylistSummary = null } = {}) {
+  const playlistSummary = systemPlaylistSummary || {
+    totalSystemPlaylists: 0,
+    emptySystemPlaylists: 0,
+    missingCover: 0,
+    lastUpdatedAt: null,
+    lastRegeneratedAt: null,
+    lastRunStatus: null,
+    hasRecentRunLog: false,
+    schedulerEnabled: process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false',
+    groups: emptySystemPlaylistGroups(),
+    latestRunLogAt: null,
+    items: [],
+    error: null
+  };
+
+  return {
+    aiRecommendation: getDashboardRecommendationSummary(),
+    systemPlaylists: playlistSummary.items || [],
+    systemPlaylistsSummary: playlistSummary,
+    playlistAutomation: {
+      schedulerEnabled: playlistSummary.schedulerEnabled,
+      statusLabel: playlistSummary.schedulerEnabled ? 'Đang bật' : 'Chưa bật',
+      hasRecentRunLog: playlistSummary.hasRecentRunLog,
+      lastRegeneratedAt: playlistSummary.lastRegeneratedAt,
+      lastUpdatedAt: playlistSummary.lastUpdatedAt,
+      latestRunLogAt: playlistSummary.latestRunLogAt,
+      lastRunStatus: playlistSummary.lastRunStatus,
+      message: playlistSummary.hasRecentRunLog
+        ? 'Có log tạo/cập nhật gần đây.'
+        : 'Chưa có log tạo gần đây. Có thể chạy "Tạo lại tất cả" để cập nhật playlist.'
+    },
+    contentAlerts: [],
+    paymentAttention: {
+      failed24h: null,
+      pending: Number(pendingTransactions || 0),
+      successToday: null,
+      recentIssues: []
+    }
   };
 }
 
@@ -385,7 +644,7 @@ async function getDashboardSummary() {
   // 4. userGrowth
   if (await tableExists('users')) {
     const [usersGrowth] = await safeQuery(warnings, 'user growth', `
-      SELECT 
+      SELECT
         SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
         SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
       FROM users
@@ -398,7 +657,13 @@ async function getDashboardSummary() {
   return data;
 }
 
-async function getQuickOperations() {
+let quickOpsCache = { data: null, expiresAt: 0 };
+
+async function getQuickOperations(forceRefresh = false) {
+  if (!forceRefresh && quickOpsCache.data && Date.now() < quickOpsCache.expiresAt) {
+    return quickOpsCache.data;
+  }
+
   const result = {
     aiStatus: { status: 'Chưa có dữ liệu mô hình' },
     systemPlaylists: [],
@@ -412,19 +677,25 @@ async function getQuickOperations() {
   try {
     const adminRecommendationController = require('../controllers/admin_recommendation.controller');
     const summaryData = adminRecommendationController.getSummaryData();
-    
+
+    let label = summaryData.strategyLabel;
+    if (!label) {
+        label = summaryData.strategy === 'bpr_mf_rerank' ? 'BPR-MF cá nhân hóa' : 'Content-based';
+    }
+
     result.aiRecommendation = {
-      status: summaryData.hasArtifact ? 'active' : 'offline',
-      strategy: summaryData.strategy,
-      strategyLabel: summaryData.strategy === 'bpr_mf_rerank' ? 'BPR-MF cá nhân hóa' : 'Content-based',
-      hasArtifact: summaryData.hasArtifact,
-      artifactPath: summaryData.artifactPath,
+      status: summaryData.serving?.hasArtifact || summaryData.hasArtifact ? 'active' : 'offline',
+      strategy: summaryData.serving?.strategy || summaryData.strategy,
+      strategyLabel: summaryData.serving?.strategyLabel || label,
+      benchmarkLabel: summaryData.benchmark?.strategyLabel || null,
+      hasArtifact: summaryData.serving?.hasArtifact || summaryData.hasArtifact,
+      artifactPath: summaryData.serving?.path || summaryData.artifactPath,
       updatedAt: summaryData.updatedAt,
-      metrics: summaryData.metrics,
-      training: summaryData.training
+      metrics: summaryData.benchmark?.metrics || summaryData.metrics,
+      training: summaryData.benchmark?.training || summaryData.training
     };
-    
-    console.log('[Dashboard QuickOps] aiRecommendation:', result.aiRecommendation);
+
+    dashboardDebugLog('[Dashboard QuickOps] aiRecommendation:', result.aiRecommendation);
   } catch (e) {
     warnings.push(`AI Recommendation Error: ${e.message}`);
     result.aiRecommendation = { hasArtifact: false };
@@ -434,10 +705,10 @@ async function getQuickOperations() {
   try {
     if (await tableExists('playlists')) {
       const keys = [
-        'dailymix_01', 'dailymix_02', 'dailymix_03', 'dailymix_04', 'dailymix_05', 'dailymix_06', 
+        'dailymix_01', 'dailymix_02', 'dailymix_03', 'dailymix_04', 'dailymix_05', 'dailymix_06',
         'weekly_mix', 'weeklymix', 'moodmix', 'mood_mix', 'trending_now', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'
       ];
-      
+
       const {
         SYSTEM_PLAYLIST_SCHEDULES,
         getLatestScheduledOccurrence,
@@ -445,14 +716,14 @@ async function getQuickOperations() {
         normalizeSystemKey
       } = require('../schedulers/systemPlaylistScheduler');
       const weekdays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-      
+
       const [rows] = await pool.query(
-        `SELECT 
-           system_key, 
-           MAX(name) AS name, 
-           COUNT(*) AS total_instances, 
-           MAX(updated_at) AS updated_at 
-         FROM playlists 
+        `SELECT
+           system_key,
+           MAX(name) AS name,
+           COUNT(*) AS total_instances,
+           MAX(updated_at) AS updated_at
+         FROM playlists
          WHERE system_key IN (?) AND is_system = 1
          GROUP BY system_key`,
         [keys]
@@ -467,12 +738,12 @@ async function getQuickOperations() {
         }
         return acc;
       }, {});
-      
+
       let logMap = new Map();
       const lastSuccessMap = {};
       if (await tableExists('system_playlist_runs')) {
         const [runLogs] = await pool.query(`
-           SELECT r1.id, r1.system_key, r1.run_type, r1.source_start_date, r1.scheduled_for, r1.finished_at, r1.status 
+           SELECT r1.id, r1.system_key, r1.run_type, r1.source_start_date, r1.scheduled_for, r1.finished_at, r1.status
            FROM system_playlist_runs r1
            INNER JOIN (
              SELECT system_key, MAX(id) as max_id
@@ -506,31 +777,31 @@ async function getQuickOperations() {
           lastSuccessMap[log.system_key] = log.lastSuccessAt;
         }
       }
-      
+
       const now = new Date();
       result.systemPlaylists = rows.map(row => {
         const lastGeneratedDate = row.updated_at;
         const updatedAt = lastGeneratedDate ? new Date(lastGeneratedDate) : null;
-        
+
         let isStale = false;
         let diffDays = 0;
         let diffHours = 0;
         let statusLabel = 'Cần kiểm tra';
-        
-        const schedule = SYSTEM_PLAYLIST_SCHEDULES.find(s => 
-          s.keys.some(k => 
-            k === row.system_key || 
+
+        const schedule = SYSTEM_PLAYLIST_SCHEDULES.find(s =>
+          s.keys.some(k =>
+            k === row.system_key ||
             normalizeSystemKey(k) === normalizeSystemKey(row.system_key) ||
-            k.replace('mix', '_mix') === row.system_key || 
+            k.replace('mix', '_mix') === row.system_key ||
             k.replace('_mix', 'mix') === row.system_key
           )
         );
-        
+
         if (updatedAt) {
           const diffMs = now - updatedAt;
           diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
           diffHours = diffMs / (1000 * 60 * 60);
-          
+
           if (schedule) {
             const scheduleLastGeneratedAt =
               getLastGeneratedAtForKey(lastSuccessMap, row.system_key) ||
@@ -545,11 +816,11 @@ async function getQuickOperations() {
               // Weekly or specific day schedule
               const targetDay = schedule.runDayOfWeek;
               isStale = isDueForLatestSchedule;
-              
+
               const hh = schedule.hour.toString().padStart(2, '0');
               const mm = schedule.minute.toString().padStart(2, '0');
               const nextRunText = `Lịch: ${weekdays[targetDay]} ${hh}:${mm}`;
-              
+
               if (isStale) {
                 statusLabel = overdueDays > 0
                   ? `Quá hạn ${overdueDays} ngày`
@@ -580,7 +851,7 @@ async function getQuickOperations() {
               const hh = schedule.hour !== undefined ? schedule.hour.toString().padStart(2, '0') : '00';
               const mm = schedule.minute !== undefined ? schedule.minute.toString().padStart(2, '0') : '00';
               const nextRunText = `Lịch: Mỗi ngày ${hh}:${mm}`;
-              
+
               if (isStale) {
                 statusLabel = overdueDays > 0
                   ? `Quá hạn ${overdueDays} ngày`
@@ -612,7 +883,7 @@ async function getQuickOperations() {
             statusLabel = updatedAt.toLocaleDateString('vi-VN') === now.toLocaleDateString('vi-VN') ? 'Hôm nay' : `Cập nhật ${updatedAt.toLocaleDateString('vi-VN')}`;
           }
         }
-        
+
         return {
           name: row.name,
           systemKey: row.system_key,
@@ -625,7 +896,7 @@ async function getQuickOperations() {
           statusLabel
         };
       });
-      
+
       // Deduplicate by normalized system_key if aliases exist (e.g., both weekly_mix and weeklymix)
       const itemMap = new Map();
       for (const item of result.systemPlaylists) {
@@ -636,15 +907,15 @@ async function getQuickOperations() {
         }
       }
       result.systemPlaylists = Array.from(itemMap.values());
-      
+
       const enabled = process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false';
       result.playlistAutomation = {
         schedulerEnabled: enabled,
         scheduleDescription: 'Daily Mix: Tue-Sat/Mon 00:10; Weekly: Sun 07:00; Trending: daily 00:30; Mood: daily 01:00; Vibes: daily 01:15.',
         nextRunHint: 'Backend kiểm tra mỗi 60 phút và catch-up job đã quá mốc nếu chưa chạy thành công.'
       };
-      
-      if (process.env.DEBUG_DASHBOARD_QUICKOPS === 'true') {
+
+      if (DEBUG_DASHBOARD) {
         console.log('[Dashboard QuickOps] playlistAutomation summary:', {
           count: result.systemPlaylists.length,
           keys: result.systemPlaylists.map(item => item.systemKey)
@@ -660,7 +931,7 @@ async function getQuickOperations() {
     if (await tableExists('songs')) {
       const [noAudio] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE audio_url IS NULL OR TRIM(audio_url) = ""');
       result.contentAlerts.push({ id: 'no_audio', title: 'Bài hát thiếu audio', desc: 'Không thể phát nhạc', count: noAudio[0].c, type: 'error', icon: 'error' });
-      
+
       const missingLyricsCount = await getMissingLyricsCount(warnings);
       result.contentAlerts.push({ id: 'no_lyrics', title: 'Bài hát thiếu lyrics', desc: 'Cần bổ sung lời bài hát', count: missingLyricsCount, type: 'warning', icon: 'article' });
       const [noCover] = await pool.query('SELECT COUNT(*) as c FROM songs WHERE cover_url IS NULL OR TRIM(cover_url) = ""');
@@ -674,7 +945,7 @@ async function getQuickOperations() {
       const [emptyPlaylists] = await pool.query("SELECT COUNT(p.id) as c FROM playlists p LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id WHERE ps.song_id IS NULL");
       result.contentAlerts.push({ id: 'empty_playlist', title: 'Playlist rỗng', desc: 'Không có bài hát nào', count: emptyPlaylists[0].c, type: 'info', icon: 'playlist' });
     }
-    
+
     // Sort so errors come first, then warnings, then info, but keep 0 counts at the bottom
     result.contentAlerts.sort((a, b) => {
       if (a.count === 0 && b.count > 0) return 1;
@@ -694,7 +965,7 @@ async function getQuickOperations() {
       const [[{ failed24h }]] = await pool.query("SELECT COUNT(*) as failed24h FROM payment_transactions WHERE status = 'failed' AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
       const [[{ pending }]] = await pool.query("SELECT COUNT(*) as pending FROM payment_transactions WHERE status = 'pending'");
       const [[{ successToday }]] = await pool.query("SELECT COUNT(*) as successToday FROM payment_transactions WHERE status = 'paid' AND DATE(paid_at) = CURDATE()");
-      
+
       const [recentIssues] = await pool.query(`
         SELECT t.id, t.amount, t.status, t.created_at, u.email, u.display_name
         FROM payment_transactions t
@@ -715,10 +986,14 @@ async function getQuickOperations() {
     warnings.push(`Payment Alert Error: ${e.message}`);
   }
 
-  return { ...result, warnings };
+  const finalResult = { ...result, warnings };
+  quickOpsCache = { data: finalResult, expiresAt: Date.now() + 300000 }; // 5 minutes TTL
+  return finalResult;
 }
 
 module.exports = {
   getDashboardSummary,
   getQuickOperations,
+  getDashboardQuickOperationsLite,
+  getDashboardSystemPlaylistSummary
 };

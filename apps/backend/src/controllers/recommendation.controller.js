@@ -5,6 +5,7 @@ const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const recommendationService = require('../services/recommendation.service');
 const contextualMoodService = require('../services/contextualMood.service');
 const modelService = require('../services/recommendationModel.service');
+const { getSystemPlaylistTempoMetadata, isTempoAwareSystemPlaylist } = require('../config/systemPlaylistTempo.config');
 const {
   SYSTEM_PLAYLIST_BY_KEY,
   MADE_FOR_YOU_ORDER,
@@ -65,7 +66,7 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
     'SELECT id, type FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1',
     [userId, systemKey]
   );
-  
+
   let playlistId;
   let shouldPopulate = false;
   if (playlists.length === 0) {
@@ -85,8 +86,11 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
       shouldPopulate = true;
     }
   }
-  
+
   if (shouldPopulate) {
+    if (isTempoAwareSystemPlaylist(systemKey)) {
+      return playlistId;
+    }
     // Get songs to populate
     const [songs] = await conn.query(songQuery, queryParams);
     if (songs.length > 0) {
@@ -94,7 +98,7 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
       await conn.query('INSERT IGNORE INTO playlist_songs (playlist_id, song_id) VALUES ?', [values]);
     }
   }
-  
+
   return playlistId;
 }
 
@@ -103,7 +107,7 @@ async function getFollowedArtistIds(conn, userId) {
   try {
     const [follows] = await conn.query('SELECT artist_id FROM artist_follows WHERE user_id = ?', [userId]);
     const [prefs] = await conn.query('SELECT artist_id FROM user_artist_preferences WHERE user_id = ?', [userId]);
-    
+
     const idSet = new Set([...follows.map(r => r.artist_id), ...prefs.map(r => r.artist_id)]);
     const ids = Array.from(idSet);
     return ids.length > 0 ? ids : [0]; // Tránh lỗi SQL Syntax khi mảng rỗng
@@ -127,34 +131,34 @@ exports.getHomeRecommendations = async (req, res, next) => {
     // 1. Fetch user preferred genres to personalize the Weekly Mix
     const [prefGenres] = await conn.query('SELECT genre_id FROM user_genre_preferences WHERE user_id = ?', [userId]);
     let weeklySongQuery, weeklyQueryParams;
-    
+
     if (prefGenres.length > 0) {
       const genreIds = prefGenres.map(g => g.genre_id);
       // Ưu tiên bài từ nghệ sĩ đã follow
       weeklySongQuery = `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (?)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (?)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 30
       `;
       weeklyQueryParams = [followedArtistIds, genreIds];
     } else {
       // Không có genre preferences, ưu tiên followed artists
       weeklySongQuery = `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY is_followed_bonus DESC, RAND()
         LIMIT 30
       `;
       weeklyQueryParams = [followedArtistIds];
     }
 
     // 2. Ensure all Spotify-like playlists exist for this user
-    
+
     // Weekly Mix - Ưu tiên followed artists + genre preferences
     const weeklyId = await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Weekly Mix',
@@ -170,11 +174,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('morning_vibes'),
       'Chào ngày mới với những giai điệu đầy hứng khởi.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (3, 4, 7, 8, 12)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (3, 4, 7, 8, 12)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'morning_vibes'
@@ -186,11 +190,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('night_vibes'),
       'Thư giãn cuối ngày với những âm điệu êm dịu.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (1, 2, 6, 9)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (1, 2, 6, 9)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'night_vibes'
@@ -202,11 +206,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_01'),
       'Giai điệu Pop, R&B và nhạc trẻ yêu thích.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (4, 5, 10, 11)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (4, 5, 10, 11)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_01'
@@ -218,11 +222,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_02'),
       'Không gian Lofi và Indie mộc mạc.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (1, 12)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (1, 12)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_02'
@@ -234,11 +238,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_03'),
       'Giai điệu EDM sảng khoái và Rock mạnh mẽ.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (3, 7, 8)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (3, 7, 8)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_03'
@@ -250,11 +254,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_04'),
       'Giai điệu Ballad và Acoustic sâu lắng.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (2, 6, 9)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (2, 6, 9)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_04'
@@ -266,11 +270,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_05'),
       'Những bản hit nhạc Việt và Châu Á.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (10, 11)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (10, 11)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_05'
@@ -282,11 +286,11 @@ exports.getHomeRecommendations = async (req, res, next) => {
       resolvePlaylistCoverUrl('dailymix_06'),
       'Năng lượng mạnh mẽ từ Remix và EDM.',
       `
-        SELECT id, 
+        SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs 
-        WHERE ${publicSongCondition('songs')} 
-        ORDER BY (genre_id IN (3, 8)) DESC, is_followed_bonus DESC, RAND() 
+        FROM songs
+        WHERE ${publicSongCondition('songs')}
+        ORDER BY (genre_id IN (3, 8)) DESC, is_followed_bonus DESC, RAND()
         LIMIT 20
       `, [followedArtistIds],
       'dailymix_06'
@@ -312,7 +316,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
       await getOrCreateSystemPlaylist(
         conn, userId, getSystemPlaylistConfig('recently_played'),
-        `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY MAX(listened_at) DESC LIMIT 30`,
+        `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY MAX(created_at) DESC LIMIT 30`,
         [userId]
       );
 
@@ -338,14 +342,14 @@ exports.getHomeRecommendations = async (req, res, next) => {
     const allSystemIds = [weeklyId, daily1Id, daily2Id, daily3Id, daily4Id, daily5Id, daily6Id];
     for (const plId of allSystemIds) {
       const [artists] = await conn.query(`
-        SELECT DISTINCT a.name 
+        SELECT DISTINCT a.name
         FROM playlist_songs ps
         JOIN songs s ON ps.song_id = s.id
         JOIN artists a ON s.artist_id = a.id
         WHERE ps.playlist_id = ?
         LIMIT 3
       `, [plId]);
-      
+
       if (artists.length > 0) {
         const artistNames = artists.map(a => a.name).join(', ');
         dynamicDescMap[plId] = `${artistNames} và nhiều hơn nữa...`;
@@ -384,7 +388,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
     // Format output
     const listMap = {};
-    
+
     // Deduplicate Weekly Mixes
     const weeklyMixes = playlists.filter(pl => pl.system_key === 'weeklymix' || pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix'));
     let selectedWeeklyMixId = null;
@@ -407,6 +411,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       pl.cover_url = normalizeCoverUrl(pl.cover_url, req);
       pl.effective_cover_url = normalizeCoverUrl(pl.effective_cover_url, req);
       pl.creator_name = 'MusicFlow';
+      Object.assign(pl, getSystemPlaylistTempoMetadata(pl.system_key));
       if (dynamicDescMap[pl.id]) {
         pl.desc = dynamicDescMap[pl.id];
         pl.description = dynamicDescMap[pl.id];
@@ -489,7 +494,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
     }
 
     // Prepare home response structure matching the new frontend requirements
-    
+
     const SYSTEM_KEYS_MADE_FOR_YOU = MADE_FOR_YOU_ORDER;
 
     // 1. madeForYouPlaylists: ONLY system personalized playlists
@@ -582,6 +587,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
         tn.cover_url = normalizeCoverUrl(tn.cover_url, req);
         tn.effective_cover_url = normalizeCoverUrl(tn.effective_cover_url, req);
         tn.creator_name = 'MusicFlow';
+        Object.assign(tn, getSystemPlaylistTempoMetadata(tn.system_key));
         trendingNowPlaylist = tn;
       }
     } catch (tnErr) {
@@ -629,15 +635,32 @@ exports.getHomeSongRecommendations = async (req, res) => {
     const result = await recommendationService.getRecommendationsForUser(userId, { limit, req });
     const meta = modelService.getModelMetadata();
     const status = modelService.getLoadStatus();
+    const serving = recommendationService.getServingMetadata(result);
 
     const itemsWithReason = result.items.map((item) => ({
       ...item,
-      reason: recommendationService.reasonForStrategy(result.strategy),
+      reason: recommendationService.reasonForStrategy(serving.strategy),
     }));
+
+    console.log(
+      `[RecommendationServing] userId=${userId} strategy=${serving.strategy} servingVersion=${serving.servingVersion} fallbackUsed=${serving.fallbackUsed} legacyV3Used=${serving.legacyV3Used} itemCount=${itemsWithReason.length}`
+    );
 
     res.json({
       success: true,
-      strategy: result.strategy,
+      strategy: serving.strategy,
+      strategyLabel: serving.strategyLabel,
+      servingVersion: serving.servingVersion,
+      coreModel: serving.coreModel,
+      fallbackUsed: serving.fallbackUsed,
+      fallbackReason: serving.fallbackReason,
+      legacyV3Used: serving.legacyV3Used,
+      tempoAware: result.tempoAware,
+      tempoProfile: result.tempoProfile,
+      audioFeatureCoverage: result.audioFeatureCoverage,
+      serving,
+      metadata: serving,
+      fallbackChain: result.fallbackChain || [],
       strategy_reason: result.reason,
       reason: result.reason,
       dominantMarket: result.tasteProfile?.dominantMarket || null,

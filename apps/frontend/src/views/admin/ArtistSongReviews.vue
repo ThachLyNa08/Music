@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-0 pb-10 font-sans text-gray-800 dark:text-text-base">
+  <div class="flex-1 flex flex-col bg-gray-50 dark:bg-bg-base relative full-bleed min-h-screen overflow-y-scroll pb-10 font-sans text-gray-800 dark:text-text-base" style="scrollbar-gutter: stable;">
     <!-- Header -->
     <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm">
       <div>
@@ -33,35 +33,50 @@
     </div>
 
     <div class="p-4 md:p-6 flex flex-col gap-4">
-      <!-- KPI Cards -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-2">
-        <AdminKpiCard
-          title="Chờ duyệt"
-          :value="activeStats.pendingCount ?? 0"
-          icon="clock"
-          tone="amber"
-          :showIcon="true"
-        />
-        <AdminKpiCard
-          title="Đã duyệt"
-          :value="activeStats.approvedCount ?? 0"
-          icon="check-circle"
-          tone="green"
-          :showIcon="true"
-        />
-        <AdminKpiCard
-          title="Đã từ chối"
-          :value="activeStats.rejectedCount ?? 0"
-          icon="close"
-          tone="rose"
-          :showIcon="true"
-        />
+
+      <!-- KPI Risk Cards (Clickable Quick Filters with Toggle) -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div
+          @click="toggleKpiFilter('pending_review', 'all')"
+          class="bg-white dark:bg-bg-card p-4 rounded-xl border border-gray-200 dark:border-bg-border shadow-sm flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md active:scale-95 select-none"
+          :class="{ 'ring-2 ring-indigo-500 border-indigo-500': statusFilter === 'pending_review' && levelFilter === 'all' }"
+        >
+          <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Tổng chờ duyệt</span>
+          <div class="text-2xl font-extrabold text-gray-900 dark:text-white mt-1">{{ riskStats.totalPending || 0 }}</div>
+        </div>
+
+        <div
+          @click="toggleKpiFilter('pending_review', 'high')"
+          class="bg-rose-50/50 dark:bg-rose-500/10 p-4 rounded-xl border border-rose-200 dark:border-rose-500/20 shadow-sm flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md active:scale-95 select-none"
+          :class="{ 'ring-2 ring-rose-500 border-rose-500': statusFilter === 'pending_review' && levelFilter === 'high' }"
+        >
+          <span class="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Rủi ro cao (High)</span>
+          <div class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-1">{{ riskStats.highRiskCount || 0 }}</div>
+        </div>
+
+        <div
+          @click="toggleKpiFilter('pending_review', 'medium')"
+          class="bg-amber-50/50 dark:bg-amber-500/10 p-4 rounded-xl border border-amber-200 dark:border-amber-500/20 shadow-sm flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md active:scale-95 select-none"
+          :class="{ 'ring-2 ring-amber-500 border-amber-500': statusFilter === 'pending_review' && levelFilter === 'medium' }"
+        >
+          <span class="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Cần kiểm tra (Medium)</span>
+          <div class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">{{ riskStats.mediumRiskCount || 0 }}</div>
+        </div>
+
+        <div
+          @click="toggleKpiFilter('pending_review', 'low')"
+          class="bg-emerald-50/50 dark:bg-emerald-500/10 p-4 rounded-xl border border-emerald-200 dark:border-emerald-500/20 shadow-sm flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md active:scale-95 select-none"
+          :class="{ 'ring-2 ring-emerald-500 border-emerald-500': statusFilter === 'pending_review' && levelFilter === 'low' }"
+        >
+          <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Rủi ro thấp (Low)</span>
+          <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">{{ riskStats.lowRiskCount || 0 }}</div>
+        </div>
       </div>
 
       <!-- Filter Bar -->
       <div>
         <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-          <div class="relative min-w-[320px] flex-1">
+          <div class="relative min-w-[280px] flex-1">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               v-model="searchQuery"
@@ -74,13 +89,27 @@
               <MfIcon name="close" size="14" />
             </button>
           </div>
-          <select v-model="statusFilter" @change="handleSearch" class="admin-input w-full xl:w-48 xl:shrink-0 cursor-pointer !pl-3">
+          <select v-model="levelFilter" @change="handleSearch" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !pl-3">
+            <option value="all">Tất cả mức độ</option>
+            <option value="high">Mức cao (High)</option>
+            <option value="medium">Mức trung bình</option>
+            <option value="low">Mức thấp (Low)</option>
+          </select>
+          <select v-model="flagFilter" @change="handleSearch" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer !pl-3">
+            <option v-for="opt in flagOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <select v-model="artistFilter" @change="handleSearch" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer !pl-3">
+            <option value="all">Tất cả nghệ sĩ</option>
+            <option v-for="artist in artistOptions" :key="artist.id" :value="artist.id">{{ artist.name }}</option>
+          </select>
+          <select v-model="statusFilter" @change="handleSearch" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !pl-3">
             <option value="all">Tất cả trạng thái</option>
             <option value="pending_review">Chờ duyệt</option>
             <option value="approved">Đã duyệt</option>
             <option value="rejected">Bị từ chối</option>
           </select>
-          <select v-model="sortOption" @change="handleSearch" class="admin-input w-full xl:w-44 xl:shrink-0 cursor-pointer !pl-3">
+          <select v-model="sortOption" @change="handleSearch" class="admin-input w-full xl:w-40 xl:shrink-0 cursor-pointer !pl-3">
+            <option value="risk_desc">Rủi ro cao trước</option>
             <option value="newest">Mới nhất</option>
             <option value="oldest">Cũ nhất</option>
           </select>
@@ -91,8 +120,39 @@
         {{ errorMsg }}
       </div>
 
+      <!-- Bulk Action Bar -->
+      <div v-if="selectedIds.length > 0" class="sticky top-20 z-30 mb-3 flex items-center justify-between rounded-xl bg-white dark:bg-bg-card p-3 px-4 text-gray-900 dark:text-white shadow-md border border-gray-200 dark:border-bg-border">
+        <div class="flex items-center gap-2 text-sm font-bold">
+          <MfIcon name="check-circle" size="18" class="text-indigo-600 dark:text-indigo-400" />
+          <span>Đã chọn <span class="text-indigo-600 dark:text-indigo-400">{{ selectedIds.length }}</span> {{ currentTab === 'songs' ? 'bài hát' : 'album' }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            @click="openBulkConfirmApprove"
+            :disabled="bulkLoading"
+            class="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+          >
+            <MfIcon name="check" size="14" /> Duyệt đã chọn
+          </button>
+          <button
+            @click="openBulkRejectModal"
+            :disabled="bulkLoading"
+            class="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+          >
+            <MfIcon name="close" size="14" /> Từ chối đã chọn
+          </button>
+          <button
+            @click="clearSelection"
+            :disabled="bulkLoading"
+            class="flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white px-2 py-1 transition-colors cursor-pointer"
+          >
+            Bỏ chọn
+          </button>
+        </div>
+      </div>
+
       <!-- Table Songs -->
-      <div v-if="currentTab === 'songs'" class="mb-8 flex flex-col !mt-2">
+      <div v-if="currentTab === 'songs'" class="mb-8 flex flex-col !mt-2 min-h-[480px]">
         <AdminTableShell
           maxHeight="400px"
           :loading="loading"
@@ -103,16 +163,35 @@
           <table class="w-full min-w-[900px] text-left border-collapse text-xs whitespace-nowrap table-fixed">
             <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#1e293b]">
               <tr class="text-black dark:text-white uppercase tracking-wider font-bold">
-                <th class="py-2 px-3 w-[30%]">Bài hát</th>
-                <th class="py-2 px-3 w-[20%]">Nghệ sĩ</th>
-                <th class="py-2 px-3 w-[15%]">Thể loại / Album</th>
-                <th class="py-2 px-3 w-[15%]">Ngày gửi</th>
+                <th class="py-2 px-3 w-[4%] text-center">
+                  <input
+                    type="checkbox"
+                    :checked="isAllSelected"
+                    :disabled="pendingItemsOnCurrentPage.length === 0"
+                    @change="toggleSelectAll"
+                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-40"
+                    title="Chọn tất cả mục chờ duyệt trên trang này"
+                  />
+                </th>
+                <th class="py-2 px-3 w-[24%]">Bài hát</th>
+                <th class="py-2 px-3 w-[15%]">Nghệ sĩ</th>
+                <th class="py-2 px-3 w-[24%]">Kiểm duyệt / Rủi ro</th>
+                <th class="py-2 px-3 w-[13%]">Ngày gửi</th>
                 <th class="py-2 px-3 w-[10%] text-center">Trạng thái</th>
                 <th class="py-2 px-3 w-[10%] text-right sticky right-0 bg-gray-50 dark:bg-bg-card z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Hành động</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
               <tr v-for="review in songReviews" :key="review.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group">
+                <td class="py-2 px-3 text-center">
+                  <input
+                    type="checkbox"
+                    :value="review.id"
+                    v-model="selectedIds"
+                    :disabled="(review.reviewStatus || review.review_status) !== 'pending_review'"
+                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  />
+                </td>
                 <td class="py-2 px-3 max-w-0">
                   <div class="flex items-center gap-3">
                     <div class="relative w-10 h-10 shrink-0">
@@ -131,9 +210,19 @@
                   <span v-else class="text-gray-400">-</span>
                 </td>
                 <td class="py-2 px-3">
-                  <div class="flex flex-col">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300 truncate">{{ review.genre?.name || 'Không có' }}</span>
-                    <span class="text-[11px] text-gray-500">{{ review.album?.title || 'Single' }}</span>
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded text-[11px] font-bold" :class="getLevelBadgeClass(review.moderationLevel)">
+                        {{ formatLevelText(review.moderationLevel) }}
+                      </span>
+                      <span class="text-[11px] text-gray-500 font-semibold">Health: {{ review.metadataScore || 0 }}/100</span>
+                      <span class="text-[11px] text-rose-500 font-bold" v-if="review.riskScore > 0">Risk: +{{ review.riskScore }}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1" v-if="review.moderationFlags && review.moderationFlags.length">
+                      <span v-for="flag in review.moderationFlags" :key="flag" class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-bg-surface text-gray-600 dark:text-gray-300 text-[10px] font-medium border border-gray-200 dark:border-bg-border">
+                        {{ formatFlagText(flag) }}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td class="py-2 px-3">
@@ -168,7 +257,7 @@
       </div>
 
       <!-- Table Albums -->
-      <div v-else-if="currentTab === 'albums'" class="mb-8 flex flex-col !mt-2">
+      <div v-else-if="currentTab === 'albums'" class="mb-8 flex flex-col !mt-2 min-h-[480px]">
         <AdminTableShell
           maxHeight="400px"
           :loading="loading"
@@ -179,8 +268,18 @@
           <table class="w-full min-w-[900px] text-left border-collapse text-xs whitespace-nowrap table-fixed">
             <thead class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#1e293b]">
               <tr class="text-black dark:text-white uppercase tracking-wider font-bold">
-                <th class="py-2 px-3 w-[30%]">Album</th>
-                <th class="py-2 px-3 w-[20%]">Nghệ sĩ</th>
+                <th class="py-2 px-3 w-[4%] text-center">
+                  <input
+                    type="checkbox"
+                    :checked="isAllSelected"
+                    :disabled="pendingItemsOnCurrentPage.length === 0"
+                    @change="toggleSelectAll"
+                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-40"
+                    title="Chọn tất cả album chờ duyệt trên trang này"
+                  />
+                </th>
+                <th class="py-2 px-3 w-[28%]">Album</th>
+                <th class="py-2 px-3 w-[18%]">Nghệ sĩ</th>
                 <th class="py-2 px-3 w-[15%] text-center">Số bài hát</th>
                 <th class="py-2 px-3 w-[15%]">Ngày gửi</th>
                 <th class="py-2 px-3 w-[10%] text-center">Trạng thái</th>
@@ -189,6 +288,15 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
               <tr v-for="review in albumReviews" :key="review.id" class="hover:bg-gray-50/80 dark:hover:bg-bg-card transition-colors group">
+                <td class="py-2 px-3 text-center">
+                  <input
+                    type="checkbox"
+                    :value="review.id"
+                    v-model="selectedIds"
+                    :disabled="(review.reviewStatus || review.review_status) !== 'pending_review'"
+                    class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  />
+                </td>
                 <td class="py-2 px-3 max-w-0">
                   <div class="flex items-center gap-3">
                     <div class="relative w-10 h-10 shrink-0">
@@ -312,6 +420,17 @@
                 </div>
               </div>
 
+              <div v-if="selectedReview.duplicateReferenceSongId" class="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-600 dark:text-amber-400">
+                <div class="font-bold flex items-center gap-1 mb-1">
+                  <MfIcon name="alert-triangle" size="14" /> Cảnh báo Audio Trùng khớp:
+                </div>
+                <div>
+                  Trùng 100% với bài hát <strong>#{{ selectedReview.duplicateReferenceSongId }} - {{ selectedReview.duplicateReferenceTitle }}</strong>
+                  <span v-if="selectedReview.duplicateReferenceArtistName"> (Nghệ sĩ: <strong>{{ selectedReview.duplicateReferenceArtistName }}</strong>)</span>
+                  — Trạng thái: <span class="font-bold uppercase">{{ selectedReview.duplicateReferenceStatus === 'pending_review' ? 'Chờ duyệt' : selectedReview.duplicateReferenceStatus }}</span>
+                </div>
+              </div>
+
               <div v-if="selectedReview.rejectionReason" class="mb-4">
                 <span class="block text-xs font-semibold text-rose-500 uppercase mb-1">Lý do bị từ chối</span>
                 <div class="bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 text-sm p-3 rounded-lg border border-rose-200 dark:border-rose-800/30 font-medium">
@@ -358,7 +477,14 @@
               class="admin-input w-full p-3 h-24 resize-none"
               placeholder="Nhập lý do từ chối rõ ràng cho nghệ sĩ biết..."
             ></textarea>
-            <div class="flex gap-2 mt-3 justify-end">
+            <div class="mt-3 flex items-center gap-2">
+              <input type="checkbox" id="allowResubmit" v-model="allowResubmit" class="rounded border-gray-300 text-rose-500 focus:ring-rose-500 disabled:opacity-50" :disabled="selectedReview.resubmissionCount >= 3" />
+              <label for="allowResubmit" class="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer" :class="{'opacity-50': selectedReview.resubmissionCount >= 3}">
+                Cho phép nghệ sĩ chỉnh sửa và gửi lại
+              </label>
+              <span v-if="selectedReview.resubmissionCount >= 3" class="text-xs text-rose-500 font-medium ml-2">(Đã hết lượt)</span>
+            </div>
+            <div class="flex gap-2 mt-4 justify-end">
               <button @click="isRejecting = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors" :disabled="submitting">Hủy</button>
               <button @click="submitReject" class="px-4 py-2 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition-colors shadow-sm disabled:opacity-50" :disabled="!rejectReason.trim() || submitting">Xác nhận Từ chối</button>
             </div>
@@ -379,7 +505,7 @@
       </div>
     </Teleport>
 
-    <!-- Confirm Dialog -->
+    <!-- Confirm Dialog Single Approve -->
     <ConfirmDialog
       v-model:open="showConfirmApprove"
       :title="currentTab === 'songs' ? 'Duyệt bài hát này?' : 'Duyệt album này?'"
@@ -390,6 +516,153 @@
       :loading="submitting"
       @confirm="submitApprove"
     />
+
+    <!-- Confirm Dialog Bulk Approve -->
+    <ConfirmDialog
+      v-model:open="showBulkConfirmApprove"
+      :title="currentTab === 'songs' ? 'Duyệt các bài hát đã chọn?' : 'Duyệt các album đã chọn?'"
+      :message="`Bạn có chắc chắn muốn duyệt ${selectedIds.length} mục đã chọn? Các nội dung rủi ro cao (High Risk), điểm rủi ro > 60 hoặc có cờ cảnh báo vi phạm sẽ tự động được hệ thống bỏ qua để đảm bảo an toàn.`"
+      confirmText="Duyệt hàng loạt"
+      cancelText="Hủy"
+      type="primary"
+      :loading="bulkLoading"
+      @confirm="submitBulkApprove"
+    />
+
+    <!-- Modal Bulk Reject -->
+    <Teleport to="body">
+      <div v-if="showBulkRejectModal" class="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" @click.self="showBulkRejectModal = false">
+        <div class="w-full max-w-xl max-h-[90vh] flex flex-col bg-white dark:bg-bg-card rounded-2xl shadow-2xl border border-gray-100 dark:border-bg-border overflow-hidden">
+          <!-- Header -->
+          <div class="p-4 px-5 border-b border-gray-100 dark:border-bg-border flex items-center justify-between shrink-0">
+            <div>
+              <h3 class="text-base font-bold text-gray-900 dark:text-white">Từ chối {{ selectedIds.length }} {{ currentTab === 'songs' ? 'bài hát' : 'album' }} đã chọn</h3>
+              <p class="text-xs text-gray-500">Lựa chọn áp dụng lý do chung hoặc nhập lý do riêng từng nội dung.</p>
+            </div>
+            <button @click="showBulkRejectModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-lg">
+              <MfIcon name="close" size="18" />
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-5 overflow-y-auto flex-1 space-y-4">
+            <!-- Warning if items have different flags -->
+            <div v-if="hasDiverseFlags" class="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300">
+              <div class="font-bold flex items-center gap-1.5 mb-0.5">
+                <MfIcon name="warning" size="14" class="text-amber-500" /> Cảnh báo:
+              </div>
+              <span>Các nội dung đã chọn có cảnh báo khác nhau. Nên nhập lý do riêng cho từng nội dung.</span>
+            </div>
+
+            <!-- Mode Selector -->
+            <div class="flex rounded-xl bg-gray-100 dark:bg-bg-surface p-1 text-xs font-bold border border-gray-200 dark:border-bg-border">
+              <button
+                @click="bulkRejectMode = 'common'"
+                :class="bulkRejectMode === 'common' ? 'bg-white dark:bg-bg-card text-rose-600 dark:text-rose-400 shadow-xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'"
+                class="flex-1 py-2 rounded-lg transition-all text-center cursor-pointer"
+              >
+                Dùng lý do chung
+              </button>
+              <button
+                @click="bulkRejectMode = 'per_item'"
+                :class="bulkRejectMode === 'per_item' ? 'bg-white dark:bg-bg-card text-rose-600 dark:text-rose-400 shadow-xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'"
+                class="flex-1 py-2 rounded-lg transition-all text-center cursor-pointer"
+              >
+                Nhập lý do riêng cho từng {{ currentTab === 'songs' ? 'bài' : 'album' }}
+              </button>
+            </div>
+
+            <!-- Suggestion Chips -->
+            <div>
+              <span class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Gợi ý lý do từ chối:</span>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="chip in reasonChips"
+                  :key="chip"
+                  @click="applyReasonChip(chip)"
+                  type="button"
+                  class="rounded-lg bg-gray-100 dark:bg-bg-surface hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 border border-gray-200 dark:border-bg-border px-2.5 py-1 text-xs text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+                >
+                  + {{ chip }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode 1: Common Reason -->
+            <div v-if="bulkRejectMode === 'common'" class="space-y-2">
+              <div class="rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 text-xs text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/30">
+                Lý do này sẽ được áp dụng cho tất cả nội dung đã chọn. Chỉ sử dụng khi các nội dung có cùng nguyên nhân từ chối.
+              </div>
+              <textarea
+                v-model="bulkCommonReason"
+                rows="3"
+                placeholder="Nhập lý do từ chối chung cho tất cả các mục..."
+                class="w-full p-3 text-xs rounded-xl border border-gray-200 dark:border-bg-border bg-gray-50 dark:bg-bg-surface text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+              ></textarea>
+            </div>
+
+            <!-- Mode 2: Per Item Reason -->
+            <div v-else class="space-y-3">
+              <span class="block text-xs font-semibold text-gray-500">Danh sách lý do riêng từng mục (Click vào ô nhập để áp dụng gợi ý):</span>
+              <div class="space-y-3 max-h-64 overflow-y-auto pr-1">
+                <div
+                  v-for="item in selectedItemsDetails"
+                  :key="item.id"
+                  class="p-3 rounded-xl border border-gray-200 dark:border-bg-border bg-gray-50/70 dark:bg-bg-surface/70 flex flex-col gap-2"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                      <img :src="normalizeImageUrl(item.coverUrl) || fallbackCover" class="w-8 h-8 rounded-md object-cover bg-gray-200 shrink-0" />
+                      <div class="min-w-0 flex flex-col">
+                        <span class="font-bold text-xs text-gray-900 dark:text-white truncate">{{ item.title }}</span>
+                        <span class="text-[11px] text-gray-500 truncate">{{ item.artist?.name || '-' }}</span>
+                      </div>
+                    </div>
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0"
+                      :class="getLevelBadgeClass(item.moderationLevel || item.moderation_level)"
+                    >
+                      {{ formatLevelText(item.moderationLevel || item.moderation_level) }}
+                    </span>
+                  </div>
+
+                  <!-- Flags -->
+                  <div v-if="(item.moderationFlags || item.moderation_flags)?.length > 0" class="flex flex-wrap gap-1">
+                    <span
+                      v-for="flag in (item.moderationFlags || item.moderation_flags)"
+                      :key="flag"
+                      class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium"
+                    >
+                      {{ formatFlagText(flag) }}
+                    </span>
+                  </div>
+
+                  <textarea
+                    v-model="bulkItemReasons[item.id]"
+                    @focus="focusedItemId = item.id"
+                    rows="2"
+                    :placeholder="`Nhập lý do từ chối cho '${item.title}'...`"
+                    class="w-full p-2.5 text-xs rounded-lg border border-gray-200 dark:border-bg-border bg-white dark:bg-bg-card text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resubmit Option -->
+            <label class="flex items-center gap-2 pt-2 cursor-pointer select-none">
+              <input type="checkbox" v-model="bulkAllowResubmit" class="rounded text-rose-600 focus:ring-rose-500" />
+              <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Cho phép nghệ sĩ chỉnh sửa và gửi lại</span>
+            </label>
+          </div>
+
+          <!-- Footer -->
+          <div class="p-4 border-t border-gray-100 dark:border-bg-border bg-gray-50/50 dark:bg-bg-surface flex justify-end gap-2 shrink-0">
+            <button @click="showBulkRejectModal = false" class="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer" :disabled="bulkLoading">Hủy</button>
+            <button @click="submitBulkReject" class="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 cursor-pointer" :disabled="bulkLoading">Xác nhận từ chối {{ selectedIds.length }} mục</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -449,15 +722,244 @@ const activePagination = computed(() => {
 })
 
 const searchQuery = ref('')
-const statusFilter = ref('pending_review')
-const sortOption = ref('newest')
+const statusFilter = ref('all')
+const levelFilter = ref('all')
+const flagFilter = ref('all')
+const artistFilter = ref('all')
+const artistOptions = ref([])
+const sortOption = ref('risk_desc')
+const riskStats = ref({ totalPending: 0, highRiskCount: 0, mediumRiskCount: 0, lowRiskCount: 0 })
 
+const flagOptions = computed(() => {
+  if (currentTab.value === 'songs') {
+    return [
+      { value: 'all', label: 'Tất cả cảnh báo' },
+      { value: 'duplicate_audio_pending', label: 'Trùng audio đang chờ duyệt' },
+      { value: 'missing_cover', label: 'Thiếu ảnh bìa' },
+      { value: 'missing_lyrics', label: 'Thiếu lyrics' },
+      { value: 'new_artist', label: 'Nghệ sĩ mới' },
+      { value: 'duplicate_title', label: 'Tên gần trùng' },
+      { value: 'resubmitted_multiple_times', label: 'Gửi lại nhiều lần' },
+      { value: 'unusual_duration', label: 'Thời lượng bất thường' }
+    ]
+  } else {
+    return [
+      { value: 'all', label: 'Tất cả cảnh báo' },
+      { value: 'missing_cover', label: 'Thiếu ảnh bìa' },
+      { value: 'new_artist', label: 'Nghệ sĩ mới' },
+      { value: 'duplicate_title', label: 'Tên gần trùng' },
+      { value: 'resubmitted_multiple_times', label: 'Gửi lại nhiều lần' },
+      { value: 'few_album_songs', label: 'Album quá ít bài' },
+      { value: 'unapproved_album_song', label: 'Chứa bài chưa duyệt' }
+    ]
+  }
+})
+
+const toggleKpiFilter = (targetStatus, targetLevel) => {
+  if (statusFilter.value === targetStatus && levelFilter.value === targetLevel) {
+    statusFilter.value = 'all'
+    levelFilter.value = 'all'
+  } else {
+    statusFilter.value = targetStatus
+    levelFilter.value = targetLevel
+  }
+  handleSearch()
+}
+
+const allowResubmit = ref(true)
 const showDetailModal = ref(false)
 const selectedReview = ref(null)
 const isRejecting = ref(false)
 const rejectReason = ref('')
 const submitting = ref(false)
 const showConfirmApprove = ref(false)
+
+// Bulk Selection & Action States
+const selectedIds = ref([])
+const bulkLoading = ref(false)
+const showBulkConfirmApprove = ref(false)
+const showBulkRejectModal = ref(false)
+const bulkRejectMode = ref('common') // 'common' | 'per_item'
+const bulkCommonReason = ref('')
+const bulkItemReasons = ref({})
+const focusedItemId = ref(null)
+const bulkAllowResubmit = ref(true)
+
+const reasonChips = [
+  'Thiếu lời bài hát.',
+  'Thời lượng audio không hợp lệ.',
+  'Metadata chưa đầy đủ.',
+  'Ảnh bìa chưa phù hợp.',
+  'Nội dung cần chỉnh sửa trước khi phát hành.'
+]
+
+const selectedItemsDetails = computed(() => {
+  const sourceList = currentTab.value === 'songs' ? songReviews.value : albumReviews.value
+  const idSet = new Set(selectedIds.value)
+  return sourceList.filter(item => idSet.has(item.id))
+})
+
+const hasDiverseFlags = computed(() => {
+  const items = selectedItemsDetails.value
+  if (items.length <= 1) return false
+  const getFlagString = (item) => {
+    const flags = item.moderationFlags || item.moderation_flags || []
+    return Array.isArray(flags) ? flags.sort().join(',') : ''
+  }
+  const firstFlagStr = getFlagString(items[0])
+  return items.some(item => getFlagString(item) !== firstFlagStr)
+})
+
+const applyReasonChip = (chipText) => {
+  if (bulkRejectMode.value === 'common') {
+    bulkCommonReason.value = chipText
+  } else {
+    if (focusedItemId.value && selectedIds.value.includes(focusedItemId.value)) {
+      bulkItemReasons.value[focusedItemId.value] = chipText
+    } else {
+      for (const id of selectedIds.value) {
+        if (!bulkItemReasons.value[id] || !bulkItemReasons.value[id].trim()) {
+          bulkItemReasons.value[id] = chipText
+        }
+      }
+    }
+  }
+}
+
+const pendingItemsOnCurrentPage = computed(() => {
+  if (currentTab.value === 'songs') {
+    return songReviews.value.filter(s => (s.reviewStatus || s.review_status) === 'pending_review')
+  } else {
+    return albumReviews.value.filter(a => (a.reviewStatus || a.review_status) === 'pending_review')
+  }
+})
+
+const isAllSelected = computed(() => {
+  const items = pendingItemsOnCurrentPage.value
+  if (items.length === 0) return false
+  return items.every(item => selectedIds.value.includes(item.id))
+})
+
+const toggleSelectAll = () => {
+  const items = pendingItemsOnCurrentPage.value
+  if (isAllSelected.value) {
+    const itemIds = new Set(items.map(i => i.id))
+    selectedIds.value = selectedIds.value.filter(id => !itemIds.has(id))
+  } else {
+    const newSelected = new Set([...selectedIds.value, ...items.map(i => i.id)])
+    selectedIds.value = Array.from(newSelected)
+  }
+}
+
+const clearSelection = () => {
+  selectedIds.value = []
+}
+
+const openBulkConfirmApprove = () => {
+  if (selectedIds.value.length === 0) return
+  showBulkConfirmApprove.value = true
+}
+
+const submitBulkApprove = async () => {
+  if (selectedIds.value.length === 0) return
+  bulkLoading.value = true
+  try {
+    const apiCall = currentTab.value === 'songs'
+      ? adminArtistSongReviewsApi.bulkApproveSongs(selectedIds.value)
+      : adminArtistAlbumReviewsApi.bulkApproveAlbums(selectedIds.value)
+
+    const res = await apiCall
+    if (res.data.success) {
+      const { approvedCount = 0, skippedCount = 0, skipped = [] } = res.data
+      if (approvedCount > 0) {
+        toastStore.showToast(`Đã duyệt thành công ${approvedCount} nội dung.`, 'success')
+      }
+      if (skippedCount > 0) {
+        const firstReason = skipped[0]?.reason || 'Không đủ điều kiện duyệt hàng loạt.'
+        toastStore.showToast(`Bỏ qua ${skippedCount} nội dung: ${firstReason}`, 'warning')
+      }
+      showBulkConfirmApprove.value = false
+      clearSelection()
+      fetchSummary()
+      fetchReviews()
+    }
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Lỗi khi duyệt hàng loạt', 'error')
+  } finally {
+    bulkLoading.value = false
+  }
+}
+
+const openBulkRejectModal = () => {
+  if (selectedIds.value.length === 0) return
+  bulkRejectMode.value = 'common'
+  bulkCommonReason.value = ''
+  bulkItemReasons.value = {}
+  focusedItemId.value = null
+  for (const id of selectedIds.value) {
+    bulkItemReasons.value[id] = ''
+  }
+  bulkAllowResubmit.value = true
+  showBulkRejectModal.value = true
+}
+
+const submitBulkReject = async () => {
+  if (selectedIds.value.length === 0) return
+
+  if (bulkRejectMode.value === 'common') {
+    if (!bulkCommonReason.value || !bulkCommonReason.value.trim()) {
+      toastStore.showToast('Vui lòng nhập lý do từ chối chung.', 'error')
+      return
+    }
+  } else {
+    for (const id of selectedIds.value) {
+      if (!bulkItemReasons.value[id] || !bulkItemReasons.value[id].trim()) {
+        const item = selectedItemsDetails.value.find(i => i.id === id)
+        toastStore.showToast(`Vui lòng nhập lý do từ chối cho "${item?.title || id}".`, 'error')
+        return
+      }
+    }
+  }
+
+  bulkLoading.value = true
+  try {
+    let res
+    if (bulkRejectMode.value === 'common') {
+      const payload = {
+        ids: selectedIds.value,
+        reason: bulkCommonReason.value.trim(),
+        allowResubmit: bulkAllowResubmit.value
+      }
+      res = currentTab.value === 'songs'
+        ? await adminArtistSongReviewsApi.bulkRejectSongs(payload)
+        : await adminArtistAlbumReviewsApi.bulkRejectAlbums(payload)
+    } else {
+      const itemsPayload = selectedIds.value.map(id => ({
+        id,
+        reason: bulkItemReasons.value[id].trim()
+      }))
+      const payload = {
+        items: itemsPayload,
+        allowResubmit: bulkAllowResubmit.value
+      }
+      res = currentTab.value === 'songs'
+        ? await adminArtistSongReviewsApi.bulkRejectSongs(payload)
+        : await adminArtistAlbumReviewsApi.bulkRejectAlbums(payload)
+    }
+
+    if (res.data.success) {
+      toastStore.showToast(`Đã từ chối ${res.data.rejectedCount} nội dung.`, 'success')
+      showBulkRejectModal.value = false
+      clearSelection()
+      fetchSummary()
+      fetchReviews()
+    }
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Lỗi khi từ chối hàng loạt', 'error')
+  } finally {
+    bulkLoading.value = false
+  }
+}
 
 const normalizeStatusFilter = (status) => {
   return status === 'pending' ? 'pending_review' : (status || 'pending_review')
@@ -502,8 +1004,12 @@ watch(() => route.query.status, (newStatus) => {
 
 watch(currentTab, () => {
   searchQuery.value = ''
-  statusFilter.value = 'pending_review'
-  sortOption.value = 'newest'
+  statusFilter.value = 'all'
+  levelFilter.value = 'all'
+  flagFilter.value = 'all'
+  artistFilter.value = 'all'
+  sortOption.value = 'risk_desc'
+  clearSelection()
   closeDetailModal()
   fetchReviews(1)
 })
@@ -526,6 +1032,9 @@ const fetchSummary = async () => {
     const res = await adminArtistSongReviewsApi.getSummary()
     if (res.data.success) {
       mapStats(res.data.summary || {})
+      if (res.data.artists) {
+        artistOptions.value = res.data.artists || []
+      }
     }
   } catch (err) {
     console.error(err)
@@ -553,6 +1062,39 @@ const mapAlbumReview = (album = {}) => ({
   songs: album.songs || []
 })
 
+const getLevelBadgeClass = (level) => {
+  switch (level) {
+    case 'high': return 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+    case 'medium': return 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+    default: return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+  }
+}
+
+const formatLevelText = (level) => {
+  switch (level) {
+    case 'high': return 'RỦI RO CAO'
+    case 'medium': return 'TRUNG BÌNH'
+    default: return 'AN TOÀN'
+  }
+}
+
+const formatFlagText = (flag) => {
+  const flagMap = {
+    missing_cover: 'Thiếu ảnh bìa',
+    missing_lyrics: 'Thiếu lời bài hát',
+    new_artist: 'Nghệ sĩ mới (<3 bài)',
+    duplicate_title: 'Tên trùng/gần trùng',
+    duplicate_audio_pending: 'Audio trùng bài đang chờ duyệt',
+    resubmitted_multiple_times: 'Gửi lại nhiều lần (>=2)',
+    incomplete_metadata: 'Metadata chưa đủ',
+    unusual_duration: 'Thời lượng bất thường',
+    few_album_songs: 'Album ít bài (<2)',
+    unapproved_album_song: 'Album chứa bài chưa duyệt',
+    missing_description: 'Thiếu mô tả album'
+  }
+  return flagMap[flag] || flag
+}
+
 const fetchReviews = async (page = 1) => {
   loading.value = true
   errorMsg.value = ''
@@ -562,6 +1104,9 @@ const fetchReviews = async (page = 1) => {
       limit: activePagination.value.limit,
       q: searchQuery.value,
       status: normalizeStatusFilter(statusFilter.value),
+      level: levelFilter.value !== 'all' ? levelFilter.value : undefined,
+      flag: flagFilter.value !== 'all' ? flagFilter.value : undefined,
+      artistId: artistFilter.value !== 'all' ? artistFilter.value : undefined,
       sort: sortOption.value
     }
 
@@ -575,12 +1120,8 @@ const fetchReviews = async (page = 1) => {
     if (res.data.success) {
       if (currentTab.value === 'songs') {
         songReviews.value = res.data.reviews || []
-        if (res.data.summary) {
-          songStats.value = {
-            pendingCount: Number(res.data.summary.pendingCount || 0),
-            approvedCount: Number(res.data.summary.approvedCount || 0),
-            rejectedCount: Number(res.data.summary.rejectedCount || 0)
-          }
+        if (res.data.stats) {
+          riskStats.value = res.data.stats
         }
         songPagination.value = res.data.pagination || { ...emptyPagination }
       } else {
@@ -599,6 +1140,7 @@ const fetchReviews = async (page = 1) => {
 }
 
 const handleSearch = () => {
+  clearSelection()
   fetchReviews(1)
 }
 
@@ -671,6 +1213,12 @@ const submitApprove = async () => {
   }
 }
 
+watch(isRejecting, (newVal) => {
+  if (newVal) {
+    allowResubmit.value = (selectedReview.value?.resubmissionCount || 0) < 3
+  }
+})
+
 const submitReject = async () => {
   if (!rejectReason.value.trim()) return
 
@@ -678,9 +1226,9 @@ const submitReject = async () => {
   try {
     let res
     if (currentTab.value === 'songs') {
-      res = await adminArtistSongReviewsApi.rejectSong(selectedReview.value.id, rejectReason.value)
+      res = await adminArtistSongReviewsApi.rejectSong(selectedReview.value.id, rejectReason.value, allowResubmit.value)
     } else {
-      res = await adminArtistAlbumReviewsApi.rejectAlbum(selectedReview.value.id, rejectReason.value)
+      res = await adminArtistAlbumReviewsApi.rejectAlbum(selectedReview.value.id, rejectReason.value, allowResubmit.value)
     }
 
     if (res.data.success) {
@@ -741,6 +1289,7 @@ const formatStatus = (status) => {
 const formatMetadataStatus = (status) => {
   switch (status) {
     case 'complete': return 'Đầy đủ'
+    case 'needs_check': return 'Cần kiểm tra'
     case 'missing_audio': return 'Thiếu audio'
     case 'missing_cover': return 'Thiếu cover'
     case 'missing_genre': return 'Thiếu thể loại'
@@ -748,6 +1297,8 @@ const formatMetadataStatus = (status) => {
     default: return status
   }
 }
+
+
 
 const onImageError = (e) => {
   e.target.src = fallbackCover

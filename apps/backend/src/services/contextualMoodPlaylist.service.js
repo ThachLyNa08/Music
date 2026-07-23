@@ -9,6 +9,7 @@ const {
   evaluateRegenerateQuality,
   calculatePlaylistDiversity
 } = require('../utils/playlistRegenerate.util');
+const systemPlaylistTempoService = require('./systemPlaylistTempo.service');
 
 const DEFAULT_LIMIT = 25;
 const TIME_SLOTS = ['morning', 'afternoon', 'evening', 'night'];
@@ -82,12 +83,19 @@ function dedupeSongItems(items) {
   return { deduped, duplicateCount };
 }
 
-async function ensureContextualMoodPlaylist(conn, userId, config, songIds) {
+async function ensureContextualMoodPlaylist(conn, userId, config, songIds, targetPlaylistId = null) {
   const coverUrl = resolvePlaylistCoverUrl(config.system_key);
-  const [existing] = await conn.query(
-    `SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1`,
-    [userId, config.system_key]
-  );
+  const [existing] = targetPlaylistId
+    ? await conn.query(
+      `SELECT id FROM playlists
+       WHERE id = ? AND user_id = ? AND system_key = ? AND (is_system = 1 OR type = 'system')
+       LIMIT 1`,
+      [targetPlaylistId, userId, config.system_key]
+    )
+    : await conn.query(
+      `SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1`,
+      [userId, config.system_key]
+    );
 
   let playlistId;
   let created = false;
@@ -136,17 +144,24 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
 
   try {
     const config = SLOT_PLAYLISTS[slot];
-    
+
     // Find existing playlist to get oldSongIds
-    const [existingPlaylists] = await conn.query(
-      `SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1`,
-      [userId, config.system_key]
-    );
+    const [existingPlaylists] = options.playlistId
+      ? await conn.query(
+        `SELECT id FROM playlists
+         WHERE id = ? AND user_id = ? AND system_key = ? AND (is_system = 1 OR type = 'system')
+         LIMIT 1`,
+        [options.playlistId, userId, config.system_key]
+      )
+      : await conn.query(
+        `SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1`,
+        [userId, config.system_key]
+      );
     let oldSongIds = [];
     if (existingPlaylists.length > 0) {
       oldSongIds = await getPlaylistSongIds(conn, existingPlaylists[0].id);
     }
-    
+
     const recommendation = await contextualMoodService.getContextualMoodRecommendations(userId, {
       timeSlot: slot,
       limit: limit * 5,
@@ -155,7 +170,7 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
     });
 
     const { deduped, duplicateCount } = dedupeSongItems(recommendation.items);
-    
+
     const oldSongSet = new Set(oldSongIds);
     // Format candidateObjs with fallback score if not present
     const candidateObjs = deduped.map((item, idx) => {
@@ -170,6 +185,11 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       };
     }).sort((a,b) => b.score - a.score);
 
+    const tempoRerank = await systemPlaylistTempoService.rerankSystemPlaylistCandidates(
+      candidateObjs,
+      config.system_key
+    );
+    const tempoAwareCandidates = tempoRerank.items;
     const targetSize = VIBE_LIMITS.targetSize;
     const {
       selected: refinedObjs,
@@ -179,10 +199,15 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       maxArtistSongs,
       maxGenreSongs
     } = selectSongsWithDiversityAndOverlapCheck(
-      candidateObjs, oldSongIds, targetSize, VIBE_LIMITS
+      tempoAwareCandidates, oldSongIds, targetSize, VIBE_LIMITS
     );
     const songIds = refinedObjs.map(c => Number(c.id));
-    
+    const finalTempoStats = systemPlaylistTempoService.buildTempoStats(
+      refinedObjs,
+      new Map(refinedObjs.map((item) => [Number(item.id), item.audioFeature || null]).filter(([, feature]) => feature)),
+      config.system_key
+    );
+
     const topSongs = refinedObjs.slice(0, 5).map((item, index) => ({
       position: index + 1,
       id: Number(item.id),
@@ -191,14 +216,14 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       recommendation_score: item.recommendation_score || item.score,
       mood_reason: item.mood_reason || null
     }));
-    
+
     const overlapStats = computeOverlapStats(oldSongIds, songIds);
     const finalDiversity = calculatePlaylistDiversity(refinedObjs);
     let evalResult = evaluateRegenerateQuality({ ...overlapStats, candidateCount: candidateObjs.length, finalDiversity, relaxedDiversityUsed }, targetSize, VIBE_LIMITS);
     const exactArtistPassed = finalDiversity.maxSameArtistCount <= maxArtistSongs;
     const exactGenrePassed = finalDiversity.maxSameGenreCount <= maxGenreSongs;
     const finalDiversityPassed = exactArtistPassed && exactGenrePassed;
-    
+
     if (refinedObjs.length < targetSize) {
       evalResult = { status: 'failed', message: `selectedCount < targetSize under diversity quota (${refinedObjs.length} < ${targetSize})`, canApply: false };
     } else {
@@ -232,6 +257,13 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       candidateCount: candidateObjs.length,
       candidateCountByTier: recommendation.candidateCountByTier || null,
       missingAudioFeatureRatio: recommendation.missingAudioFeatureRatio || 0,
+      tempoAwareApplied: finalTempoStats.tempoAwareApplied,
+      avgBpm: finalTempoStats.avgBpm,
+      avgEnergy: finalTempoStats.avgEnergy,
+      tempoDistribution: finalTempoStats.tempoDistribution,
+      audioFeatureCoverage: finalTempoStats.audioFeatureCoverage,
+      tempoRule: finalTempoStats.tempoRule,
+      timeContext: finalTempoStats.timeContext,
       fallbackUsed,
       fallbackReason,
       ...overlapStats,
@@ -263,12 +295,19 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       };
     }
 
-    if (evalResult.canApply) {
+    if (evalResult.canApply || options.forceApply === true) {
       if (ownsConnection) await conn.beginTransaction();
-      const writeResult = await ensureContextualMoodPlaylist(conn, userId, config, songIds);
+      const writeResult = await ensureContextualMoodPlaylist(
+        conn,
+        userId,
+        config,
+        songIds,
+        options.playlistId || null
+      );
       if (ownsConnection) await conn.commit();
       return {
         ...baseResult,
+        forceApplied: options.forceApply === true && !evalResult.canApply,
         ...writeResult
       };
     } else {
@@ -312,6 +351,23 @@ async function generateContextualMoodPlaylistsForUser(userId, options = {}) {
       tier4: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier4 || 0), 0)
     },
     missingAudioFeatureRatioSum: results.reduce((sum, item) => sum + (item.missingAudioFeatureRatio || 0), 0),
+    audioFeatureCoverage: {
+      covered: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0),
+      total: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0),
+      ratio: (() => {
+        const covered = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0);
+        const total = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0);
+        return total ? Number((covered / total).toFixed(4)) : 0;
+      })()
+    },
+    avgBpm: (() => {
+      const bpmItems = results.filter((item) => item.avgBpm !== null && item.avgBpm !== undefined);
+      if (!bpmItems.length) return null;
+      const weighted = bpmItems.reduce((sum, item) => sum + Number(item.avgBpm) * Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
+      const weight = bpmItems.reduce((sum, item) => sum + Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
+      return weight ? Number((weighted / weight).toFixed(2)) : null;
+    })(),
+    tempoAwareApplied: results.some((item) => item.tempoAwareApplied),
     overlapRatioSum: results.reduce((sum, item) => sum + (item.overlapRatio || 0), 0),
     addedSongs: results.reduce((sum, item) => sum + (item.addedSongs || 0), 0),
     removedSongs: results.reduce((sum, item) => sum + (item.removedSongs || 0), 0),
@@ -359,6 +415,11 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
     candidateCountSum: 0,
     aggregateTiers: { tier1: 0, tier2: 0, tier3: 0, tier4: 0 },
     missingAudioFeatureRatioSum: 0,
+    audioFeatureCoveredSum: 0,
+    audioFeatureTotalSum: 0,
+    bpmSum: 0,
+    bpmCount: 0,
+    tempoAwareApplied: true,
     overlapRatioSum: 0,
     artistRatioSum: 0,
     genreRatioSum: 0,
@@ -375,10 +436,10 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
     sampleWarnings: new Set(),
     errors: 0,
     perSlotStats: {
-      morning_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0 },
-      afternoon_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0 },
-      evening_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0 },
-      night_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0 }
+      morning_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0, audioFeatureCoveredSum: 0, audioFeatureTotalSum: 0, bpmSum: 0, bpmCount: 0, tempoDistribution: { slow: 0, medium: 0, fast: 0, unknown: 0 } },
+      afternoon_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0, audioFeatureCoveredSum: 0, audioFeatureTotalSum: 0, bpmSum: 0, bpmCount: 0, tempoDistribution: { slow: 0, medium: 0, fast: 0, unknown: 0 } },
+      evening_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0, audioFeatureCoveredSum: 0, audioFeatureTotalSum: 0, bpmSum: 0, bpmCount: 0, tempoDistribution: { slow: 0, medium: 0, fast: 0, unknown: 0 } },
+      night_vibes: { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0, audioFeatureCoveredSum: 0, audioFeatureTotalSum: 0, bpmSum: 0, bpmCount: 0, tempoDistribution: { slow: 0, medium: 0, fast: 0, unknown: 0 } }
     },
     results: []
   };
@@ -404,21 +465,55 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
       summary.removedSongsSum += result.removedSongs || 0;
       summary.artistRatioSum += result.artistRatioSum || 0;
       summary.genreRatioSum += result.genreRatioSum || 0;
-      
+
       if (result.fallbackUsed) {
         summary.anyFallbackUsed = true;
         result.fallbackReasons.forEach(r => summary.fallbackReasons.add(r));
       }
-      
+
       let hasSuccessSlot = false;
       for (const slotResult of result.results) {
         const slotKey = slotResult.systemKey || slotResult.name.toLowerCase().replace(' ', '_');
-        if (!summary.perSlotStats[slotKey]) summary.perSlotStats[slotKey] = { processed: 0, succeeded: 0, skipped: 0, failed: 0, addedSongsSum: 0, overlapSum: 0, artistSum: 0, genreSum: 0 };
-        
+        if (!summary.perSlotStats[slotKey]) {
+          summary.perSlotStats[slotKey] = {
+            processed: 0,
+            succeeded: 0,
+            skipped: 0,
+            failed: 0,
+            addedSongsSum: 0,
+            overlapSum: 0,
+            artistSum: 0,
+            genreSum: 0,
+            audioFeatureCoveredSum: 0,
+            audioFeatureTotalSum: 0,
+            bpmSum: 0,
+            bpmCount: 0,
+            tempoDistribution: { slow: 0, medium: 0, fast: 0, unknown: 0 }
+          };
+        }
+
         summary.perSlotStats[slotKey].processed++;
         summary.perSlotStats[slotKey].addedSongsSum += slotResult.addedSongs || 0;
         summary.perSlotStats[slotKey].overlapSum += slotResult.overlapRatio || 0;
-        
+        const coverage = slotResult.audioFeatureCoverage || {};
+        const coverageCovered = Number(coverage.covered || 0);
+        const coverageTotal = Number(coverage.total || 0);
+        summary.perSlotStats[slotKey].audioFeatureCoveredSum += coverageCovered;
+        summary.perSlotStats[slotKey].audioFeatureTotalSum += coverageTotal;
+        summary.audioFeatureCoveredSum += coverageCovered;
+        summary.audioFeatureTotalSum += coverageTotal;
+        if (slotResult.avgBpm !== null && slotResult.avgBpm !== undefined) {
+          const bpmWeight = coverageCovered || 1;
+          summary.perSlotStats[slotKey].bpmSum += Number(slotResult.avgBpm) * bpmWeight;
+          summary.perSlotStats[slotKey].bpmCount += bpmWeight;
+          summary.bpmSum += Number(slotResult.avgBpm) * bpmWeight;
+          summary.bpmCount += bpmWeight;
+        }
+        const dist = slotResult.tempoDistribution || {};
+        ['slow', 'medium', 'fast', 'unknown'].forEach((bucket) => {
+          summary.perSlotStats[slotKey].tempoDistribution[bucket] += Number(dist[bucket] || 0);
+        });
+
         if (slotResult.canApply) {
           hasSuccessSlot = true;
           summary.playlistsSucceeded++;
@@ -427,7 +522,7 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
           summary.perSlotStats[slotKey].genreSum += slotResult.actualMaxSameGenreRatio || 0;
           summary.worstArtistRatio = Math.max(summary.worstArtistRatio, slotResult.actualMaxSameArtistRatio || 0);
           summary.worstGenreRatio = Math.max(summary.worstGenreRatio, slotResult.actualMaxSameGenreRatio || 0);
-          
+
           if (slotResult.status === 'warning') {
             summary.sampleWarnings.add(slotResult.message);
           }
@@ -441,12 +536,12 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
         if (!slotResult.finalDiversityPassed) {
           summary.failedDiversityPlaylists++;
         }
-        
+
         if (!slotResult.canApply && slotResult.message && slotResult.message !== 'Generated successfully') {
           summary.sampleSkipReasons.add(slotResult.message);
         }
       }
-      
+
       if (hasSuccessSlot) summary.usersSucceeded++;
 
       summary.results.push(result);
@@ -468,30 +563,36 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
     tier4: Math.round(summary.aggregateTiers.tier4 / totalValidPlaylists)
   };
   summary.missingAudioFeatureRatio = summary.missingAudioFeatureRatioSum / totalValidPlaylists;
+  summary.audioFeatureCoverage = {
+    covered: summary.audioFeatureCoveredSum,
+    total: summary.audioFeatureTotalSum,
+    ratio: summary.audioFeatureTotalSum ? Number((summary.audioFeatureCoveredSum / summary.audioFeatureTotalSum).toFixed(4)) : 0
+  };
+  summary.avgBpm = summary.bpmCount ? Number((summary.bpmSum / summary.bpmCount).toFixed(2)) : null;
   summary.overlapRatio = Number((summary.overlapRatioSum / totalValidPlaylists).toFixed(2));
   summary.addedSongs = Math.round(summary.addedSongsSum / totalValidPlaylists);
   summary.removedSongs = Math.round(summary.removedSongsSum / totalValidPlaylists);
-  
+
   const avgArtistRatio = summary.artistRatioSum / successPlaylists;
   const avgGenreRatio = summary.genreRatioSum / successPlaylists;
   summary.actualMaxSameArtistRatio = summary.playlistsSucceeded > 0 ? Number(avgArtistRatio.toFixed(2)) : 0;
   summary.actualMaxSameGenreRatio = summary.playlistsSucceeded > 0 ? Number(avgGenreRatio.toFixed(2)) : 0;
   summary.maxSameArtistLimit = VIBE_LIMITS.maxSameArtistRatio;
   summary.maxSameGenreLimit = VIBE_LIMITS.maxSameGenreRatio;
-  
+
   const successRate = summary.playlistsProcessed > 0 ? summary.playlistsSucceeded / summary.playlistsProcessed : 0;
   summary.playlistSuccessRate = Number(successRate.toFixed(3));
-  
+
   let batchStatus = 'success';
   if (successRate < 0.75) batchStatus = 'failed';
   else if (successRate < 0.90) batchStatus = 'warning';
-  
+
   let finalDiversityPassed = true;
   if (summary.failedDiversityPlaylists > 0) finalDiversityPassed = false;
   summary.finalDiversityPassed = finalDiversityPassed;
   summary.worstMaxSameArtistRatio = Number(summary.worstArtistRatio.toFixed(2));
   summary.worstMaxSameGenreRatio = Number(summary.worstGenreRatio.toFixed(2));
-  
+
   // Format perSlotStats and check per-slot success rates
   let allSlotsPassed = true;
   Object.keys(summary.perSlotStats).forEach(key => {
@@ -503,29 +604,44 @@ async function generateContextualMoodPlaylistsForAllUsers(options = {}) {
       s.avgOverlapRatio = Number((s.overlapSum / s.processed).toFixed(2));
       s.actualMaxSameArtistRatio = s.succeeded > 0 ? Number((s.artistSum / s.succeeded).toFixed(2)) : 0;
       s.actualMaxSameGenreRatio = s.succeeded > 0 ? Number((s.genreSum / s.succeeded).toFixed(2)) : 0;
+      s.tempoAwareApplied = true;
+      s.audioFeatureCoverage = {
+        covered: s.audioFeatureCoveredSum,
+        total: s.audioFeatureTotalSum,
+        ratio: s.audioFeatureTotalSum ? Number((s.audioFeatureCoveredSum / s.audioFeatureTotalSum).toFixed(4)) : 0
+      };
+      s.avgBpm = s.bpmCount ? Number((s.bpmSum / s.bpmCount).toFixed(2)) : null;
     }
     delete s.addedSongsSum;
     delete s.overlapSum;
     delete s.artistSum;
     delete s.genreSum;
+    delete s.audioFeatureCoveredSum;
+    delete s.audioFeatureTotalSum;
+    delete s.bpmSum;
+    delete s.bpmCount;
   });
-  
+
   summary.fallbackUsed = summary.anyFallbackUsed;
   summary.fallbackReason = Array.from(summary.fallbackReasons).join('; ');
   summary.sampleWarnings = Array.from(summary.sampleWarnings).slice(0, 10);
   summary.sampleSkipReasons = Array.from(summary.sampleSkipReasons).slice(0, 10);
-  
+
   summary.status = batchStatus;
   summary.message = batchStatus === 'failed' ? `Batch success rate too low (${summary.playlistsSucceeded}/${summary.playlistsProcessed}) or diversity failed` : 'Generated successfully';
   summary.canApply = successRate >= 0.85 && finalDiversityPassed && allSlotsPassed;
-  
+
   if (!allSlotsPassed && summary.canApply === false && successRate >= 0.85) {
       summary.message = `Batch overall success rate ok, but one or more slots failed (< 0.85).`;
   }
-  
+
   delete summary.candidateCountSum;
   delete summary.aggregateTiers;
   delete summary.missingAudioFeatureRatioSum;
+  delete summary.audioFeatureCoveredSum;
+  delete summary.audioFeatureTotalSum;
+  delete summary.bpmSum;
+  delete summary.bpmCount;
   delete summary.overlapRatioSum;
   delete summary.addedSongsSum;
   delete summary.removedSongsSum;

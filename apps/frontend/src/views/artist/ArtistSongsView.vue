@@ -126,7 +126,7 @@
                 </td>
                 <td class="text-right actions-cell">
                   <button @click="openDetailModal(song.id)" class="btn-icon">Chi tiết</button>
-                  <button class="btn-icon disabled" title="Giai đoạn sau">Sửa</button>
+                  <button v-if="song.reviewStatus === 'rejected' && song.canResubmit && song.resubmissionCount < 3" @click="openResubmitModal(song)" class="btn-icon">Sửa lại</button>
                 </td>
               </tr>
             </tbody>
@@ -216,6 +216,24 @@
               <span>{{ selectedSong.genre?.name || 'Chưa xác định' }}</span>
             </div>
             <div class="info-item">
+              <label>Metadata Score</label>
+              <span class="font-bold text-success">{{ selectedSong.metadataScore || 0 }}/100</span>
+            </div>
+            <div class="info-item">
+              <label>Risk Score</label>
+              <span :class="{'text-danger': selectedSong.riskScore > 30, 'text-warning': selectedSong.riskScore > 0, 'text-success': selectedSong.riskScore === 0}">
+                {{ selectedSong.riskScore > 0 ? '+' + selectedSong.riskScore : '0 (An toàn)' }}
+              </span>
+            </div>
+            <div class="info-item full-width" v-if="selectedSong.moderationFlags && selectedSong.moderationFlags.length">
+              <label>Cảnh báo kiểm duyệt</label>
+              <div class="flex flex-wrap gap-1.5 mt-1">
+                <span v-for="flag in selectedSong.moderationFlags" :key="flag" class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
+                  {{ formatFlagText(flag) }}
+                </span>
+              </div>
+            </div>
+            <div class="info-item">
               <label>File Audio</label>
               <span :class="{'text-success': !!selectedSong.audioUrl, 'text-warning': !selectedSong.audioUrl}">
                 {{ selectedSong.audioUrl ? 'Đã tải lên' : 'Chưa có file audio' }}
@@ -235,6 +253,16 @@
               <label>Lý do từ chối</label>
               <span class="text-warning">{{ selectedSong.rejectionReason }}</span>
             </div>
+            <div class="info-item" v-if="selectedSong.reviewStatus === 'rejected'">
+              <label>Số lần gửi lại</label>
+              <span :class="{'text-warning': selectedSong.resubmissionCount >= 3}">{{ selectedSong.resubmissionCount || 0 }}/3</span>
+            </div>
+            <div class="info-item full-width" v-if="selectedSong.reviewStatus === 'rejected' && (!selectedSong.canResubmit || selectedSong.resubmissionCount >= 3)">
+              <div class="alert alert-danger w-full mt-2">
+                Nội dung này không thể gửi lại. Vui lòng liên hệ quản trị viên.
+                <span v-if="selectedSong.resubmitLockedReason" class="block mt-1"><strong>Lý do khóa:</strong> {{ selectedSong.resubmitLockedReason }}</span>
+              </div>
+            </div>
             <div class="info-item">
               <label>Ngày tạo</label>
               <span>{{ formatDate(selectedSong.createdAt) }}</span>
@@ -243,7 +271,7 @@
         </div>
         <div class="modal-footer">
           <button @click="closeModal" class="btn-secondary">Đóng</button>
-          <button class="btn-primary disabled" title="Giai đoạn sau">Chỉnh sửa</button>
+          <button v-if="selectedSong && selectedSong.reviewStatus === 'rejected' && selectedSong.canResubmit && selectedSong.resubmissionCount < 3" @click="openResubmitModal(selectedSong)" class="btn-primary">Chỉnh sửa và gửi lại</button>
         </div>
       </div>
     </div>
@@ -328,13 +356,96 @@
     </div>
 
   </section>
+
+    <!-- Resubmit Modal -->
+    <div v-if="showResubmitModal" class="modal-overlay" @click.self="closeResubmitModal">
+      <div class="modal-content dark-modal">
+        <div class="modal-header">
+          <h2>Chỉnh sửa bài hát bị từ chối</h2>
+          <button @click="closeResubmitModal" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="resubmitForm.rejectionReason" class="alert alert-danger mb-4">
+            <strong>Lý do từ chối:</strong> {{ resubmitForm.rejectionReason }}
+          </div>
+          <form @submit.prevent="handleResubmit" class="upload-form">
+            <div class="form-section">
+              <h3>Thông tin bài hát</h3>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Tên bài hát <span class="text-danger">*</span></label>
+                  <input type="text" v-model.trim="resubmitForm.title" class="input-dark" required />
+                </div>
+                <div class="form-group">
+                  <label>Thể loại</label>
+                  <input type="text" class="input-dark readonly-field" :value="uploadArtistGenreName" readonly disabled />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h3>Cập nhật tệp (Tùy chọn)</h3>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>File Audio mới <span class="muted">(mp3, wav, m4a)</span></label>
+                  <input type="file" @change="onResubmitAudioFileChange" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4,audio/x-m4a" class="input-dark" />
+                  <div v-if="resubmitForm.audioFile" class="file-info text-success">{{ resubmitForm.audioFile.name }}</div>
+                  <div v-else class="helper-text">Giữ nguyên file hiện tại nếu không chọn</div>
+                </div>
+                <div class="form-group">
+                  <label>Ảnh bìa mới <span class="muted">(jpg, jpeg, png, webp)</span></label>
+                  <input type="file" @change="onResubmitCoverFileChange" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="input-dark" />
+                  <div v-if="resubmitForm.coverFile" class="file-info text-success">{{ resubmitForm.coverFile.name }}</div>
+                  <div v-else class="helper-text">Giữ nguyên ảnh hiện tại nếu không chọn</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h3>Thông tin bổ sung</h3>
+              <div class="form-group">
+                <label>Lyrics</label>
+                <textarea v-model="resubmitForm.lyrics" class="input-dark textarea-dark" rows="4"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Ghi chú gửi Admin duyệt</label>
+                <textarea v-model="resubmitForm.submissionNote" class="input-dark textarea-dark" rows="3"></textarea>
+              </div>
+            </div>
+            <div v-if="resubmitError" class="alert alert-danger">{{ resubmitError }}</div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button @click="closeResubmitModal" class="btn-secondary" :disabled="resubmitting">Hủy</button>
+          <button @click="handleResubmit" class="btn-primary" :disabled="resubmitting || !canSubmitResubmit">
+            {{ resubmitting ? 'Đang gửi...' : 'Gửi duyệt lại' }}
+          </button>
+        </div>
+      </div>
+    </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { artistStudioApi } from '@/api/artistStudio'
 import { useToastStore } from '@/stores/toast'
 import { normalizeImageUrl } from '@/utils/imageUrl'
+
+const formatFlagText = (flag) => {
+  const flagMap = {
+    missing_cover: 'Thiếu ảnh bìa',
+    missing_lyrics: 'Thiếu lời bài hát',
+    new_artist: 'Nghệ sĩ mới',
+    duplicate_title: 'Tên gần trùng',
+    resubmitted_multiple_times: 'Gửi lại nhiều lần',
+    incomplete_metadata: 'Thiếu metadata',
+    unusual_duration: 'Thời lượng bất thường',
+    few_album_songs: 'Album quá ít bài',
+    unapproved_album_song: 'Chứa bài chưa duyệt',
+    missing_description: 'Thiếu mô tả'
+  }
+  return flagMap[flag] || flag
+}
 
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
 const initialLoading = ref(true)
@@ -361,6 +472,10 @@ watch(() => pagination.value.page, (val) => {
   pageInputValue.value = val
 })
 
+const handleReviewStatusChanged = () => {
+  fetchSongs(pagination.value.page)
+}
+
 onMounted(() => {
   const saved = localStorage.getItem('artist_search_history')
   if (saved) {
@@ -369,6 +484,11 @@ onMounted(() => {
     } catch(e) {}
   }
   fetchSongs()
+  window.addEventListener('artist:review_status_changed', handleReviewStatusChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('artist:review_status_changed', handleReviewStatusChanged)
 })
 
 const saveSearchHistory = (query) => {
@@ -515,6 +635,7 @@ const formatDate = (dateStr) => {
 const formatMetadataStatus = (status) => {
   switch (status) {
     case 'complete': return 'Đầy đủ'
+    case 'needs_check': return 'Cần kiểm tra'
     case 'missing_audio': return 'Thiếu audio'
     case 'missing_cover': return 'Thiếu cover'
     case 'missing_genre': return 'Thiếu thể loại'
@@ -525,9 +646,9 @@ const formatMetadataStatus = (status) => {
 
 const getReviewStatusClass = (status) => {
   switch (status) {
-    case 'approved': return 'text-success'
-    case 'pending_review': return 'text-warning'
-    case 'rejected': return 'text-danger'
+    case 'approved': return 'approved'
+    case 'pending_review': return 'pending'
+    case 'rejected': return 'rejected'
     default: return ''
   }
 }
@@ -698,11 +819,114 @@ const handleUpload = async () => {
     }
   } catch (err) {
     console.error(err)
-    uploadError.value = err.response?.data?.message || 'Có lỗi xảy ra khi tải lên. Vui lòng thử lại.'
+    const errCode = err.response?.data?.code
+    const errMsg = err.response?.data?.message
+
+    if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
+      const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
+      uploadError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (errCode === 'DUPLICATE_AUDIO_PENDING') {
+      const msg = 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
+      uploadError.value = msg
+      toast.showToast(msg, 'error')
+    } else {
+      uploadError.value = errMsg || 'Có lỗi xảy ra khi tải lên. Vui lòng thử lại.'
+    }
   } finally {
     uploading.value = false
   }
 }
+
+// Resubmit Logic
+const showResubmitModal = ref(false)
+const resubmitting = ref(false)
+const resubmitError = ref('')
+const resubmitForm = ref({
+  id: null,
+  title: '',
+  lyrics: '',
+  submissionNote: '',
+  rejectionReason: '',
+  audioFile: null,
+  coverFile: null
+})
+
+const openResubmitModal = (song) => {
+  resubmitForm.value = {
+    id: song.id,
+    title: song.title || '',
+    lyrics: song.lyrics || '',
+    submissionNote: song.submissionNote || song.submission_note || '',
+    rejectionReason: song.rejectionReason || song.rejection_reason || '',
+    audioFile: null,
+    coverFile: null
+  }
+  resubmitError.value = ''
+  showResubmitModal.value = true
+}
+
+const closeResubmitModal = () => {
+  showResubmitModal.value = false
+}
+
+const onResubmitAudioFileChange = (e) => {
+  resubmitForm.value.audioFile = e.target.files[0] || null
+}
+
+const onResubmitCoverFileChange = (e) => {
+  resubmitForm.value.coverFile = e.target.files[0] || null
+}
+
+const canSubmitResubmit = computed(() => {
+  return resubmitForm.value.title.trim().length > 0
+})
+
+const handleResubmit = async () => {
+  if (!resubmitForm.value.title.trim()) {
+    resubmitError.value = 'Vui lòng nhập tên bài hát.'
+    return
+  }
+  resubmitError.value = ''
+  resubmitting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('title', resubmitForm.value.title.trim())
+    if (resubmitForm.value.lyrics.trim()) formData.append('lyrics', resubmitForm.value.lyrics.trim())
+    if (resubmitForm.value.submissionNote.trim()) formData.append('submissionNote', resubmitForm.value.submissionNote.trim())
+    if (resubmitForm.value.audioFile) formData.append('audio', resubmitForm.value.audioFile)
+    if (resubmitForm.value.coverFile) formData.append('cover', resubmitForm.value.coverFile)
+
+    const res = await artistStudioApi.resubmitSong(resubmitForm.value.id, formData)
+    if (res.data.success) {
+      toast.showToast('Bài hát đã được gửi Admin duyệt.', 'success')
+      closeResubmitModal()
+      if (showModal.value) closeModal()
+      fetchSongs(1)
+    } else {
+      resubmitError.value = res.data.message || 'Lỗi khi gửi lại'
+    }
+  } catch (err) {
+    console.error(err)
+    const errCode = err.response?.data?.code
+    const errMsg = err.response?.data?.message
+
+    if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
+      const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
+      resubmitError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (errCode === 'DUPLICATE_AUDIO_PENDING') {
+      const msg = 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
+      resubmitError.value = msg
+      toast.showToast(msg, 'error')
+    } else {
+      resubmitError.value = errMsg || 'Có lỗi xảy ra khi gửi lại.'
+    }
+  } finally {
+    resubmitting.value = false
+  }
+}
+
 </script>
 
 <style scoped>
@@ -938,7 +1162,7 @@ const handleUpload = async () => {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg-card);
+  background: #141528;
 }
 
 .song-table tr:hover {
@@ -979,15 +1203,34 @@ const handleUpload = async () => {
 .text-warning { color: var(--warning); }
 
 .status-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 20px;
   font-size: 11px;
-  font-weight: 600;
-  background: rgba(255,255,255,0.05);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
-.status-badge.complete { background: rgba(46, 213, 115, 0.15); color: var(--success); }
-.status-badge.missing_audio, .status-badge.missing_cover, .status-badge.missing_genre, .status-badge.incomplete { background: rgba(255, 165, 2, 0.15); color: var(--warning); }
+.status-badge.approved, .status-badge.complete {
+  background: rgba(46, 213, 115, 0.12);
+  color: #2ed573;
+  border: 1px solid rgba(46, 213, 115, 0.25);
+  box-shadow: 0 0 12px rgba(46, 213, 115, 0.1);
+}
+.status-badge.pending, .status-badge.missing_audio, .status-badge.missing_cover, .status-badge.missing_genre, .status-badge.incomplete {
+  background: rgba(255, 165, 2, 0.12);
+  color: #ffa502;
+  border: 1px solid rgba(255, 165, 2, 0.25);
+  box-shadow: 0 0 12px rgba(255, 165, 2, 0.1);
+}
+.status-badge.rejected, .status-badge.danger {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  box-shadow: 0 0 12px rgba(255, 71, 87, 0.15);
+}
 
 .actions-cell {
   display: flex;
@@ -1057,7 +1300,7 @@ const handleUpload = async () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: var(--bg-card);
+  background: #141528;
   border-top: 1px solid var(--border);
   flex-wrap: wrap;
   gap: 16px;
@@ -1142,29 +1385,33 @@ const handleUpload = async () => {
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  backdrop-filter: blur(4px);
 }
 
 .dark-modal {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: #141528 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
   width: 100%;
   max-width: 680px;
   max-height: 90vh;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  opacity: 1 !important;
 }
 
 .modal-header {
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
+  background: #141528 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1188,6 +1435,7 @@ const handleUpload = async () => {
 .modal-body {
   padding: 24px;
   overflow-y: auto;
+  background: #141528 !important;
 }
 
 .detail-hero {
@@ -1344,7 +1592,8 @@ const handleUpload = async () => {
 
 .modal-footer {
   padding: 16px 24px;
-  border-top: 1px solid var(--border);
+  background: #141528 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: flex-end;
   gap: 12px;

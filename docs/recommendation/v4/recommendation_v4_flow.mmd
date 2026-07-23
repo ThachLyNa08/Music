@@ -1,0 +1,27 @@
+graph TD
+    A[MySQL Database] -->|Fetch real catalog| B(generate_v4_experimental_data.py)
+    B -->|Generate 2000 users, 600k interactions| C[datasets/.../v4/interactions_v4.csv]
+
+    C --> D(split_v4_temporal.py)
+    D -->|80% temporal| E[train_v4.csv]
+    D -->|20% temporal| F[test_v4.csv]
+
+    E --> G1(train_bpr_mf_v4.py)
+    E --> G2(train_lightgcn_v4.py)
+
+    G1 --> H1[models/v4/bpr_mf_v4.json]
+    G2 --> H2[models/v4/lightgcn_v4.json/pt]
+
+    H1 --> I(hybrid_rerank_v4.py)
+    H2 --> I
+
+    I -->|Reranked top 20| J[evaluation/v4/hybrid_recs_v4.json]
+
+    J --> K(evaluate_v4_models.py)
+    F --> K
+
+    K --> L[evaluation/v4/metrics_v4.json]
+    L --> M(generate_v4_report.py)
+
+    M --> N[charts/*.png]
+    M --> O[RECOMMENDATION_V4_REPORT.md]

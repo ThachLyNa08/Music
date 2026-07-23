@@ -64,11 +64,7 @@
     </aside>
 
     <main class="artist-main" ref="artistMainRef">
-      <router-view v-slot="{ Component, route: currentRoute }">
-        <transition name="page-slide-up" mode="out-in">
-          <component :is="Component" :key="currentRoute.path" />
-        </transition>
-      </router-view>
+      <router-view />
     </main>
 
     <ConfirmDialog
@@ -311,28 +307,33 @@ const performLogout = () => {
 </style>
 
 <style>
-/* ARTIST STUDIO SHARED THEME */
+/* ARTIST STUDIO HALLMARK THEME */
 :root {
   --main-px: 32px;
   --main-py: 28px;
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --bg-card: #16162a;
-  --bg-card-hover: #1e1e3a;
-  --accent: #00d4aa;
-  --accent-soft: rgba(0, 212, 170, 0.15);
-  --accent-glow: rgba(0, 212, 170, 0.3);
-  --text-primary: #f0f0f5;
-  --text-secondary: #a0a0b8;
-  --text-muted: #6b6b8a;
-  --border: rgba(255, 255, 255, 0.06);
+  --bg-primary: #0a0b12;
+  --bg-secondary: #121322;
+  --bg-card: rgba(22, 23, 42, 0.75);
+  --bg-card-hover: rgba(30, 32, 58, 0.85);
+  --accent: #00e6b8;
+  --accent-soft: rgba(0, 230, 184, 0.12);
+  --accent-glow: rgba(0, 230, 184, 0.25);
+  --text-primary: #f4f4f8;
+  --text-secondary: #9da0bc;
+  --text-muted: #626585;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
   --danger: #ff4757;
+  --danger-soft: rgba(255, 71, 87, 0.15);
   --warning: #ffa502;
+  --warning-soft: rgba(255, 165, 2, 0.15);
   --success: #2ed573;
+  --success-soft: rgba(46, 213, 115, 0.15);
   --gold: #ffd700;
   --radius: 16px;
   --radius-sm: 10px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --backdrop-blur: blur(16px);
 }
 
 .artist-page {

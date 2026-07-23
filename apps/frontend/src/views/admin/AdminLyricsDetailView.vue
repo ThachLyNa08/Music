@@ -5,6 +5,10 @@ import { useToastStore } from '@/stores/toast'
 import api from '@/api/axios'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import MfIcon from '@/components/common/MfIcon.vue'
+import { normalizeImageUrl } from '@/utils/imageUrl'
+
+const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
+const onImageError = (e) => { e.target.src = fallbackCover }
 
 const route = useRoute()
 const router = useRouter()
@@ -157,7 +161,7 @@ onMounted(() => {
         <div class="w-full lg:w-[320px] shrink-0 space-y-4">
           <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div class="aspect-square rounded-xl bg-slate-100 overflow-hidden border border-slate-200 mb-4">
-              <img :src="currentSong.cover_url" class="w-full h-full object-cover">
+              <img :src="normalizeImageUrl(currentSong.cover_url) || fallbackCover" @error="onImageError" class="w-full h-full object-cover">
             </div>
             <div>
               <h3 class="font-bold text-slate-900 text-lg leading-tight">{{ currentSong.title }}</h3>
@@ -237,7 +241,7 @@ onMounted(() => {
               <pre class="text-sm font-mono whitespace-pre-wrap">{{ JSON.stringify(safeRawMetadata, null, 2) }}</pre>
             </div>
           </div>
-          
+
           <!-- Actions Footer -->
           <div class="border-t border-slate-200 p-5 bg-slate-50/50 rounded-b-2xl flex items-center justify-end gap-3">
             <button @click="resetChanges" class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 hover:text-slate-800 transition shadow-sm">

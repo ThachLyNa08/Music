@@ -72,6 +72,10 @@
         <div class="flex flex-col justify-center min-w-0 pr-4">
           <div class="truncate text-[15px] font-semibold text-white" :class="{'text-[#1ed760]': playerStore.currentSong?.id === song.id}">{{ song.title }}</div>
           <div class="truncate text-[13px] text-[#b3b3b3] hover:text-white hover:underline transition-colors">{{ song.artist || song.artist_name || 'Unknown Artist' }}</div>
+          <div v-if="song.tempoBucket || isHighEnergy(song)" class="mt-1 flex flex-wrap items-center gap-1.5">
+            <span v-if="song.tempoBucket" class="tempo-pill">{{ formatTempoBucket(song.tempoBucket) }}</span>
+            <span v-if="isHighEnergy(song)" class="tempo-pill energy">High energy</span>
+          </div>
           <AiPlaylistSongReason class="mt-0.5 text-xs text-[#a7a7a7] line-clamp-1 md:line-clamp-2" :reason="song.reason" />
         </div>
         <div class="hidden items-center justify-end text-sm text-[#b3b3b3] md:flex">
@@ -108,6 +112,17 @@ function formatDuration(value) {
   const secs = Math.floor(seconds % 60)
   return `${mins}:${String(secs).padStart(2, '0')}`
 }
+
+function formatTempoBucket(bucket) {
+  if (bucket === 'fast') return 'Fast tempo'
+  if (bucket === 'medium') return 'Medium tempo'
+  if (bucket === 'slow') return 'Slow tempo'
+  return ''
+}
+
+function isHighEnergy(song) {
+  return Number(song.energyScore) >= 0.65
+}
 </script>
 
 <style scoped>
@@ -123,5 +138,21 @@ function formatDuration(value) {
 }
 .custom-scrollbar:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.28);
+}
+
+.tempo-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tempo-pill.energy {
+  color: #fbbf24;
 }
 </style>

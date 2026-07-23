@@ -4,7 +4,7 @@
     <header class="sticky -top-6 z-30 py-6 bg-white dark:bg-bg-surface border-b border-gray-100 dark:border-bg-border overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center px-6 shrink-0 gap-4">
       <!-- Background subtle gradient -->
       <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-      
+
       <div class="relative z-10">
         <div class="flex items-center gap-3 mb-2">
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Taxonomy Center</h1>
@@ -47,7 +47,12 @@
         <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
           Đang Trending
         </div>
-        <div v-if="insights.trending && insights.trending.length > 0" class="space-y-1">
+        <div v-if="insightsLoading" class="space-y-2">
+          <div class="h-3 w-28 rounded bg-white/25 animate-pulse"></div>
+          <div class="h-3 w-20 rounded bg-white/20 animate-pulse"></div>
+          <div class="text-xs text-white/70">Đang cập nhật phân tích thể loại...</div>
+        </div>
+        <div v-else-if="insights.trending && insights.trending.length > 0" class="space-y-1">
           <div v-for="(t, idx) in insights.trending" :key="t.id" class="text-sm font-bold truncate flex justify-between">
             <span>{{ idx + 1 }}. {{ t.name }}</span>
             <span class="text-white/70 text-xs">{{ formatNumber(t.listens) }}</span>
@@ -55,14 +60,15 @@
         </div>
         <div v-else class="text-sm">Chưa có dữ liệu</div>
       </div>
-      
+
       <!-- Needs Optimization -->
       <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 shadow-sm relative overflow-hidden">
         <div class="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 text-blue-500">
           Cần tối ưu gợi ý
         </div>
         <div class="flex items-end gap-2">
-          <span class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.needs_optimization_count }}</span>
+          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
+          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.needs_optimization_count }}</span>
           <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
         </div>
         <p class="text-[10px] text-gray-400 mt-1">Đang bật Suggest nhưng ít lượt nghe (< 50).</p>
@@ -74,7 +80,8 @@
           Quá ít bài hát
         </div>
         <div class="flex items-end gap-2">
-          <span class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.few_songs_count }}</span>
+          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
+          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.few_songs_count }}</span>
           <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
         </div>
         <p class="text-[10px] text-gray-400 mt-1">Có dưới 50 bài hát, ảnh hưởng Cold Start.</p>
@@ -86,7 +93,8 @@
           Thiếu Metadata
         </div>
         <div class="flex items-end gap-2">
-          <span class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.missing_data_count }}</span>
+          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
+          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.missing_data_count }}</span>
           <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
         </div>
         <p class="text-[10px] text-gray-400 mt-1">Chưa có ảnh Cover hoặc Mô tả.</p>
@@ -99,13 +107,13 @@
         <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
           <div class="relative w-full xl:flex-1 xl:min-w-[200px]">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-            <input 
+            <input
               v-model="filters.search"
               @input="handleSearchInput"
               @keyup.enter="handleEnter"
               @focus="showHistory = true"
               @blur="handleBlur"
-              type="text" 
+              type="text"
               placeholder="Tìm kiếm thể loại..."
               class="admin-input pl-9 pr-8 w-full"
             >
@@ -128,7 +136,7 @@
           </div>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3 w-full xl:w-auto xl:shrink-0">
-          <select 
+          <select
             v-model="filters.data_status"
             @change="fetchGenres"
             class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer"
@@ -137,7 +145,7 @@
             <option value="has_data">Có dữ liệu</option>
             <option value="no_data">Chưa có dữ liệu</option>
           </select>
-          <select 
+          <select
             v-model="filters.taxonomy_flag"
             @change="fetchGenres"
             class="admin-input min-w-0 truncate w-full xl:w-44 cursor-pointer"
@@ -147,7 +155,7 @@
             <option value="recommendation">Dùng Recommendation</option>
             <option value="ai_playlist">Dùng AI Playlist</option>
           </select>
-          <select 
+          <select
             v-model="filters.featured"
             @change="fetchGenres"
             class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer"
@@ -164,7 +172,7 @@
       <!-- Bulk Actions -->
       <div v-if="selectedGenres.length > 0" class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm animate-fade-in">
         <span class="text-xs font-bold text-indigo-700 dark:text-indigo-300 mr-2">{{ selectedGenres.length }} đã chọn</span>
-        <select 
+        <select
           v-model="bulkAction"
           class="px-2 py-1 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-lg text-xs font-medium text-gray-900 dark:text-white focus:outline-none appearance-none cursor-pointer"
         >
@@ -176,7 +184,7 @@
           <option value="tax_rec_true">Bật Gợi ý</option>
           <option value="tax_rec_false">Tắt Gợi ý</option>
         </select>
-        <button 
+        <button
           @click="applyBulkAction"
           :disabled="!bulkAction"
           class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors"
@@ -188,11 +196,11 @@
 
     <!-- Data Table -->
     <div class="flex-1 flex flex-col mb-8">
-      <AdminTableShell 
+      <AdminTableShell
         maxHeight="375px"
-        :loading="loading" 
-        :empty="!loading && genres.length === 0" 
-        emptyTitle="Không tìm thấy thể loại nào" 
+        :loading="loading"
+        :empty="!loading && genres.length === 0"
+        emptyTitle="Không tìm thấy thể loại nào"
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
       >
         <table class="w-full text-left border-collapse text-xs whitespace-nowrap table-fixed">
@@ -211,9 +219,9 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
-            <tr 
-              v-for="genre in genres" 
-              :key="genre.id" 
+            <tr
+              v-for="genre in genres"
+              :key="genre.id"
               class="hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors group cursor-pointer"
               @click="openDetailDrawer(genre.id, $event)"
             >
@@ -316,24 +324,24 @@
     </div>
 
     <!-- Modals & Drawers -->
-    <GenreFormModal 
-      v-if="showFormModal" 
-      :genre="editingGenre" 
+    <GenreFormModal
+      v-if="showFormModal"
+      :genre="editingGenre"
       :genres="allGenresForDropdown"
-      @close="showFormModal = false" 
+      @close="showFormModal = false"
       @success="handleFormSuccess"
     />
-    <GenreMergeModal 
-      v-if="showMergeModal" 
-      :sourceGenre="mergeSource" 
+    <GenreMergeModal
+      v-if="showMergeModal"
+      :sourceGenre="mergeSource"
       :genres="genres"
-      @close="showMergeModal = false" 
+      @close="showMergeModal = false"
       @success="handleMergeSuccess"
     />
-    <GenreSongsDrawer 
-      v-if="showSongsDrawer" 
-      :genre="activeDrawerGenre" 
-      @close="showSongsDrawer = false" 
+    <GenreSongsDrawer
+      v-if="showSongsDrawer"
+      :genre="activeDrawerGenre"
+      @close="showSongsDrawer = false"
     />
     <!-- New Detail Drawer -->
     <GenreDetailDrawer
@@ -344,7 +352,7 @@
     />
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       v-model:open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -427,6 +435,7 @@ function getGenreActions(genre) {
 
 const loading = ref(false);
 const isStatsLoading = ref(false);
+const insightsLoading = ref(false);
 const genres = ref([]);
 const allGenresForDropdown = ref([]);
 const pagination = reactive({ page: 1, limit: 10, totalPages: 1, total: 0 });
@@ -485,17 +494,52 @@ const isAllSelected = computed(() => {
 });
 
 onMounted(() => {
-  fetchDashboardData();
   fetchGenres();
+  fetchDashboardData();
   fetchAllGenresForDropdown();
 });
 
+const fetchGenresSummary = async () => {
+  isStatsLoading.value = true;
+  try {
+    const summaryRes = await api.get('/admin/genres/summary');
+    if (summaryRes.data.success) Object.assign(summary, summaryRes.data.data);
+  } catch (error) {
+    console.error('Lỗi khi tải genre summary', error);
+  } finally {
+    isStatsLoading.value = false;
+  }
+};
+
+const fetchGenresInsights = async () => {
+  insightsLoading.value = true;
+  let keepLoading = false;
+  try {
+    const insightsRes = await api.get('/admin/genres/insights');
+    if (insightsRes.data?.meta?.refreshing) {
+      keepLoading = true;
+      setTimeout(fetchGenresInsights, 1500);
+      return;
+    }
+    if (insightsRes.data.success) Object.assign(insights, insightsRes.data.data);
+  } catch (error) {
+    console.error('Lỗi khi tải genre insights', error);
+  } finally {
+    if (!keepLoading) insightsLoading.value = false;
+  }
+};
+
 const fetchDashboardData = async () => {
+  await Promise.allSettled([
+    fetchGenresSummary(),
+    fetchGenresInsights()
+  ]);
+  return;
   isStatsLoading.value = true;
   try {
     const [summaryRes, insightsRes] = await Promise.all([
       api.get('/admin/genres/summary'),
-      api.get('/admin/genres/insights')
+      Promise.resolve({ data: { success: false } })
     ]);
     if (summaryRes.data.success) Object.assign(summary, summaryRes.data.data);
     if (insightsRes.data.success) Object.assign(insights, insightsRes.data.data);
@@ -518,7 +562,7 @@ const fetchGenres = async () => {
       data_status: filters.data_status,
       taxonomy_flag: filters.taxonomy_flag
     };
-    
+
     const { data } = await api.get('/admin/genres', { params });
     genres.value = data.data;
     Object.assign(pagination, data.pagination);
@@ -545,7 +589,7 @@ async function handleExport() {
       },
       responseType: 'blob'
     })
-    
+
     const filename = getFilenameFromDisposition(
       response.headers?.['content-disposition'],
       'musicflow-genres.csv'
@@ -621,7 +665,7 @@ const getParentName = (parentId) => {
 
 const fetchAllGenresForDropdown = async () => {
   try {
-    const { data } = await api.get('/admin/genres', { params: { limit: 1000 } });
+    const { data } = await api.get('/admin/genres/options');
     allGenresForDropdown.value = data.data;
   } catch (e) {
     // ignore
@@ -638,7 +682,7 @@ const toggleSelectAll = (e) => {
 
 const applyBulkAction = async () => {
   if (!bulkAction.value || selectedGenres.value.length === 0) return;
-  
+
   openConfirm({
     title: 'Thao tác hàng loạt?',
     message: `Bạn có chắc chắn muốn áp dụng thao tác này cho ${selectedGenres.value.length} thể loại?`,
@@ -647,7 +691,7 @@ const applyBulkAction = async () => {
     action: async () => {
       try {
         let payload = { genreIds: selectedGenres.value };
-        
+
         if (bulkAction.value.startsWith('status_')) {
           payload.action = 'status';
           payload.value = bulkAction.value.split('_')[1];
@@ -661,7 +705,7 @@ const applyBulkAction = async () => {
 
         await api.patch('/admin/genres/bulk-action', payload);
         toast.showToast('Thao tác hàng loạt thành công', 'success');
-        
+
         selectedGenres.value = [];
         bulkAction.value = '';
         fetchGenres();
@@ -739,7 +783,7 @@ const closeDropdown = () => {
 const openDetailDrawer = (id, event) => {
   // Prevent opening drawer if clicking on checkbox or actions
   if (event.target.closest('input[type="checkbox"]') || event.target.closest('button')) return;
-  
+
   activeDetailGenreId.value = id;
   showDetailDrawer.value = true;
 };

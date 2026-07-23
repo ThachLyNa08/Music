@@ -3,6 +3,9 @@ const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.ut
 const { getArtistTotalPlaysQuery } = require('../utils/artistStats.util');
 const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
 
+const popularArtistsCache = new Map();
+const POPULAR_ARTISTS_TTL = 300000; // 5 minutes
+
 function parseGenresJson(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -414,43 +417,72 @@ exports.getPopularArtistsGlobally = async (req, res, next) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const period = req.query.period || '7d';
 
-    let timeFilter = '';
-    if (period === '7d') {
-      timeFilter = 'AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
-    } else if (period === '30d') {
-      timeFilter = 'AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
-    } else if (period === 'this_month') {
-      timeFilter = "AND lh.listened_at >= DATE_FORMAT(NOW(), '%Y-%m-01')";
-    } else if (period === 'all_time') {
-      timeFilter = '';
+    const cacheKey = `popular_artists:limit=${limit}:period=${period}`;
+    const cachedData = popularArtistsCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cachedData && now - cachedData.timestamp < POPULAR_ARTISTS_TTL) {
+      return res.json({ success: true, data: cachedData.data });
     }
 
-    const [artists] = await pool.query(`
-      SELECT
-        a.id,
-        a.name,
-        a.avatar_url,
-        SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS listen_count,
-        COUNT(DISTINCT s.id) AS song_count,
-        SUM(lh.listen_duration) AS total_seconds
-      FROM listening_history lh
-      JOIN songs s ON lh.song_id = s.id
-      JOIN artists a ON s.artist_id = a.id
-      WHERE 1=1 ${timeFilter}
-      GROUP BY a.id, a.name, a.avatar_url
-      HAVING listen_count > 0
-      ORDER BY listen_count DESC, total_seconds DESC
-      LIMIT ?
-    `, [limit]);
+    try {
+      const dateColumn = 'created_at';
 
-    artists.forEach(a => {
-      a.avatar_url = resolveArtistAvatar(a, req);
-    });
+      let timeFilter = '';
+      if (period === '7d') {
+        timeFilter = `AND lh.${dateColumn} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
+      } else if (period === '30d') {
+        timeFilter = `AND lh.${dateColumn} >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
+      } else if (period === 'this_month') {
+        timeFilter = `AND lh.${dateColumn} >= DATE_FORMAT(NOW(), '%Y-%m-01')`;
+      } else if (period === 'all_time') {
+        timeFilter = '';
+      }
 
-    res.json({
-      success: true,
-      data: artists
-    });
+      const [artists] = await pool.query(`
+        WITH ArtistStats AS (
+          SELECT
+            s.artist_id,
+            SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS listen_count,
+            COUNT(DISTINCT s.id) AS song_count,
+            SUM(lh.listen_duration) AS total_seconds
+          FROM listening_history lh
+          JOIN songs s ON lh.song_id = s.id
+          WHERE 1=1 ${timeFilter}
+          GROUP BY s.artist_id
+          HAVING listen_count > 0
+          ORDER BY listen_count DESC, total_seconds DESC
+          LIMIT ?
+        )
+        SELECT
+          a.id,
+          a.name,
+          a.avatar_url,
+          ast.listen_count,
+          ast.song_count,
+          ast.total_seconds
+        FROM ArtistStats ast
+        JOIN artists a ON ast.artist_id = a.id
+        ORDER BY ast.listen_count DESC, ast.total_seconds DESC
+      `, [limit]);
+
+      artists.forEach(a => {
+        a.avatar_url = resolveArtistAvatar(a, req);
+      });
+
+      popularArtistsCache.set(cacheKey, { timestamp: now, data: artists });
+
+      return res.json({
+        success: true,
+        data: artists
+      });
+    } catch (dbError) {
+      if (cachedData) {
+        console.warn('DB query failed, serving stale popular artists cache:', dbError);
+        return res.json({ success: true, data: cachedData.data });
+      }
+      throw dbError;
+    }
   } catch (err) {
     next(err);
   }
@@ -541,4 +573,3 @@ exports.getOnboardingArtists = async (req, res, next) => {
     next(err);
   }
 };
-

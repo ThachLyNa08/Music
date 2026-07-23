@@ -7,12 +7,12 @@ const getPremiumStatus = (expiresAt) => {
   const now = new Date();
   const expiry = new Date(expiresAt);
   if (expiry <= now) return 'expired';
-  
+
   // Expiring soon: within 7 days
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   if (expiry <= sevenDaysFromNow) return 'expiring_soon';
-  
+
   return 'active';
 };
 
@@ -21,32 +21,32 @@ exports.getPremiumSummary = async (req, res, next) => {
     const [[{ totalPremiumUsers }]] = await pool.query(`
       SELECT COUNT(*) as totalPremiumUsers FROM users WHERE premium_expires_at IS NOT NULL
     `);
-    
+
     const [[{ activePremiumUsers }]] = await pool.query(`
       SELECT COUNT(*) as activePremiumUsers FROM users WHERE premium_expires_at > NOW()
     `);
-    
+
     const [[{ expiringSoonUsers }]] = await pool.query(`
-      SELECT COUNT(*) as expiringSoonUsers FROM users 
+      SELECT COUNT(*) as expiringSoonUsers FROM users
       WHERE premium_expires_at > NOW() AND premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
     `);
-    
+
     const [[{ expiredPremiumUsers }]] = await pool.query(`
-      SELECT COUNT(*) as expiredPremiumUsers FROM users 
+      SELECT COUNT(*) as expiredPremiumUsers FROM users
       WHERE premium_expires_at IS NOT NULL AND premium_expires_at <= NOW()
     `);
-    
+
     const [[{ monthlyPremiumRevenue }]] = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as monthlyPremiumRevenue 
-      FROM payment_transactions 
+      SELECT COALESCE(SUM(amount), 0) as monthlyPremiumRevenue
+      FROM payment_transactions
       WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())
     `);
-    
+
     const [[{ lastMonthPremiumRevenue }]] = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as lastMonthPremiumRevenue 
-      FROM payment_transactions 
-      WHERE status = 'paid' 
-      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) 
+      SELECT COALESCE(SUM(amount), 0) as lastMonthPremiumRevenue
+      FROM payment_transactions
+      WHERE status = 'paid'
+      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
       AND YEAR(paid_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
     `);
 
@@ -61,18 +61,18 @@ exports.getPremiumSummary = async (req, res, next) => {
       SELECT COUNT(DISTINCT user_id) as usersAddedLastMonth
       FROM payment_transactions
       WHERE status = 'paid'
-      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) 
+      AND MONTH(paid_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
       AND YEAR(paid_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
     `);
-    
+
     const [[{ pendingPremiumTransactions }]] = await pool.query(`
-      SELECT COUNT(*) as pendingPremiumTransactions 
-      FROM payment_transactions 
+      SELECT COUNT(*) as pendingPremiumTransactions
+      FROM payment_transactions
       WHERE status = 'pending'
     `);
 
     const [planDistribution] = await pool.query(`
-      SELECT 
+      SELECT
         p.id, p.name, p.price, p.duration_days,
         COUNT(u.id) as user_count
       FROM premium_plans p
@@ -82,8 +82,8 @@ exports.getPremiumSummary = async (req, res, next) => {
     `);
 
     const [expiringTimeline] = await pool.query(`
-      SELECT 
-        u.id, u.display_name, u.email, u.avatar_url, 
+      SELECT
+        u.id, u.display_name, u.email, u.avatar_url,
         u.premium_expires_at, p.name as plan_name,
         EXISTS(SELECT 1 FROM premium_reminder_logs prl WHERE prl.user_id = u.id AND prl.subscription_end_date = u.premium_expires_at AND prl.reminder_type = 'auto_7d') as autoReminderSent,
         EXISTS(SELECT 1 FROM premium_reminder_logs prl WHERE prl.user_id = u.id AND prl.subscription_end_date = u.premium_expires_at AND prl.reminder_type = 'manual_admin') as manualReminderSent
@@ -122,20 +122,20 @@ exports.getPremiumUsers = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
-    
+
     let whereClause = '1=1';
     const params = [];
-    
+
     if (q) {
       whereClause += ' AND (u.display_name LIKE ? OR u.email LIKE ? OR u.id = ?)';
       params.push(`%${q}%`, `%${q}%`, q);
     }
-    
+
     if (plan && plan !== 'Tất cả') {
       whereClause += ' AND p.name = ?';
       params.push(plan);
     }
-    
+
     const statusVal = status || 'Tất cả Premium';
     if (statusVal === 'Tất cả Premium') {
       whereClause += " AND (u.premium_expires_at IS NOT NULL OR EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid'))";
@@ -148,17 +148,17 @@ exports.getPremiumUsers = async (req, res, next) => {
     } else if (statusVal === 'Chưa Premium') {
       whereClause += " AND u.premium_expires_at IS NULL AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid')";
     }
-    
+
     if (expiresFrom) {
       whereClause += ' AND u.premium_expires_at >= ?';
       params.push(expiresFrom);
     }
-    
+
     if (expiresTo) {
       whereClause += ' AND DATE(u.premium_expires_at) <= ?';
       params.push(expiresTo);
     }
-    
+
     let orderClause = 'ORDER BY u.created_at DESC';
     if (sort === 'Hết hạn gần nhất') {
       orderClause = 'ORDER BY CASE WHEN u.premium_expires_at > NOW() THEN 0 ELSE 1 END, u.premium_expires_at ASC, u.id DESC';
@@ -177,15 +177,15 @@ exports.getPremiumUsers = async (req, res, next) => {
       WHERE ${whereClause}
     `;
     const [[{ total }]] = await pool.query(countQuery, params);
-    
+
     const listQuery = `
-      SELECT 
-        u.id as user_id, 
-        u.display_name as name, 
-        u.email, 
-        u.avatar_url, 
-        u.premium_plan_id as plan_id, 
-        p.name as plan_name, 
+      SELECT
+        u.id as user_id,
+        u.display_name as name,
+        u.email,
+        u.avatar_url,
+        u.premium_plan_id as plan_id,
+        p.name as plan_name,
         u.premium_expires_at,
         (SELECT COALESCE(SUM(amount), 0) FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid') as total_spent,
         (SELECT payment_code FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid' ORDER BY paid_at DESC LIMIT 1) as last_transaction_code,
@@ -197,17 +197,17 @@ exports.getPremiumUsers = async (req, res, next) => {
       ${orderClause}
       LIMIT ? OFFSET ?
     `;
-    
+
     const listParams = [...params, limit, offset];
     const [rows] = await pool.query(listQuery, listParams);
-    
+
     const items = rows.map(r => {
       let daysRemaining = null;
       if (r.premium_expires_at) {
         const diffTime = new Date(r.premium_expires_at) - new Date();
         daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
-      
+
       return {
         user_id: r.user_id,
         name: r.name,
@@ -246,12 +246,12 @@ exports.getPremiumUsers = async (req, res, next) => {
 exports.getPremiumPlans = async (req, res, next) => {
   try {
     const [plans] = await pool.query(`
-      SELECT id, name, description, price, duration_days as duration_months, features 
-      FROM premium_plans 
+      SELECT id, name, description, price, duration_days as duration_months, features
+      FROM premium_plans
       WHERE is_active = 1
       ORDER BY price ASC
     `);
-    
+
     // Convert duration_days to duration_months for backward compatibility if needed
     const mapped = plans.map(p => ({
       ...p,
@@ -273,7 +273,7 @@ exports.updatePremium = async (req, res, next) => {
   try {
     const userId = req.params.id;
     const { planId, expiresAt, note } = req.body;
-    
+
     if (!planId) {
       return res.status(400).json({ success: false, message: 'Thiếu planId' });
     }
@@ -301,27 +301,27 @@ exports.updatePremium = async (req, res, next) => {
 
     // Update users table
     await conn.query(`
-      UPDATE users 
+      UPDATE users
       SET premium_plan_id = ?, premium_expires_at = ?
       WHERE id = ?
     `, [planId, expiresAt, userId]);
 
     // Upsert subscription (if any active, close it and open a new one, or just extend)
     const [[activeSub]] = await conn.query(`
-      SELECT id FROM user_subscriptions 
+      SELECT id FROM user_subscriptions
       WHERE user_id = ? AND status = 'active'
       ORDER BY start_date DESC LIMIT 1
     `, [userId]);
 
     if (activeSub) {
       await conn.query(`
-        UPDATE user_subscriptions 
+        UPDATE user_subscriptions
         SET end_date = ?, plan_id = ?
         WHERE id = ?
       `, [expiresAt, planId, activeSub.id]);
     } else {
       await conn.query(`
-        INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date) 
+        INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
         VALUES (?, ?, 'active', NOW(), ?)
       `, [userId, planId, expiresAt]);
     }
@@ -356,19 +356,33 @@ exports.cancelPremium = async (req, res, next) => {
 
     // Set expiration to NOW() to effectively cancel it without deleting history
     await conn.query(`
-      UPDATE users 
+      UPDATE users
       SET premium_expires_at = NOW()
       WHERE id = ?
     `, [userId]);
 
     // Update active subscriptions to expired
     await conn.query(`
-      UPDATE user_subscriptions 
+      UPDATE user_subscriptions
       SET status = 'expired', end_date = NOW()
       WHERE user_id = ? AND status = 'active'
     `, [userId]);
 
     await conn.commit();
+
+    try {
+      const notificationService = require('../services/notification.service');
+      await notificationService.createNotification({
+        userId: userId,
+        title: 'Premium đã bị hủy',
+        message: note ? `Gói Premium của bạn đã bị hủy với lý do: ${note}` : 'Gói Premium của bạn đã bị hủy bởi Quản trị viên.',
+        type: 'system',
+        link: '/profile'
+      });
+    } catch (notiErr) {
+      console.error('Error sending cancel premium notification:', notiErr);
+    }
+
     res.json({ success: true, message: 'Hủy Premium thành công' });
   } catch (error) {
     if (conn) await conn.rollback();
@@ -382,20 +396,20 @@ exports.cancelPremium = async (req, res, next) => {
 exports.exportPremium = async (req, res, next) => {
   try {
     const { q = '', status = '', plan = '', expiresFrom = '', expiresTo = '' } = req.query;
-    
+
     let whereClause = '1=1';
     const params = [];
-    
+
     if (q) {
       whereClause += ' AND (u.display_name LIKE ? OR u.email LIKE ? OR u.id = ?)';
       params.push(`%${q}%`, `%${q}%`, q);
     }
-    
+
     if (plan && plan !== 'Tất cả') {
       whereClause += ' AND p.name = ?';
       params.push(plan);
     }
-    
+
     const statusVal = status || 'Tất cả Premium';
     if (statusVal === 'Tất cả Premium') {
       whereClause += " AND (u.premium_expires_at IS NOT NULL OR EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid'))";
@@ -408,21 +422,21 @@ exports.exportPremium = async (req, res, next) => {
     } else if (statusVal === 'Chưa Premium') {
       whereClause += " AND u.premium_expires_at IS NULL AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid')";
     }
-    
+
     if (expiresFrom) {
       whereClause += ' AND u.premium_expires_at >= ?';
       params.push(expiresFrom + ' 00:00:00');
     }
-    
+
     if (expiresTo) {
       whereClause += ' AND u.premium_expires_at <= ?';
       params.push(expiresTo + ' 23:59:59');
     }
 
     const queryStr = `
-      SELECT 
-        u.id as user_id, 
-        u.display_name as name, 
+      SELECT
+        u.id as user_id,
+        u.display_name as name,
         u.email,
         u.premium_expires_at,
         p.name as plan_name,
@@ -488,7 +502,7 @@ exports.remindExpiring = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const adminId = req.user?.id; // Assuming requireAdmin middleware puts user in req.user
-    
+
     // Check if user has active premium and is within 7 days of expiry
     const [users] = await pool.query(
       'SELECT id, premium_expires_at FROM users WHERE id = ? AND premium_expires_at > NOW() AND premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)',

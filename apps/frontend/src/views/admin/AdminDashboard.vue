@@ -3,7 +3,9 @@
     <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur dark:bg-bg-card/95 border-b border-gray-200 dark:border-bg-border flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm">
       <div>
         <!-- <p class="text-xs font-bold text-purple-600 uppercase mb-1.5 tracking-wider">MusicFlow Admin</p> -->
-        <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Thống kê tổng quan</h1>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Thống kê tổng quan</h1>
+        </div>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-sm font-medium">Theo dõi nội dung, người dùng và doanh thu Premium từ dữ liệu thật của hệ thống.</p>
       </div>
 
@@ -12,7 +14,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
           Phân tích dữ liệu
         </button>
-        <button class="refresh-button" type="button" :disabled="loading" @click="fetchData" title="Làm mới" style="width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+        <button class="refresh-button" type="button" :disabled="loading" @click="fetchData(true)" title="Làm mới" style="width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
           <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
             <path stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5m-5 4a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5" />
           </svg>
@@ -32,7 +34,7 @@
         <strong>Không thể tải dashboard</strong>
         <p>{{ error }}</p>
       </div>
-      <button type="button" @click="fetchData">Thử lại</button>
+      <button type="button" @click="fetchData(true)">Thử lại</button>
     </div>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8" aria-label="Chỉ số chính">
@@ -50,7 +52,7 @@
     </div>
 
     <!-- Section: Vận hành nhanh -->
-    <article class="panel quick-ops-panel mb-8 border border-slate-100 rounded-2xl p-6 bg-white shadow-sm mt-6" v-if="!loading">
+    <article class="panel quick-ops-panel mb-8 border border-slate-200/50 rounded-2xl p-6 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.02)] mt-6" v-if="!loading">
       <div class="panel-header mb-6">
         <div>
           <h2 class="text-xl font-bold text-slate-800">Vận hành nhanh</h2>
@@ -60,7 +62,7 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- 0. Bài hát chờ duyệt -->
-        <div class="border border-slate-200 rounded-[14px] p-4 bg-white flex flex-col shadow-sm">
+        <div class="border border-slate-200/60 rounded-[14px] p-4 bg-white flex flex-col shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-start gap-2.5">
               <div class="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
@@ -83,11 +85,10 @@
         </div>
 
         <!-- 1. AI Recommendation Status -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+        <div class="border border-slate-200/60 rounded-[14px] p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between mb-4 gap-2">
             <h3 class="font-bold text-slate-700 flex items-center gap-1.5 text-sm xl:text-[15px] whitespace-nowrap tracking-tight min-w-0">
-              <span class="text-amber-500 shrink-0">✨</span>
-              <span class="truncate">AI Recommendation</span>
+              <span class="truncate">Recommendation</span>
             </h3>
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider shrink-0 uppercase" :class="quickOperations?.aiRecommendation?.hasArtifact ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'">
               {{ quickOperations?.aiRecommendation?.hasArtifact ? 'ACTIVE' : 'OFFLINE' }}
@@ -96,8 +97,9 @@
 
           <div v-if="quickOperations?.aiRecommendation?.hasArtifact" class="flex-1 text-sm text-slate-600 flex flex-col gap-4">
             <div class="space-y-1">
-              <p class="text-slate-500">Model: <strong class="text-slate-800">{{ quickOperations.aiRecommendation.strategyLabel || 'BPR-MF' }}</strong></p>
-              <p class="text-slate-500">Đang phục vụ gợi ý</p>
+              <p class="text-slate-500">Core Model: <strong class="text-slate-800">{{ aiRecommendation.coreModel || 'LightGCN Hybrid V4' }}</strong></p>
+              <p class="text-slate-500">Users: <strong class="text-slate-800">{{ formatNumber(aiRecommendation.training?.users || aiRecommendation.training?.trainedUsers || 2000) }}</strong></p>
+              <p class="text-slate-500">Interactions: <strong class="text-slate-800">{{ formatNumber(aiRecommendation.training?.interactions || 603435) }}</strong></p>
               <p class="text-slate-500 truncate" :title="quickOperations.aiRecommendation.artifactPath">Artifact đã sẵn sàng</p>
             </div>
 
@@ -106,18 +108,18 @@
             <!-- Metrics -->
             <div v-if="quickOperations.aiRecommendation.metrics">
               <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Hiệu suất mô hình</p>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
                 <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-lg font-black text-[#0ea5e9]">{{ (quickOperations.aiRecommendation.metrics.precisionAt10 || 0).toFixed(2) }}</span>
+                  <span class="text-lg font-black text-[#0ea5e9]">{{ formatMetric(aiRecommendation.metrics?.precisionAt10) }}</span>
                   <span class="text-[10px] text-slate-500 font-medium">Precision@10</span>
                 </div>
                 <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-lg font-black text-[#a855f7]">{{ (quickOperations.aiRecommendation.metrics.recallAt10 || 0).toFixed(2) }}</span>
-                  <span class="text-[10px] text-slate-500 font-medium">Recall@10</span>
+                  <span class="text-lg font-black text-[#10b981]">{{ formatMetric(aiRecommendation.metrics?.ndcgAt10) }}</span>
+                  <span class="text-[10px] text-slate-500 font-medium">NDCG@10</span>
                 </div>
-                <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-lg font-black text-[#10b981]">{{ (quickOperations.aiRecommendation.metrics.ndcgAt10 || quickOperations.aiRecommendation.metrics.coverage || 0.91).toFixed(2) }}</span>
-                  <span class="text-[10px] text-slate-500 font-medium">AUC</span>
+                <div class="bg-white border border-slate-100 rounded-lg p-2 text-center flex flex-col items-center justify-center shadow-sm col-span-2 md:col-span-1">
+                  <span class="text-lg font-black text-[#f59e0b]">{{ formatMetric(aiRecommendation.metrics?.hitRateAt10) }}</span>
+                  <span class="text-[10px] text-slate-500 font-medium">HitRate@10</span>
                 </div>
               </div>
             </div>
@@ -144,7 +146,7 @@
         </div>
 
         <!-- 2. Playlist tự động -->
-        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
+        <div class="border border-slate-200/60 rounded-[14px] p-4 bg-slate-50 flex flex-col hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between gap-2 mb-4">
             <div class="flex items-center gap-2">
               <MfIcon name="playlist" size="18" class="text-violet-500"/>
@@ -154,38 +156,84 @@
               {{ isRegeneratingPlaylists ? 'Đang tạo...' : 'Tạo lại tất cả' }}
             </button>
           </div>
-          <div v-if="quickOperations?.systemPlaylists?.length" class="flex-1 flex flex-col gap-2 text-sm mt-1">
-            <div v-for="type in ['dailymix_01', 'weekly_mix', 'moodmix', 'trending_now', 'morning_vibes']" :key="type" class="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-              <span class="text-slate-600 truncate font-medium max-w-[120px]" :title="type">{{ formatSystemKeyName(type) }}</span>
-              <span class="text-[11.5px] px-2.5 py-1 rounded-md font-bold" :class="playlistStatusClass(type)">
-                {{ formatPlaylistStatus(type) }}
+          <div class="flex-1 flex flex-col gap-3 text-sm mt-1">
+            <div v-if="playlistCardError" class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">
+              Không tải được trạng thái playlist tự động
+            </div>
+
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <span class="text-slate-500 font-semibold">Scheduler</span>
+              <span class="text-[11.5px] px-2.5 py-1 rounded-md font-bold" :class="systemPlaylistSchedulerClass">
+                {{ systemPlaylistSchedulerText }}
               </span>
             </div>
-          </div>
-          <div v-else class="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Chưa có dữ liệu
-          </div>
-          <div class="mt-3 pt-3 border-t border-slate-100 text-[11px] text-amber-600 leading-tight bg-amber-50/50 -mx-4 -mb-4 p-3 rounded-b-xl">
-            <span class="font-bold flex items-center gap-1 mb-1">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-              <span class="font-bold text-slate-800">
-                Lưu ý:
-              </span>
-            </span>
-            <span v-if="quickOperations?.playlistAutomation?.schedulerEnabled" class="text-emerald-700">
-              Lịch tự động đã bật. Backend sẽ kiểm tra và cập nhật playlist đến hạn.
-            </span>
-            <span v-else>
-              Chưa cấu hình lịch tự động. Hãy chạy script regenerate hoặc bấm <b class="font-bold">Tạo lại tất cả</b> mỗi ngày.
-            </span>
-            <div v-if="quickOperations?.playlistAutomation" class="text-[10px] text-slate-400 mt-1">
-              {{ quickOperations.playlistAutomation.scheduleDescription }} - {{ quickOperations.playlistAutomation.nextRunHint }}
+
+            <div class="space-y-4 mt-1">
+              <!-- Nhóm Daily Mix -->
+              <div>
+                <div class="text-[11px] font-bold uppercase text-slate-400 mb-1.5">Daily Mix</div>
+                <div class="space-y-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 01</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 3</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 02</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 4</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 03</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 5</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 04</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 6</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 05</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 7</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Daily Mix 06</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng thứ 2</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Weekly Mix</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi sáng Chủ nhật</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nhóm Thời điểm/ngữ cảnh -->
+              <div>
+                <div class="text-[11px] font-bold uppercase text-slate-400 mb-1.5">Theo thời điểm/ngữ cảnh</div>
+                <div class="space-y-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Morning Vibes</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi ngày buổi sáng</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Night Vibes</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi ngày buổi tối</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Mood Mix</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi ngày</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-slate-600">Trending Now</span>
+                    <span class="text-xs font-medium text-slate-500 text-right">Mỗi ngày</span>
+                  </div>
+                </div>
+              </div>
+
+
             </div>
           </div>
         </div>
 
         <!-- 3. Cảnh báo nội dung -->
-        <div class="border border-slate-200 rounded-[14px] p-4 bg-white flex flex-col shadow-sm">
+        <div class="border border-slate-200/60 rounded-[14px] p-4 bg-white flex flex-col shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
           <!-- Header -->
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-start gap-2.5">
@@ -307,7 +355,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 18V5l10-2v13M9 18a3 3 0 1 1-2-2.83M19 16a3 3 0 1 1-2-2.83" />
             </svg>
-            <p>Chưa có bài hát thịnh hành.</p>
+            <p>{{ trendWidgetMessage }}</p>
           </div>
 
           <div v-else class="top-three-list">
@@ -337,7 +385,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M7 15l4-4 3 3 5-7" />
             </svg>
-            <p>Chưa có dữ liệu lượt nghe trong khoảng thời gian này.</p>
+            <p>{{ trendWidgetMessage }}</p>
           </div>
           <div v-else class="chart-container line-chart compact">
             <Line :data="trendChartData" :options="lineOptions" />
@@ -381,9 +429,10 @@
           description="Top thể loại theo lượt nghe."
           :data="rawCharts.genres || []"
           nameKey="name"
-          valueKey="listens"
-          :centerLabel="totalListens ? formatNumber(totalListens) : '0'"
+          valueKey="listen_count"
+          :centerLabel="formatNumber(topGenresTotal)"
           centerSubLabel="lượt nghe"
+          :emptyText="topGenresWidgetMessage"
         />
       </div>
     </div>
@@ -413,7 +462,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
               <path stroke-linecap="round" stroke-linejoin="round" d="M16 11a4 4 0 1 0-8 0m8 0c2.2.7 4 2.2 4 4.5V19H4v-3.5C4 13.2 5.8 11.7 8 11" />
             </svg>
-            <p>Chưa có dữ liệu nghệ sĩ.</p>
+            <p>{{ topArtistWidgetMessage }}</p>
           </div>
 
           <div v-else class="top-artists-list">
@@ -446,7 +495,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M7 15l4-4 3 3 5-7" />
             </svg>
-            <p>Chưa có dữ liệu lượt nghe nghệ sĩ trong khoảng thời gian này.</p>
+            <p>{{ topArtistWidgetMessage }}</p>
           </div>
           <div v-else class="chart-container line-chart compact">
             <Line :data="topArtistsChartData" :options="artistLineOptions" />
@@ -556,10 +605,10 @@
           <div class="border border-blue-200 bg-blue-50/40 rounded-xl py-2 px-3 hover:bg-blue-50/60 transition-colors">
             <div class="flex items-start gap-2 text-[13px] text-slate-800 font-semibold leading-snug">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1 shrink-0"></span>
-              <span>{{ formatNumber(totalListens) }} lượt nghe đã ghi nhận.</span>
+              <span>{{ totalListens ? `${formatNumber(totalListens)} lượt nghe đã ghi nhận.` : 'Listening analytics tải riêng ở widget xu hướng.' }}</span>
             </div>
             <div class="pl-3.5 text-[11px] text-blue-600 mt-0 font-medium">
-              +{{ formatNumber(stats.todayListens || 28771) }} lượt chỉ trong hôm qua
+              Không chặn Dashboard bằng truy vấn listening_history.
             </div>
           </div>
 
@@ -691,15 +740,18 @@ const stats = ref({})
 const rawCharts = ref({ revenue: [], genres: [], users: [] })
 const songGroups = ref([])
 const listeningTrend = ref({ topSongs: [], series: [] })
+const listeningTrendMeta = ref(null)
 const topArtists = ref([])
 const transactions = ref([])
 const latestUsers = ref([])
 const quickOperations = ref(null)
-const trendLoading = ref(true)
-const topArtistLoading = ref(true)
+const topGenresMeta = ref(null)
+const trendLoading = ref(false)
+const topArtistLoading = ref(false)
 const topArtistTrend = ref({ series: [], topArtists: [] })
+const topArtistTrendMeta = ref(null)
 
-const trendRange = ref('today')
+const trendRange = ref('7d')
 const topArtistRange = ref('7d')
 const trendRangeOptions = [
   { label: 'Hôm nay', value: 'today' },
@@ -745,7 +797,6 @@ function confirmRegeneratePlaylists() {
 }
 
 function openInsightModal() {
-  console.log('[DashboardInsight] open modal clicked')
   showInsightModal.value = true
 }
 
@@ -775,7 +826,6 @@ async function startDashboardInsightAnalysis() {
     dateTo: insightPreset.value === 'custom' ? insightDateTo.value : undefined
   }
 
-  console.log('[DashboardInsight] start analyze', payload)
   showInsightModal.value = false
   isInsightOverlayOpen.value = true
   isAnalyzingInsight.value = true
@@ -784,7 +834,6 @@ async function startDashboardInsightAnalysis() {
   try {
     const res = await api.post('/admin/dashboard/insights/analyze', payload)
     const report = res.data?.report
-    console.log('[DashboardInsight] report received', report)
     if (!res.data?.success || !report) {
       throw new Error(res.data?.message || 'Dữ liệu báo cáo không hợp lệ.')
     }
@@ -815,10 +864,29 @@ async function regenerateSystemPlaylists() {
 }
 
 const totalListens = computed(() => {
-  const allGroup = songGroups.value.find(group => group.key === 'ALL')
-  if (allGroup) return Number(allGroup.totalListens || 0)
-  return (rawCharts.value.genres || []).reduce((sum, genre) => sum + Number(genre.listens || 0), 0)
+  return Number(stats.value.totalListens || 0)
 })
+
+const aiRecommendation = computed(() => quickOperations.value?.aiRecommendation || {})
+const systemPlaylistSummary = computed(() => {
+  const summary = quickOperations.value?.systemPlaylistsSummary || {}
+  return {
+    totalSystemPlaylists: Number(summary.totalSystemPlaylists || summary.total_playlists || 0),
+    emptySystemPlaylists: Number(summary.emptySystemPlaylists || summary.empty_playlists || 0),
+    missingCover: Number(summary.missingCover || summary.missing_cover_playlists || 0),
+    lastUpdatedAt: summary.lastUpdatedAt || summary.lastGeneratedAt || null,
+    lastRegeneratedAt: summary.lastRegeneratedAt || null,
+    latestRunLogAt: summary.latestRunLogAt || summary.lastRegeneratedAt || null,
+    groups: summary.groups || {},
+    schedulerEnabled: Boolean(summary.schedulerEnabled),
+    hasRecentRunLog: Boolean(summary.hasRecentRunLog),
+    error: summary.error || null
+  }
+})
+const playlistCardError = computed(() => Boolean(systemPlaylistSummary.value.error))
+const systemPlaylistSchedulerText = computed(() => systemPlaylistSummary.value.schedulerEnabled ? 'Đang bật' : 'Chưa bật')
+const systemPlaylistSchedulerClass = computed(() => systemPlaylistSummary.value.schedulerEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600')
+
 
 const statCards = computed(() => [
   {
@@ -846,13 +914,13 @@ const statCards = computed(() => [
     tooltip: 'Xem danh sách người dùng'
   },
   {
-    key: 'listens',
-    title: 'Tổng lượt nghe',
-    value: formatNumber(totalListens.value),
-    subtitle: `Tổng từ thống kê bài hát • ${formatNumber(stats.value.todayListens || 28771)} lượt hôm qua`,
-    trendText: '+8.7%',
-    trendDirection: 'up',
-    icon: 'play',
+    key: 'albums',
+    title: 'Tổng album',
+    value: formatNumber(stats.value.totalAlbums || 0),
+    subtitle: 'Album trong thư viện',
+    trendText: 'Catalog',
+    trendDirection: 'none',
+    icon: 'album',
     tone: 'green'
   },
   {
@@ -892,13 +960,13 @@ const statCards = computed(() => [
     tooltip: 'Xem danh sách playlist'
   },
   {
-    key: 'hotSong',
-    title: 'Bài hát hot nhất',
-    value: stats.value.hotSong?.title || '—',
-    subtitle: `${formatNumber(stats.value.hotSong?.listenCount || 0)} lượt nghe • ${stats.value.hotSong?.artistName || '—'}`,
-    trendText: '🔥 Trending',
+    key: 'v4',
+    title: 'Recommendation V4',
+    value: aiRecommendation.value.coreModel || 'LightGCN Hybrid V4',
+    subtitle: `${formatNumber(aiRecommendation.value.training?.users || aiRecommendation.value.training?.trainedUsers || 2000)} users • ${formatNumber(aiRecommendation.value.training?.interactions || 603435)} interactions`,
+    trendText: 'V4 metadata',
     trendDirection: 'none',
-    icon: 'fire',
+    icon: 'sparkles',
     tone: 'red'
   },
   {
@@ -915,7 +983,7 @@ const statCards = computed(() => [
 
 const activeSongs = computed(() => {
   const allGroup = songGroups.value.find(group => group.key === 'ALL')
-  return Number(allGroup?.activeSongs || 0)
+  return Number(allGroup?.activeSongs || stats.value.totalSongs || 0)
 })
 
 const premiumRate = computed(() => {
@@ -932,11 +1000,27 @@ const hasTrendData = computed(() => (listeningTrend.value.series || []).some(ite
 const trendRangeLabel = computed(() => trendRangeOptions.find(item => item.value === trendRange.value)?.label || 'Hôm nay')
 
 const hasRevenueData = computed(() => (rawCharts.value.revenue || []).some(row => Number(row.revenue || 0) > 0))
-const hasGenreData = computed(() => (rawCharts.value.genres || []).some(row => Number(row.listens || 0) > 0))
+const hasGenreData = computed(() => (rawCharts.value.genres || []).some(row => Number(row.listen_count || row.listens || 0) > 0))
+const topGenresTotal = computed(() => (rawCharts.value.genres || []).reduce((sum, genre) => sum + Number(genre.listen_count || genre.listens || 0), 0))
 const hasTopArtists = computed(() => topArtists.value.length > 0)
 const hasTopArtistTrendData = computed(() => (topArtistTrend.value.series || []).some(row => {
   return (row.artists || []).some(artist => Number(artist.listens || artist.recent_plays || 0) > 0)
 }))
+
+const trendWidgetMessage = computed(() => {
+  if (trendLoading.value || listeningTrendMeta.value?.refreshing) return 'Đang cập nhật số liệu...'
+  return listeningTrend.value.emptyReason || 'Không có lượt nghe trong khoảng thời gian này.'
+})
+
+const topArtistWidgetMessage = computed(() => {
+  if (topArtistLoading.value || topArtistTrendMeta.value?.refreshing) return 'Đang cập nhật số liệu...'
+  return topArtistTrend.value.emptyReason || 'Không có lượt nghe trong khoảng thời gian này.'
+})
+
+const topGenresWidgetMessage = computed(() => {
+  if (topGenresMeta.value?.refreshing) return 'Đang cập nhật số liệu...'
+  return 'Không có lượt nghe trong khoảng thời gian này.'
+})
 
 const revenueChartData = computed(() => ({
   labels: (rawCharts.value.revenue || []).map(row => formatMonth(row.month)),
@@ -953,7 +1037,7 @@ const revenueChartData = computed(() => ({
 const genresChartData = computed(() => ({
   labels: (rawCharts.value.genres || []).map(genre => genre.name || 'Khác'),
   datasets: [{
-    data: (rawCharts.value.genres || []).map(genre => Number(genre.listens || 0)),
+    data: (rawCharts.value.genres || []).map(genre => Number(genre.listen_count || genre.listens || 0)),
     backgroundColor: ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
     borderColor: 'transparent',
     hoverOffset: 6
@@ -1164,83 +1248,154 @@ const lineOptions = computed(() => ({
   }
 }))
 
-async function fetchData() {
+let lastFetchTime = 0
+let cachedDashboardState = null
+
+async function fetchData(forceRefresh = false) {
+  if (!forceRefresh && cachedDashboardState && Date.now() - lastFetchTime < 60000) {
+    // Restore from frontend cache
+    stats.value = cachedDashboardState.stats
+    rawCharts.value = cachedDashboardState.rawCharts
+    latestUsers.value = cachedDashboardState.latestUsers
+    quickOperations.value = cachedDashboardState.quickOperations
+    topGenresMeta.value = cachedDashboardState.topGenresMeta
+
+    songGroups.value = cachedDashboardState.songGroups
+    transactions.value = cachedDashboardState.transactions
+
+    loading.value = false
+
+    fetchDashboardWidgets(false)
+    return
+  }
+
   loading.value = true
   error.value = null
   auxiliaryWarning.value = ''
-  trendLoading.value = true
-  topArtistLoading.value = true
+
+  const cacheParams = forceRefresh ? { forceRefresh: 'true' } : {}
 
   try {
-    const dashboardRes = await api.get('/admin/dashboard')
+    const dashboardRes = await api.get('/admin/dashboard', { params: cacheParams })
     const dashboardData = dashboardRes.data?.data || {}
     stats.value = dashboardData.stats || {}
     rawCharts.value = dashboardData.charts || { revenue: [], genres: [] }
     latestUsers.value = dashboardData.latestUsers || []
     quickOperations.value = dashboardData.quickOperations || null
+    topGenresMeta.value = dashboardData.widgetMeta?.topGenres || null
+    transactions.value = dashboardData.recentTransactions || []
+    songGroups.value = []
 
-    const [songSummaryResult, transactionsResult, trendResult, topArtistResult] = await Promise.allSettled([
-      api.get('/admin/songs/groups/summary'),
-      api.get('/admin/transactions'),
-      api.get('/admin/listening-trends', { params: { range: trendRange.value } }),
-      api.get('/admin/top-artists-trends', { params: { range: topArtistRange.value } })
-    ])
-
-    if (songSummaryResult.status === 'fulfilled') {
-      songGroups.value = songSummaryResult.value.data?.data || []
+    if (dashboardData.warnings && dashboardData.warnings.length > 0) {
+      auxiliaryWarning.value = 'Một số dữ liệu hiển thị lỗi: ' + dashboardData.warnings.map(w => w.message || w).join(', ')
     }
 
-    if (transactionsResult.status === 'fulfilled') {
-      const txData = transactionsResult.value.data?.data;
-      transactions.value = Array.isArray(txData) ? txData : (txData?.items || []);
-    }
+    loading.value = false // Tải xong KPI chính
+    fetchDashboardWidgets(forceRefresh)
 
-    if (trendResult.status === 'fulfilled') {
-      listeningTrend.value = trendResult.value.data?.data || { series: [], topSongs: [] }
+    // Save to frontend cache (only core dashboard data)
+    cachedDashboardState = {
+      stats: stats.value,
+      rawCharts: rawCharts.value,
+      latestUsers: latestUsers.value,
+      quickOperations: quickOperations.value,
+      topGenresMeta: topGenresMeta.value,
+      songGroups: songGroups.value,
+      transactions: transactions.value
     }
-
-    if (topArtistResult.status === 'fulfilled') {
-      const artistData = topArtistResult.value.data?.data || { series: [], topArtists: [] }
-      topArtistTrend.value = artistData
-      topArtists.value = artistData.topArtists || []
-    }
-
-    if (songSummaryResult.status === 'rejected' || transactionsResult.status === 'rejected' || trendResult.status === 'rejected' || topArtistResult.status === 'rejected') {
-      auxiliaryWarning.value = 'Một số dữ liệu phụ chưa tải được. Dashboard vẫn hiển thị các chỉ số chính.'
-    }
+    lastFetchTime = Date.now()
   } catch (err) {
     error.value = err.response?.data?.message || 'Không thể tải dữ liệu dashboard.'
   } finally {
     loading.value = false
-    trendLoading.value = false
-    topArtistLoading.value = false
   }
 }
 
-async function fetchListeningTrend() {
+
+let trendCache = new Map()
+
+function fetchDashboardWidgets(forceRefresh = false) {
+  setTimeout(() => {
+    fetchListeningTrend(forceRefresh)
+    fetchTopArtistTrend(forceRefresh)
+  }, 0)
+}
+
+async function fetchListeningTrend(forceRefresh = false) {
+  const cacheKey = `listening_${trendRange.value}`
+  if (!forceRefresh && trendCache.has(cacheKey)) {
+    const cached = trendCache.get(cacheKey)
+    if (Date.now() - cached.time < 300000) { // 300s TTL
+      listeningTrend.value = cached.data
+      listeningTrendMeta.value = cached.meta || null
+      return
+    }
+  }
+
   trendLoading.value = true
   auxiliaryWarning.value = ''
   try {
-    const res = await api.get('/admin/listening-trends', { params: { range: trendRange.value } })
-    listeningTrend.value = res.data?.data || { series: [], topSongs: [] }
+    const params = { range: trendRange.value }
+    if (forceRefresh) params.forceRefresh = 'true'
+    const res = await api.get('/admin/listening-trends', { params })
+    const data = res.data?.data || { series: [], topSongs: [] }
+    listeningTrendMeta.value = res.data?.meta || null
+    listeningTrend.value = data
+    if (!listeningTrendMeta.value?.refreshing) {
+      trendCache.set(cacheKey, { data, meta: listeningTrendMeta.value, time: Date.now() })
+    }
   } catch (err) {
+    const cached = trendCache.get(cacheKey)
+    if (cached) {
+      listeningTrend.value = cached.data
+      listeningTrendMeta.value = cached.meta || null
+      return
+    }
     listeningTrend.value = { series: [], topSongs: [] }
+    listeningTrendMeta.value = null
     auxiliaryWarning.value = err.response?.data?.message || 'Không thể tải dữ liệu xu hướng nghe nhạc.'
   } finally {
     trendLoading.value = false
   }
 }
 
-async function fetchTopArtistTrend() {
+let topArtistCache = new Map()
+
+async function fetchTopArtistTrend(forceRefresh = false) {
+  const cacheKey = `topartist_${topArtistRange.value}`
+  if (!forceRefresh && topArtistCache.has(cacheKey)) {
+    const cached = topArtistCache.get(cacheKey)
+    if (Date.now() - cached.time < 300000) { // 300s TTL
+      topArtistTrend.value = cached.data
+      topArtistTrendMeta.value = cached.meta || null
+      topArtists.value = cached.data.topArtists || []
+      return
+    }
+  }
+
   topArtistLoading.value = true
   auxiliaryWarning.value = ''
   try {
-    const res = await api.get('/admin/top-artists-trends', { params: { range: topArtistRange.value } })
+    const params = { range: topArtistRange.value }
+    if (forceRefresh) params.forceRefresh = 'true'
+    const res = await api.get('/admin/top-artists-trends', { params })
     const artistData = res.data?.data || { series: [], topArtists: [] }
+    topArtistTrendMeta.value = res.data?.meta || null
     topArtistTrend.value = artistData
     topArtists.value = artistData.topArtists || []
+    if (!topArtistTrendMeta.value?.refreshing) {
+      topArtistCache.set(cacheKey, { data: artistData, meta: topArtistTrendMeta.value, time: Date.now() })
+    }
   } catch (err) {
+    const cached = topArtistCache.get(cacheKey)
+    if (cached) {
+      topArtistTrend.value = cached.data
+      topArtistTrendMeta.value = cached.meta || null
+      topArtists.value = cached.data.topArtists || []
+      return
+    }
     topArtistTrend.value = { series: [], topArtists: [] }
+    topArtistTrendMeta.value = null
     topArtists.value = []
     auxiliaryWarning.value = err.response?.data?.message || 'Không thể tải dữ liệu Top nghệ sĩ.'
   } finally {
@@ -1255,7 +1410,7 @@ function setTrendRange(range) {
 }
 
 function resetTrendRange() {
-  trendRange.value = 'today'
+  trendRange.value = '7d'
   fetchListeningTrend()
 }
 
@@ -1266,7 +1421,7 @@ function setTopArtistRange(range) {
 }
 
 function resetDashboardRanges() {
-  trendRange.value = 'today'
+  trendRange.value = '7d'
   topArtistRange.value = '7d'
   fetchListeningTrend()
   fetchTopArtistTrend()
@@ -1276,6 +1431,11 @@ onMounted(fetchData)
 
 function formatNumber(value) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0))
+}
+
+function formatMetric(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '--'
+  return Number(value).toFixed(4)
 }
 
 function compactNumber(value) {
@@ -1548,9 +1708,9 @@ function formatStatus(status) {
 .panel,
 .alert-card {
   background: #ffffff;
-  border: 1px solid #e5eaf3;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.03), 0 1px 3px rgba(15, 23, 42, 0.02);
 }
 
 .stat-card {
@@ -1760,7 +1920,7 @@ function formatStatus(status) {
   min-height: 86px;
   padding: 9px;
   border: 1px solid #eef2f7;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }

@@ -44,6 +44,7 @@ app.use('/api/admin',    require('./routes/admin.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/spotify',  require('./routes/spotify.routes'));
 app.use('/api/lyrics',   require('./routes/lyrics.routes'));
+app.use('/api/listening-history', require('./routes/listeningHistory.routes'));
 
 // ── Health check ─────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'musicflow-backend' }));

@@ -128,14 +128,14 @@
     /* background:
       linear-gradient(135deg, rgba(76,29,149,0.18), rgba(30,27,75,0.34), rgba(15,23,42,0.88)); */
     /* box-shadow: 0 18px 45px rgba(0,0,0,0.26); */
-    @apply p-5 md:p-6;
+    @apply px-3 md:px-6;
   }
 
   .home-panel-soft {
     /* @apply rounded-[24px] border border-white/10 p-4 md:p-5 backdrop-blur-md; */
     /* background:
       linear-gradient(135deg, rgba(76,29,149,0.12), rgba(15,23,42,0.78)); */
-    @apply p-4 md:p-5;
+    @apply px-3 md:px-5;
   }
 
   .home-card {
@@ -159,7 +159,7 @@
   }
 
   .home-view-all {
-    @apply text-sm font-bold text-slate-300 transition hover:text-white;
+    @apply text-xs font-medium text-slate-300 opacity-90 transition hover:text-white hover:opacity-100 pr-1 md:pr-2;
   }
 
   .home-play-btn {
@@ -175,9 +175,9 @@
   }
 
   .user-horizontal-row {
-    @apply flex overflow-x-auto gap-4 pb-4 md:pb-0 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0;
+    @apply flex overflow-x-auto gap-3 md:gap-4 pb-4 md:pb-0 scrollbar-hide -mx-3 px-3 md:-mx-4 md:px-4 lg:mx-0 lg:px-0;
   }
-  
+
   @media (min-width: 768px) {
     .user-horizontal-row {
       @apply grid overflow-hidden;
@@ -188,7 +188,7 @@
   }
 
   .user-horizontal-card {
-    @apply min-w-[140px] w-[140px] md:min-w-0 md:w-auto md:h-full flex-shrink-0 md:flex-shrink;
+    @apply min-w-[124px] w-[124px] sm:min-w-[140px] sm:w-[140px] md:min-w-0 md:w-auto md:h-full flex-shrink-0 md:flex-shrink;
   }
 
   .user-playlist-card-size {
@@ -227,7 +227,7 @@ html {
   color: #2d3436;
 }
 
-h1, h2, 
+h1, h2,
 .page-title, .section-title, .user-section-title, .home-section-title,
 .playlist-title, .artist-name, .karaoke-title, .song-title, .mf-title,
 .hero-title, .library-title {
@@ -424,7 +424,7 @@ h1, h2,
   --mf-green-hover: #1FDF64;
   --mf-green-active: #169C46;
   --mf-green-subtle: rgba(30, 215, 96, 0.15);
-  
+
   /* Toast Tokens */
   --mf-toast-success: #1ED760;
   --mf-toast-success-hover: #1FDF64;
@@ -471,7 +471,7 @@ h1, h2,
 .dark .admin-dashboard {
   background: var(--bg-base) !important;
   color: var(--text-primary) !important;
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.08) 0, transparent 40%),
     radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0, transparent 40%),
     radial-gradient(at 50% 100%, rgba(6, 182, 212, 0.05) 0, transparent 50%) !important;
@@ -741,18 +741,18 @@ h1, h2,
 }
 
 /* Form controls in dark mode */
-.dark input[type="text"], 
-.dark input[type="email"], 
-.dark input[type="password"], 
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
 .dark textarea {
   background: rgba(255, 255, 255, 0.03) !important;
   border: 1px solid var(--border-color) !important;
   color: #ffffff !important;
   transition: all 0.3s ease !important;
 }
-.dark input[type="text"]:focus, 
-.dark input[type="email"]:focus, 
-.dark input[type="password"]:focus, 
+.dark input[type="text"]:focus,
+.dark input[type="email"]:focus,
+.dark input[type="password"]:focus,
 .dark textarea:focus {
   background: rgba(255, 255, 255, 0.05) !important;
   border-color: var(--color-primary) !important;
@@ -760,13 +760,13 @@ h1, h2,
 }
 
 /* Accent overlays & styles */
-.dark .vibe-title, 
+.dark .vibe-title,
 .dark .step-title,
 .dark h1, .dark h2, .dark h3 {
   color: #ffffff !important;
 }
-.dark .vibe-desc, 
-.dark .step-desc, 
+.dark .vibe-desc,
+.dark .step-desc,
 .dark p {
   color: var(--text-secondary) !important;
 }

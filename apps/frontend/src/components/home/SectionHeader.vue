@@ -1,12 +1,12 @@
 <template>
-  <div class="flex items-end justify-between mb-5">
+  <div class="flex items-end justify-between mb-3">
     <div>
       <h2 class="home-section-title cursor-pointer hover:underline" :class="{ 'cursor-default': !clickable }">
         {{ title }}
       </h2>
       <p v-if="subtitle" class="home-section-subtitle">{{ subtitle }}</p>
     </div>
-    <button 
+    <button
       v-if="showViewAll"
       @click="$emit('viewAll')"
       class="home-view-all hover:underline"

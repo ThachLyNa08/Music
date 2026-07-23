@@ -102,7 +102,7 @@
                 </div>
                 <div class="flex flex-col min-w-0">
                   <span
-                    class="text-[13px] font-bold text-white truncate cursor-pointer hover:underline"
+                    class="text-[13px] font-bold tracking-tight text-white truncate cursor-pointer hover:underline"
                     title="Xem chi tiết bài hát"
                     @click.stop="goToSong"
                   >{{ getTrackTitle(currentSong) }}</span>
@@ -185,11 +185,11 @@
                     <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
                   </svg>
                 </button>
-                <div 
-                  class="fs-volume-slider" 
-                  @click="setVolumeFromClick" 
-                  @mousedown="startVolumeDrag" 
-                  @touchstart="startVolumeDrag" 
+                <div
+                  class="fs-volume-slider"
+                  @click="setVolumeFromClick"
+                  @mousedown="startVolumeDrag"
+                  @touchstart="startVolumeDrag"
                   ref="volumeTrack"
                 >
                   <div class="fs-volume-fill" :style="{ width: volumePercent + '%' }" />
@@ -299,7 +299,7 @@ watch(() => player.queueIndex, (newVal, oldVal) => {
   } else {
     slideDirection.value = 'next'
   }
-  
+
   isSliding.value = true
   if (slideTimer) clearTimeout(slideTimer)
   slideTimer = setTimeout(() => {
@@ -458,7 +458,7 @@ function startVolumeDrag(e) {
   window.addEventListener('mouseup', end)
   window.addEventListener('touchmove', move, { passive: true })
   window.addEventListener('touchend', end)
-  
+
   move(e)
 }
 
@@ -579,8 +579,8 @@ function goToArtist() {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.15); /* Nền tối nhẹ nhàng, tinh tế hơn */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   color: rgba(255, 255, 255, 0.75); /* Trắng dịu hơn */
@@ -598,7 +598,8 @@ function goToArtist() {
 }
 
 .fs-btn-icon:hover {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
   color: #ffffff;
   transform: scale(1.05);
 }
@@ -659,7 +660,7 @@ function goToArtist() {
 .fs-card-cover-wrap {
   width: 340px;
   height: 340px;
-  border-radius: 26px;
+  border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
   transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
@@ -695,19 +696,20 @@ function goToArtist() {
 .fs-card-caption {
   margin-top: 16px;
   padding: 12px 18px;
-  background: rgba(20, 20, 20, 0.35);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: rgba(20, 20, 20, 0.25);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
   text-align: center;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   max-width: 300px;
 }
 
 .fs-card-title {
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   font-weight: 700;
+  letter-spacing: -0.025em;
   color: #fff;
   margin: 0 0 4px;
   line-height: 1.3;
@@ -718,6 +720,7 @@ function goToArtist() {
 
 .fs-card-artist {
   font-size: 0.95rem;
+  font-weight: 500;
   color: rgba(255, 255, 255, 0.6);
   margin: 0;
   white-space: nowrap;
@@ -739,10 +742,10 @@ function goToArtist() {
   width: min(920px, calc(100vw - 32px));
   min-height: 84px;
   padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(24px) saturate(1.3);
   -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   display: flex;
@@ -826,7 +829,7 @@ function goToArtist() {
   height: 56px;
   background: #fff;
   color: #000;
-  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.12);
 }
 
 .fs-dock-btn--xl svg {
@@ -952,9 +955,9 @@ function goToArtist() {
 /* ---------- TRANSITIONS ---------- */
 .fullscreen-slide-enter-active,
 .fullscreen-slide-leave-active {
-  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), 
-              opacity 320ms ease, 
-              filter 420ms ease, 
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 320ms ease,
+              filter 420ms ease,
               border-radius 420ms ease;
   will-change: transform, opacity, filter, border-radius;
 }
@@ -1052,37 +1055,37 @@ function goToArtist() {
   .fs-card:not(.fs-card--active) {
     display: none;
   }
-  
+
   .fs-volume-wrap {
     display: none;
   }
-  
+
   .fs-dock {
     padding: 12px 14px;
     border-radius: 24px;
   }
-  
+
   .fs-dock-left {
     order: 2;
     width: 100%;
     justify-content: center;
     gap: 12px;
   }
-  
+
   .fs-dock-center {
     order: 1;
     width: 100%;
   }
-  
+
   .fs-dock-right {
     order: 3;
   }
-  
+
   .fs-dock-btn--xl {
     width: 48px;
     height: 48px;
   }
-  
+
   .fs-dock-btn--xl svg {
     width: 24px;
     height: 24px;

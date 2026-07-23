@@ -556,6 +556,42 @@ async function normalizeAiPlaylistDailyUsageSchema(conn) {
   `);
 }
 
+async function normalizeArtistContentModerationSchema(conn) {
+  const moderationCols = [
+    { name: 'metadata_score', def: 'INT NOT NULL DEFAULT 0' },
+    { name: 'risk_score', def: 'INT NOT NULL DEFAULT 0' },
+    { name: 'moderation_level', def: "VARCHAR(20) NOT NULL DEFAULT 'normal'" },
+    { name: 'moderation_flags', def: 'JSON NULL' },
+    { name: 'resubmission_count', def: 'INT NOT NULL DEFAULT 0' },
+    { name: 'can_resubmit', def: 'TINYINT(1) NOT NULL DEFAULT 1' },
+    { name: 'resubmit_locked_reason', def: 'TEXT NULL' },
+  ];
+
+  for (const col of moderationCols) {
+    await addColumnIfMissing(conn, 'songs', col.name, col.def);
+    await addColumnIfMissing(conn, 'albums', col.name, col.def);
+  }
+
+  if (!(await tableExists(conn, 'artist_content_review_logs'))) {
+    await conn.query(`
+      CREATE TABLE artist_content_review_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        content_type ENUM('song', 'album') NOT NULL,
+        content_id INT NOT NULL,
+        artist_id INT NULL,
+        admin_id INT NULL,
+        action ENUM('submitted', 'approved', 'rejected', 'resubmitted') NOT NULL,
+        reason TEXT NULL,
+        score_snapshot JSON NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_content (content_type, content_id),
+        INDEX idx_artist (artist_id),
+        INDEX idx_action (action)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+}
+
 async function main() {
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -578,6 +614,7 @@ async function main() {
     await normalizeArtistSongSubmissionNoteSchema(conn);
     await normalizeArtistAlbumReviewSchema(conn);
     await normalizeAiPlaylistDailyUsageSchema(conn);
+    await normalizeArtistContentModerationSchema(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();

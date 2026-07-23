@@ -62,15 +62,23 @@ async function getSchemaInfo(db) {
         getExistingColumns('genres', ['name', 'slug']),
         getExistingColumns('song_audio_features', [
             'bpm',
+            'raw_bpm',
+            'normalized_bpm',
+            'tempo_bucket',
+            'tempo_confidence',
+            'tempo_stability',
             'tempo',
             'tempo_level',
             'energy_score',
             'energy',
+            'danceability_score',
             'danceability',
             'acoustic_score',
+            'brightness_score',
             'brightness',
             'mood',
-            'vibe'
+            'vibe',
+            'status'
         ]),
         tableExists('song_audio_features')
     ]);
@@ -175,14 +183,23 @@ function buildSelectSql(schema) {
     if (schema.hasAudioFeatures) {
         selectParts.push(
             selectColumn(schema.audioFeatureColumns, 'saf', 'bpm'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'raw_bpm'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'normalized_bpm'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'tempo_bucket'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'tempo_confidence'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'tempo_stability'),
             schema.audioFeatureColumns.bpm
                 ? 'saf.bpm AS audio_bpm'
-                : (schema.songColumns.tempo ? 's.tempo AS audio_bpm' : sqlNull('audio_bpm')),
+                : (schema.audioFeatureColumns.normalized_bpm
+                    ? 'saf.normalized_bpm AS audio_bpm'
+                    : (schema.songColumns.tempo ? 's.tempo AS audio_bpm' : sqlNull('audio_bpm'))),
             selectColumn(schema.audioFeatureColumns, 'saf', 'tempo_level'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'energy_score'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'energy'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'danceability_score'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'danceability'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'acoustic_score'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'brightness_score'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'brightness'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'mood'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'vibe')
@@ -190,12 +207,19 @@ function buildSelectSql(schema) {
     } else {
         selectParts.push(
             schema.songColumns.tempo ? 's.tempo AS bpm' : sqlNull('bpm'),
+            sqlNull('raw_bpm'),
+            sqlNull('normalized_bpm'),
+            sqlNull('tempo_bucket'),
+            sqlNull('tempo_confidence'),
+            sqlNull('tempo_stability'),
             schema.songColumns.tempo ? 's.tempo AS audio_bpm' : sqlNull('audio_bpm'),
             sqlNull('tempo_level'),
             sqlNull('energy_score'),
             sqlNull('energy'),
+            sqlNull('danceability_score'),
             sqlNull('danceability'),
             sqlNull('acoustic_score'),
+            sqlNull('brightness_score'),
             sqlNull('brightness'),
             sqlNull('mood'),
             sqlNull('vibe')
@@ -413,7 +437,9 @@ function inferGenreFamily(row) {
 }
 
 function shapeCandidate(row) {
-    const bpm = numberOrNull(row.audio_bpm ?? row.bpm);
+    const normalizedBpm = numberOrNull(row.normalized_bpm ?? row.audio_bpm ?? row.bpm);
+    const rawBpm = numberOrNull(row.raw_bpm ?? row.bpm ?? row.audio_bpm);
+    const bpm = normalizedBpm ?? rawBpm;
     return {
         id: Number(row.id),
         title: row.title,
@@ -435,12 +461,21 @@ function shapeCandidate(row) {
         listen_count: Number(row.play_count || 0),
         like_count: Number(row.like_count || 0),
         bpm,
-        tempo_level: row.tempo_level || null,
+        raw_bpm: rawBpm,
+        normalized_bpm: normalizedBpm,
+        normalizedBpm,
+        tempo_bucket: row.tempo_bucket || row.tempo_level || null,
+        tempoBucket: row.tempo_bucket || row.tempo_level || null,
+        tempo_confidence: numberOrNull(row.tempo_confidence),
+        tempo_stability: numberOrNull(row.tempo_stability),
+        tempo_level: row.tempo_level || row.tempo_bucket || null,
         energy_score: numberOrNull(row.energy_score),
         energy: row.energy || null,
-        danceability: numberOrNull(row.danceability),
+        danceability_score: numberOrNull(row.danceability_score ?? row.danceability),
+        danceability: numberOrNull(row.danceability_score ?? row.danceability),
         acoustic_score: numberOrNull(row.acoustic_score),
-        brightness: numberOrNull(row.brightness),
+        brightness_score: numberOrNull(row.brightness_score ?? row.brightness),
+        brightness: numberOrNull(row.brightness_score ?? row.brightness),
         mood: row.mood || null,
         vibe: row.vibe || null,
         release_status: row.release_status || null,

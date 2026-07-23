@@ -2,6 +2,8 @@ const { pool } = require('../config/database');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 
+const APPROVED_CATALOG_WHERE = `COALESCE(s.review_status, 'approved') = 'approved' AND (s.is_active = 1 OR s.is_active IS NULL)`;
+
 function hasValidSyncedLyrics(text) {
   if (!text || !text.trim()) return false;
   return /\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]\s*\S/.test(text);
@@ -9,16 +11,18 @@ function hasValidSyncedLyrics(text) {
 
 exports.getSummary = async (req, res, next) => {
   try {
-    const [[{ totalSongs }]] = await pool.query(`SELECT COUNT(*) AS totalSongs FROM songs`);
+    const [[{ totalSongs }]] = await pool.query(`SELECT COUNT(*) AS totalSongs FROM songs s WHERE ${APPROVED_CATALOG_WHERE}`);
 
     const [[lyricsStats]] = await pool.query(`
       SELECT
-        COUNT(*) as songsWithLyrics,
-        SUM(CASE WHEN sync_type = 'LINE_SYNCED' THEN 1 ELSE 0 END) as syncedLyricsCount,
-        SUM(CASE WHEN sync_type = 'PLAIN_TEXT' THEN 1 ELSE 0 END) as plainLyricsCount,
-        SUM(CASE WHEN provider = 'lrclib' OR provider = 'LRCLIB' THEN 1 ELSE 0 END) as lrclibCount,
-        SUM(CASE WHEN provider = 'MANUAL' THEN 1 ELSE 0 END) as manualCount
-      FROM song_lyrics
+        COUNT(sl.song_id) as songsWithLyrics,
+        SUM(CASE WHEN sl.sync_type = 'LINE_SYNCED' THEN 1 ELSE 0 END) as syncedLyricsCount,
+        SUM(CASE WHEN sl.sync_type = 'PLAIN_TEXT' THEN 1 ELSE 0 END) as plainLyricsCount,
+        SUM(CASE WHEN sl.provider = 'lrclib' OR sl.provider = 'LRCLIB' THEN 1 ELSE 0 END) as lrclibCount,
+        SUM(CASE WHEN sl.provider = 'MANUAL' THEN 1 ELSE 0 END) as manualCount
+      FROM songs s
+      JOIN song_lyrics sl ON s.id = sl.song_id
+      WHERE ${APPROVED_CATALOG_WHERE}
     `);
 
     res.json({
@@ -46,7 +50,10 @@ exports.getList = async (req, res, next) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
     const offset = (page - 1) * limit;
 
-    let whereConditions = [];
+    let whereConditions = [
+      `COALESCE(s.review_status, 'approved') = 'approved'`,
+      `(s.is_active = 1 OR s.is_active IS NULL)`
+    ];
     let queryParams = [];
 
     if (q) {
@@ -84,7 +91,8 @@ exports.getList = async (req, res, next) => {
 
     const dataQuery = `
       SELECT
-        s.id as song_id, s.title, a.name as artist_name, al.title as album_name, s.cover_url,
+        s.id as song_id, s.title, a.name as artist_name, al.title as album_name,
+        COALESCE(NULLIF(s.cover_url, ''), al.cover_url) AS cover_url,
         sl.sync_type, sl.provider, sl.provider_lyric_id,
         sl.updated_at, sl.plain_lyrics, sl.synced_lyrics,
         IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
@@ -144,11 +152,15 @@ exports.getDetail = async (req, res, next) => {
     const { songId } = req.params;
 
     const [[song]] = await pool.query(`
-      SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name, s.cover_url, s.duration_sec as duration
+      SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name,
+             COALESCE(NULLIF(s.cover_url, ''), al.cover_url) AS cover_url,
+             s.duration_sec as duration
       FROM songs s
       LEFT JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       WHERE s.id = ?
+        AND COALESCE(s.review_status, 'approved') = 'approved'
+        AND (s.is_active = 1 OR s.is_active IS NULL)
     `, [songId]);
 
     if (!song) {
@@ -187,8 +199,13 @@ exports.updateLyrics = async (req, res, next) => {
     const { songId } = req.params;
     const { plain_lyrics, synced_lyrics, sync_type } = req.body;
 
-    // Check if song exists
-    const [[song]] = await pool.query(`SELECT id FROM songs WHERE id = ?`, [songId]);
+    // Check if song exists and is approved catalog song
+    const [[song]] = await pool.query(`
+      SELECT id FROM songs
+      WHERE id = ?
+        AND COALESCE(review_status, 'approved') = 'approved'
+        AND (is_active = 1 OR is_active IS NULL)
+    `, [songId]);
     if (!song) {
       return res.status(404).json({ success: false, message: 'Song not found' });
     }
@@ -253,7 +270,10 @@ exports.exportLyrics = async (req, res, next) => {
   try {
     const { q, status, provider } = req.query;
 
-    let whereConditions = [];
+    let whereConditions = [
+      `COALESCE(s.review_status, 'approved') = 'approved'`,
+      `(s.is_active = 1 OR s.is_active IS NULL)`
+    ];
     let queryParams = [];
 
     if (q) {

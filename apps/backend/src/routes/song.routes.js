@@ -4,6 +4,8 @@ const upload = require('../middleware/upload.middleware');
 const songController = require('../controllers/song.controller');
 const { authenticate, requireAdmin, optionalAuthenticate } = require('../middleware/auth.middleware');
 
+const listeningHistoryController = require('../controllers/listeningHistory.controller');
+
 router.get('/search', optionalAuthenticate, songController.searchSongs);
 router.get('/suggestions', songController.getSuggestions);
 router.get('/', optionalAuthenticate, songController.getAllSongs);
@@ -15,13 +17,13 @@ router.get('/:id/detail', optionalAuthenticate, songController.getSongDetail);
 router.get('/:id/related', optionalAuthenticate, songController.getRelatedSongs);
 router.post('/:id/like', authenticate, songController.likeSong);
 router.delete('/:id/like', authenticate, songController.unlikeSong);
-router.post('/:id/listen', authenticate, songController.recordListen);
+router.post('/:id/listen', optionalAuthenticate, listeningHistoryController.trackListening);
 
 // Admin only route for uploading songs securely
-router.post('/upload', 
-  authenticate, 
-  requireAdmin, 
-  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), 
+router.post('/upload',
+  authenticate,
+  requireAdmin,
+  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]),
   songController.uploadSong
 );
 

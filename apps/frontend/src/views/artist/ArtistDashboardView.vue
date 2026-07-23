@@ -40,9 +40,6 @@
                 <div class="spark-bar" style="height:90%"></div>
                 <div class="spark-bar" style="height:100%"></div>
               </div>
-              <div class="text-xs mt-3 font-medium" :class="summary.pendingSongs > 0 ? 'text-[#00d4aa]' : 'text-gray-500'">
-                {{ summary.pendingSongs > 0 ? '↑ +' + summary.pendingSongs + ' chờ duyệt' : '— Đã duyệt tất cả' }}
-              </div>
             </div>
             <div class="artist-stat-card" @mouseenter="handleSparklineEnter" @mouseleave="handleSparklineLeave">
               <div class="artist-stat-label">ALBUM</div>
@@ -55,9 +52,6 @@
                 <div class="spark-bar" style="height:70%"></div>
                 <div class="spark-bar" style="height:70%"></div>
                 <div class="spark-bar" style="height:100%"></div>
-              </div>
-              <div class="text-xs mt-3 font-medium" :class="summary.pendingAlbums > 0 ? 'text-[#00d4aa]' : 'text-gray-500'">
-                {{ summary.pendingAlbums > 0 ? '↑ +' + summary.pendingAlbums + ' chờ duyệt' : '— Đã duyệt tất cả' }}
               </div>
             </div>
             <div class="artist-stat-card" @mouseenter="handleSparklineEnter" @mouseleave="handleSparklineLeave">
@@ -72,9 +66,6 @@
                 <div class="spark-bar" style="height:85%"></div>
                 <div class="spark-bar" style="height:100%"></div>
               </div>
-              <div class="text-xs mt-3 font-medium" :class="sessionStats.newPlays > 0 ? 'text-[#00d4aa]' : 'text-gray-500'">
-                {{ sessionStats.newPlays > 0 ? '↑ +' + formatNumber(sessionStats.newPlays) + ' mới nhất' : '— Đang cập nhật' }}
-              </div>
             </div>
             <div class="artist-stat-card" @mouseenter="handleSparklineEnter" @mouseleave="handleSparklineLeave">
               <div class="artist-stat-label">LƯỢT THÍCH</div>
@@ -87,9 +78,6 @@
                 <div class="spark-bar" style="height:75%"></div>
                 <div class="spark-bar" style="height:90%"></div>
                 <div class="spark-bar" style="height:100%"></div>
-              </div>
-              <div class="text-xs mt-3 font-medium" :class="sessionStats.newLikes > 0 ? 'text-[#00d4aa]' : 'text-gray-500'">
-                {{ sessionStats.newLikes > 0 ? '↑ +' + formatNumber(sessionStats.newLikes) + ' tuần này' : '— Đang cập nhật' }}
               </div>
             </div>
             <div class="artist-stat-card" @mouseenter="handleSparklineEnter" @mouseleave="handleSparklineLeave">
@@ -104,7 +92,6 @@
                 <div class="spark-bar" style="height:10%"></div>
                 <div class="spark-bar" style="height:10%"></div>
               </div>
-              <div class="text-xs mt-3 font-medium text-rose-500">— Chưa có dữ liệu</div>
             </div>
           </div>
         </div>

@@ -88,6 +88,7 @@
                   </td>
                   <td class="text-right actions-cell">
                     <button @click="openDetailModal(album.id)" class="btn-icon">Chi tiết</button>
+                    <button v-if="album.reviewStatus === 'rejected' && album.canResubmit && album.resubmissionCount < 3" @click="openResubmitModal(album)" class="btn-icon">Sửa lại</button>
                   </td>
                 </tr>
               </tbody>
@@ -228,8 +229,33 @@
           <div v-if="selectedAlbum.reviewStatus === 'rejected' && selectedAlbum.rejectionReason" class="artist-panel error" style="margin-bottom: 20px;">
             <strong>Lý do từ chối:</strong> {{ selectedAlbum.rejectionReason }}
           </div>
+          <div v-if="selectedAlbum.reviewStatus === 'rejected'" class="artist-panel error" style="margin-bottom: 20px; background-color: var(--mf-bg-surface);">
+            <strong>Số lần gửi lại:</strong> <span :class="{'text-warning': selectedAlbum.resubmissionCount >= 3}">{{ selectedAlbum.resubmissionCount || 0 }}/3</span>
+          </div>
+          <div v-if="selectedAlbum.reviewStatus === 'rejected' && (!selectedAlbum.canResubmit || selectedAlbum.resubmissionCount >= 3)" class="alert alert-danger" style="margin-bottom: 20px;">
+            Nội dung này không thể gửi lại. Vui lòng liên hệ quản trị viên.
+            <div v-if="selectedAlbum.resubmitLockedReason" style="margin-top: 4px;"><strong>Lý do khóa:</strong> {{ selectedAlbum.resubmitLockedReason }}</div>
+          </div>
 
           <div class="detail-info-grid">
+            <div class="info-item">
+              <label>Metadata Score:</label>
+              <span style="color: #1ed760; font-weight: 700;">{{ selectedAlbum.metadataScore || 0 }}/100</span>
+            </div>
+            <div class="info-item">
+              <label>Risk Score:</label>
+              <span :style="{ color: (selectedAlbum.riskScore > 30 ? '#ff4757' : (selectedAlbum.riskScore > 0 ? '#f59e0b' : '#1ed760')), fontWeight: '700' }">
+                {{ selectedAlbum.riskScore > 0 ? '+' + selectedAlbum.riskScore : '0 (An toàn)' }}
+              </span>
+            </div>
+            <div class="info-item full-width" v-if="selectedAlbum.moderationFlags && selectedAlbum.moderationFlags.length">
+              <label>Cảnh báo kiểm duyệt:</label>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+                <span v-for="flag in selectedAlbum.moderationFlags" :key="flag" style="padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-size: 11px; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.3);">
+                  {{ formatFlagText(flag) }}
+                </span>
+              </div>
+            </div>
             <div class="info-item">
               <label>Ngày phát hành:</label>
               <span>{{ formatDate(selectedAlbum.releaseDate) || '-' }}</span>
@@ -261,16 +287,131 @@
             </table>
           </div>
         </div>
+        <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px;">
+          <button @click="closeDetailModal" class="btn-secondary">Đóng</button>
+          <button v-if="selectedAlbum && selectedAlbum.reviewStatus === 'rejected' && selectedAlbum.canResubmit && selectedAlbum.resubmissionCount < 3" @click="openResubmitModal(selectedAlbum)" class="btn-primary">Chỉnh sửa và gửi lại</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resubmit Modal -->
+    <div v-if="showResubmitModal" class="modal-overlay" @click.self="closeResubmitModal">
+      <div class="modal-content dark-modal" style="width: 100%; max-width: 800px; height: 90vh;">
+        <div class="modal-header">
+          <h2>Chỉnh sửa album bị từ chối</h2>
+          <button type="button" class="close-btn" @click="closeResubmitModal">&times;</button>
+        </div>
+        <div class="modal-body" style="flex: 1; overflow-y: auto;">
+          <div v-if="resubmitForm.rejectionReason" class="alert alert-danger mb-4">
+            <strong>Lý do từ chối:</strong> {{ resubmitForm.rejectionReason }}
+          </div>
+          <form @submit.prevent="submitResubmit" class="upload-form">
+            <div class="form-section">
+              <h3 style="font-size: 15px; margin-bottom: 12px;">1. Thông tin album</h3>
+              <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="form-group">
+                  <label>Tên album <span class="text-warning">*</span></label>
+                  <input v-model.trim="resubmitForm.title" type="text" class="input-dark" placeholder="VD: Mùa Hè Của Tôi" required />
+                </div>
+
+                <div class="form-group">
+                  <label>Ảnh bìa mới <span class="muted">(tùy chọn)</span></label>
+                  <input type="file" class="input-dark" @change="onResubmitCoverChange" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+                  <div class="text-success mt-1" v-if="resubmitForm.coverFile">{{ resubmitForm.coverFile.name }}</div>
+                  <div class="helper-text mt-1" v-else>Giữ nguyên ảnh bìa cũ nếu không chọn.</div>
+                </div>
+
+                <div class="form-group">
+                  <label>Ngày phát hành dự kiến</label>
+                  <input v-model="resubmitForm.releaseDate" type="date" class="input-dark" />
+                </div>
+
+                <div class="form-group full-width">
+                  <label>Mô tả / Ghi chú</label>
+                  <textarea v-model="resubmitForm.description" class="input-dark textarea-dark" placeholder="Mô tả về album..."></textarea>
+                </div>
+                <div class="form-group full-width">
+                  <label>Ghi chú gửi Admin duyệt</label>
+                  <textarea v-model="resubmitForm.submissionNote" class="input-dark textarea-dark" rows="3"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section" style="margin-top: 20px;">
+              <h3 style="font-size: 15px; margin-bottom: 12px;">2. Chọn lại bài hát cho album <span class="text-warning">*</span></h3>
+              <p class="muted" style="margin-bottom: 16px; font-size: 13px;">Chỉ hiển thị các bài hát đã được duyệt và chưa thuộc album nào (hoặc đã thuộc album này).</p>
+
+              <div v-if="songOptions.length === 0" class="empty-state" style="padding: 30px; border: 1px dashed rgba(255,255,255,0.1); background: transparent;">
+                <p>Chưa có bài hát nào có thể thêm vào album. Vui lòng upload và chờ Admin duyệt bài hát trước.</p>
+              </div>
+
+              <div v-else>
+                <div class="search-box" style="margin-bottom: 12px; width: 100%;">
+                  <input v-model="songSearchQuery" type="text" placeholder="Tìm bài hát..." class="input-dark" style="width: 100%;" />
+                </div>
+
+                <div class="song-picker-list" style="max-height: 250px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                  <div v-for="song in filteredSongOptions" :key="song.id" class="song-picker-item" style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <input type="checkbox" :id="'resubmit-song-' + song.id" :value="song.id" v-model="resubmitSelectedSongs" class="custom-checkbox" />
+                    <label :for="'resubmit-song-' + song.id" style="display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1; margin: 0;">
+                      <img :src="normalizeImageUrl(song.coverUrl) || fallbackCover" style="width: 40px; height: 40px; border-radius: 4px; object-fit: cover;" alt="" />
+                      <div style="flex: 1;">
+                        <div style="font-weight: 500; font-size: 14px;">{{ song.title }}</div>
+                        <div class="muted" style="font-size: 12px;">{{ formatDuration(song.duration) }} • {{ song.playCount || 0 }} lượt nghe</div>
+                      </div>
+                    </label>
+                  </div>
+                  <div v-if="filteredSongOptions.length === 0" style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5);">
+                    Không tìm thấy bài hát phù hợp.
+                  </div>
+                </div>
+
+                <div style="margin-top: 12px; font-size: 13px; color: #1ed760;" v-if="resubmitSelectedSongs.length > 0">
+                  Đã chọn {{ resubmitSelectedSongs.length }} bài hát.
+                </div>
+                <div style="margin-top: 12px; font-size: 13px; color: #f59e0b;" v-else>
+                  Vui lòng chọn ít nhất 1 bài hát cho album trước khi gửi duyệt.
+                </div>
+              </div>
+            </div>
+
+            <div v-if="resubmitError" class="alert alert-danger">{{ resubmitError }}</div>
+          </form>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" @click="closeResubmitModal" :disabled="resubmitting">Hủy</button>
+          <button type="button" class="btn-primary" @click="submitResubmit" :disabled="resubmitting || !resubmitForm.title || resubmitSelectedSongs.length === 0">
+            <span v-if="resubmitting">Đang tải lên...</span>
+            <span v-else>Gửi duyệt lại</span>
+          </button>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { artistStudioApi } from '@/api/artistStudio'
 import { useToastStore } from '@/stores/toast'
 import { normalizeImageUrl } from '@/utils/imageUrl'
+
+const formatFlagText = (flag) => {
+  const flagMap = {
+    missing_cover: 'Thiếu ảnh bìa',
+    missing_lyrics: 'Thiếu lời bài hát',
+    new_artist: 'Nghệ sĩ mới',
+    duplicate_title: 'Tên gần trùng',
+    resubmitted_multiple_times: 'Gửi lại nhiều lần',
+    incomplete_metadata: 'Thiếu metadata',
+    unusual_duration: 'Thời lượng bất thường',
+    few_album_songs: 'Album quá ít bài',
+    unapproved_album_song: 'Chứa bài chưa duyệt',
+    missing_description: 'Thiếu mô tả'
+  }
+  return flagMap[flag] || flag
+}
 
 const toast = useToastStore()
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
@@ -356,8 +497,17 @@ const fetchAlbums = async () => {
   }
 }
 
+const handleReviewStatusChanged = () => {
+  fetchAlbums()
+}
+
 onMounted(() => {
   fetchAlbums()
+  window.addEventListener('artist:review_status_changed', handleReviewStatusChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('artist:review_status_changed', handleReviewStatusChanged)
 })
 
 
@@ -382,9 +532,9 @@ const formatReviewStatus = (status) => {
 
 const getReviewStatusClass = (status) => {
   switch (status) {
-    case 'approved': return 'complete'
-    case 'pending_review': return 'missing_genre'
-    case 'rejected': return 'missing_audio'
+    case 'approved': return 'approved'
+    case 'pending_review': return 'pending'
+    case 'rejected': return 'rejected'
     default: return ''
   }
 }
@@ -478,6 +628,100 @@ const submitUpload = async () => {
     uploading.value = false
   }
 }
+
+// Resubmit Logic
+const showResubmitModal = ref(false)
+const resubmitting = ref(false)
+const resubmitError = ref('')
+const resubmitForm = ref({
+  id: null,
+  title: '',
+  description: '',
+  releaseDate: '',
+  submissionNote: '',
+  rejectionReason: '',
+  coverFile: null
+})
+const resubmitSelectedSongs = ref([])
+
+const openResubmitModal = async (album) => {
+  resubmitForm.value = {
+    id: album.id,
+    title: album.name || '',
+    description: album.description || '',
+    releaseDate: album.releaseDate ? album.releaseDate.split('T')[0] : '',
+    submissionNote: album.submissionNote || album.submission_note || '',
+    rejectionReason: album.rejectionReason || album.rejection_reason || '',
+    coverFile: null
+  }
+  resubmitSelectedSongs.value = []
+  // Select songs that were in the album
+  if (album.songs && Array.isArray(album.songs)) {
+    resubmitSelectedSongs.value = album.songs.map(s => s.id)
+  }
+  resubmitError.value = ''
+
+  // Ensure we have latest song options
+  await fetchAlbumSongOptions()
+
+  // Combine current options with the selected songs if they are not in the list (because they might still be linked to album_id)
+  // fetchAlbumSongOptions from backend already includes (album_id IS NULL OR album_id = currentAlbumId) if we passed currentAlbumId,
+  // but it doesn't take an argument right now. It just returns album_id IS NULL. Let's rely on backend to allow it or we fetch it.
+  // Actually, we don't need to change `fetchAlbumSongOptions` backend if the rejected songs were already `album_id IS NULL`.
+
+  showResubmitModal.value = true
+}
+
+const closeResubmitModal = () => {
+  showResubmitModal.value = false
+}
+
+const onResubmitCoverChange = (e) => {
+  resubmitForm.value.coverFile = e.target.files[0] || null
+}
+
+const submitResubmit = async () => {
+  if (!resubmitForm.value.title.trim()) {
+    resubmitError.value = 'Vui lòng nhập tên album.'
+    return
+  }
+  if (resubmitSelectedSongs.value.length === 0) {
+    resubmitError.value = 'Vui lòng chọn ít nhất 1 bài hát.'
+    return
+  }
+
+  resubmitError.value = ''
+  resubmitting.value = true
+
+  try {
+    const formData = new FormData()
+    formData.append('title', resubmitForm.value.title.trim())
+    if (resubmitForm.value.description) formData.append('description', resubmitForm.value.description)
+    if (resubmitForm.value.releaseDate) formData.append('releaseDate', resubmitForm.value.releaseDate)
+    if (resubmitForm.value.submissionNote) formData.append('submissionNote', resubmitForm.value.submissionNote)
+    formData.append('songIds', JSON.stringify(resubmitSelectedSongs.value))
+
+    if (resubmitForm.value.coverFile) {
+      formData.append('cover', resubmitForm.value.coverFile)
+    }
+
+    const res = await artistStudioApi.resubmitAlbum(resubmitForm.value.id, formData)
+    if (res.data.success) {
+      toast.showToast('Album đã được gửi lại Admin duyệt.', 'success')
+      closeResubmitModal()
+      if (showDetailModal.value) closeDetailModal()
+      fetchAlbums(1)
+    } else {
+      resubmitError.value = res.data.message || 'Lỗi khi gửi lại'
+    }
+  } catch (err) {
+    console.error(err)
+    resubmitError.value = err.response?.data?.message || 'Có lỗi xảy ra khi gửi lại.'
+  } finally {
+    resubmitting.value = false
+  }
+}
+
 
 // Detail Modal
 const showDetailModal = ref(false)
@@ -664,7 +908,7 @@ const closeDetailModal = () => {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg-card);
+  background: #141528;
 }
 
 .song-table tr:hover {
@@ -695,16 +939,34 @@ const closeDetailModal = () => {
 .text-warning { color: var(--warning); }
 
 .status-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 20px;
   font-size: 11px;
-  font-weight: 600;
-  background: rgba(255,255,255,0.05);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
-.status-badge.complete { background: rgba(46, 213, 115, 0.15); color: var(--success); }
-.status-badge.missing_genre { background: rgba(255, 165, 2, 0.15); color: var(--warning); }
-.status-badge.missing_audio { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
+.status-badge.approved, .status-badge.complete {
+  background: rgba(46, 213, 115, 0.12);
+  color: #2ed573;
+  border: 1px solid rgba(46, 213, 115, 0.25);
+  box-shadow: 0 0 12px rgba(46, 213, 115, 0.1);
+}
+.status-badge.pending, .status-badge.missing_genre {
+  background: rgba(255, 165, 2, 0.12);
+  color: #ffa502;
+  border: 1px solid rgba(255, 165, 2, 0.25);
+  box-shadow: 0 0 12px rgba(255, 165, 2, 0.1);
+}
+.status-badge.rejected, .status-badge.missing_audio {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  box-shadow: 0 0 12px rgba(255, 71, 87, 0.15);
+}
 
 .btn-icon {
   background: rgba(255,255,255,0.05);
@@ -734,7 +996,7 @@ const closeDetailModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: var(--bg-card);
+  background: #141528;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -748,14 +1010,22 @@ const closeDetailModal = () => {
 /* Modal */
 .modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+  background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+  backdrop-filter: blur(4px);
 }
-.dark-modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; }
-.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.dark-modal {
+  background: #141528 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  width: 100%; max-width: 680px; max-height: 90vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  display: flex; flex-direction: column; overflow: hidden; opacity: 1 !important;
+}
+.modal-header { padding: 20px 24px; background: #141528 !important; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; }
 .modal-header h2 { margin: 0; font-size: 18px; }
 .close-btn { background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; }
-.modal-body { padding: 24px; overflow-y: auto; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
+.modal-body { padding: 24px; overflow-y: auto; background: #141528 !important; }
+.modal-footer { padding: 16px 24px; background: #141528 !important; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: flex-end; gap: 12px; }
 
 .detail-hero { display: flex; gap: 20px; margin-bottom: 24px; }
 .detail-cover { width: 100px; height: 100px; border-radius: 8px; object-fit: cover; }

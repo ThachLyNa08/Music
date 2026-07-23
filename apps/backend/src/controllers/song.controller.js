@@ -1,6 +1,8 @@
 const { pool } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const spotifyService = require('../services/spotify.service');
+const recommendationService = require('../services/recommendation.service');
+const { computeTempoMatchScore } = require('../utils/tempoFeature.util');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
 const {
   publicSongCondition,
@@ -149,17 +151,17 @@ exports.uploadSong = async (req, res, next) => {
     await conn.beginTransaction();
     const { title, artist_name, album_title, genre_id, duration_sec } = req.body;
     const releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
-    
+
     const missing = [];
     if (!title) missing.push('title');
     if (!artist_name) missing.push('artist_name');
     if (!genre_id) missing.push('genre_id');
 
     if (missing.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         missing,
-        message: 'Thiếu thông tin bắt buộc' 
+        message: 'Thiếu thông tin bắt buộc'
       });
     }
 
@@ -215,16 +217,16 @@ exports.uploadSong = async (req, res, next) => {
         console.error("Auto fetch artist avatar in uploadSong failed:", error.message);
       });
     }
-    
+
     // Gửi thông báo cho người theo dõi nghệ sĩ (không phải global)
     try {
       const [followers] = await pool.query(
         'SELECT user_id FROM artist_follows WHERE artist_id = ?',
         [artistId]
       );
-      
+
       if (followers.length > 0) {
-        const notificationPromises = followers.map(f => 
+        const notificationPromises = followers.map(f =>
           notificationService.createNotification({
             userId: f.user_id,
             title: 'Nghệ sĩ bạn theo dõi vừa ra mắt bài hát mới!',
@@ -265,7 +267,7 @@ exports.getTrendingSongs = async (req, res, next) => {
   try {
     const userId = getUserId(req);
     let [trending] = await pool.query('SELECT v.*, v.listen_count_week AS weekly_plays FROM v_trending_songs_weekly v ORDER BY v.listen_count_week DESC LIMIT 10');
-    
+
     if (trending.length < 10) {
       const [popular] = await pool.query(`
         SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url,
@@ -313,9 +315,9 @@ exports.getRecommendedSongs = async (req, res, next) => {
         ORDER BY match_score DESC, s.play_count DESC, RAND()
         LIMIT 30
       `, [followedArtistIds, genreIds]);
-      
+
       recommended = songs;
-    } 
+    }
 
     if (recommended.length === 0) {
       const [popular] = await pool.query(`
@@ -643,8 +645,8 @@ exports.getSuggestions = async (req, res, next) => {
     let playlistSuggestions = [];
     try {
       const reqUserId = req.user?.id || null;
-      const plWhere = reqUserId 
-          ? `(p.is_public = 1 OR p.is_system = 1 OR p.user_id = ${pool.escape(reqUserId)})` 
+      const plWhere = reqUserId
+          ? `(p.is_public = 1 OR p.is_system = 1 OR p.user_id = ${pool.escape(reqUserId)})`
           : `(p.is_public = 1 OR p.is_system = 1)`;
 
       const [pResult] = await pool.query(`
@@ -655,14 +657,14 @@ exports.getSuggestions = async (req, res, next) => {
           CASE WHEN p.name LIKE ? OR p.name LIKE ? THEN 0 ELSE 1 END
         LIMIT 2
       `, [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent, searchTerm, searchTermNoAccent]);
-      
+
       playlistSuggestions = pResult;
     } catch (plErr) {
       console.warn('Playlist suggestion warning:', plErr);
     }
 
     const rawSuggestions = [...artistSuggestions, ...titleSuggestions, ...albumSuggestions, ...playlistSuggestions];
-    
+
     const suggestions = rawSuggestions.map(item => {
       let imageUrl = null;
       if (item.type === 'song') {
@@ -881,7 +883,7 @@ exports.recordListen = async (req, res, next) => {
 
     listen_duration = Number(listen_duration) || 0;
     song_duration = Number(song_duration) || 0;
-    
+
     // Nếu frontend không gửi completion_rate thì backend tự tính
     if (completion_rate === undefined && song_duration > 0) {
       completion_rate = listen_duration / song_duration;
@@ -908,7 +910,7 @@ exports.recordListen = async (req, res, next) => {
     else if (completion_rate >= 0.3) implicit_rating = 3.0;
     else if (is_skipped) implicit_rating = 1.0;
     else if (in_progress) implicit_rating = 2.0; // Tạm thời
-    
+
     if (liked) implicit_rating = Math.min(5.0, implicit_rating + 1.0);
 
     let finalHistoryId = history_id;
@@ -927,7 +929,7 @@ exports.recordListen = async (req, res, next) => {
       }
 
       await pool.query(`
-        UPDATE listening_history 
+        UPDATE listening_history
         SET listen_duration = ?, completion_rate = ?, is_completed = ?, is_skipped = ?, implicit_rating = ?
         WHERE id = ? AND user_id = ?
       `, [listen_duration, completion_rate, is_completed, is_skipped, implicit_rating, history_id, userId]);
@@ -961,8 +963,8 @@ exports.recordListen = async (req, res, next) => {
       await pool.query('UPDATE songs SET play_count = COALESCE(play_count, 0) + 1 WHERE id = ?', [songId]);
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Đã ghi nhận lịch sử nghe nhạc',
       data: {
         history_id: finalHistoryId,
@@ -1222,6 +1224,38 @@ exports.getRelatedSongs = async (req, res, next) => {
       }
     }
 
+    try {
+      const featureMap = await recommendationService.fetchAudioFeaturesForSongs([
+        Number(songId),
+        ...relatedSongs.map((row) => row.id),
+      ]);
+      const seedFeature = featureMap.get(Number(songId));
+      if (seedFeature) {
+        relatedSongs.sort((a, b) => {
+          const fa = featureMap.get(Number(a.id));
+          const fb = featureMap.get(Number(b.id));
+          const scoreFeature = (row, feature) => {
+            if (!feature) return 0.5;
+            const tempo = computeTempoMatchScore(feature, { tempoBucket: seedFeature.tempo_bucket });
+            const energyDistance = Math.abs(Number(feature.energy_score ?? 0.5) - Number(seedFeature.energy_score ?? 0.5));
+            const danceDistance = Math.abs(Number(feature.danceability_score ?? 0.5) - Number(seedFeature.danceability_score ?? 0.5));
+            const brightnessDistance = Math.abs(Number(feature.brightness_score ?? 0.5) - Number(seedFeature.brightness_score ?? 0.5));
+            const audioSimilarity = tempo * 0.45
+              + Math.max(0, 1 - energyDistance) * 0.25
+              + Math.max(0, 1 - danceDistance) * 0.20
+              + Math.max(0, 1 - brightnessDistance) * 0.10;
+            const metadataSimilarity = (row.genre_id === currentSong.genre_id ? 0.25 : 0)
+              + (row.artist_id === currentSong.artist_id ? 0.25 : 0)
+              + (row.album_id && row.album_id === currentSong.album_id ? 0.1 : 0);
+            return audioSimilarity * 0.6 + metadataSimilarity;
+          };
+          return scoreFeature(b, fb) - scoreFeature(a, fa);
+        });
+      }
+    } catch (audioSimilarityErr) {
+      console.warn('[RelatedSongs] audio similarity skipped:', audioSimilarityErr.message);
+    }
+
     res.json({
       success: true,
       data: relatedSongs.map(row => ({
@@ -1351,9 +1385,9 @@ exports.getAutoContinueSongs = async (req, res, next) => {
         if (selectedRows.length >= limit) break;
         const key = String(row.id);
         const aId = String(row.artist_id);
-        
+
         if (selectedIds.has(key)) continue;
-        
+
         const count = artistCounts[aId] || 0;
         if (count >= 2) continue; // Bắt buộc: đa dạng nghệ sĩ (tối đa 2 bài / 1 nghệ sĩ)
 

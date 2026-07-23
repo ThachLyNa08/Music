@@ -32,25 +32,41 @@ exports.getUsersOverview = async (req, res, next) => {
     `);
 
     // 1. New users
-    const [newUsers] = await pool.query('SELECT id, display_name, created_at FROM users WHERE role = "user" ORDER BY created_at DESC LIMIT 3');
+    let newUsers = [];
+    try {
+      const [rows] = await pool.query('SELECT id, display_name, created_at FROM users WHERE role = "user" ORDER BY created_at DESC LIMIT 3');
+      newUsers = rows;
+    } catch(e) {}
 
     // 2. New playlists created by users
-    const [newPlaylists] = await pool.query(`
-      SELECT p.name, p.created_at, u.display_name
-      FROM playlists p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.is_system = 0 AND p.user_id IS NOT NULL
-      ORDER BY p.created_at DESC LIMIT 3
-    `);
+    let newPlaylists = [];
+    try {
+      const [rows] = await pool.query(`
+        SELECT p.name, p.created_at, u.display_name
+        FROM playlists p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.is_system = 0 AND p.user_id IS NOT NULL
+        ORDER BY p.created_at DESC LIMIT 3
+      `);
+      newPlaylists = rows;
+    } catch(e) {}
 
-    // 3. Recent listens
-    const [recentListens] = await pool.query(`
-      SELECT u.id, u.display_name, s.title as song_title, lh.listened_at as created_at
-      FROM listening_history lh
-      JOIN users u ON lh.user_id = u.id
-      JOIN songs s ON lh.song_id = s.id
-      ORDER BY lh.listened_at DESC LIMIT 3
-    `);
+    // 3. Recent listens (optimized)
+    let recentListens = [];
+    try {
+      const [rows] = await pool.query(`
+        SELECT u.id, u.display_name, s.title as song_title, lh.created_at as created_at
+        FROM (
+          SELECT user_id, song_id, created_at
+          FROM listening_history
+          ORDER BY created_at DESC
+          LIMIT 3
+        ) lh
+        JOIN users u ON lh.user_id = u.id
+        JOIN songs s ON lh.song_id = s.id
+      `);
+      recentListens = rows;
+    } catch(e) {}
 
     // Combine and sort
     let allActivities = [];

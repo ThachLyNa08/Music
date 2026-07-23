@@ -139,6 +139,15 @@ function sanitizeAiPlaylistIntent(intent) {
     safe.explanation = String(intent?.explanation || '').trim();
     safe.raw.prompt = String(intent?.raw?.prompt || '');
     safe.raw.matchedKeywords = uniqueStrings(intent?.raw?.matchedKeywords);
+    if (intent?.tempoIntent && typeof intent.tempoIntent === 'object') {
+        safe.tempoIntent = {
+            tempoBucket: intent.tempoIntent.tempoBucket || null,
+            energyTarget: intent.tempoIntent.energyTarget || null,
+            danceabilityTarget: intent.tempoIntent.danceabilityTarget || null,
+            activity: intent.tempoIntent.activity || null,
+            label: intent.tempoIntent.label || null
+        };
+    }
 
     return safe;
 }

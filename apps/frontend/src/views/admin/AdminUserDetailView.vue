@@ -6,7 +6,7 @@
         <MfIcon name="arrow_back" size="16" />
         Quay lại
       </div>
-      
+
       <div class="header-main">
         <div class="user-profile">
           <img v-if="user.avatar_url" :src="normalizeImageUrl(user.avatar_url, 'user')" class="avatar" />
@@ -36,8 +36,8 @@
           <button class="btn-action" :class="{ 'unlock': user.status === 'locked' }" @click="toggleStatus">
             {{ user.status === 'locked' ? 'Mở khóa' : 'Khóa' }}
           </button>
-          <button class="btn-action premium" @click="openPremiumModal">
-            Gia hạn
+          <button v-if="isPremiumExpiringSoon" class="btn-action premium" @click="remindPremium">
+            Nhắc gia hạn
           </button>
         </div>
       </div>
@@ -134,7 +134,7 @@
                       <h3 class="font-bold text-slate-800 m-0 leading-none">Engagement Score</h3>
                       <div class="relative group flex items-center -mt-0.5">
                         <MfIcon name="info" size="16" class="text-slate-400 cursor-pointer hover:text-violet-500 transition-colors" />
-                        
+
                         <!-- Tooltip -->
                         <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 pointer-events-none text-left font-normal">
                           <div class="font-bold mb-1 text-violet-300">Công thức khái quát:</div>
@@ -178,7 +178,7 @@
                         {{ getEngagementLabel(engagementData.engagementScore) }}
                       </div>
                     </div>
-                    
+
                     <div class="w-full mt-2 space-y-3 text-sm">
                       <div class="flex justify-between border-b border-slate-100 pb-2">
                         <span class="text-slate-500">Nguy cơ churn</span>
@@ -208,7 +208,7 @@
                       <span class="w-4 h-4 rounded-md bg-emerald-800"></span> Nhiều
                     </div>
                   </div>
-                  
+
                   <div v-if="heatmapLoading" class="flex-1 flex justify-center items-center py-8">
                     <div class="spinner"></div>
                   </div>
@@ -220,7 +220,7 @@
                       <!-- Weeks -->
                       <div v-for="(week, wIdx) in heatmapWeeks" :key="'w'+wIdx" class="flex flex-row gap-2">
                         <!-- Days in week -->
-                        <div v-for="(day, dIdx) in week" :key="'d'+dIdx" 
+                        <div v-for="(day, dIdx) in week" :key="'d'+dIdx"
                              class="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-md transition-all hover:scale-110 hover:shadow-sm"
                              :class="getHeatmapColor(day?.count)"
                              :title="day && day.date ? `${formatDateTitle(day.date)}: ${day.count} lượt nghe, ${Math.round(day.minutes)} phút` : ''"
@@ -256,9 +256,9 @@
             <div class="card">
               <h3>Top Bài Hát Nghe Nhiều</h3>
               <ul v-if="musicTaste.topSongs.length" class="simple-list">
-                <li v-for="(song, i) in musicTaste.topSongs" :key="song.id" 
-                    class="group flex items-center gap-3 rounded-xl px-2 py-2 cursor-pointer hover:bg-slate-50 transition -mx-2" 
-                    title="Mở chi tiết bài hát" 
+                <li v-for="(song, i) in musicTaste.topSongs" :key="song.id"
+                    class="group flex items-center gap-3 rounded-xl px-2 py-2 cursor-pointer hover:bg-slate-50 transition -mx-2"
+                    title="Mở chi tiết bài hát"
                     @click="goToAdminSong(song)">
                   <span class="rank">{{ i + 1 }}</span>
                   <img :src="normalizeImageUrl(song.cover_url)" class="tiny-cover" @error="handleImageError" />
@@ -271,7 +271,7 @@
               </ul>
               <div v-else class="empty-text">Chưa có bài hát nào.</div>
             </div>
-            
+
             <div class="card">
               <h3>Top Nghệ Sĩ Nghe Nhiều</h3>
               <ul v-if="musicTaste.topArtists.length" class="simple-list">
@@ -429,17 +429,17 @@
                       </span>
                     </div>
                   </div>
-                  
+
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.manual.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.manual.updated_at ? new Date(highlightPlaylists.manual.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
                     <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.manual.description || 'Không có mô tả' }}</p>
-                    
+
                     <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-violet-50 hover:text-violet-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.manual)">Xem chi tiết</button>
                     </div>
                   </div>
-                  
+
                   <!-- Tracklist Expand -->
                   <div class="overflow-hidden transition-all duration-500 bg-slate-50 border-t border-slate-100" :style="{ maxHeight: expandedTracklist === 'manual' ? '400px' : '0px', opacity: expandedTracklist === 'manual' ? 1 : 0 }">
                     <div class="p-4 space-y-2" v-if="highlightPlaylists.manual.songs?.length">
@@ -500,12 +500,12 @@
                       </span>
                     </div>
                   </div>
-                  
+
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.system.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.system.updated_at ? new Date(highlightPlaylists.system.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
                     <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.system.description || 'Không có mô tả' }}</p>
-                    
+
                     <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.system)">Chi tiết</button>
                       <button class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-blue-500 hover:text-white rounded-lg text-slate-600 transition-colors" title="Làm mới" @click.stop="regenerateUserPlaylist(highlightPlaylists.system)">
@@ -513,7 +513,7 @@
                       </button>
                     </div>
                   </div>
-                  
+
                   <!-- Tracklist Expand -->
                   <div class="overflow-hidden transition-all duration-500 bg-slate-50 border-t border-slate-100" :style="{ maxHeight: expandedTracklist === 'system' ? '400px' : '0px', opacity: expandedTracklist === 'system' ? 1 : 0 }">
                     <div class="p-4 space-y-2" v-if="highlightPlaylists.system.songs?.length">
@@ -574,12 +574,12 @@
                       </span>
                     </div>
                   </div>
-                  
+
                   <div class="p-5 flex flex-col flex-1">
                     <h3 class="font-bold text-lg truncate text-slate-800">{{ highlightPlaylists.ai.name }}</h3>
                     <p class="text-xs text-slate-500 mt-1 mb-3">Cập nhật: {{ highlightPlaylists.ai.updated_at ? new Date(highlightPlaylists.ai.updated_at).toLocaleDateString('vi-VN') : 'N/A' }}</p>
                     <p class="text-sm text-slate-600 mb-2 line-clamp-2">{{ highlightPlaylists.ai.description || 'Gợi ý tự động từ AI' }}</p>
-                    
+
                     <div class="flex items-center justify-between">
                       <button class="px-3 py-1.5 bg-slate-100 hover:bg-cyan-50 hover:text-cyan-600 rounded-lg text-sm font-medium transition-colors" @click.stop="viewPlaylistDetail(highlightPlaylists.ai)">Chi tiết</button>
                       <button class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-cyan-500 hover:text-white rounded-lg text-slate-600 transition-colors" title="Làm mới" @click.stop="regenerateUserPlaylist(highlightPlaylists.ai)">
@@ -587,7 +587,7 @@
                       </button>
                     </div>
                   </div>
-                  
+
                   <!-- Tracklist Expand -->
                   <div class="overflow-hidden transition-all duration-500 bg-slate-50 border-t border-slate-100" :style="{ maxHeight: expandedTracklist === 'ai' ? '400px' : '0px', opacity: expandedTracklist === 'ai' ? 1 : 0 }">
                     <div class="p-4 space-y-2" v-if="highlightPlaylists.ai.songs?.length">
@@ -669,41 +669,46 @@
 
         <!-- 4. PREMIUM & GIAO DỊCH -->
         <div v-if="currentTab === 'premium'" class="tab-pane">
-          <div class="card mb-4 premium-card" :class="premium.status">
-            <h3>Trạng thái Gói Cước</h3>
-            <div class="status-big">
-              {{ premium.status === 'active' ? 'Đang sử dụng Premium' : (premium.status === 'expired' ? 'Premium Đã Hết Hạn' : 'Gói Miễn Phí') }}
+          <div class="grid grid-cols-1 xl:[grid-template-columns:minmax(360px,0.9fr)_minmax(0,1.4fr)] gap-6">
+            <div class="card premium-card h-max" :class="premium.status">
+              <h3>Trạng thái Gói Cước</h3>
+              <div class="status-big">
+                {{ premium.status === 'active' ? 'Đang sử dụng Premium' : (premium.status === 'expired' ? 'Premium Đã Hết Hạn' : 'Gói Miễn Phí') }}
+              </div>
+              <p v-if="premium.expiresAt" class="expiry-text">
+                Hết hạn vào: <strong>{{ new Date(premium.expiresAt).toLocaleDateString('vi-VN') }}</strong>
+              </p>
+              <p class="mt-4 text-sm text-slate-500 max-w-lg mx-auto leading-relaxed">
+                * Quản lý Premium: Việc nâng cấp và gia hạn được tự động hóa qua hệ thống thanh toán (SePay). Quản trị viên chỉ có thể "Nhắc gia hạn" đối với các tài khoản sắp hết hạn, không can thiệp thủ công vào thời hạn để đảm bảo tính toàn vẹn của giao dịch.
+              </p>
             </div>
-            <p v-if="premium.expiresAt" class="expiry-text">
-              Hết hạn vào: <strong>{{ new Date(premium.expiresAt).toLocaleDateString('vi-VN') }}</strong>
-            </p>
-          </div>
 
-          <div class="card">
-            <h3>Lịch sử Giao dịch (5 gần nhất)</h3>
-            <table v-if="premium.recentTransactions.length" class="data-table">
-              <thead>
-                <tr>
-                  <th>Mã GD</th>
-                  <th>Số tiền</th>
-                  <th>Trạng thái</th>
-                  <th>Thời gian</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="trx in premium.recentTransactions" :key="trx.id">
-                  <td>#{{ trx.id }}</td>
-                  <td class="font-bold">{{ formatCurrency(trx.amount) }}</td>
-                  <td>
-                    <span class="badge" :class="trx.status === 'paid' || trx.status === 'success' ? 'active' : 'free'">
-                      {{ trx.status }}
-                    </span>
-                  </td>
-                  <td>{{ new Date(trx.created_at).toLocaleString('vi-VN') }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="empty-text">Chưa có giao dịch nào.</div>
+            <div class="card h-max">
+              <h3>Lịch sử Giao dịch (5 gần nhất)</h3>
+              <table v-if="premium.recentTransactions.length" class="data-table">
+                <thead>
+                  <tr>
+                    <th>Mã GD</th>
+                    <th>Số tiền</th>
+                    <th>Trạng thái</th>
+                    <th>Thời gian</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="trx in premium.recentTransactions" :key="trx.id">
+                    <td>#{{ trx.id }}</td>
+                    <td class="font-bold">{{ formatCurrency(trx.amount) }}</td>
+                    <td>
+                      <span class="badge" :class="trx.status === 'paid' || trx.status === 'success' ? 'active' : 'free'">
+                        {{ trx.status }}
+                      </span>
+                    </td>
+                    <td>{{ new Date(trx.created_at).toLocaleString('vi-VN') }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty-text">Chưa có giao dịch nào.</div>
+            </div>
           </div>
         </div>
 
@@ -719,7 +724,7 @@
               <div class="p-4 bg-white rounded-xl border border-purple-100 shadow-sm flex flex-col justify-center">
                 <span class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Chiến lược hiện tại</span>
                 <span class="text-lg font-bold text-purple-700">
-                  {{ recommendation.strategy === 'cold_start' ? 'Cold Start' : 'Hybrid (BPR-MF + CB)' }}
+                  {{ recommendation.strategy === 'cold_start' ? 'Cold Start' : 'LightGCN Hybrid V4' }}
                 </span>
                 <span class="text-xs text-slate-400 mt-1">{{ recommendation.strategy === 'cold_start' ? 'Dành cho người dùng mới' : 'Kết hợp hành vi & nội dung' }}</span>
               </div>
@@ -795,11 +800,11 @@
                 <h3>Bài hát đề xuất cho người dùng</h3>
                 <p class="text-sm text-slate-500 mt-1 mb-4">Dựa trên lịch sử nghe, thể loại yêu thích và mô hình recommendation hiện có.</p>
               </div>
-              
+
               <div v-if="recommendedSongsLoading" class="flex justify-center items-center py-8 shrink-0">
                 <div class="spinner"></div>
               </div>
-              
+
               <div v-else-if="recommendedSongsError" class="p-4 text-center bg-rose-50 rounded-lg border border-rose-100 text-rose-600 text-sm shrink-0">
                 {{ recommendedSongsError }}
               </div>
@@ -808,16 +813,16 @@
                 <div class="flex flex-col gap-2">
                   <div v-for="(song, i) in recommendedSongs" :key="song.song_id || i" class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
                   <span class="text-slate-400 font-medium w-6 text-center text-sm shrink-0">{{ i + 1 }}</span>
-                  
-                  <img 
-                    :src="song.cover_url || '/images/default-cover.svg'" 
-                    @error="handleImageError" 
+
+                  <img
+                    :src="song.cover_url || '/images/default-cover.svg'"
+                    @error="handleImageError"
                     class="w-12 h-12 rounded-md object-cover shrink-0 shadow-sm cursor-pointer"
                     @click="goToAdminSong(song)"
                   />
-                  
+
                   <div class="min-w-0 flex-1 flex flex-col justify-center">
-                    <p 
+                    <p
                       class="truncate font-semibold text-slate-800 transition-colors w-max max-w-full cursor-pointer hover:text-violet-600"
                       @click="goToAdminSong(song)"
                     >
@@ -836,7 +841,7 @@
                       {{ song.artist_name || 'Không rõ nghệ sĩ' }}
                     </p>
                   </div>
-                  
+
                   <div class="flex-shrink-0 flex flex-col items-end gap-1">
                     <span v-if="song.genre" class="badge-tag bg-slate-100 text-slate-600">{{ song.genre }}</span>
                     <span v-if="song.strategy" class="text-[10px] uppercase font-bold tracking-wider text-slate-400" :title="song.reason">{{ song.strategy.replace('_', ' ') }}</span>
@@ -855,7 +860,7 @@
             </div>
           </div>
         </div>
-        
+
         <!-- 6. HOẠT ĐỘNG GẦN ĐÂY -->
         <div v-if="currentTab === 'activity'" class="tab-pane">
            <div class="card">
@@ -881,36 +886,6 @@
   </div>
 </div>
 
-    <!-- Premium Manager Modal (Reused logic) -->
-    <div v-if="showPremiumModal" class="modal-overlay">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2>Gia hạn Gói Premium</h2>
-          <button class="close-btn" @click="showPremiumModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>Chọn thời gian gia hạn</label>
-            <div class="premium-options">
-              <button class="btn-premium-opt" @click="setPremiumExpiry(30)">+30 ngày (1 tháng)</button>
-              <button class="btn-premium-opt" @click="setPremiumExpiry(90)">+90 ngày (3 tháng)</button>
-              <button class="btn-premium-opt" @click="setPremiumExpiry(365)">+365 ngày (1 năm)</button>
-              <button class="btn-premium-opt cancel" @click="setPremiumExpiry(0)">Hủy gói Premium</button>
-            </div>
-          </div>
-          <div class="form-group custom-date">
-            <label>Hoặc chọn ngày hết hạn cụ thể</label>
-            <input type="date" v-model="customExpiryDate" class="form-input" />
-          </div>
-          <div class="modal-footer">
-            <button class="btn-secondary" @click="showPremiumModal = false">Đóng</button>
-            <button class="btn-primary" @click="saveCustomPremiumExpiry" :disabled="savingPremium">
-              {{ savingPremium ? 'Đang lưu...' : 'Xác nhận thay đổi' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
     <!-- Playlist Detail Modal -->
     <div class="modal-overlay" v-if="drawerPlaylist" @click.self="drawerPlaylist = null">
       <div class="modal-card" style="max-height: 90vh; display: flex; flex-direction: column; width: 700px; max-width: 90vw;">
@@ -935,7 +910,7 @@
           <div class="flex-1">
             <h2 class="text-2xl font-bold mb-2 text-slate-800">{{ drawerPlaylist.name }}</h2>
             <p class="text-slate-500 mb-4">{{ drawerPlaylist.description || 'Không có mô tả' }}</p>
-            
+
             <div class="flex flex-col gap-2 text-sm text-slate-700 mb-5">
               <div v-if="drawerPlaylist.system_key"><span class="font-semibold w-24 inline-block">System Key:</span> <span class="system-key-badge bg-slate-100 px-2 py-1 rounded text-xs font-mono">{{ drawerPlaylist.system_key }}</span></div>
               <div><span class="font-semibold w-24 inline-block">Số bài hát:</span> {{ drawerPlaylist.song_count }}</div>
@@ -958,16 +933,16 @@
           <li v-for="(song, i) in drawerSongs" :key="song.id" class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 transition">
             <span class="text-slate-400 font-medium w-6 text-center text-sm shrink-0">{{ i + 1 }}</span>
             <div class="flex flex-1 min-w-0 items-center gap-3">
-              <img 
-                :src="normalizeImageUrl(song.cover_url)" 
-                @error="handleImageError" 
+              <img
+                :src="normalizeImageUrl(song.cover_url)"
+                @error="handleImageError"
                 class="w-10 h-10 rounded-md object-cover shrink-0 shadow-sm"
                 :class="{'cursor-pointer': (song.song_id || song.id)}"
                 @click="(song.song_id || song.id) ? goToAdminSong(song) : null"
               />
               <div class="min-w-0 flex-1 flex flex-col justify-center">
-                <p 
-                  class="truncate font-semibold text-slate-800 transition-colors w-max max-w-full" 
+                <p
+                  class="truncate font-semibold text-slate-800 transition-colors w-max max-w-full"
                   :class="{'cursor-pointer hover:text-violet-600': (song.song_id || song.id)}"
                   @click="(song.song_id || song.id) ? goToAdminSong(song) : null"
                 >
@@ -998,7 +973,7 @@
     </div>
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -1081,10 +1056,34 @@ const loading = ref(true)
 const error = ref(null)
 const currentTab = ref('overview')
 
-// Modal states
-const showPremiumModal = ref(false)
-const savingPremium = ref(false)
-const customExpiryDate = ref('')
+// Premium Actions
+const isPremiumExpiringSoon = computed(() => {
+  if (premium.value.status !== 'active' || !premium.value.expiresAt) return false
+  const expiry = new Date(premium.value.expiresAt)
+  const now = new Date()
+  const diffTime = expiry - now
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays >= 0 && diffDays <= 7
+})
+
+
+
+function remindPremium() {
+  openConfirm({
+    title: 'Nhắc gia hạn Premium?',
+    message: `Hệ thống sẽ gửi thông báo nhắc gia hạn đến người dùng "${user.value.display_name}".`,
+    confirmText: 'Gửi nhắc nhở',
+    type: 'default',
+    action: async () => {
+      try {
+        await api.post(`/admin/premium/users/${userId}/remind-expiring`)
+        toast.showToast('Đã gửi nhắc nhở gia hạn', 'success')
+      } catch (err) {
+        toast.showToast(err.response?.data?.message || 'Không thể gửi nhắc nhở', 'error')
+      }
+    }
+  })
+}
 
 // Data
 const user = ref(null)
@@ -1157,9 +1156,9 @@ const highlightPlaylists = computed(() => {
   }
 })
 
-const totalPlaylistsCount = computed(() => 
-  (userPlaylists.value.created?.length || 0) + 
-  (userPlaylists.value.system?.length || 0) + 
+const totalPlaylistsCount = computed(() =>
+  (userPlaylists.value.created?.length || 0) +
+  (userPlaylists.value.system?.length || 0) +
   (userPlaylists.value.ai?.length || 0)
 )
 
@@ -1227,7 +1226,7 @@ function formatRelativeTime(dateStr) {
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)
-  
+
   if (diffMins < 60) return `${diffMins} phút trước`
   if (diffHours < 24) return `${diffHours} giờ trước`
   return `${diffDays} ngày trước`
@@ -1248,45 +1247,45 @@ function formatDateTitle(dateStr) {
 
 const heatmapWeeks = computed(() => {
   if (!heatmapData.value || heatmapData.value.length === 0) return []
-  
+
   // Create last 30 days grid
   const today = new Date()
   today.setHours(0,0,0,0)
-  
+
   const startDate = new Date(today)
   startDate.setDate(today.getDate() - 29) // 30 days ago (including today)
-  
+
   // Align start date to Sunday (0)
   while (startDate.getDay() !== 0) {
     startDate.setDate(startDate.getDate() - 1)
   }
-  
+
   const dataMap = {}
   heatmapData.value.forEach(d => {
     // API returns local YYYY-MM-DD
     dataMap[d.date] = d
   })
-  
+
   const weeks = []
   let currentWeek = []
   let currDate = new Date(startDate)
-  
+
   while (currDate <= today || currentWeek.length > 0) {
     const y = currDate.getFullYear()
     const m = String(currDate.getMonth() + 1).padStart(2, '0')
     const dStr = String(currDate.getDate()).padStart(2, '0')
     const key = `${y}-${m}-${dStr}`
-    
+
     currentWeek.push(dataMap[key] || { date: key, count: 0, minutes: 0 })
-    
+
     if (currentWeek.length === 7) {
       weeks.push(currentWeek)
       currentWeek = []
     }
-    
+
     currDate.setDate(currDate.getDate() + 1)
   }
-  
+
   return weeks
 })
 
@@ -1344,13 +1343,13 @@ const trendChartOptions = {
     }
   },
   scales: {
-    y: { 
-      beginAtZero: true, 
+    y: {
+      beginAtZero: true,
       grid: { display: false, drawBorder: false },
       ticks: { precision: 0 }
     },
-    x: { 
-      grid: { display: false, drawBorder: false } 
+    x: {
+      grid: { display: false, drawBorder: false }
     }
   }
 }
@@ -1532,8 +1531,8 @@ function toggleRole() {
   const isDemote = user.value.role === 'admin'
   openConfirm({
     title: isDemote ? 'Hạ quyền Admin?' : 'Thăng cấp Admin?',
-    message: isDemote 
-      ? `Bạn có chắc muốn hạ quyền quản trị của "${user.value.display_name}"?` 
+    message: isDemote
+      ? `Bạn có chắc muốn hạ quyền quản trị của "${user.value.display_name}"?`
       : `Người dùng "${user.value.display_name}" sẽ có quyền truy cập khu vực quản trị.`,
     confirmText: isDemote ? 'Hạ quyền' : 'Thăng cấp',
     type: 'warning',
@@ -1552,7 +1551,7 @@ function toggleRole() {
 function toggleStatus() {
   const newStatus = user.value.status === 'locked' ? 'active' : 'locked'
   const isLocked = user.value.status === 'locked'
-  
+
   openConfirm({
     title: isLocked ? 'Mở khóa tài khoản?' : 'Khóa tài khoản?',
     message: isLocked
@@ -1572,47 +1571,7 @@ function toggleStatus() {
   })
 }
 
-function openPremiumModal() {
-  customExpiryDate.value = user.value.premium_expires_at 
-    ? new Date(user.value.premium_expires_at).toISOString().split('T')[0]
-    : ''
-  showPremiumModal.value = true
-}
 
-async function setPremiumExpiry(days) {
-  savingPremium.value = true
-  try {
-    let expiry = null
-    if (days > 0) {
-      const d = new Date()
-      d.setDate(d.getDate() + days)
-      expiry = d.toISOString()
-    }
-    await api.put(`/admin/users/${userId}/premium`, { premium_expires_at: expiry })
-    showPremiumModal.value = false
-    await fetchUserDetail()
-    toast.showToast('Cập nhật Premium thành công', 'success')
-  } catch (err) {
-    toast.showToast('Thao tác thất bại', 'error')
-  } finally {
-    savingPremium.value = false
-  }
-}
-
-async function saveCustomPremiumExpiry() {
-  savingPremium.value = true
-  try {
-    const expiry = customExpiryDate.value ? new Date(customExpiryDate.value).toISOString() : null
-    await api.put(`/admin/users/${userId}/premium`, { premium_expires_at: expiry })
-    showPremiumModal.value = false
-    await fetchUserDetail()
-    toast.showToast('Cập nhật Premium thành công', 'success')
-  } catch (err) {
-    toast.showToast('Thao tác thất bại', 'error')
-  } finally {
-    savingPremium.value = false
-  }
-}
 
 onMounted(() => {
   fetchUserDetail()
@@ -1710,7 +1669,7 @@ onMounted(() => {
   display: flex; gap: 8px; margin-top: 4px;
 }
 .badge {
-  padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; text-transform: uppercase;
 }
 .badge.role.admin { background: rgba(253, 121, 168, 0.12); color: #e84393; }
 .badge.role.user { background: rgba(116, 185, 255, 0.12); color: #0984e3; }
@@ -1724,8 +1683,8 @@ onMounted(() => {
   display: flex; gap: 10px;
 }
 .btn-action {
-  background: #f1f2f6; border: 1px solid #dfe6e9; padding: 10px 16px; border-radius: 12px;
-  font-size: 13px; font-weight: 700; cursor: pointer; color: #2d3436; transition: all 0.2s;
+  background: #f1f2f6; border: 1px solid #dfe6e9; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer; color: #2d3436; transition: all 0.2s;
 }
 .btn-action:hover { background: #dfe6e9; transform: translateY(-2px); }
 .btn-action.unlock { background: rgba(85, 239, 196, 0.1); color: #00b894; border-color: rgba(85, 239, 196, 0.3); }
@@ -1744,8 +1703,8 @@ onMounted(() => {
   display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid #f0f2f5; padding-bottom: 12px; overflow-x: auto;
 }
 .tab-btn {
-  background: transparent; border: none; padding: 10px 16px; border-radius: 12px;
-  font-size: 14px; font-weight: 700; color: #636e72; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  background: transparent; border: none; padding: 6px 12px; border-radius: 8px;
+  font-size: 13px; font-weight: 700; color: #636e72; cursor: pointer; transition: all 0.2s; white-space: nowrap;
 }
 .tab-btn:hover { background: #f8f9fa; color: #2d3436; }
 .tab-btn.active { background: rgba(162, 155, 254, 0.1); color: #6c5ce7; }
@@ -1788,8 +1747,8 @@ onMounted(() => {
 
 /* Data Table */
 .data-table { width: 100%; border-collapse: collapse; text-align: left; }
-.data-table th { padding: 12px; color: #b2bec3; font-size: 12px; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid #f0f2f5; }
-.data-table td { padding: 16px 12px; border-bottom: 1px solid #f8f9fa; font-size: 14px; color: #2d3436; }
+.data-table th { padding: 8px 12px; color: #b2bec3; font-size: 11px; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid #f0f2f5; }
+.data-table td { padding: 12px 12px; border-bottom: 1px solid #f8f9fa; font-size: 13px; color: #2d3436; }
 
 /* Empty Text */
 .empty-text { color: #b2bec3; font-size: 14px; font-style: italic; }
@@ -1821,9 +1780,9 @@ onMounted(() => {
 .act-meta { display: inline-block; background: #f8f9fa; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #a29bfe; }
 
 /* Premium special classes */
-.premium-card { text-align: center; padding: 40px 20px; }
+.premium-card { text-align: center; padding: 24px 20px; }
 .premium-card.active { background: linear-gradient(135deg, rgba(253, 121, 168, 0.1), rgba(162, 155, 254, 0.1)); border-color: rgba(253, 121, 168, 0.2); }
-.status-big { font-size: 28px; font-weight: 900; color: #e84393; margin-bottom: 8px; }
+.status-big { font-size: 20px; font-weight: 900; color: #e84393; margin-bottom: 4px; }
 .premium-card.free .status-big { color: #636e72; }
 .badge-tag { background: #f1f2f6; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; color: #2d3436; }
 

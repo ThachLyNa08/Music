@@ -28,7 +28,7 @@
         </p>
 
       </div>
-      
+
     </div>
   </section>
 </template>
@@ -150,8 +150,8 @@ const greetingSubtitle = computed(() => {
   color: #fff;
   font-size: 13px;
   font-weight: 800;
-  background: rgba(255,255,255,0.13);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
   backdrop-filter: blur(18px);
   margin-bottom: 12px;
 }
@@ -161,7 +161,7 @@ const greetingSubtitle = computed(() => {
   height: 12px;
   border-radius: 999px;
   background: #facc15;
-  box-shadow: 0 0 18px rgba(250,204,21,0.55);
+  box-shadow: 0 0 10px rgba(250,204,21,0.3);
 }
 
 .hero-title {
@@ -175,10 +175,10 @@ const greetingSubtitle = computed(() => {
 
 .hero-subtitle {
   margin: 12px 0 0;
-  color: rgba(255,255,255,0.72);
+  color: rgba(255,255,255,0.65);
   font-size: clamp(15px, 1.3vw, 18px);
   line-height: 1.35;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 

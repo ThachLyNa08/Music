@@ -2,9 +2,24 @@ const { pool } = require('../config/database');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
 const { getArtistStats } = require('../services/artistStats.service');
 const notificationService = require('../services/notification.service');
+const { evaluateSongSubmission, evaluateAlbumSubmission } = require('../services/artistContentModeration.service');
+const { calculateFileSha256 } = require('../utils/fileHash.util');
+const { findDuplicateAudioHash } = require('../services/audioDuplicate.service');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+
+function computeFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    if (!filePath || !fs.existsSync(filePath)) return resolve(null);
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', err => reject(err));
+  });
+}
 
 let cachedUserColumns = null;
 async function getUserColumns() {
@@ -14,8 +29,59 @@ async function getUserColumns() {
   return cachedUserColumns;
 }
 
+let schemaEnsured = false;
+async function ensureModerationSchema() {
+  if (schemaEnsured) return;
+  try {
+    const modCols = [
+      { name: 'metadata_score', def: 'INT NOT NULL DEFAULT 0' },
+      { name: 'risk_score', def: 'INT NOT NULL DEFAULT 0' },
+      { name: 'moderation_level', def: "VARCHAR(20) NOT NULL DEFAULT 'normal'" },
+      { name: 'moderation_flags', def: 'JSON NULL' },
+      { name: 'resubmission_count', def: 'INT NOT NULL DEFAULT 0' },
+      { name: 'can_resubmit', def: 'TINYINT(1) NOT NULL DEFAULT 1' },
+      { name: 'resubmit_locked_reason', def: 'TEXT NULL' },
+      { name: 'audio_hash', def: 'VARCHAR(64) NULL' },
+      { name: 'audio_file_size', def: 'BIGINT NULL' },
+      { name: 'audio_mime_type', def: 'VARCHAR(100) NULL' },
+      { name: 'duplicate_reference_song_id', def: 'INT NULL' },
+      { name: 'duplicate_reference_status', def: 'VARCHAR(30) NULL' },
+      { name: 'duplicate_reference_artist_id', def: 'INT NULL' }
+    ];
+
+    for (const col of modCols) {
+      try { await pool.query(`ALTER TABLE songs ADD COLUMN ${col.name} ${col.def}`); } catch (e) {}
+      try { await pool.query(`ALTER TABLE albums ADD COLUMN ${col.name} ${col.def}`); } catch (e) {}
+    }
+    try { await pool.query('CREATE INDEX idx_songs_audio_hash ON songs(audio_hash)'); } catch (e) {}
+    try { await pool.query('CREATE INDEX idx_songs_duplicate_reference_song_id ON songs(duplicate_reference_song_id)'); } catch (e) {}
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS artist_content_review_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        content_type ENUM('song', 'album') NOT NULL,
+        content_id INT NOT NULL,
+        artist_id INT NULL,
+        admin_id INT NULL,
+        action ENUM('submitted', 'approved', 'rejected', 'resubmitted') NOT NULL,
+        reason TEXT NULL,
+        score_snapshot JSON NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_content (content_type, content_id),
+        INDEX idx_artist (artist_id),
+        INDEX idx_action (action)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `).catch(() => {});
+
+    schemaEnsured = true;
+  } catch (err) {
+    console.warn('Auto migration ensure failed:', err.message);
+  }
+}
+
 let cachedSongColumns = null;
 async function getSongColumns() {
+  await ensureModerationSchema();
   if (cachedSongColumns) return cachedSongColumns;
   const [rows] = await pool.query('SHOW COLUMNS FROM songs');
   cachedSongColumns = new Set(rows.map(row => row.Field));
@@ -40,6 +106,7 @@ async function getArtistColumns() {
 
 let cachedAlbumColumns = null;
 async function getAlbumColumns() {
+  await ensureModerationSchema();
   if (cachedAlbumColumns) return cachedAlbumColumns;
   const [rows] = await pool.query('SHOW COLUMNS FROM albums');
   cachedAlbumColumns = new Set(rows.map(row => row.Field));
@@ -641,7 +708,7 @@ exports.getSongs = async (req, res, next) => {
       `SELECT
         s.id, s.title, s.cover_url, s.audio_url, s.duration_sec as duration,
         s.play_count, s.created_at,
-        s.review_status, s.rejection_reason, s.submitted_at, s.reviewed_at,
+        s.review_status, s.rejection_reason, s.resubmission_count, s.can_resubmit, s.resubmit_locked_reason, s.submitted_at, s.reviewed_at,
         ${submissionNoteSelect}
         s.lyrics,
         al.id as album_id, al.title as album_title,
@@ -684,6 +751,9 @@ exports.getSongs = async (req, res, next) => {
         createdAt: r.created_at,
         reviewStatus: r.review_status,
         rejectionReason: r.rejection_reason,
+        resubmissionCount: r.resubmission_count || 0,
+        canResubmit: r.can_resubmit !== 0,
+        resubmitLockedReason: r.resubmit_locked_reason,
         submittedAt: r.submitted_at,
         reviewedAt: r.reviewed_at
       };
@@ -754,7 +824,7 @@ exports.getSongDetail = async (req, res, next) => {
       `SELECT
         s.id, s.title, s.cover_url, s.audio_url, s.duration_sec as duration, s.lyrics,
         s.play_count, s.created_at,
-        s.review_status, s.rejection_reason, s.submitted_at, s.reviewed_at,
+        s.review_status, s.rejection_reason, s.resubmission_count, s.can_resubmit, s.resubmit_locked_reason, s.submitted_at, s.reviewed_at,
         ${submissionNoteSelect}
         al.id as album_id, al.title as album_title,
         g.id as genre_id, g.name as genre_name, g.slug as genre_code,
@@ -800,6 +870,9 @@ exports.getSongDetail = async (req, res, next) => {
         createdAt: r.created_at,
         reviewStatus: r.review_status,
         rejectionReason: r.rejection_reason,
+        resubmissionCount: r.resubmission_count || 0,
+        canResubmit: r.can_resubmit !== 0,
+        resubmitLockedReason: r.resubmit_locked_reason,
         submittedAt: r.submitted_at,
         reviewedAt: r.reviewed_at
       }
@@ -849,6 +922,42 @@ exports.uploadSong = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'File am thanh la bat buoc.' });
     }
 
+    let audioHash = null;
+    let audioFileSize = null;
+    let audioMimeType = null;
+
+    if (req.files && req.files.audio && req.files.audio[0]) {
+      const audioFile = req.files.audio[0];
+      audioFileSize = audioFile.size || null;
+      audioMimeType = audioFile.mimetype || null;
+
+      try {
+        audioHash = await calculateFileSha256(audioFile.path);
+      } catch (err) {
+        console.error('Error calculating file SHA-256 hash:', err);
+      }
+    }
+
+    let dupSong = null;
+    if (audioHash) {
+      dupSong = await findDuplicateAudioHash(audioHash);
+      if (dupSong) {
+        cleanupUploadedFiles(uploadedFiles);
+        if (dupSong.review_status === 'approved') {
+          return res.status(409).json({
+            success: false,
+            code: 'DUPLICATE_AUDIO_APPROVED',
+            message: 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_AUDIO_PENDING',
+          message: 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
+        });
+      }
+    }
+
     const artistGenre = await resolveArtistUploadGenre(artistId);
     const genre = artistGenre?.genre?.id || null;
     if (!genre) {
@@ -872,7 +981,33 @@ exports.uploadSong = async (req, res, next) => {
       }
     }
 
+    const [approvedSongRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",
+      [artistId]
+    );
+    const approvedSongCount = approvedSongRows[0]?.count || 0;
+
+    const [dupRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND LOWER(title) = LOWER(?)",
+      [artistId, title.trim()]
+    );
+    const duplicateTitleCount = dupRows[0]?.count || 0;
+
     const songColumns = await getSongColumns();
+    const songEvalResult = evaluateSongSubmission({
+      title: title.trim(),
+      coverUrl,
+      audioUrl,
+      lyrics,
+      genreId: genre,
+      submissionNote: submissionNote || reviewNote,
+      duration: null,
+      resubmissionCount: 0,
+    }, {
+      approvedSongCount,
+      duplicateTitleCount,
+    });
+
     const fields = [
       'title',
       'artist_id',
@@ -889,7 +1024,36 @@ exports.uploadSong = async (req, res, next) => {
       'play_count'
     ];
     const placeholders = ['?', '?', '?', '?', '?', '?', '?', "'pending_review'", '?', '?', 'NOW()', 'NULL', '0'];
-    const values = [title.trim(), artistId, genre, album || null, audioUrl, coverUrl, lyrics || null, artistId, userId];
+    const values = [
+      title.trim(), artistId, genre, album || null, audioUrl, coverUrl, lyrics || null, artistId, userId
+    ];
+
+    if (songColumns.has('metadata_score')) {
+      fields.push('metadata_score', 'risk_score', 'moderation_level', 'moderation_flags');
+      placeholders.push('?', '?', '?', '?');
+      values.push(
+        songEvalResult.metadataScore,
+        songEvalResult.riskScore,
+        songEvalResult.moderationLevel,
+        JSON.stringify(songEvalResult.moderationFlags)
+      );
+    }
+
+    if (songColumns.has('audio_hash') && audioHash) {
+      fields.push('audio_hash');
+      placeholders.push('?');
+      values.push(audioHash);
+    }
+    if (songColumns.has('audio_file_size') && audioFileSize) {
+      fields.push('audio_file_size');
+      placeholders.push('?');
+      values.push(audioFileSize);
+    }
+    if (songColumns.has('audio_mime_type') && audioMimeType) {
+      fields.push('audio_mime_type');
+      placeholders.push('?');
+      values.push(audioMimeType);
+    }
 
     if (songColumns.has('submission_note')) {
       const reviewIndex = fields.indexOf('review_status');
@@ -902,10 +1066,17 @@ exports.uploadSong = async (req, res, next) => {
       `INSERT INTO songs (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`,
       values
     );
+    const newSongId = result.insertId;
+
+    pool.query(
+      `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, action, score_snapshot)
+       VALUES ('song', ?, ?, 'submitted', ?)`,
+      [newSongId, artistId, JSON.stringify(songEvalResult)]
+    ).catch(err => console.warn('Failed to log song submission:', err));
 
     res.json({
       success: true,
-      message: 'Bai hat da duoc gui Admin duyet.',
+      message: 'Bài hát đã được gửi Admin duyệt.',
       songId: result.insertId
     });
 
@@ -942,6 +1113,9 @@ exports.getAlbums = async (req, res, next) => {
       albumColumns.has('submitted_at') ? 'al.submitted_at as submittedAt' : 'NULL as submittedAt',
       albumColumns.has('reviewed_at') ? 'al.reviewed_at as reviewedAt' : 'NULL as reviewedAt',
       albumColumns.has('rejection_reason') ? 'al.rejection_reason as rejectionReason' : 'NULL as rejectionReason',
+      albumColumns.has('resubmission_count') ? 'al.resubmission_count as resubmissionCount' : '0 as resubmissionCount',
+      albumColumns.has('can_resubmit') ? 'al.can_resubmit as canResubmit' : '1 as canResubmit',
+      albumColumns.has('resubmit_locked_reason') ? 'al.resubmit_locked_reason as resubmitLockedReason' : 'NULL as resubmitLockedReason',
       albumColumns.has('published_at') ? 'al.published_at as publishedAt' : 'NULL as publishedAt',
       '(SELECT COUNT(*) FROM songs s WHERE s.album_id = al.id) as songCount',
       approvedSongCountSql
@@ -978,6 +1152,9 @@ exports.getAlbumDetail = async (req, res, next) => {
       albumColumns.has('submitted_at') ? 'al.submitted_at as submittedAt' : 'NULL as submittedAt',
       albumColumns.has('reviewed_at') ? 'al.reviewed_at as reviewedAt' : 'NULL as reviewedAt',
       albumColumns.has('rejection_reason') ? 'al.rejection_reason as rejectionReason' : 'NULL as rejectionReason',
+      albumColumns.has('resubmission_count') ? 'al.resubmission_count as resubmissionCount' : '0 as resubmissionCount',
+      albumColumns.has('can_resubmit') ? 'al.can_resubmit as canResubmit' : '1 as canResubmit',
+      albumColumns.has('resubmit_locked_reason') ? 'al.resubmit_locked_reason as resubmitLockedReason' : 'NULL as resubmitLockedReason',
       albumColumns.has('published_at') ? 'al.published_at as publishedAt' : 'NULL as publishedAt',
     ];
 
@@ -1151,9 +1328,47 @@ exports.createAlbum = async (req, res, next) => {
       placeholders.push('NOW()');
     }
 
+    const [approvedSongRows] = await connection.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",
+      [artistId]
+    );
+    const approvedSongCount = approvedSongRows[0]?.count || 0;
+
+    const [dupAlbumRows] = await connection.query(
+      "SELECT COUNT(*) as count FROM albums WHERE artist_id = ? AND LOWER(title) = LOWER(?)",
+      [artistId, title.trim()]
+    );
+    const duplicateTitleCount = dupAlbumRows[0]?.count || 0;
+
+    const albumEvalResult = evaluateAlbumSubmission({
+      title: title.trim(),
+      coverUrl,
+      description,
+      submissionNote,
+      resubmissionCount: 0,
+    }, validSongs, {
+      approvedSongCount,
+      duplicateTitleCount,
+    });
+
+    fields.push('metadata_score', 'risk_score', 'moderation_level', 'moderation_flags');
+    placeholders.push('?', '?', '?', '?');
+    values.push(
+      albumEvalResult.metadataScore,
+      albumEvalResult.riskScore,
+      albumEvalResult.moderationLevel,
+      JSON.stringify(albumEvalResult.moderationFlags)
+    );
+
     const query = `INSERT INTO albums (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`;
     const [result] = await connection.query(query, values);
     const newAlbumId = result.insertId;
+
+    await connection.query(
+      `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, action, score_snapshot)
+       VALUES ('album', ?, ?, 'submitted', ?)`,
+      [newAlbumId, artistId, JSON.stringify(albumEvalResult)]
+    ).catch(err => console.warn('Failed to log album submission:', err));
 
     // Update songs with album_id and track_number
     const songColumns = await getSongColumns();
@@ -1189,6 +1404,406 @@ exports.createAlbum = async (req, res, next) => {
     }).catch(err => console.error('Error notifying admins:', err));
 
   } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+};
+
+exports.resubmitSong = async (req, res, next) => {
+  try {
+    const artistId = req.artist.id;
+    const songId = parseInt(req.params.id, 10);
+    const { title, lyrics, submissionNote } = req.body;
+    const uploadedFiles = [
+      ...(req.files?.audio || []),
+      ...(req.files?.cover || [])
+    ];
+
+    if (!title || !title.trim()) {
+      cleanupUploadedFiles(uploadedFiles);
+      return res.status(400).json({ success: false, message: 'Tên bài hát là bắt buộc.' });
+    }
+
+    const [songRows] = await pool.query(
+      "SELECT * FROM songs WHERE id = ? AND artist_id = ? AND review_status = 'rejected'",
+      [songId, artistId]
+    );
+
+    if (!songRows.length) {
+      cleanupUploadedFiles(uploadedFiles);
+      return res.status(400).json({ success: false, message: 'Không thể gửi lại bài hát này. Có thể bài hát không thuộc về bạn, không tồn tại hoặc không ở trạng thái bị từ chối.' });
+    }
+
+    const songRecord = songRows[0];
+    if (songRecord.can_resubmit === 0 || songRecord.resubmission_count >= 3) {
+      cleanupUploadedFiles(uploadedFiles);
+      return res.status(400).json({ success: false, message: 'Nội dung đã đạt số lần gửi lại tối đa. Vui lòng liên hệ quản trị viên.' });
+    }
+
+    let audioUrl = songRecord.audio_url;
+    let coverUrl = songRecord.cover_url;
+    let audioHash = songRecord.audio_hash || null;
+    let audioFileSize = songRecord.audio_file_size || null;
+    let audioMimeType = songRecord.audio_mime_type || null;
+
+    if (req.files) {
+      if (req.files.audio && req.files.audio.length > 0) {
+        const audioFile = req.files.audio[0];
+        if (!isAllowedUpload(audioFile, ['.mp3', '.wav', '.m4a'], ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a'])) {
+          cleanupUploadedFiles(uploadedFiles);
+          return res.status(400).json({ success: false, message: 'File audio chỉ hỗ trợ mp3, wav, m4a.' });
+        }
+
+        let newHash = null;
+        try {
+          newHash = await calculateFileSha256(audioFile.path);
+        } catch (err) {
+          console.error('Error calculating resubmit audio SHA-256 hash:', err);
+        }
+
+        if (newHash) {
+          const dupSong = await findDuplicateAudioHash(newHash, songId);
+          if (dupSong) {
+            cleanupUploadedFiles(uploadedFiles);
+            if (dupSong.review_status === 'approved') {
+              return res.status(409).json({
+                success: false,
+                code: 'DUPLICATE_AUDIO_APPROVED',
+                message: 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
+              });
+            }
+            return res.status(409).json({
+              success: false,
+              code: 'DUPLICATE_AUDIO_PENDING',
+              message: 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
+            });
+          }
+          audioHash = newHash;
+        }
+
+        audioUrl = '/uploads/audio/' + audioFile.filename;
+        audioFileSize = audioFile.size || null;
+        audioMimeType = audioFile.mimetype || null;
+      }
+      if (req.files.cover && req.files.cover.length > 0) {
+        if (!isAllowedUpload(req.files.cover[0], ['.jpg', '.jpeg', '.png', '.webp'], ['image/jpeg', 'image/png', 'image/webp'])) {
+          cleanupUploadedFiles(uploadedFiles);
+          return res.status(400).json({ success: false, message: 'Ảnh bìa chỉ hỗ trợ jpg, jpeg, png, webp.' });
+        }
+        coverUrl = '/uploads/images/' + req.files.cover[0].filename;
+      }
+    }
+
+    const artistGenre = await resolveArtistUploadGenre(artistId);
+    const genreId = artistGenre?.genre?.id || null;
+
+    const [approvedSongRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",
+      [artistId]
+    );
+    const approvedSongCount = approvedSongRows[0]?.count || 0;
+
+    const [dupRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND id != ? AND LOWER(title) = LOWER(?)",
+      [artistId, songId, title.trim()]
+    );
+    const duplicateTitleCount = dupRows[0]?.count || 0;
+
+    const nextResubmitCount = (songRecord.resubmission_count || 0) + 1;
+    const songEvalResult = evaluateSongSubmission({
+      title: title.trim(),
+      coverUrl,
+      audioUrl,
+      lyrics,
+      genreId,
+      submissionNote,
+      duration: songRecord.duration_sec || songRecord.duration || null,
+      resubmissionCount: nextResubmitCount,
+    }, {
+      approvedSongCount,
+      duplicateTitleCount,
+    });
+
+    const songColumns = await getSongColumns();
+    const updateFields = [
+      'title = ?',
+      'lyrics = ?',
+      'audio_url = ?',
+      'cover_url = ?',
+      'review_status = ?',
+      'rejection_reason = NULL',
+      'reviewed_at = NULL',
+      'reviewed_by_admin_id = NULL',
+      'submitted_at = NOW()',
+      'resubmission_count = resubmission_count + 1',
+      'can_resubmit = 1',
+      'resubmit_locked_reason = NULL',
+      'metadata_score = ?',
+      'risk_score = ?',
+      'moderation_level = ?',
+      'moderation_flags = ?'
+    ];
+    const values = [
+      title.trim(), lyrics || null, audioUrl, coverUrl, 'pending_review',
+      songEvalResult.metadataScore, songEvalResult.riskScore, songEvalResult.moderationLevel, JSON.stringify(songEvalResult.moderationFlags)
+    ];
+
+    if (genreId) {
+      updateFields.push('genre_id = ?');
+      values.push(genreId);
+    }
+
+    if (songColumns.has('submission_note')) {
+      updateFields.push('submission_note = ?');
+      values.push(submissionNote || null);
+    }
+
+    if (songColumns.has('audio_hash') && audioHash) {
+      updateFields.push('audio_hash = ?');
+      values.push(audioHash);
+    }
+    if (songColumns.has('audio_file_size') && audioFileSize) {
+      updateFields.push('audio_file_size = ?');
+      values.push(audioFileSize);
+    }
+    if (songColumns.has('audio_mime_type') && audioMimeType) {
+      updateFields.push('audio_mime_type = ?');
+      values.push(audioMimeType);
+    }
+    if (songColumns.has('duplicate_reference_song_id') && typeof resubmitDupRef !== 'undefined' && resubmitDupRef) {
+      updateFields.push('duplicate_reference_song_id = ?', 'duplicate_reference_status = ?', 'duplicate_reference_artist_id = ?');
+      values.push(resubmitDupRef.id, resubmitDupRef.review_status, resubmitDupRef.artist_id);
+    }
+
+    values.push(songId);
+
+    await pool.query(
+      `UPDATE songs SET ${updateFields.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    pool.query(
+      `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, action, score_snapshot)
+       VALUES ('song', ?, ?, 'resubmitted', ?)`,
+      [songId, artistId, JSON.stringify(songEvalResult)]
+    ).catch(err => console.warn('Failed to log song resubmission:', err));
+
+    res.json({
+      success: true,
+      message: 'Bài hát đã được gửi lại để Admin duyệt.',
+      song: {
+        id: songId,
+        title: title.trim(),
+        reviewStatus: 'pending_review'
+      }
+    });
+
+    try {
+      const notificationService = require('../services/notification.service');
+      notificationService.createAdminNotification({
+        title: 'Bài hát gửi lại chờ duyệt',
+        message: `Nghệ sĩ vừa gửi lại bài hát "${title.trim()}" sau khi sửa và đang chờ duyệt.`,
+        type: 'system',
+        link: '/admin/artist-song-reviews'
+      }).catch(err => console.error('Error notifying admins:', err));
+    } catch (err) {
+      console.warn('Notification service error:', err);
+    }
+
+  } catch (error) {
+    cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
+    next(error);
+  }
+};
+
+exports.resubmitAlbum = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const artistId = req.artist.id;
+    const albumId = parseInt(req.params.id, 10);
+    const { title, description, releaseDate, submissionNote } = req.body;
+    let songIds = [];
+    if (req.body.songIds) {
+      try {
+        songIds = JSON.parse(req.body.songIds);
+      } catch (e) {
+        throw new Error('Định dạng songIds không hợp lệ');
+      }
+    }
+
+    if (!title || !title.trim()) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (title)' });
+    }
+
+    if (!Array.isArray(songIds) || songIds.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Phải chọn ít nhất 1 bài hát cho album' });
+    }
+
+    songIds = [...new Set(songIds)].map(id => parseInt(id, 10));
+    if (songIds.some(isNaN)) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    }
+
+    const [albumRows] = await connection.query(
+      "SELECT * FROM albums WHERE id = ? AND artist_id = ? AND review_status = 'rejected'",
+      [albumId, artistId]
+    );
+
+    if (!albumRows.length) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Không thể gửi lại album này. Có thể album không thuộc về bạn, không tồn tại hoặc không ở trạng thái bị từ chối.' });
+    }
+
+    const albumRecord = albumRows[0];
+    if (albumRecord.can_resubmit === 0 || albumRecord.resubmission_count >= 3) {
+      cleanupUploadedFiles([req.file]);
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Nội dung đã đạt số lần gửi lại tối đa. Vui lòng liên hệ quản trị viên.' });
+    }
+
+    // Verify songs in DB
+    const [validSongs] = await connection.query(`
+      SELECT id FROM songs
+      WHERE id IN (?) AND artist_id = ? AND review_status = 'approved' AND (album_id IS NULL OR album_id = ?)
+    `, [songIds, artistId, albumId]);
+
+    if (validSongs.length !== songIds.length) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'Một hoặc nhiều bài hát không hợp lệ hoặc đã thuộc album khác' });
+    }
+
+    const albumColumns = await getAlbumColumns();
+    let coverUrl = albumRecord.cover_url;
+    if (req.file) {
+      coverUrl = '/uploads/images/' + req.file.filename;
+    }
+
+    const [approvedSongRows] = await connection.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",
+      [artistId]
+    );
+    const approvedSongCount = approvedSongRows[0]?.count || 0;
+
+    const [dupAlbumRows] = await connection.query(
+      "SELECT COUNT(*) as count FROM albums WHERE artist_id = ? AND id != ? AND LOWER(title) = LOWER(?)",
+      [artistId, albumId, title.trim()]
+    );
+    const duplicateTitleCount = dupAlbumRows[0]?.count || 0;
+
+    const nextResubmitCount = (albumRecord.resubmission_count || 0) + 1;
+    const albumEvalResult = evaluateAlbumSubmission({
+      title: title.trim(),
+      coverUrl,
+      description,
+      submissionNote,
+      resubmissionCount: nextResubmitCount,
+    }, validSongs, {
+      approvedSongCount,
+      duplicateTitleCount,
+    });
+
+    const updateFields = [
+      'title = ?',
+      'cover_url = ?',
+      'review_status = ?',
+      'rejection_reason = NULL',
+      'reviewed_at = NULL',
+      'reviewed_by_admin_id = NULL',
+      'submitted_at = NOW()',
+      'resubmission_count = resubmission_count + 1',
+      'can_resubmit = 1',
+      'resubmit_locked_reason = NULL',
+      'metadata_score = ?',
+      'risk_score = ?',
+      'moderation_level = ?',
+      'moderation_flags = ?'
+    ];
+    const values = [
+      title.trim(),
+      coverUrl,
+      'pending_review',
+      albumEvalResult.metadataScore,
+      albumEvalResult.riskScore,
+      albumEvalResult.moderationLevel,
+      JSON.stringify(albumEvalResult.moderationFlags)
+    ];
+
+    if (albumColumns.has('description')) {
+      updateFields.push('description = ?');
+      values.push(description || null);
+    }
+    if (albumColumns.has('release_date')) {
+      updateFields.push('release_date = ?');
+      values.push(releaseDate || null);
+    }
+    if (albumColumns.has('release_at')) {
+      updateFields.push('release_at = ?');
+      values.push(releaseDate || null);
+    }
+    if (albumColumns.has('submission_note')) {
+      updateFields.push('submission_note = ?');
+      values.push(submissionNote || null);
+    }
+
+    values.push(albumId);
+
+    await connection.query(
+      `UPDATE albums SET ${updateFields.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    await connection.query(
+      `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, action, score_snapshot)
+       VALUES ('album', ?, ?, 'resubmitted', ?)`,
+      [albumId, artistId, JSON.stringify(albumEvalResult)]
+    ).catch(err => console.warn('Failed to log album resubmission:', err));
+
+    // Clear old links
+    await connection.query('UPDATE songs SET album_id = NULL WHERE album_id = ?', [albumId]);
+
+    // Update new links
+    const songColumns = await getSongColumns();
+    const hasTrackNumber = songColumns.has('track_number');
+    for (let i = 0; i < songIds.length; i++) {
+      if (hasTrackNumber) {
+        await connection.query('UPDATE songs SET album_id = ?, track_number = ? WHERE id = ?', [albumId, i + 1, songIds[i]]);
+      } else {
+        await connection.query('UPDATE songs SET album_id = ? WHERE id = ?', [albumId, songIds[i]]);
+      }
+    }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Album đã được gửi lại để Admin duyệt.',
+      album: {
+        id: albumId,
+        title: title.trim(),
+        reviewStatus: 'pending_review'
+      }
+    });
+
+    try {
+      const notificationService = require('../services/notification.service');
+      notificationService.createAdminNotification({
+        title: 'Album gửi lại chờ duyệt',
+        message: `Nghệ sĩ vừa gửi lại album "${title.trim()}" sau khi sửa và đang chờ duyệt.`,
+        type: 'system',
+        link: '/admin/artist-song-reviews'
+      }).catch(err => console.error('Error notifying admins:', err));
+    } catch (err) {
+      console.warn('Notification service error:', err);
+    }
+
+  } catch (error) {
+    if (req.file) cleanupUploadedFiles([req.file]);
     await connection.rollback();
     next(error);
   } finally {

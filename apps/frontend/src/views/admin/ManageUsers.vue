@@ -4,6 +4,7 @@
       <div>
         <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-xs font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
+        <p class="text-amber-600 mt-1 text-xs font-bold italic">Bao gồm dữ liệu thực nghiệm V4 được nạp vào môi trường demo.</p>
       </div>
       <div class="flex items-center gap-3 mt-4 md:mt-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
@@ -53,10 +54,10 @@
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
-      <AdminTableShell 
-        :loading="loading" 
-        :empty="!loading && filteredUsers.length === 0" 
-        emptyTitle="Không tìm thấy người dùng" 
+      <AdminTableShell
+        :loading="loading"
+        :empty="!loading && filteredUsers.length === 0"
+        emptyTitle="Không tìm thấy người dùng"
         emptySubtitle="Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."
         maxHeight="420px"
       >
@@ -128,16 +129,16 @@
           </select>
         </div>
 
-        <AdminPagination 
+        <AdminPagination
           :limit="pageSize"
-          v-model:currentPage="currentPage" 
-          :totalPages="totalPages" 
+          v-model:currentPage="currentPage"
+          :totalPages="totalPages"
         />
       </div>
 
       <!-- New Sections: Recent Activities & Top Users -->
       <div v-if="overviewData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        
+
         <!-- Hoạt động gần đây -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h3 class="text-sm font-bold text-gray-800 mb-4">Hoạt động gần đây</h3>
@@ -166,7 +167,7 @@
             </select>
           </div>
           <div class="space-y-3">
-            <div v-for="(u, index) in overviewData.topUsers" :key="u.id" 
+            <div v-for="(u, index) in overviewData.topUsers" :key="u.id"
                  class="flex items-center justify-between p-3 rounded-xl border transition-all"
                  :class="{
                    'bg-amber-50/40 border-amber-200/60': index === 0,
@@ -266,7 +267,7 @@
               <span class="user-preview-title">Thành viên:</span>
               <span class="user-preview-name">{{ selectedUser.display_name }} ({{ selectedUser.email }})</span>
             </div>
-            
+
             <div class="form-group">
               <label>Chọn thời gian gia hạn</label>
               <div class="premium-options">
@@ -333,7 +334,7 @@
     </Teleport>
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       :open="confirmState.open"
       :title="confirmState.title"
       :message="confirmState.message"
@@ -536,13 +537,13 @@ function openEditModal(user) {
 async function submitEditUser() {
   savingUser.value = true
   editError.value = ''
-  
+
   if (!editUser.value.display_name.trim() || !editUser.value.email.trim()) {
     editError.value = 'Tên hiển thị và Email không được để trống'
     savingUser.value = false
     return
   }
-  
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(editUser.value.email.trim())) {
     editError.value = 'Email không đúng định dạng'
@@ -556,12 +557,12 @@ async function submitEditUser() {
       email: editUser.value.email,
       role: editUser.value.role
     })
-    
+
     const idx = users.value.findIndex(u => u.id === editUser.value.id)
     if (idx !== -1) {
       users.value[idx] = { ...users.value[idx], ...res.data.data }
     }
-    
+
     toast.showToast('Cập nhật hồ sơ thành công', 'success')
     showEditUserModal.value = false
   } catch (err) {
@@ -585,7 +586,7 @@ async function handleExport() {
       },
       responseType: 'blob'
     })
-    
+
     const filename = getFilenameFromDisposition(
       response.headers?.['content-disposition'],
       'musicflow-users.csv'
@@ -601,8 +602,23 @@ async function handleExport() {
 async function fetchUsers() {
   loading.value = true
   try {
-    const res = await api.get('/admin/users')
-    users.value = res.data.data
+    const res = await api.get('/admin/users', {
+      params: {
+        page: currentPage.value,
+        limit: pageSize.value,
+        q: searchQuery.value,
+        role: filterRole.value,
+        status: filterStatus.value,
+        premium: filterPremium.value
+      }
+    })
+    if (res.data.data && res.data.data.pagination) {
+      users.value = res.data.data.items || []
+      totalPages.value = res.data.data.pagination.totalPages || 1
+    } else {
+      users.value = res.data.data || []
+      totalPages.value = 1
+    }
   } catch (err) {
     console.error('Lỗi khi lấy danh sách user:', err)
   } finally {
@@ -610,31 +626,29 @@ async function fetchUsers() {
   }
 }
 
-const filteredUsers = computed(() => {
-  return users.value.filter(u => {
-    const matchSearch = 
-      u.display_name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.value.toLowerCase())
-
-    const matchRole = !filterRole.value || u.role === filterRole.value
-    const matchStatus = !filterStatus.value || u.status === filterStatus.value
-    
-    let matchPremium = true
-    if (filterPremium.value === 'active') {
-      matchPremium = isPremiumActive(u.premium_expires_at)
-    } else if (filterPremium.value === 'inactive') {
-      matchPremium = !isPremiumActive(u.premium_expires_at)
-    }
-
-    return matchSearch && matchRole && matchStatus && matchPremium
-  })
-})
+const filteredUsers = computed(() => users.value)
+const paginatedUsers = computed(() => users.value)
+const totalPages = ref(1)
 
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-watch([searchQuery, filterRole, filterStatus, filterPremium], () => {
+let searchTimeout = null
+watch(searchQuery, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    currentPage.value = 1
+    fetchUsers()
+  }, 500)
+})
+
+watch([filterRole, filterStatus, filterPremium], () => {
   currentPage.value = 1
+  fetchUsers()
+})
+
+watch([currentPage, pageSize], () => {
+  fetchUsers()
 })
 
 function resetFilters() {
@@ -643,20 +657,8 @@ function resetFilters() {
   filterStatus.value = ''
   filterPremium.value = ''
   currentPage.value = 1
+  fetchUsers()
 }
-
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / pageSize.value)))
-
-watch(totalPages, (newTotal) => {
-  if (currentPage.value > newTotal && newTotal > 0) {
-    currentPage.value = newTotal
-  }
-})
-
-const paginatedUsers = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredUsers.value.slice(start, start + pageSize.value)
-})
 
 function isPremiumActive(dateStr) {
   if (!dateStr) return false
@@ -700,10 +702,10 @@ function formatLastActive(dateStr) {
 
 async function toggleRole(user) {
   const newRole = user.role === 'admin' ? 'user' : 'admin'
-  const message = user.role === 'admin' 
-    ? `Bạn có chắc muốn hạ quyền quản trị của "${user.display_name}"?` 
+  const message = user.role === 'admin'
+    ? `Bạn có chắc muốn hạ quyền quản trị của "${user.display_name}"?`
     : `Người dùng này sẽ có quyền truy cập khu vực quản trị.`
-    
+
   openConfirm({
     title: user.role === 'admin' ? 'Hạ quyền Admin?' : 'Thăng cấp Admin?',
     message: message,
@@ -730,8 +732,8 @@ function toggleStatus(user) {
   const isLocked = user.status === 'locked'
   openConfirm({
     title: isLocked ? 'Mở khóa tài khoản?' : 'Khóa tài khoản?',
-    message: isLocked 
-      ? `Người dùng "${user.display_name}" sẽ có thể đăng nhập lại.` 
+    message: isLocked
+      ? `Người dùng "${user.display_name}" sẽ có thể đăng nhập lại.`
       : `Người dùng sẽ không thể đăng nhập cho đến khi được mở khóa.`,
     confirmText: isLocked ? 'Mở khóa' : 'Khóa tài khoản',
     type: isLocked ? 'default' : 'warning',
@@ -750,6 +752,11 @@ function toggleStatus(user) {
 }
 
 function deleteUser(user) {
+  if (isPremiumActive(user.premium_expires_at)) {
+    toast.showToast('Không thể xóa người dùng đang có Premium còn hạn', 'error')
+    return
+  }
+
   openConfirm({
     title: 'Xóa người dùng?',
     message: `Hành động này có thể ảnh hưởng đến playlist, giao dịch và lịch sử nghe nhạc của người dùng.`,
@@ -789,7 +796,7 @@ async function submitAddUser() {
 
 function openPremiumModal(user) {
   selectedUser.value = user
-  customExpiryDate.value = user.premium_expires_at 
+  customExpiryDate.value = user.premium_expires_at
     ? new Date(user.premium_expires_at).toISOString().split('T')[0]
     : ''
   showPremiumModal.value = true
@@ -804,7 +811,7 @@ async function setPremiumExpiry(days) {
       d.setDate(d.getDate() + days)
       expiry = d.toISOString()
     }
-    
+
     await api.put(`/admin/users/${selectedUser.value.id}/premium`, { premium_expires_at: expiry })
     selectedUser.value.premium_expires_at = expiry
     showPremiumModal.value = false

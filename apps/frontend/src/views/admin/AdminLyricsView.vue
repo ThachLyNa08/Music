@@ -8,6 +8,10 @@ import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import AdminExportButton from '@/components/admin/AdminExportButton.vue'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils/downloadBlob'
+import { normalizeImageUrl } from '@/utils/imageUrl'
+
+const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
+const onImageError = (e) => { e.target.src = fallbackCover }
 
 const router = useRouter()
 
@@ -37,7 +41,7 @@ const kpiCards = computed(() => {
   const s = summary.value || {}
   const total = s.totalSongs || 0
   const coverageRate = total ? ((s.songsWithLyrics / total) * 100).toFixed(1) : 0
-  
+
   return [
     {
       title: 'Tổng bài hát',
@@ -244,7 +248,7 @@ async function handleExport() {
       },
       responseType: 'blob'
     })
-    
+
     const filename = getFilenameFromDisposition(
       response.headers?.['content-disposition'],
       'musicflow-lyrics.csv'
@@ -313,14 +317,14 @@ onMounted(() => {
         <div class="flex flex-col gap-3 xl:flex-row xl:items-center w-full">
           <div class="relative w-full xl:flex-1 xl:min-w-[280px]">
             <MfIcon name="search" size="16" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-            <input 
-              v-model="searchInput" 
+            <input
+              v-model="searchInput"
               @input="handleSearchInput"
               @keyup.enter="handleEnter()"
               @focus="showHistory = true"
               @blur="handleBlur"
-              type="text" 
-              placeholder="Nhập tên bài hát, nghệ sĩ để tìm kiếm..." 
+              type="text"
+              placeholder="Nhập tên bài hát, nghệ sĩ để tìm kiếm..."
               class="admin-input pl-9 pr-8 w-full"
             >
             <button v-if="searchInput" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
@@ -360,7 +364,7 @@ onMounted(() => {
 
       <!-- Table and Pagination Wrapper -->
       <div class="flex flex-col gap-3">
-        <AdminTableShell maxHeight="375px" style="min-height: 375px;" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
+        <AdminTableShell maxHeight="375px" style="min-height: 375px;" :loading="loading" :empty="!loading && songs.length === 0" emptyTitle="Không tìm thấy bài hát nào" emptyDescription="Chỉ hiển thị các bài hát đã được duyệt và đang có trong thư viện phát hành. Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.">
         <table class="w-full text-left text-xs whitespace-nowrap table-fixed min-w-[900px]">
           <thead class="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
             <tr>
@@ -375,7 +379,7 @@ onMounted(() => {
           <tbody class="divide-y divide-slate-100 relative">
               <tr v-for="song in songs" :key="song.song_id" class="hover:bg-slate-50 transition group" :class="{'opacity-50 pointer-events-none': loading}">
                 <td class="px-4 py-3">
-                  <img :src="song.cover_url" class="w-10 h-10 rounded object-cover border border-slate-200">
+                  <img :src="normalizeImageUrl(song.cover_url) || fallbackCover" @error="onImageError" class="w-10 h-10 rounded object-cover border border-slate-200 bg-slate-100">
                 </td>
                 <td class="px-4 py-3 font-medium text-slate-800 truncate" :title="song.title">{{ song.title }}</td>
                 <td class="px-4 py-3 text-slate-500 truncate" :title="song.artist_name">{{ song.artist_name }}</td>
@@ -421,4 +425,3 @@ onMounted(() => {
   }
 }
 </style>
-

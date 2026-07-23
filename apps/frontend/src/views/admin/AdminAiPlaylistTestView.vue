@@ -23,20 +23,20 @@
         <!-- Input Card -->
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <h2 class="text-lg font-bold text-slate-800 mb-4">Cấu hình Prompt</h2>
-          
+
           <div class="mb-4">
             <label class="block text-sm font-semibold text-slate-700 mb-2">Nhập prompt tiếng Việt</label>
-            <textarea 
-              v-model="form.prompt" 
-              rows="3" 
+            <textarea
+              v-model="form.prompt"
+              rows="3"
               class="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 resize-none"
               placeholder="Ví dụ: Tạo playlist VPOP chill nhẹ để học bài buổi tối"
             ></textarea>
-            
+
             <div class="mt-3 flex flex-wrap gap-2 items-center">
               <span class="text-xs text-slate-500">Gợi ý nhanh:</span>
-              <button 
-                v-for="(suggestion, i) in quickPrompts" 
+              <button
+                v-for="(suggestion, i) in quickPrompts"
                 :key="i"
                 @click="form.prompt = suggestion"
                 class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-xs font-medium transition-colors"
@@ -58,10 +58,10 @@
             </div>
             <div>
               <label class="block text-sm font-semibold text-slate-700 mb-2">User ID (Tùy chọn)</label>
-              <input 
-                type="number" 
-                v-model="form.userId" 
-                class="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 text-sm text-slate-700" 
+              <input
+                type="number"
+                v-model="form.userId"
+                class="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 text-sm text-slate-700"
                 placeholder="Để trống = Cold-start"
               />
             </div>
@@ -74,11 +74,11 @@
                 <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" :class="{ 'opacity-50 cursor-not-allowed': !hasLLMKey }"></div>
               </label>
               <div>
-                <span class="text-sm font-semibold text-slate-700 block">Dùng LLM (Gemini)</span>
+                <span class="text-sm font-semibold text-slate-700 block">Dùng LLM</span>
                 <span v-if="!hasLLMKey" class="text-[10px] text-rose-500">Chưa cấu hình API Key</span>
               </div>
             </div>
-  
+
             <button class="flex-1 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white justify-center h-11 text-sm font-semibold rounded-xl whitespace-nowrap transition-colors flex items-center gap-2" @click="runAnalysis" :disabled="loading">
               <span v-if="loading" class="animate-spin"><MfIcon name="sync" size="16" /></span>
               <span>{{ loading ? 'Đang phân tích...' : 'Phân tích & tạo preview' }}</span>
@@ -91,11 +91,11 @@
           <div v-if="loading" class="absolute inset-0 bg-white/60 flex items-center justify-center rounded-2xl z-10 backdrop-blur-sm">
             <div class="spinner border-4 border-indigo-100 border-l-indigo-600 rounded-full w-8 h-8 animate-spin"></div>
           </div>
-          
+
           <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
             <MfIcon name="psychology" class="text-indigo-600" /> Intent được nhận diện
           </h2>
-          
+
           <div v-if="result.intent" class="flex flex-col gap-3">
             <div v-if="result.intent.mood" class="flex flex-col">
               <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Mood</span>
@@ -145,7 +145,7 @@
           <!-- Preview Songs -->
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col relative">
             <div v-if="loading" class="absolute inset-0 bg-white/50 z-20 backdrop-blur-[1px]"></div>
-            
+
             <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <MfIcon name="queue_music" class="text-indigo-600" /> Preview danh sách
@@ -154,48 +154,50 @@
                 {{ result?.items?.length || 0 }} / {{ form.targetCount }} bài
               </span>
             </div>
-            
+
             <AdminTableShell :loading="false" :empty="!result?.items?.length && !loading" emptyTitle="Không có bài hát" emptySubtitle="Không tìm thấy bài hát nào phù hợp với Intent.">
               <div class="max-h-[500px] overflow-y-auto">
                 <table class="w-full text-left border-collapse">
                   <thead class="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                     <tr class="text-xs text-slate-500 uppercase tracking-wider">
-                      <th class="p-3 font-semibold text-center w-12">#</th>
-                      <th class="p-3 font-semibold w-14">Ảnh</th>
-                      <th class="p-3 font-semibold min-w-[200px]">Bài hát & Nghệ sĩ</th>
-                      <th class="p-3 font-semibold w-24">Chiến lược</th>
-                      <th class="p-3 font-semibold min-w-[200px]">Lý do</th>
+                      <th class="px-2 py-3 font-semibold text-center w-8">#</th>
+                      <th class="px-2 py-3 font-semibold w-12">Ảnh</th>
+                      <th class="px-2 py-3 font-semibold">Bài hát & Nghệ sĩ</th>
+                      <th class="px-2 py-3 font-semibold">Chiến lược</th>
+                      <th class="px-2 py-3 font-semibold">Lý do</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
                     <tr v-for="(item, idx) in result?.items" :key="item.song_id" class="hover:bg-slate-50/80 transition-colors">
-                      <td class="p-3 text-center text-sm font-medium text-slate-400">{{ idx + 1 }}</td>
-                      <td class="p-3">
-                        <img v-if="item.cover_url" :src="item.cover_url" class="w-10 h-10 rounded-lg object-cover shadow-sm" alt="" />
-                        <div v-else class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                          <MfIcon name="music_note" class="text-slate-400" size="18" />
+                      <td class="px-2 py-2 text-center text-xs font-medium text-slate-400">{{ idx + 1 }}</td>
+                      <td class="px-2 py-2">
+                        <img v-if="item.cover_url" :src="item.cover_url" class="w-9 h-9 rounded-md object-cover shadow-sm" alt="" />
+                        <div v-else class="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center">
+                          <MfIcon name="music_note" class="text-slate-400" size="16" />
                         </div>
                       </td>
-                      <td class="p-3">
-                        <div class="font-bold text-slate-900 text-sm hover:text-indigo-600 cursor-pointer truncate max-w-[250px]" @click="goToSong(item.song_id)" :title="item.title">
+                      <td class="px-2 py-2">
+                        <div class="font-bold text-slate-900 text-[13px] hover:text-indigo-600 cursor-pointer truncate max-w-[150px] xl:max-w-[220px]" @click="goToSong(item.song_id)" :title="item.title">
                           {{ item.title }}
                         </div>
-                        <div class="text-xs text-slate-500 mt-0.5 truncate max-w-[250px]" :title="item.artist_name">
-                          <span 
-                            v-if="item.artist_id" 
-                            class="hover:text-indigo-600 hover:underline cursor-pointer" 
+                        <div class="text-[11px] text-slate-500 mt-0.5 truncate max-w-[150px] xl:max-w-[220px]" :title="item.artist_name">
+                          <span
+                            v-if="item.artist_id"
+                            class="hover:text-indigo-600 hover:underline cursor-pointer"
                             @click="goToArtist(item.artist_id)"
                           >{{ item.artist_name }}</span>
                           <span v-else>{{ item.artist_name || 'Unknown' }}</span>
                         </div>
                       </td>
-                      <td class="p-3">
-                        <span class="inline-block px-2 py-1 text-[10px] font-bold rounded bg-slate-100 text-slate-600 uppercase border border-slate-200">
+                      <td class="px-2 py-2">
+                        <span class="inline-block px-1.5 py-0.5 text-[9px] font-bold rounded bg-slate-100 text-slate-600 uppercase border border-slate-200 truncate max-w-[90px] xl:max-w-[120px]" :title="item.strategy">
                           {{ item.strategy }}
                         </span>
                       </td>
-                      <td class="p-3 text-xs text-slate-600 leading-snug truncate max-w-[250px]" :title="item.reason">
-                        {{ item.reason }}
+                      <td class="px-2 py-2 text-[11px] text-slate-600 leading-tight">
+                        <div class="line-clamp-2 max-w-[160px] xl:max-w-[240px]" :title="item.reason">
+                          {{ item.reason }}
+                        </div>
                       </td>
                     </tr>
                   </tbody>
@@ -212,7 +214,7 @@
               </h2>
               <MfIcon :name="showDiagnostics ? 'expand_less' : 'expand_more'" class="text-slate-400" />
             </button>
-            
+
             <div v-show="showDiagnostics" class="p-4 border-t border-slate-200 bg-slate-900 text-slate-300 font-mono text-xs overflow-x-auto relative rounded-b-2xl max-h-[300px] overflow-y-auto">
               <button class="absolute top-2 right-2 p-1.5 bg-white/10 hover:bg-white/20 rounded-md text-white transition-colors flex items-center justify-center" @click="copyDiagnostics" title="Copy JSON">
                 <MfIcon name="copy" size="16" />
@@ -225,7 +227,7 @@
     </div>
 
     <!-- Confirm Dialog -->
-    <ConfirmDialog 
+    <ConfirmDialog
       :open="confirmClearState.open"
       :title="confirmClearState.title"
       :message="confirmClearState.message"
@@ -297,11 +299,11 @@ async function runAnalysis() {
     }
 
     const res = await api.post('/admin/ai-playlist-test/preview', payload)
-    
+
     if (res.data?.success) {
       result.value = res.data.data
       toast.showToast('Phân tích thành công!', 'success')
-      
+
       if (!result.value.diagnostics?.useLLMApplied && form.useLLM) {
         toast.showToast('LLM không khả dụng, đã dùng Rule-based Fallback.', 'info')
       }

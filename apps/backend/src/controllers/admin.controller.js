@@ -10,7 +10,7 @@ const {
   syncMissingArtistBio,
   getArtistMetadataIssues: getArtistMetadataIssueRows,
 } = require('../services/artistMetadata.service');
-const { getDashboardSummary, getQuickOperations } = require('../services/adminDashboard.service');
+const { getDashboardSummary, getQuickOperations, getDashboardQuickOperationsLite, getDashboardSystemPlaylistSummary } = require('../services/adminDashboard.service');
 const {
   getDataQualitySummary: getAdminDataQualitySummary,
   getDataQualityIssues: getAdminDataQualityIssues,
@@ -27,8 +27,74 @@ const {
 } = require('../utils/public.utils');
 const recommendationService = require('../services/recommendation.service');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
+const {
+  getWidgetSnapshot,
+  buildListeningTrendsPayload,
+  buildTotalListensPayload,
+  buildTopArtistsPayload,
+  buildTopGenresPayload,
+} = require('../services/adminDashboardWidgetCache.service');
 
 const schemaCache = new Map();
+const dashboardCache = new Map();
+const DEBUG_DASHBOARD = process.env.DEBUG_DASHBOARD === 'true';
+
+function dashboardDebugLog(...args) {
+  if (DEBUG_DASHBOARD) console.log(...args);
+}
+
+function getCachedData(key, allowStale = false) {
+  const cached = dashboardCache.get(key);
+  if (cached) {
+    if (cached.expiry > Date.now()) {
+      dashboardDebugLog(`[DashboardCache] HIT ${key}`);
+      return cached.data;
+    } else if (allowStale) {
+      dashboardDebugLog(`[DashboardCache] STALE HIT ${key}`);
+      return cached.data;
+    }
+  }
+  dashboardDebugLog(`[DashboardCache] MISS ${key}`);
+  return null;
+}
+
+function setCachedData(key, data, ttlSeconds) {
+  dashboardCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
+}
+
+const refreshJobs = new Map();
+
+function getCachedOrRefresh(key, ttlSeconds, computeFn, fallbackValue) {
+  const cached = dashboardCache.get(key);
+  const isExpired = !cached || cached.expiry <= Date.now();
+
+  const triggerRefresh = () => {
+    if (refreshJobs.has(key)) return;
+    const job = computeFn()
+      .then(value => {
+        dashboardCache.set(key, { data: value, expiry: Date.now() + ttlSeconds * 1000 });
+      })
+      .catch(err => {
+        console.error(`[SWR] Refresh failed for ${key}:`, err.message);
+      })
+      .finally(() => {
+        refreshJobs.delete(key);
+      });
+    refreshJobs.set(key, job);
+  };
+
+  if (cached && !isExpired) {
+    return { value: cached.data, cacheStatus: 'hit', stale: false, refreshing: false };
+  }
+
+  if (cached && isExpired) {
+    triggerRefresh();
+    return { value: cached.data, cacheStatus: 'stale', stale: true, refreshing: true };
+  }
+
+  triggerRefresh();
+  return { value: fallbackValue, cacheStatus: 'miss', stale: false, refreshing: true };
+}
 
 async function getTableColumns(tableName) {
   if (schemaCache.has(tableName)) return schemaCache.get(tableName);
@@ -47,6 +113,12 @@ async function getOptionalTableColumns(tableName) {
     }
     throw error;
   }
+}
+
+let _listenDateColCache = 'created_at';
+let _listenDateColCacheTime = Date.now();
+async function getListenDateCol() {
+  return 'created_at';
 }
 
 function parsePositiveInt(value, fallback) {
@@ -214,215 +286,120 @@ function maskEmail(email) {
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    // 1. Lấy tổng quan
-    const [[{ totalUsers }]] = await pool.query('SELECT COUNT(*) as totalUsers FROM users');
-    const [[{ totalPremium }]] = await pool.query('SELECT COUNT(*) as totalPremium FROM users WHERE premium_expires_at > NOW()');
-    const [[{ totalSongs }]] = await pool.query('SELECT COUNT(*) as totalSongs FROM songs');
-    const [[{ totalArtists }]] = await pool.query('SELECT COUNT(*) as totalArtists FROM artists');
-    const [[{ totalAlbums }]] = await pool.query('SELECT COUNT(*) as totalAlbums FROM albums');
-    const [[{ totalPlaylists }]] = await pool.query('SELECT COUNT(*) as totalPlaylists FROM playlists');
-    const [[{ totalListens }]] = await pool.query('SELECT COALESCE(SUM(play_count), 0) as totalListens FROM songs');
+    const forceRefresh = req.query.forceRefresh === 'true';
+    if (forceRefresh) {
+      ['dashboard_light_stats'].forEach(k => dashboardCache.delete(k));
+    }
 
-    // Hôm nay (Listens & Users)
-    const [[{ todayListens }]] = await pool.query('SELECT COUNT(*) as todayListens FROM listening_history WHERE DATE(listened_at) = CURDATE()');
-    const [[{ newUsersToday }]] = await pool.query('SELECT COUNT(*) as newUsersToday FROM users WHERE DATE(created_at) = CURDATE()');
-
-    // Revenue & Transactions
-    const [[{ totalRevenue }]] = await pool.query("SELECT SUM(amount) as totalRevenue FROM payment_transactions WHERE status = 'paid'");
-    const [[{ revenueThisMonth }]] = await pool.query("SELECT SUM(amount) as revenueThisMonth FROM payment_transactions WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())");
-    const [[{ pendingTransactions }]] = await pool.query("SELECT COUNT(*) as pendingTransactions FROM payment_transactions WHERE status = 'pending'");
-
-    // 1.5. New KPI fields
-    const [[{ newArtistsThisWeek }]] = await pool.query('SELECT COUNT(*) as cnt FROM artists WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
-    const [[playlistStatsRow]] = await pool.query('SELECT COUNT(*) as totalPlaylists, SUM(CASE WHEN is_public = 1 THEN 1 ELSE 0 END) as publicPlaylists, SUM(CASE WHEN is_system = 1 THEN 1 ELSE 0 END) as systemPlaylists, SUM(CASE WHEN is_system = 0 THEN 1 ELSE 0 END) as userPlaylists FROM playlists');
-    const [hotSongRows] = await pool.query(`
-      SELECT lh.song_id, COUNT(*) as cnt, s.title, a.name as artist
-      FROM listening_history lh
-      JOIN songs s ON lh.song_id = s.id
-      LEFT JOIN artists a ON s.artist_id = a.id
-      WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-      GROUP BY lh.song_id, s.title, a.name
-      ORDER BY cnt DESC
-      LIMIT 1
-    `);
-    let hotSong = null;
-    if (hotSongRows && hotSongRows.length > 0) {
-      hotSong = {
-        songId: hotSongRows[0].song_id,
-        title: hotSongRows[0].title,
-        artistName: hotSongRows[0].artist,
-        listenCount: hotSongRows[0].cnt,
-        period: '7d'
-      };
-    } else {
-      const [fallbackHot] = await pool.query(`
-        SELECT s.id, s.title, a.name as artist, s.play_count
-        FROM songs s
-        LEFT JOIN artists a ON s.artist_id = a.id
-        ORDER BY s.play_count DESC LIMIT 1
-      `);
-      if (fallbackHot && fallbackHot.length > 0) {
-        hotSong = {
-          songId: fallbackHot[0].id,
-          title: fallbackHot[0].title,
-          artistName: fallbackHot[0].artist,
-          listenCount: fallbackHot[0].play_count,
-          period: 'all'
-        };
+    const timedQuery = async (timerName, queryStr, params = []) => {
+      if (DEBUG_DASHBOARD) console.time(`[Dashboard] ${timerName}`);
+      try {
+        return await pool.query(queryStr, params);
+      } finally {
+        if (DEBUG_DASHBOARD) console.timeEnd(`[Dashboard] ${timerName}`);
       }
-    }
-    const [[usersGrowthRow]] = await pool.query(`
-      SELECT
-        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
-        SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
-      FROM users
-    `);
-    const newUsersThisMonth = Number(usersGrowthRow?.thisMonth || 0);
-    const newUsersLastMonth = Number(usersGrowthRow?.lastMonth || 0);
+    };
 
-    // 2. Thống kê theo tháng (6 tháng gần nhất) - Doanh thu
-    const [revenueByMonth] = await pool.query(`
-      SELECT
-        DATE_FORMAT(paid_at, '%Y-%m') as month,
-        SUM(amount) as revenue
-      FROM payment_transactions
-      WHERE status = 'paid' AND paid_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-      GROUP BY month
-      ORDER BY month ASC
-    `);
+    const cached = forceRefresh ? null : getCachedData('dashboard_light_stats');
+    let responseData = cached;
 
-    // 3. Lượt nghe theo thể loại (Top 5)
-    const [topGenres] = await pool.query(`
-      SELECT g.name,
-             COALESCE(SUM(s.play_count), 0) as total_plays,
-             COALESCE(SUM(s.play_count), 0) as listens
-      FROM genres g
-      JOIN songs s ON s.genre_id = g.id
-      GROUP BY g.id, g.name
-      ORDER BY total_plays DESC
-      LIMIT 5
-    `);
+    if (!responseData) {
+      const [
+        [[{ totalUsers }]], [[{ totalPremium }]], [[{ totalSongs }]], [[{ totalArtists }]],
+        [[{ totalAlbums }]], [[{ totalPlaylists }]], [[{ newUsersToday }]],
+        [[{ totalRevenue }]], [[{ revenueThisMonth }]], [[{ pendingTransactions }]],
+        [[{ cnt: newArtistsThisWeek }]], [[playlistStatsRow]], [[usersGrowthRow]], [revenueByMonth],
+        [recentTransactions], [latestUsers], totalListensSnapshot, topGenresSnapshot, systemPlaylistSummary
+      ] = await Promise.all([
+        timedQuery('countUsers', 'SELECT COUNT(*) as totalUsers FROM users WHERE role = "user"'),
+        timedQuery('countPremium', 'SELECT COUNT(*) as totalPremium FROM users WHERE premium_expires_at > NOW() AND role = "user"'),
+        timedQuery('countSongs', 'SELECT COUNT(*) as totalSongs FROM songs'),
+        timedQuery('countArtists', 'SELECT COUNT(*) as totalArtists FROM artists'),
+        timedQuery('countAlbums', 'SELECT COUNT(*) as totalAlbums FROM albums'),
+        timedQuery('countPlaylists', 'SELECT COUNT(*) as totalPlaylists FROM playlists'),
+        timedQuery('newUsersToday', 'SELECT COUNT(*) as newUsersToday FROM users WHERE DATE(created_at) = CURDATE() AND role = "user"'),
+        timedQuery('revenue', "SELECT SUM(amount) as totalRevenue FROM payment_transactions WHERE status = 'paid'"),
+        timedQuery('revenueThisMonth', "SELECT SUM(amount) as revenueThisMonth FROM payment_transactions WHERE status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE())"),
+        timedQuery('pendingTransactions', "SELECT COUNT(*) as pendingTransactions FROM payment_transactions WHERE status = 'pending'"),
+        timedQuery('newArtistsThisWeek', 'SELECT COUNT(*) as cnt FROM artists WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'),
+        timedQuery('playlistStats', 'SELECT COUNT(*) as totalPlaylists, SUM(CASE WHEN is_public = 1 THEN 1 ELSE 0 END) as publicPlaylists, SUM(CASE WHEN is_system = 1 THEN 1 ELSE 0 END) as systemPlaylists, SUM(CASE WHEN is_system = 0 THEN 1 ELSE 0 END) as userPlaylists FROM playlists'),
+        timedQuery('usersGrowth', `
+          SELECT
+            SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as thisMonth,
+            SUM(CASE WHEN created_at >= DATE_FORMAT(NOW() - INTERVAL 1 MONTH ,'%Y-%m-01') AND created_at < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN 1 ELSE 0 END) as lastMonth
+          FROM users
+          WHERE role = 'user'`),
+        timedQuery('revenueByMonth', "SELECT DATE_FORMAT(paid_at, '%Y-%m') as month, SUM(amount) as revenue FROM payment_transactions WHERE status = 'paid' AND paid_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH) GROUP BY month ORDER BY month ASC"),
+        timedQuery('recentTransactions', 'SELECT t.id, t.amount, t.status, t.created_at, t.paid_at, u.display_name as user_name, u.email as user_email FROM payment_transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 5'),
+        timedQuery('latestUsers', 'SELECT id, display_name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5'),
+        getWidgetSnapshot({
+          cacheKey: 'dashboard_total_listens_cache',
+          rangeKey: 'all',
+          ttlSeconds: 900,
+          forceRefresh,
+          refreshFn: () => buildTotalListensPayload('all', 'system')
+        }),
+        getWidgetSnapshot({
+          cacheKey: 'dashboard_top_genres_cache',
+          rangeKey: 'all',
+          ttlSeconds: 900,
+          forceRefresh,
+          refreshFn: () => buildTopGenresPayload('all', 'system')
+        }),
+        getDashboardSystemPlaylistSummary()
+      ]);
+      const newUsersThisMonth = Number(usersGrowthRow?.thisMonth || 0);
+      const newUsersLastMonth = Number(usersGrowthRow?.lastMonth || 0);
 
-    // Top Artists (Dành cho Dashboard mới)
-    const [topArtists] = await pool.query(`
-      SELECT a.id, a.name, a.avatar_url, a.avatar_url as image,
-             COUNT(s.id) as song_count,
-             COALESCE(SUM(s.play_count), 0) as total_plays,
-             COALESCE(SUM(s.play_count), 0) as listens
-      FROM artists a
-      LEFT JOIN songs s ON s.artist_id = a.id AND s.is_active = TRUE
-      GROUP BY a.id, a.name, a.avatar_url
-      ORDER BY total_plays DESC
-      LIMIT 5
-    `);
+      const stats = {
+        totalUsers: Number(totalUsers || 0), totalPremium: Number(totalPremium || 0), totalSongs: Number(totalSongs || 0),
+        newUsersToday: Number(newUsersToday || 0), totalRevenue: Number(totalRevenue || 0), revenueThisMonth: Number(revenueThisMonth || 0),
+        totalAlbums: Number(totalAlbums || 0), totalPlaylists: Number(totalPlaylists || 0),
+        totalArtists: Number(totalArtists || 0),
+        pendingTransactions: Number(pendingTransactions || 0),
+        totalListens: totalListensSnapshot.data ? Number(totalListensSnapshot.data.totalListens || 0) : null,
+        v4Listens: null, todayListens: null, hotSong: null,
+        artistStats: { totalArtists: Number(totalArtists || 0), newArtistsThisWeek: Number(newArtistsThisWeek || 0) },
+        playlistStats: {
+          totalPlaylists: Number(totalPlaylists || 0), publicPlaylists: Number(playlistStatsRow?.publicPlaylists || 0),
+          systemPlaylists: Number(playlistStatsRow?.systemPlaylists || 0), userPlaylists: Number(playlistStatsRow?.userPlaylists || 0)
+        },
+        userGrowth: { newUsersThisMonth, delta: newUsersThisMonth - newUsersLastMonth }
+      };
+      stats.premiumUsers = stats.totalPremium;
+      stats.revenue = stats.totalRevenue;
 
-    if (topArtists.length > 0) {
-      const artistIds = topArtists.map(a => a.id);
-      const [trendData] = await pool.query(`
-        SELECT
-          a.id as artist_id,
-          DATE_FORMAT(lh.listened_at, '%Y-%m-%d') as date_str,
-          SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) as listens,
-          COUNT(lh.id) as raw_listen_events
-        FROM listening_history lh
-        JOIN songs s ON lh.song_id = s.id
-        JOIN artists a ON s.artist_id = a.id
-        WHERE a.id IN (?) AND lh.listened_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-        GROUP BY artist_id, date_str
-      `, [artistIds]);
+      responseData = {
+        stats,
+        charts: {
+          revenue: revenueByMonth || [],
+          genres: topGenresSnapshot.data?.genres || []
+        },
+        widgetMeta: {
+          totalListens: totalListensSnapshot.meta,
+          topGenres: topGenresSnapshot.meta
+        },
+        latestUsers: (latestUsers || []).map(u => ({ ...u, email: maskEmail(u.email) })),
+        recentTransactions: recentTransactions || [],
+        quickOperations: getDashboardQuickOperationsLite({
+          pendingTransactions: stats.pendingTransactions,
+          systemPlaylistSummary
+        })
+      };
 
-      // Generate last 7 days strings in local DB timezone equivalent (assuming simple JS date works for now, or just query it)
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        // offset to local timezone YYYY-MM-DD
-        const offset = d.getTimezoneOffset() * 60000;
-        return (new Date(d.getTime() - offset)).toISOString().split('T')[0];
-      });
-
-      topArtists.forEach(artist => {
-        artist.avatar_url = resolveArtistAvatar(artist, req);
-        artist.trend = last7Days.map(dateStr => {
-          const found = trendData.find(t => t.artist_id === artist.id && t.date_str === dateStr);
-          return found ? found.listens : 0;
-        });
-      });
-    }
-
-    // Giao dịch gần đây (Dành cho Dashboard mới)
-    const [recentTransactions] = await pool.query(`
-      SELECT t.id, t.amount, t.status, t.created_at, t.paid_at, u.display_name as user_name, u.email as user_email
-      FROM payment_transactions t
-      JOIN users u ON t.user_id = u.id
-      ORDER BY t.created_at DESC
-      LIMIT 5
-    `);
-
-    // 4. Danh sách user mới nhất (Ẩn email để bảo mật)
-    const [latestUsers] = await pool.query(`
-      SELECT id, display_name, email, role, created_at
-      FROM users
-      ORDER BY created_at DESC
-      LIMIT 5
-    `);
-
-    const secureUsers = latestUsers.map(u => ({
-      ...u,
-      email: maskEmail(u.email)
-    }));
-
-    // Lấy system alerts nhẹ
-    const systemAlerts = [];
-    if (pendingTransactions > 50) {
-      systemAlerts.push({ id: 'high_pending', type: 'warning', message: `Có ${pendingTransactions} giao dịch đang chờ xử lý` });
+      if (!topGenresSnapshot.meta.refreshing) {
+        setCachedData('dashboard_light_stats', responseData, 60);
+      }
     }
 
     res.json({
       success: true,
-      data: {
-        stats: {
-          totalUsers,
-          totalPremium,
-          totalSongs,
-          totalArtists,
-          totalAlbums,
-          totalPlaylists,
-          totalListens,
-          todayListens,
-          today_plays: todayListens,
-          newUsersToday,
-          totalRevenue: totalRevenue || 0,
-          revenueThisMonth: revenueThisMonth || 0,
-          pendingTransactions: pendingTransactions || 0,
-          artistStats: {
-            totalArtists: totalArtists || 0,
-            newArtistsThisWeek: newArtistsThisWeek || 0
-          },
-          playlistStats: {
-            totalPlaylists: playlistStatsRow?.totalPlaylists || 0,
-            publicPlaylists: playlistStatsRow?.publicPlaylists || 0,
-            systemPlaylists: playlistStatsRow?.systemPlaylists || 0,
-            userPlaylists: playlistStatsRow?.userPlaylists || 0
-          },
-          hotSong: hotSong,
-          userGrowth: {
-            newUsersThisMonth,
-            newUsersLastMonth,
-            delta: newUsersThisMonth - newUsersLastMonth
-          }
-        },
-        charts: {
-          revenue: revenueByMonth,
-          genres: topGenres
-        },
-        lists: {
-          topArtists,
-          recentTransactions,
-          systemAlerts
-        },
-        topArtists,
-        latestUsers: secureUsers,
-        quickOperations: await getQuickOperations()
+      data: responseData,
+      meta: {
+        cacheStatus: cached ? 'hit' : 'miss',
+        refreshing: false,
+        partial: false,
+        lastUpdated: new Date().toISOString()
       }
     });
 
@@ -449,90 +426,33 @@ exports.getDashboardSummary = async (_req, res) => {
 // 1. Quản lý Người dùng
 exports.getListeningTrends = async (req, res, next) => {
   try {
-    const allowedRanges = {
-      today: {
-        bucketFormat: '%H:00',
-        currentWhere: 'lh.listened_at >= CURDATE()',
-        previousWhere: 'lh.listened_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND lh.listened_at < CURDATE()',
-        orderFormat: '%H'
-      },
-      '7d': {
-        bucketFormat: '%d/%m',
-        currentWhere: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
-        previousWhere: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND lh.listened_at < DATE_SUB(NOW(), INTERVAL 7 DAY)',
-        orderFormat: '%Y-%m-%d'
-      },
-      '30d': {
-        bucketFormat: '%d/%m',
-        currentWhere: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        previousWhere: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 60 DAY) AND lh.listened_at < DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        orderFormat: '%Y-%m-%d'
-      }
+    const range = ['today', '7d', '30d', 'all'].includes(req.query.range) ? req.query.range : '7d';
+    const dataset = 'system';
+    const forceRefresh = req.query.forceRefresh === 'true';
+    const rangeKey = range;
+    const snapshot = await getWidgetSnapshot({
+      cacheKey: 'dashboard_listening_trends_cache',
+      rangeKey,
+      ttlSeconds: 900,
+      forceRefresh,
+      refreshFn: () => buildListeningTrendsPayload(range, dataset)
+    });
+
+    const data = snapshot.data || {
+      range,
+      dataset,
+      series: [],
+      topSongs: [],
+      emptyReason: snapshot.meta.message || 'Đang cập nhật số liệu...'
     };
-
-    const range = allowedRanges[req.query.range] ? req.query.range : 'today';
-    const config = allowedRanges[range];
-
-    const [series] = await pool.query(`
-      SELECT
-        DATE_FORMAT(lh.listened_at, ?) AS label,
-        DATE_FORMAT(lh.listened_at, ?) AS sort_key,
-        SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS recent_plays,
-        COUNT(*) AS raw_listen_events
-      FROM listening_history lh
-      WHERE ${config.currentWhere}
-      GROUP BY label, sort_key
-      ORDER BY sort_key ASC
-    `, [config.bucketFormat, config.orderFormat]);
-
-    const [topSongs] = await pool.query(`
-      SELECT
-        s.id,
-        s.title,
-        s.cover_url,
-        s.play_count,
-        a.name AS artist,
-        al.title AS album,
-        SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS recent_plays,
-        COUNT(lh.id) AS raw_listen_events,
-        COALESCE(prev.previous_recent_plays, 0) AS previous_recent_plays
-      FROM listening_history lh
-      JOIN songs s ON lh.song_id = s.id
-      JOIN artists a ON s.artist_id = a.id
-      LEFT JOIN albums al ON s.album_id = al.id
-      LEFT JOIN (
-        SELECT
-          song_id,
-          SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS previous_recent_plays
-        FROM listening_history lh
-        WHERE ${config.previousWhere}
-        GROUP BY song_id
-      ) prev ON prev.song_id = s.id
-      WHERE ${config.currentWhere}
-      GROUP BY s.id, s.title, s.cover_url, s.play_count, a.name, al.title, prev.previous_recent_plays
-      HAVING recent_plays > 0
-      ORDER BY recent_plays DESC, s.play_count DESC
-      LIMIT 10
-    `);
 
     res.json({
       success: true,
-      data: {
-        range,
-        series: series.map(item => ({
-          label: item.label,
-          recent_plays: Number(item.recent_plays || 0),
-          raw_listen_events: Number(item.raw_listen_events || 0),
-          listens: Number(item.recent_plays || 0)
-        })),
-        topSongs: topSongs.map(item => ({
-          ...item,
-          recent_plays: Number(item.recent_plays || 0),
-          raw_listen_events: Number(item.raw_listen_events || 0),
-          previous_recent_plays: Number(item.previous_recent_plays || 0),
-          listens: Number(item.recent_plays || 0),
-          previous_listens: Number(item.previous_recent_plays || 0)
-        }))
+      data,
+      meta: {
+        ...snapshot.meta,
+        partial: !snapshot.data,
+        lastUpdated: new Date().toISOString()
       }
     });
   } catch (error) {
@@ -543,181 +463,40 @@ exports.getListeningTrends = async (req, res, next) => {
 
 exports.getTopArtistTrends = async (req, res, next) => {
   try {
-    const allowedRanges = {
-      today: {
-        currentWhere: 'lh.listened_at >= CURDATE()',
-        bucketSelect: "LPAD(HOUR(lh.listened_at), 2, '0')",
-        labelSelect: "DATE_FORMAT(lh.listened_at, '%H:00')",
-        bucketType: 'hour',
-        bucketCount: 24
-      },
-      '7d': {
-        currentWhere: 'lh.listened_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)',
-        bucketSelect: "DATE_FORMAT(lh.listened_at, '%Y-%m-%d')",
-        labelSelect: "DATE_FORMAT(lh.listened_at, '%d/%m')",
-        bucketType: 'day',
-        bucketCount: 7
-      },
-      '30d': {
-        currentWhere: 'lh.listened_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)',
-        bucketSelect: "DATE_FORMAT(lh.listened_at, '%Y-%m-%d')",
-        labelSelect: "DATE_FORMAT(lh.listened_at, '%d/%m')",
-        bucketType: 'day',
-        bucketCount: 30
-      },
-      'all': {
-        currentWhere: '1=1',
-        bucketSelect: "DATE_FORMAT(lh.listened_at, '%Y-%m')",
-        labelSelect: "DATE_FORMAT(lh.listened_at, '%m/%y')",
-        bucketType: 'month',
-        bucketCount: 6
-      }
-    };
-
-    const range = allowedRanges[req.query.range] ? req.query.range : 'all';
-    const config = allowedRanges[range];
-
-    if (config.bucketType === 'month') {
-      const now = new Date();
-      let months = (now.getFullYear() - 2026) * 12 + (now.getMonth() - 4) + 1; // 4 = Tháng 5
-      config.bucketCount = Math.max(1, months);
-    }
-
-    const validListenExpr = 'CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END';
-
-    const [topArtists] = await pool.query(`
-      SELECT ranked.id,
-             ranked.name,
-             ranked.avatar_url,
-             ranked.avatar_url AS image,
-             COALESCE(song_counts.song_count, 0) AS song_count,
-             ranked.recent_plays,
-             ranked.recent_plays AS listens,
-             ranked.raw_listen_events
-      FROM (
-        SELECT a.id,
-               a.name,
-               a.avatar_url,
-               SUM(${validListenExpr}) AS recent_plays,
-               COUNT(lh.id) AS raw_listen_events
-        FROM listening_history lh
-        JOIN songs s ON lh.song_id = s.id
-        JOIN artists a ON s.artist_id = a.id
-        WHERE ${config.currentWhere}
-        GROUP BY a.id, a.name, a.avatar_url
-        HAVING recent_plays > 0
-        ORDER BY recent_plays DESC
-        LIMIT 5
-      ) ranked
-      LEFT JOIN (
-        SELECT artist_id, COUNT(*) AS song_count
-        FROM songs
-        WHERE is_active = TRUE
-        GROUP BY artist_id
-      ) song_counts ON song_counts.artist_id = ranked.id
-      ORDER BY ranked.recent_plays DESC
-    `);
-
-    topArtists.forEach(artist => {
-      artist.avatar_url = resolveArtistAvatar(artist, req);
-      artist.image = artist.avatar_url;
-      artist.recent_plays = Number(artist.recent_plays || 0);
-      artist.listens = Number(artist.listens || 0);
-      artist.raw_listen_events = Number(artist.raw_listen_events || 0);
-      artist.song_count = Number(artist.song_count || 0);
+    const range = ['today', '7d', '30d', 'all'].includes(req.query.range) ? req.query.range : '7d';
+    const dataset = 'system';
+    const forceRefresh = req.query.forceRefresh === 'true';
+    const rangeKey = range;
+    const snapshot = await getWidgetSnapshot({
+      cacheKey: 'dashboard_top_artists_cache',
+      rangeKey,
+      ttlSeconds: 900,
+      forceRefresh,
+      refreshFn: () => buildTopArtistsPayload(range, dataset)
     });
 
-    const artistIds = topArtists.map(artist => artist.id);
-    let trendRows = [];
-
-    if (artistIds.length > 0) {
-      const [rows] = await pool.query(`
-        SELECT
-          a.id AS artist_id,
-          a.name AS artist_name,
-          ${config.bucketSelect} AS bucket_key,
-          ${config.labelSelect} AS label,
-          SUM(${validListenExpr}) AS recent_plays,
-          COUNT(lh.id) AS raw_listen_events
-        FROM listening_history lh
-        JOIN songs s ON lh.song_id = s.id
-        JOIN artists a ON s.artist_id = a.id
-        WHERE ${config.currentWhere}
-          AND a.id IN (?)
-        GROUP BY a.id, a.name, bucket_key, label
-        ORDER BY bucket_key ASC
-      `, [artistIds]);
-      trendRows = rows;
-    }
-
-    const pad = value => String(value).padStart(2, '0');
-    const formatLocalDateKey = date => {
-      const offset = date.getTimezoneOffset() * 60000;
-      return new Date(date.getTime() - offset).toISOString().split('T')[0];
-    };
-    const formatLocalDateLabel = date => {
-      const day = pad(date.getDate());
-      const month = pad(date.getMonth() + 1);
-      return `${day}/${month}`;
+    const data = snapshot.data || {
+      range,
+      dataset,
+      topArtists: [],
+      series: [],
+      topArtistTrend: [],
+      emptyReason: snapshot.meta.message || 'Đang cập nhật số liệu...'
     };
 
-    const buckets = config.bucketType === 'hour'
-      ? Array.from({ length: config.bucketCount }, (_, hour) => ({
-        key: pad(hour),
-        label: `${pad(hour)}:00`
-      }))
-      : config.bucketType === 'month'
-        ? Array.from({ length: config.bucketCount }, (_, index) => {
-          const date = new Date();
-          date.setDate(1);
-          date.setMonth(date.getMonth() - (config.bucketCount - 1 - index));
-          const y = date.getFullYear();
-          const m = pad(date.getMonth() + 1);
-          const shortY = String(y).slice(-2);
-          return {
-            key: `${y}-${m}`,
-            label: `${m}/${shortY}`
-          };
-        })
-        : Array.from({ length: config.bucketCount }, (_, index) => {
-          const date = new Date();
-          date.setHours(0, 0, 0, 0);
-          date.setDate(date.getDate() - (config.bucketCount - 1 - index));
-          return {
-            key: formatLocalDateKey(date),
-            label: formatLocalDateLabel(date)
-          };
-        });
-
-    const series = buckets.map(bucket => {
-      const artists = topArtists.map(artist => {
-        const row = trendRows.find(item => String(item.bucket_key) === bucket.key && Number(item.artist_id) === Number(artist.id));
-        return {
-          artist_id: artist.id,
-          artist_name: artist.name,
-          listens: Number(row?.recent_plays || 0),
-          recent_plays: Number(row?.recent_plays || 0),
-          raw_listen_events: Number(row?.raw_listen_events || 0)
-        };
-      });
-
-      return artists.reduce((bucketRow, artist) => {
-        bucketRow[artist.artist_name] = artist.listens;
-        return bucketRow;
-      }, {
-        label: bucket.label,
-        sort_key: bucket.key,
-        artists
-      });
-    });
+    data.topArtists = (data.topArtists || []).map(artist => ({
+      ...artist,
+      avatar_url: resolveArtistAvatar(artist, req),
+      image: resolveArtistAvatar(artist, req)
+    }));
 
     res.json({
       success: true,
-      data: {
-        range,
-        topArtists,
-        series,
-        topArtistTrend: series
+      data,
+      meta: {
+        ...snapshot.meta,
+        partial: !snapshot.data,
+        lastUpdated: new Date().toISOString()
       }
     });
   } catch (error) {
@@ -1498,28 +1277,58 @@ exports.reorderAdminAlbumSongs = async (req, res, next) => {
 
 exports.getAllUsers = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    let whereClause = "WHERE 1=1";
+    const params = [];
+    const countParams = [];
+
+    if (req.query.q) {
+      whereClause += " AND (u.email LIKE ? OR u.display_name LIKE ?)";
+      const search = `%${req.query.q}%`;
+      params.push(search, search);
+      countParams.push(search, search);
+    }
+    if (req.query.role) {
+      whereClause += " AND u.role = ?";
+      params.push(req.query.role);
+      countParams.push(req.query.role);
+    }
+    if (req.query.status) {
+      whereClause += " AND u.status = ?";
+      params.push(req.query.status);
+      countParams.push(req.query.status);
+    }
+    if (req.query.premium === 'active') {
+      whereClause += " AND u.premium_expires_at > NOW()";
+    } else if (req.query.premium === 'inactive') {
+      whereClause += " AND (u.premium_expires_at IS NULL OR u.premium_expires_at <= NOW())";
+    }
+
+    const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total FROM users u ${whereClause}`, countParams);
+
+    params.push(limit, offset);
     const [users] = await pool.query(`
-      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at,
-             COALESCE((
-               SELECT SUM(ROUND(s.duration_sec * lh.completion_rate))
-               FROM listening_history lh
-               JOIN songs s ON s.id = lh.song_id
-               WHERE lh.user_id = u.id
-             ), 0) as total_listen_sec,
-             (
-               SELECT MAX(lh.listened_at)
-               FROM listening_history lh
-               WHERE lh.user_id = u.id
-             ) as last_listened_at,
-             u.created_at,
-             COUNT(p.id) as playlistCount
+      SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, u.status, u.premium_expires_at, u.created_at,
+             (SELECT COUNT(*) FROM playlists p WHERE p.user_id = u.id) as playlistCount,
+             (SELECT MAX(listened_at) FROM listening_history lh WHERE lh.user_id = u.id) as last_listened_at
       FROM users u
-      LEFT JOIN playlists p ON u.id = p.user_id
-      WHERE u.role = 'user'
-      GROUP BY u.id
+      ${whereClause}
       ORDER BY u.created_at DESC
-    `);
-    res.json({ success: true, data: users });
+      LIMIT ? OFFSET ?
+    `, params);
+
+    // Fallback: If legacy code still expects flat array, we return array but with hidden properties for pagination
+    // Or better: update the frontend directly to handle the object format. We will update frontend.
+    res.json({
+      success: true,
+      data: {
+        items: users,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+      }
+    });
   } catch (error) {
     console.error('getAllUsers Error:', error);
     next(error);
@@ -2009,14 +1818,19 @@ exports.getUserDetail = async (req, res, next) => {
       WHERE lh.user_id = ? ORDER BY lh.listened_at DESC LIMIT 10
     `, [id], []);
 
-    result.recentActivity = recentListens.map(rl => ({
-      id: rl.id,
-      type: 'listen',
-      title: `Đã nghe "${rl.song_title}"`,
-      subtitle: rl.artist,
-      date: rl.listened_at,
-      meta: `Hoàn thành: ${Math.round((rl.completion_rate || 0) * 100)}%`
-    }));
+    result.recentActivity = recentListens.map(rl => {
+      let displayPercent = Math.round((rl.completion_rate || 0) * 100);
+      displayPercent = Math.min(100, Math.max(0, displayPercent));
+
+      return {
+        id: rl.id,
+        type: 'listen',
+        title: `Đã nghe "${rl.song_title}"`,
+        subtitle: rl.artist,
+        date: rl.listened_at,
+        meta: `Hoàn thành: ${displayPercent}%`
+      };
+    });
 
     // 8. Premium Transactions
     const recentTrx = await safeQuery(`
@@ -2120,13 +1934,19 @@ exports.deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Prevent deleting self or other admins, or maybe just simple delete
-    const [users] = await pool.query('SELECT role FROM users WHERE id = ?', [id]);
+    const [users] = await pool.query('SELECT role, premium_plan_id, premium_expires_at FROM users WHERE id = ?', [id]);
     if (users.length === 0) {
       return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
-    if (users[0].role === 'admin' && req.user.id !== parseInt(id)) {
+    const user = users[0];
+    const isPremium = user.premium_plan_id && user.premium_expires_at && new Date(user.premium_expires_at) > new Date();
+
+    if (isPremium) {
+      return res.status(400).json({ success: false, message: 'Không thể xóa người dùng đang có Premium còn hạn' });
+    }
+
+    if (user.role === 'admin' && req.user.id !== parseInt(id)) {
       // Actually let's allow it, but with caution, or let's prevent deleting other admins unless necessary.
       // But it's an admin panel, let's just delete
     }
@@ -3444,10 +3264,30 @@ exports.getSystemPlaylists = async (req, res, next) => {
 
     const total = countRows[0]?.total || 0;
     const totalPages = Math.max(1, Math.ceil(total / limit));
+    const systemPlaylistTempoService = require('../services/systemPlaylistTempo.service');
+    const { getSystemPlaylistTempoMetadata } = require('../config/systemPlaylistTempo.config');
+    const enrichedPlaylists = await Promise.all(playlists.map(async (playlist) => {
+      const [songRows] = await pool.query(
+        `SELECT ps.song_id AS id
+         FROM playlist_songs ps
+         WHERE ps.playlist_id = ?`,
+        [playlist.id]
+      );
+      const enriched = await systemPlaylistTempoService.enrichSystemPlaylistSongs(songRows, playlist.system_key);
+      const tempoMetadata = getSystemPlaylistTempoMetadata(playlist.system_key);
+      return {
+        ...playlist,
+        ...tempoMetadata,
+        tempoAwareApplied: Boolean(enriched.tempoStats.tempoAwareApplied),
+        audioFeatureCoverage: enriched.tempoStats.audioFeatureCoverage,
+        avgBpm: enriched.tempoStats.avgBpm,
+        tempoDistribution: enriched.tempoStats.tempoDistribution
+      };
+    }));
 
     res.json({
       success: true,
-      data: playlists,
+      data: enrichedPlaylists,
       pagination: {
         total,
         page: Number(page),
@@ -3551,14 +3391,22 @@ exports.getSystemPlaylistDetail = async (req, res, next) => {
 
     const totalDuration = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
     const uniqueArtists = new Set(songs.map(s => s.artist)).size;
+    const systemPlaylistTempoService = require('../services/systemPlaylistTempo.service');
+    const { getSystemPlaylistTempoMetadata } = require('../config/systemPlaylistTempo.config');
+    const enriched = await systemPlaylistTempoService.enrichSystemPlaylistSongs(songs, playlist.system_key);
+    const tempoMetadata = getSystemPlaylistTempoMetadata(playlist.system_key);
 
     res.json({
       success: true,
       data: {
         ...playlist,
+        ...tempoMetadata,
+        audioFeatureCoverage: enriched.tempoStats.audioFeatureCoverage,
+        avgBpm: enriched.tempoStats.avgBpm,
+        tempoDistribution: enriched.tempoStats.tempoDistribution,
         total_duration: totalDuration,
         unique_artists: uniqueArtists,
-        songs
+        songs: enriched.songs
       }
     });
   } catch (error) {
@@ -3583,27 +3431,60 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Playlist này không có system_key hợp lệ' });
     }
 
+    let generationResult = null;
+
     if (systemKey.startsWith('dailymix_')) {
       const dailyMixService = require('../services/dailyMix.service');
-      await dailyMixService.generateDailyMixesForUser(userId, { perMix: 50 });
+      generationResult = await dailyMixService.generateDailyMixesForUser(userId, { perMix: 50 });
     } else if (systemKey === 'weeklymix' || systemKey === 'weekly_mix') {
       const weeklyMixService = require('../services/weeklyMix.service');
-      await weeklyMixService.generateWeeklyMixForUser(userId, { limit: 50 });
+      generationResult = await weeklyMixService.generateWeeklyMixForUser(userId, { limit: 50 });
     } else if (systemKey === 'moodmix') {
       const moodMixService = require('../services/moodMix.service');
-      await moodMixService.generateMoodMixForUser(userId);
+      generationResult = await moodMixService.generateMoodMixForUser(userId);
     } else if (['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'].includes(systemKey)) {
       const contextualService = require('../services/contextualMoodPlaylist.service');
-      await contextualService.generateContextualMoodPlaylistsForUser(userId);
+      const timeSlotByKey = {
+        morning_vibes: 'morning',
+        afternoon_vibes: 'afternoon',
+        evening_vibes: 'evening',
+        night_vibes: 'night'
+      };
+      generationResult = await contextualService.generateContextualMoodPlaylistsForUser(userId, {
+        timeSlot: timeSlotByKey[systemKey]
+      });
     } else if (systemKey === 'trending_now') {
       const trendingService = require('../services/trendingPlaylist.service');
-      await trendingService.generateTrendingPlaylist();
+      generationResult = await trendingService.generateTrendingPlaylist();
     } else {
       return res.status(400).json({ success: false, message: `Chưa có hàm regenerate hỗ trợ cho type: ${systemKey}` });
     }
 
     const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
-    await logSystemPlaylistRun({ system_key: systemKey === 'weeklymix' ? 'weekly_mix' : systemKey, run_type: 'manual' });
+    await logSystemPlaylistRun({
+      system_key: systemKey === 'weeklymix' ? 'weekly_mix' : systemKey,
+      playlist_id: playlist.id,
+      user_id: userId,
+      run_type: 'manual',
+      playlist_count: Number(generationResult?.playlistsProcessed || 1),
+      song_count: Number(generationResult?.songsInserted || generationResult?.songCount || 0),
+      songs_added: Number(generationResult?.addedSongs || 0),
+      songs_removed: Number(generationResult?.removedSongs || 0),
+      total_songs: Number(generationResult?.songsInserted || generationResult?.songCount || 0),
+      overlap_ratio: generationResult?.overlapRatio ?? null,
+      message: JSON.stringify({
+        tempoAwareApplied: Boolean(generationResult?.tempoAwareApplied),
+        avgBpm: generationResult?.avgBpm ?? null,
+        audioFeatureCoverage: generationResult?.audioFeatureCoverage || null,
+        results: generationResult?.results?.map((item) => ({
+          systemKey: item.systemKey,
+          tempoAwareApplied: item.tempoAwareApplied,
+          avgBpm: item.avgBpm,
+          audioFeatureCoverage: item.audioFeatureCoverage,
+          tempoDistribution: item.tempoDistribution
+        })) || null
+      })
+    });
     res.json({ success: true, message: 'Đã tạo lại playlist thành công' });
   } catch (error) {
     console.error('regenerateSystemPlaylist Error:', error);
@@ -3651,6 +3532,223 @@ function summarizeGenerationRun(aggregate) {
   if (aggregate.failedCount > 0 && aggregate.successCount === 0) return 'failed';
   return 'success';
 }
+
+const TIME_BASED_SYSTEM_KEYS = ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'];
+const TIME_SLOT_BY_SYSTEM_KEY = {
+  morning_vibes: 'morning',
+  afternoon_vibes: 'afternoon',
+  evening_vibes: 'evening',
+  night_vibes: 'night'
+};
+
+exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
+  const runLogService = require('../services/systemPlaylistRunLog.service');
+  const contextualService = require('../services/contextualMoodPlaylist.service');
+  let runId = null;
+
+  try {
+    const requestedKeys = Array.isArray(req.body?.systemKeys)
+      ? req.body.systemKeys.map((key) => String(key || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const systemKeys = [...new Set(requestedKeys)]
+      .filter((key) => TIME_BASED_SYSTEM_KEYS.includes(key));
+
+    if (!systemKeys.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'systemKeys must include at least one time-based system playlist key',
+        allowedSystemKeys: TIME_BASED_SYSTEM_KEYS
+      });
+    }
+
+    const placeholders = systemKeys.map(() => '?').join(',');
+    const [playlists] = await pool.query(
+      `SELECT id, user_id, system_key, name
+       FROM playlists
+       WHERE is_system = 1
+         AND system_key IN (${placeholders})
+       ORDER BY system_key ASC, id ASC`,
+      systemKeys
+    );
+
+    const uniqueUsers = new Set(playlists.map((playlist) => Number(playlist.user_id)).filter(Boolean));
+    const baseMetadata = {
+      source: 'admin_system_playlists_scope',
+      systemKeys,
+      totalPlaylists: playlists.length
+    };
+
+    runId = await runLogService.startGenerationRun({
+      operationType: 'regenerate_scope',
+      triggeredByUserId: req.user?.id || null,
+      metadata: baseMetadata
+    });
+
+    const progress = {
+      totalUsers: uniqueUsers.size,
+      totalPlaylists: playlists.length,
+      successCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      failedItems: [],
+      processedSamples: [],
+      successByKey: systemKeys.reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+      }, {}),
+      failedByKey: systemKeys.reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+      }, {})
+    };
+
+    await runLogService.updateGenerationRunProgress(runId, {
+      totalUsers: progress.totalUsers,
+      totalPlaylists: progress.totalPlaylists,
+      successCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      metadata: { ...baseMetadata, progress }
+    });
+
+    if (!playlists.length) {
+      await runLogService.finishGenerationRun(runId, {
+        status: 'success',
+        totalUsers: 0,
+        totalPlaylists: 0,
+        successCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        metadata: { ...baseMetadata, message: 'No playlists matched scope' }
+      });
+      return res.json({
+        success: true,
+        message: 'No playlists matched scope',
+        data: { runId, ...progress }
+      });
+    }
+
+    for (const playlist of playlists) {
+      try {
+        const result = await contextualService.generateContextualMoodPlaylistsForUser(playlist.user_id, {
+          timeSlot: TIME_SLOT_BY_SYSTEM_KEY[playlist.system_key],
+          playlistId: playlist.id,
+          forceApply: true
+        });
+        const slotResult = Array.isArray(result.results) ? result.results[0] : null;
+        progress.successCount += 1;
+        progress.successByKey[playlist.system_key] = (progress.successByKey[playlist.system_key] || 0) + 1;
+        const processedItem = {
+          playlistId: Number(playlist.id),
+          userId: Number(playlist.user_id),
+          systemKey: playlist.system_key,
+          tempoAwareApplied: Boolean(slotResult?.tempoAwareApplied || result.tempoAwareApplied),
+          avgBpm: slotResult?.avgBpm ?? result.avgBpm ?? null,
+          audioFeatureCoverage: slotResult?.audioFeatureCoverage || result.audioFeatureCoverage || null,
+          tempoDistribution: slotResult?.tempoDistribution || null
+        };
+        if (progress.processedSamples.length < 20) {
+          progress.processedSamples.push(processedItem);
+        }
+        await runLogService.logSystemPlaylistRun({
+          system_key: playlist.system_key,
+          playlist_id: playlist.id,
+          user_id: playlist.user_id,
+          run_type: 'manual',
+          status: 'success',
+          playlist_count: 1,
+          song_count: Number(slotResult?.insertedSongs || result.songsInserted || 0),
+          songs_added: Number(slotResult?.addedSongs || result.addedSongs || 0),
+          songs_removed: Number(slotResult?.removedSongs || result.removedSongs || 0),
+          total_songs: Number(slotResult?.insertedSongs || result.songsInserted || 0),
+          overlap_ratio: slotResult?.overlapRatio ?? result.overlapRatio ?? null,
+          message: JSON.stringify(processedItem)
+        });
+      } catch (err) {
+        progress.failedCount += 1;
+        progress.failedByKey[playlist.system_key] = (progress.failedByKey[playlist.system_key] || 0) + 1;
+        const failedItem = {
+          playlistId: Number(playlist.id),
+          userId: Number(playlist.user_id),
+          systemKey: playlist.system_key,
+          error: err.message
+        };
+        if (progress.failedItems.length < 50) {
+          progress.failedItems.push(failedItem);
+        }
+        await runLogService.logSystemPlaylistRun({
+          system_key: playlist.system_key,
+          playlist_id: playlist.id,
+          user_id: playlist.user_id,
+          run_type: 'manual',
+          status: 'failed',
+          playlist_count: 1,
+          error_message: err.message,
+          message: JSON.stringify(failedItem)
+        });
+      }
+
+      await runLogService.updateGenerationRunProgress(runId, {
+        totalUsers: progress.totalUsers,
+        totalPlaylists: progress.totalPlaylists,
+        successCount: progress.successCount,
+        failedCount: progress.failedCount,
+        skippedCount: progress.skippedCount,
+        errorMessage: progress.failedItems.length
+          ? progress.failedItems.slice(0, 5).map((item) => `${item.playlistId}: ${item.error}`).join('; ')
+          : null,
+        metadata: { ...baseMetadata, progress }
+      });
+    }
+
+    const status = progress.failedCount > 0
+      ? (progress.successCount > 0 ? 'partial' : 'failed')
+      : 'success';
+    await runLogService.finishGenerationRun(runId, {
+      status,
+      totalUsers: progress.totalUsers,
+      totalPlaylists: progress.totalPlaylists,
+      successCount: progress.successCount,
+      failedCount: progress.failedCount,
+      skippedCount: progress.skippedCount,
+      errorMessage: progress.failedItems.length
+        ? progress.failedItems.slice(0, 10).map((item) => `${item.playlistId}: ${item.error}`).join('; ')
+        : null,
+      metadata: { ...baseMetadata, progress }
+    });
+
+    return res.json({
+      success: status !== 'failed',
+      message: `Regenerate scope finished with status ${status}`,
+      data: {
+        runId,
+        status,
+        ...progress
+      }
+    });
+  } catch (error) {
+    if (runId) {
+      try {
+        await runLogService.finishGenerationRun(runId, {
+          status: 'failed',
+          errorMessage: error.message,
+          metadata: { error: error.message }
+        });
+      } catch (logErr) {
+        console.warn('Failed to close regenerate scope run:', logErr.message);
+      }
+    }
+    console.error('regenerateSystemPlaylistsScope Error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+      data: error.runningRun ? {
+        runningRunId: error.runningRun.id,
+        startedAt: error.runningRun.started_at
+      } : undefined
+    });
+  }
+};
 
 exports.regenerateAllSystemPlaylists = async (req, res, next) => {
   const runLogService = require('../services/systemPlaylistRunLog.service');
@@ -3737,10 +3835,23 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
     try {
       const contextualService = require('../services/contextualMoodPlaylist.service');
       const summary = await contextualService.generateContextualMoodPlaylistsForAllUsers();
-      await logSystemPlaylistRun({ system_key: 'morning_vibes', run_type: 'admin_all' });
-      await logSystemPlaylistRun({ system_key: 'afternoon_vibes', run_type: 'admin_all' });
-      await logSystemPlaylistRun({ system_key: 'evening_vibes', run_type: 'admin_all' });
-      await logSystemPlaylistRun({ system_key: 'night_vibes', run_type: 'admin_all' });
+      for (const key of ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes']) {
+        const slotStats = summary?.perSlotStats?.[key] || null;
+        await logSystemPlaylistRun({
+          system_key: key,
+          run_type: 'admin_all',
+          playlist_count: Number(slotStats?.processed || 0),
+          song_count: Number(slotStats?.audioFeatureCoverage?.total || 0),
+          songs_added: Number(slotStats?.avgAddedSongs || 0),
+          overlap_ratio: slotStats?.avgOverlapRatio ?? null,
+          message: JSON.stringify({
+            tempoAwareApplied: Boolean(slotStats?.tempoAwareApplied),
+            avgBpm: slotStats?.avgBpm ?? null,
+            audioFeatureCoverage: slotStats?.audioFeatureCoverage || null,
+            tempoDistribution: slotStats?.tempoDistribution || null
+          })
+        });
+      }
       mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers * 4));
       results.contextual = 'success';
     } catch (e) {
@@ -4290,6 +4401,21 @@ exports.getSongDetail = async (req, res, next) => {
       sameAlbumSongs
     };
 
+    const audioFeatureMap = await recommendationService.fetchAudioFeaturesForSongs([Number(id)]);
+    const audioFeature = audioFeatureMap.get(Number(id)) || null;
+    const audioFeatures = audioFeature ? {
+      rawBpm: audioFeature.raw_bpm,
+      normalizedBpm: audioFeature.normalized_bpm,
+      tempoBucket: audioFeature.tempo_bucket,
+      energyScore: audioFeature.energy_score,
+      danceabilityScore: audioFeature.danceability_score,
+      brightnessScore: audioFeature.brightness_score,
+      beatConfidence: audioFeature.tempo_confidence,
+      tempoStability: audioFeature.tempo_stability,
+      extractor: audioFeature.extractor || null,
+      extractedAt: audioFeature.extracted_at || null,
+    } : null;
+
     // 6. Admin Actions
     const adminActions = {
       canEdit: true,
@@ -4303,6 +4429,7 @@ exports.getSongDetail = async (req, res, next) => {
         song: songMetadata,
         summary,
         quality,
+        audioFeatures,
         analytics,
         relations,
         adminActions
@@ -4837,7 +4964,8 @@ exports.analyzeDashboardInsights = async (req, res, next) => {
   try {
     const { preset, dateFrom, dateTo } = req.body;
     const report = await adminDashboardInsightService.analyzeDashboardInsights(preset, dateFrom, dateTo);
-    res.json({ success: true, report });
+    const pendingWarning = (report.warnings || []).find(item => item.type === 'analytics_pending');
+    res.json({ success: true, report, message: pendingWarning?.message || null });
   } catch (error) {
     if (error.status === 400) {
       return res.status(400).json({ success: false, message: error.message });

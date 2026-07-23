@@ -23,10 +23,10 @@
         <div class="empty-state">Bạn chưa có playlist nào. Hãy tạo mới một playlist ở Thư viện.</div>
       </div>
       <div class="playlists-list" v-else>
-        <button 
-          v-for="p in playlists" 
-          :key="p.id" 
-          class="playlist-row" 
+        <button
+          v-for="p in playlists"
+          :key="p.id"
+          class="playlist-row"
           :class="{ 'added': isSongInPlaylist(p) }"
           :disabled="isSongInPlaylist(p)"
           @click="addToPlaylist(p.id)"
@@ -52,14 +52,15 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { playlistApi } from '@/api/playlist'
 import { formatImageUrl } from '@/utils/formatters'
 
+import { storeToRefs } from 'pinia'
 const library = useLibraryStore()
-const playlists = ref([])
-const loading = ref(false)
+const { myPlaylists, loadingMyPlaylists: loading } = storeToRefs(library)
+const playlists = computed(() => myPlaylists.value.filter(p => p.can_edit))
 
 watch(() => library.showPlaylistModal, async (newVal) => {
   if (newVal) {
@@ -68,18 +69,7 @@ watch(() => library.showPlaylistModal, async (newVal) => {
 })
 
 async function fetchPlaylists() {
-  loading.value = true
-  try {
-    const res = await playlistApi.getMyPlaylists()
-    if (res.data?.success) {
-      // Only show user's own editable playlists
-      playlists.value = res.data.data.filter(p => p.can_edit)
-    }
-  } catch (err) {
-    console.error('Failed to load playlists', err)
-  } finally {
-    loading.value = false
-  }
+  await library.fetchMyPlaylists()
 }
 
 function isSongInPlaylist(p) {
@@ -98,6 +88,7 @@ async function addToPlaylist(playlistId) {
   try {
     const res = await playlistApi.addSong(playlistId, songId)
     if (res.data?.success) {
+      library.fetchMyPlaylists(true)
       emit('success', 'Đã thêm bài hát vào playlist thành công!')
       library.closePlaylistModal()
     }

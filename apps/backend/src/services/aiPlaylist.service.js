@@ -30,7 +30,12 @@ function shapePreviewSong(song, req) {
         effective_release_status: song.effective_release_status || null,
         aiScore: song.aiScore,
         scoreBreakdown: song.scoreBreakdown,
-        reason: song.reason
+        reason: song.reason,
+        tempoBucket: song.tempo_bucket || song.tempoBucket || song.tempo_level || null,
+        normalizedBpm: song.normalized_bpm || song.normalizedBpm || song.bpm || null,
+        energyScore: song.energy_score ?? null,
+        danceabilityScore: song.danceability_score ?? song.danceability ?? null,
+        tempoReason: song.tempoReason || null
     };
 }
 
@@ -187,6 +192,8 @@ async function previewAiPlaylist({
         warnings,
         retrieval,
         strategy: ranked.rankingMeta.strategy,
+        tempoAware: Boolean(ranked.rankingMeta.tempoAware),
+        detectedTempoIntent: ranked.rankingMeta.detectedTempoIntent,
         source: 'ai_playlist_hybrid',
         meta: {
             strategy: ranked.rankingMeta.strategy,

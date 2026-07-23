@@ -94,9 +94,13 @@ CREATE TABLE albums (
     title           VARCHAR(255)    NOT NULL,
     cover_url       VARCHAR(500)    NULL,
     release_date    DATE            NULL,
-    release_status  ENUM('draft','scheduled','published','hidden') NOT NULL DEFAULT 'draft',
+    is_active       BOOLEAN         NOT NULL DEFAULT TRUE,  -- Trạng thái hiển thị
+    release_status  ENUM('draft','scheduled','published','hidden') NOT NULL DEFAULT 'published',
     release_at      DATETIME        NULL,
     published_at    DATETIME        NULL,
+    resubmission_count INT          NOT NULL DEFAULT 0,
+    can_resubmit    TINYINT(1)      NOT NULL DEFAULT 1,
+    resubmit_locked_reason TEXT     NULL,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_album_artist FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE,
@@ -124,6 +128,9 @@ CREATE TABLE songs (
     release_status  ENUM('draft','scheduled','published','hidden') NOT NULL DEFAULT 'published',
     release_at      DATETIME        NULL,
     published_at    DATETIME        NULL,
+    resubmission_count INT          NOT NULL DEFAULT 0,
+    can_resubmit    TINYINT(1)      NOT NULL DEFAULT 1,
+    resubmit_locked_reason TEXT     NULL,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_song_album  FOREIGN KEY (album_id)  REFERENCES albums  (id) ON DELETE SET NULL,
@@ -427,7 +434,3 @@ CREATE TABLE notifications (
     INDEX idx_noti_user (user_id),
     INDEX idx_noti_read (is_read)
 ) COMMENT='Th�ng b�o h? th?ng cho ng�?i d�ng';
-
-
-
-

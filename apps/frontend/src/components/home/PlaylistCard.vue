@@ -1,18 +1,18 @@
 <template>
-  <article 
+  <article
     :class="['group user-card user-card-hover overflow-hidden p-3 cursor-pointer flex flex-col', $attrs.class]"
     @click="$emit('click', playlist)"
   >
     <!-- Cover -->
     <div class="user-card-cover relative shadow-lg mb-3">
-      <CoverImage 
-        :src="getPlaylistCover(playlist)" 
+      <CoverImage
+        :src="getPlaylistCover(playlist)"
         class="user-card-cover-img"
       />
-      
+
       <!-- Play Button Overlay (Spotify Style) -->
       <div class="absolute bottom-2 right-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 z-10">
-        <button 
+        <button
           class="home-play-btn h-12 w-12 cursor-pointer border-none"
           @click.stop="$emit('play', playlist)"
         >
@@ -22,7 +22,7 @@
         </button>
       </div>
     </div>
-    
+
     <!-- Info -->
     <h3 class="line-clamp-1 text-sm font-extrabold text-white transition-colors">
       {{ playlist.name }}
@@ -30,6 +30,11 @@
     <p class="mt-1 line-clamp-2 text-xs font-medium text-slate-400 leading-snug">
       {{ playlist.desc || playlist.description || (playlist.total_songs ? `${playlist.total_songs} bài hát` : 'Danh sách phát') }}
     </p>
+    <div v-if="playlist.tempoAware" class="mt-2 flex">
+      <span class="inline-flex items-center rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+        Theo nhịp điệu
+      </span>
+    </div>
     <p v-if="customBottomLabel" class="mt-1 text-[11px] font-medium text-slate-500">
       {{ customBottomLabel }}
     </p>

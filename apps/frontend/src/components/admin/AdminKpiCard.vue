@@ -1,9 +1,9 @@
 <template>
-  <component 
+  <component
     :is="route ? RouterLink : 'div'"
     :to="route"
     :title="tooltip"
-    class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    class="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition hover:-translate-y-0.5 hover:shadow-md"
     :class="[
       compact && showIcon ? 'p-3.5' : compact ? 'p-4' : 'p-5',
       route ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/50 block' : ''
@@ -22,7 +22,7 @@
     <!-- Actual Content -->
     <template v-else>
       <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r" :class="accentClass" />
-      
+
       <div v-if="showIcon && iconPosition === 'left'" class="flex items-center gap-4">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" :class="iconClass">
           <MfIcon :name="icon || 'info'" size="20" />
@@ -44,13 +44,13 @@
             {{ title }}
           </p>
 
-          <p class="mt-1 leading-tight font-black tracking-tight truncate" 
+          <p class="mt-1 leading-tight font-black tracking-tight truncate"
              :class="[
                valueClass,
                String(formattedValue).length > 18 ? 'text-base' :
                String(formattedValue).length > 12 ? 'text-lg' :
                String(formattedValue).length > 8 ? 'text-xl' : 'text-2xl'
-             ]" 
+             ]"
              :title="String(formattedValue)">
             {{ formattedValue }}
           </p>
@@ -64,10 +64,10 @@
         </div>
 
         <div v-if="trendText" class="shrink-0 mt-0.5">
-          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide" 
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide"
             :class="[
-              trendDirection === 'down' ? 'bg-rose-50 text-rose-600' : 
-              trendDirection === 'none' ? iconClass : 
+              trendDirection === 'down' ? 'bg-rose-50 text-rose-600' :
+              trendDirection === 'none' ? iconClass :
               'bg-emerald-50 text-emerald-600'
             ]">
             <MfIcon v-if="trendDirection === 'down'" name="arrow_downward" size="14" />

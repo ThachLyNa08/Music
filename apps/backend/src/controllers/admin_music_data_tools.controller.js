@@ -14,27 +14,30 @@ const getBoolFieldCondition = (statusParam, field) => {
   return null;
 }
 
+const APPROVED_CATALOG_WHERE = `COALESCE(s.review_status, 'approved') = 'approved' AND (s.is_active = 1 OR s.is_active IS NULL)`;
+
 exports.getSummary = async (req, res, next) => {
   try {
-    const [[{ totalSongs }]] = await pool.query('SELECT COUNT(*) AS totalSongs FROM songs');
-    const [[{ coverCount }]] = await pool.query(`SELECT COUNT(*) AS coverCount FROM songs WHERE cover_url IS NOT NULL AND cover_url != ''`);
-    const [[{ lyricsCount }]] = await pool.query(`SELECT COUNT(*) AS lyricsCount FROM song_lyrics`);
-    const [[{ featureCount }]] = await pool.query(`SELECT COUNT(*) AS featureCount FROM song_audio_features`);
+    const [[{ totalSongs }]] = await pool.query(`SELECT COUNT(*) AS totalSongs FROM songs s WHERE ${APPROVED_CATALOG_WHERE}`);
+    const [[{ coverCount }]] = await pool.query(`SELECT COUNT(*) AS coverCount FROM songs s WHERE ${APPROVED_CATALOG_WHERE} AND cover_url IS NOT NULL AND cover_url != ''`);
+    const [[{ lyricsCount }]] = await pool.query(`SELECT COUNT(*) AS lyricsCount FROM songs s JOIN song_lyrics sl ON s.id = sl.song_id WHERE ${APPROVED_CATALOG_WHERE}`);
+    const [[{ featureCount }]] = await pool.query(`SELECT COUNT(*) AS featureCount FROM songs s JOIN song_audio_features saf ON s.id = saf.song_id WHERE ${APPROVED_CATALOG_WHERE}`);
 
     const healthQuery = `
-      SELECT 
+      SELECT
         SUM(IF(health_score = 3, 1, 0)) AS excellent,
         SUM(IF(health_score = 2, 1, 0)) AS good,
         SUM(IF(health_score = 1, 1, 0)) AS fair,
         SUM(IF(health_score = 0, 1, 0)) AS poor
       FROM (
-        SELECT 
-          (IF(s.cover_url IS NOT NULL AND s.cover_url != '', 1, 0) + 
-           IF(sl.song_id IS NOT NULL, 1, 0) + 
+        SELECT
+          (IF(s.cover_url IS NOT NULL AND s.cover_url != '', 1, 0) +
+           IF(sl.song_id IS NOT NULL, 1, 0) +
            IF(saf.song_id IS NOT NULL, 1, 0)) AS health_score
         FROM songs s
         LEFT JOIN song_lyrics sl ON s.id = sl.song_id
         LEFT JOIN song_audio_features saf ON s.id = saf.song_id
+        WHERE ${APPROVED_CATALOG_WHERE}
       ) t
     `;
     const [[healthDist]] = await pool.query(healthQuery);
@@ -66,7 +69,10 @@ exports.getList = async (req, res, next) => {
     const offset = (page - 1) * limit;
     const { search, cover, lyrics, features } = req.query;
 
-    let whereClauses = [];
+    let whereClauses = [
+      `COALESCE(s.review_status, 'approved') = 'approved'`,
+      `(s.is_active = 1 OR s.is_active IS NULL)`
+    ];
     let params = [];
 
     if (search) {
@@ -131,7 +137,7 @@ exports.getList = async (req, res, next) => {
       if (!row.has_cover) missingList.push('Cover');
       if (!row.has_lyrics) missingList.push('Lyrics');
       if (!row.has_features) missingList.push('Audio Features');
-      
+
       if (missingList.length === 3) health = 'Thiếu nhiều dữ liệu';
       else if (missingList.length > 0) health = `Thiếu ${missingList.join(', ')}`;
 
@@ -169,7 +175,7 @@ exports.getDetail = async (req, res, next) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(`
-      SELECT 
+      SELECT
         s.id, s.title, s.cover_url, s.audio_url, s.duration_sec AS duration,
         a.name AS artist_name,
         al.title AS album_title,
@@ -385,11 +391,11 @@ exports.exportLyricsBacklog = async (req, res, next) => {
     }
 
     const [missingSongs] = await pool.query(`
-      SELECT 
-        s.id AS song_id, 
-        s.title, 
+      SELECT
+        s.id AS song_id,
+        s.title,
         s.market,
-        a.name AS artist_name, 
+        a.name AS artist_name,
         al.title AS album_name,
         g.name AS genre_name
       FROM songs s
@@ -397,7 +403,9 @@ exports.exportLyricsBacklog = async (req, res, next) => {
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
       LEFT JOIN song_lyrics sl ON s.id = sl.song_id
-      WHERE sl.song_id IS NULL OR TRIM(sl.plain_lyrics) = '' OR sl.plain_lyrics IS NULL
+      WHERE (sl.song_id IS NULL OR TRIM(sl.plain_lyrics) = '' OR sl.plain_lyrics IS NULL)
+        AND COALESCE(s.review_status, 'approved') = 'approved'
+        AND (s.is_active = 1 OR s.is_active IS NULL)
     `);
 
     const FAILED_LYRICS_DIRS = [
@@ -435,7 +443,7 @@ exports.exportLyricsBacklog = async (req, res, next) => {
     for (const song of missingSongs) {
       const sTitleNorm = normalizeTitleStr(song.title);
       const sArtistNorm = normalizeArtistStr(song.artist_name);
-      
+
       let matchedItem = failedItems.find(f => (f.id || f.song_id || f.songId) == song.song_id);
       if (!matchedItem) {
         matchedItem = failedItems.find(f => f._norm_title === sTitleNorm && f._norm_artist === sArtistNorm);
@@ -474,4 +482,3 @@ exports.exportLyricsBacklog = async (req, res, next) => {
     next(error);
   }
 };
-

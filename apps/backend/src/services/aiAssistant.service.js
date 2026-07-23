@@ -1,6 +1,14 @@
 const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
+const {
+  detectTempoIntent,
+  computeTempoMatchScore,
+  computeEnergyMatchScore,
+  computeDanceabilityMatchScore,
+  buildTempoReason,
+} = require('../utils/tempoFeature.util');
+const recommendationService = require('./recommendation.service');
 
 function normalizeText(value = '') {
   return String(value)
@@ -62,7 +70,7 @@ function extractArtistQuery(prompt = '') {
   const norm = normalizeText(prompt);
   const match = norm.match(/(?:bai|nhac|bai hat)?\s*(?:cua)\s+(.+)$/);
   if (match) return match[1].trim();
-  
+
   const match2 = norm.match(/^(?:phat|nghe|bat|mo|tim)\s+(?:nhac)\s+(.+)$/);
   if (match2) {
     const val = match2[1].trim();
@@ -78,10 +86,10 @@ function extractArtistQuery(prompt = '') {
 
 function parseIntent(prompt = '') {
   const normalized = normalizeText(prompt);
-  
+
   let artistQuery = extractArtistQuery(prompt);
   let songTitleQuery = extractSongTitleQuery(prompt);
-  
+
   if (artistQuery && songTitleQuery && normalizeText(songTitleQuery).includes(artistQuery)) {
     songTitleQuery = null;
   }
@@ -92,7 +100,7 @@ function parseIntent(prompt = '') {
   if (normalized.includes('tim va phat')) action = 'play';
 
   const matchedKeywords = [];
-  
+
   let market = [];
   for (const rule of MARKET_RULES) {
     if (rule.terms.some(term => normalized.includes(term))) {
@@ -217,11 +225,11 @@ function scoreTitleCandidate(row, titleQuery) {
 
 function scoreSemanticCandidate(row, intent) {
   let score = 0;
-  
+
   if (intent.artistQuery) {
     const normArtist = normalizeText(row.artist_name);
     const normQuery = normalizeText(intent.artistQuery);
-    
+
     if (normArtist === normQuery) {
       score += 120;
     } else if (normArtist.includes(normQuery)) {
@@ -230,7 +238,7 @@ function scoreSemanticCandidate(row, intent) {
       const queryTokens = getTokens(intent.artistQuery);
       const artistTokens = new Set(getTokens(row.artist_name));
       const matchCount = queryTokens.filter(t => artistTokens.has(t)).length;
-      
+
       if (queryTokens.length > 0 && matchCount === queryTokens.length) {
         score += 80;
       } else if (matchCount > 0) {
@@ -245,11 +253,11 @@ function scoreSemanticCandidate(row, intent) {
   if (intent.market && intent.market.length > 0) {
     const m = intent.market[0];
     const genreSlug = String(row.genre_slug || '').toLowerCase();
-    
+
     if (m === 'KPOP' && (genreSlug.includes('k-pop') || genreSlug.includes('kpop'))) isMarketMatch = true;
     else if (m === 'VPOP' && (genreSlug.includes('v-pop') || genreSlug.includes('vpop') || genreSlug.includes('viet'))) isMarketMatch = true;
     else if (m === 'USUK' && (genreSlug.includes('us-uk') || genreSlug.includes('usuk') || genreSlug.includes('au-my') || genreSlug.includes('pop') && !genreSlug.includes('k-pop') && !genreSlug.includes('v-pop'))) isMarketMatch = true;
-    
+
     if (isMarketMatch) {
       score += 100;
     } else {
@@ -284,7 +292,7 @@ function scoreSemanticCandidate(row, intent) {
 }
 
 function formatSong(row) {
-  return {
+  const song = {
     id: row.id,
     title: row.title,
     duration_sec: row.duration_sec,
@@ -305,6 +313,57 @@ function formatSong(row) {
     genre_name: row.genre_name,
     like_count: row.like_count || 0,
     is_liked: Boolean(row.is_liked),
+  };
+  if (row.audioFeature) {
+    if (row.audioFeature.raw_bpm !== null && row.audioFeature.raw_bpm !== undefined) song.bpm = Number(row.audioFeature.raw_bpm);
+    if (row.audioFeature.normalized_bpm !== null && row.audioFeature.normalized_bpm !== undefined) song.normalizedBpm = Number(row.audioFeature.normalized_bpm);
+    if (row.audioFeature.tempo_bucket && row.audioFeature.tempo_bucket !== 'unknown') song.tempoBucket = row.audioFeature.tempo_bucket;
+    if (row.audioFeature.energy_score !== null && row.audioFeature.energy_score !== undefined) song.energyScore = Number(row.audioFeature.energy_score);
+    if (row.audioFeature.danceability_score !== null && row.audioFeature.danceability_score !== undefined) song.danceabilityScore = Number(row.audioFeature.danceability_score);
+    if (row.tempoReason) song.tempoReason = row.tempoReason;
+  }
+  return song;
+}
+
+async function applyTempoSearchRerank(rows, tempoIntent) {
+  if (!tempoIntent || !Array.isArray(rows) || rows.length === 0) {
+    return { rows, coverage: { covered: 0, total: rows?.length || 0, ratio: 0 } };
+  }
+
+  const featureMap = await recommendationService.fetchAudioFeaturesForSongs(rows.map((row) => row.id));
+  const textScores = rows.map((row) => Number(row._score || 0));
+  const min = Math.min(...textScores);
+  const max = Math.max(...textScores);
+  const range = max - min || 1;
+
+  const reranked = rows.map((row) => {
+    const feature = featureMap.get(Number(row.id)) || null;
+    const textSearchScore = (Number(row._score || 0) - min) / range;
+    const semanticScore = row._score > 0 ? Math.min(row._score / 120, 1) : 0;
+    const tempoMatchScore = computeTempoMatchScore(feature, tempoIntent);
+    const energyMatchScore = computeEnergyMatchScore(feature, tempoIntent);
+    const danceabilityMatchScore = computeDanceabilityMatchScore(feature, tempoIntent);
+    const finalSearchScore = textSearchScore * 0.55
+      + semanticScore * 0.15
+      + tempoMatchScore * 0.15
+      + energyMatchScore * 0.10
+      + danceabilityMatchScore * 0.05;
+
+    return {
+      ...row,
+      _score: finalSearchScore,
+      audioFeature: feature,
+      tempoReason: feature ? buildTempoReason(feature, tempoIntent) : null,
+    };
+  }).sort((a, b) => b._score - a._score || Number(a.id) - Number(b.id));
+
+  return {
+    rows: reranked,
+    coverage: {
+      covered: featureMap.size,
+      total: rows.length,
+      ratio: rows.length ? Number((featureMap.size / rows.length).toFixed(4)) : 0,
+    },
   };
 }
 
@@ -346,10 +405,10 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
   if (intent.artistQuery) {
     searchValues.push(normalizeText(intent.artistQuery));
   }
-  
+
   const fields = ['s.title', 'a.name', 'al.title', 'g.name', 'g.slug'];
   const { clauses, params: likeParams } = buildLikeWhere(fields, searchValues);
-  
+
   let finalWhere = clauses.length > 0 ? `AND (${clauses.join(' OR ')})` : '';
   const queryParams = userId ? [userId] : [];
   let marketOrder = '';
@@ -360,7 +419,7 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
     if (m === 'KPOP') marketCond = "(g.slug LIKE '%k-pop%' OR g.slug LIKE '%kpop%')";
     if (m === 'VPOP') marketCond = "(g.slug LIKE '%v-pop%' OR g.slug LIKE '%vpop%' OR g.slug LIKE '%viet%')";
     if (m === 'USUK') marketCond = "(g.slug LIKE '%us-uk%' OR g.slug LIKE '%usuk%' OR g.slug LIKE '%au-my%')";
-    
+
     marketOrder = `${marketCond} DESC,`;
     if (finalWhere) {
       finalWhere = `AND ( (${clauses.join(' OR ')}) OR ${marketCond} )`;
@@ -371,7 +430,7 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
 
   queryParams.push(...likeParams);
   if (currentSongId) queryParams.push(Number(currentSongId) || 0);
-  
+
   const fetchLimit = intent.market || intent.artistQuery ? Math.max(limit * 5, 100) : limit * 2;
   queryParams.push(`%${prompt}%`, `%${prompt}%`, `%${prompt}%`, `%${prompt}%`, fetchLimit);
 
@@ -403,6 +462,7 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
 
 async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId = null, userId = null }) {
   const intent = parseIntent(prompt);
+  const tempoIntent = detectTempoIntent(prompt);
   const limit = intent.action === 'play' ? 12 : 15;
   let rows = [];
   let strategy = intent.keywords.length > 0 ? 'rule_based_keyword_match' : 'popular_fallback';
@@ -430,12 +490,20 @@ async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId
       userId,
       limit,
     });
-    
+
     if (intent.artistQuery) {
       strategy = 'artist_strict_semantic_match';
     } else if (intent.market) {
       strategy = 'market_strict_semantic_match';
     }
+  }
+
+  let tempoCoverage = { covered: 0, total: rows.length, ratio: 0 };
+  if (tempoIntent && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery) {
+    const rerank = await applyTempoSearchRerank(rows, tempoIntent);
+    rows = rerank.rows.slice(0, limit);
+    tempoCoverage = rerank.coverage;
+    strategy = `${strategy}_tempo_aware`;
   }
 
   const songs = rows.map(formatSong);
@@ -475,6 +543,11 @@ async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId
 
   return {
     intent,
+    aiSearchMode: true,
+    tempoAware: Boolean(tempoIntent && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery),
+    detectedIntent: tempoIntent,
+    explanation: tempoIntent ? buildTempoReason(null, tempoIntent) : null,
+    audioFeatureCoverage: tempoCoverage,
     action,
     songs,
     strategy,

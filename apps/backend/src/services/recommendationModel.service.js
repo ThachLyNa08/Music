@@ -1,177 +1,104 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_MODEL_PATH = path.resolve(
-  __dirname,
-  '../../../../storage/recommendation/models/bpr_mf_latest.json'
-);
+const projectRoot = path.resolve(__dirname, '../../../../');
+const v4EvalDir = path.join(projectRoot, 'storage/recommendation/evaluation/v4');
 
-const NEW_MODEL_PATH = path.resolve(
-  __dirname,
-  '../../../../datasets/processed/recommendation/final/recommendation_bpr_model_final_semantic_v2.json'
-);
+const V4_ARTIFACTS = {
+  serving: path.join(v4EvalDir, 'lightgcn_hybrid_serving_recs_v4.json'),
+  lightgcn: path.join(v4EvalDir, 'lightgcn_hybrid_recs_v4.json'),
+  bpr: path.join(v4EvalDir, 'bpr_hybrid_recs_v4.json'),
+  cb: path.join(v4EvalDir, 'content_based_recs_v4.json'),
+  popular: path.join(v4EvalDir, 'most_popular_recs_v4.json')
+};
 
-let cached = null;
-let cachedAt = 0;
-let loadStatus = { ok: false, error: null, loadedAt: null, path: null };
+let cachedV4 = {};
+let loadStatus = { ok: false, error: null, loadedAt: null, paths: {} };
 
 function clearCache() {
-  cached = null;
-  cachedAt = 0;
-  loadStatus = { ok: false, error: null, loadedAt: null, path: null };
+  cachedV4 = {};
+  loadStatus = { ok: false, error: null, loadedAt: null, paths: {} };
 }
 
-function findLatestFileByPrefix(dir, prefix, ext = '.json') {
-  if (!fs.existsSync(dir)) return null;
-
-  const files = fs.readdirSync(dir)
-    .filter((file) => file.startsWith(prefix) && file.endsWith(ext))
-    .map((file) => {
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-      return {
-        file,
-        fullPath,
-        mtimeMs: stat.mtimeMs,
-        size: stat.size
-      };
-    })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
-
-  return files[0] ? files[0].fullPath : null;
-}
-const recommendationFinalDir = path.resolve(
-  __dirname,
-  '../../../../datasets/processed/recommendation/final'
-);
-
-function resolveModelPath(overridePath) {
-  if (overridePath) return path.isAbsolute(overridePath) ? overridePath : path.resolve(__dirname, '../../../', overridePath);
-  
-  const projectRoot = path.resolve(__dirname, '../../../../');
-  
-  // Priority 1: env var
-  if (process.env.RECOMMENDATION_MODEL_PATH) {
-    const envPath = path.isAbsolute(process.env.RECOMMENDATION_MODEL_PATH) ? process.env.RECOMMENDATION_MODEL_PATH : path.resolve(projectRoot, process.env.RECOMMENDATION_MODEL_PATH);
-    if (fs.existsSync(envPath)) {
-      console.log(`[RecommendationModel] Loaded active model from env RECOMMENDATION_MODEL_PATH: ${envPath}`);
-      return envPath;
-    }
+function loadArtifact(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`V4 artifact not found: ${filePath}`);
   }
-  if (process.env.BPR_MF_MODEL_PATH) {
-    const envPath2 = path.isAbsolute(process.env.BPR_MF_MODEL_PATH) ? process.env.BPR_MF_MODEL_PATH : path.resolve(projectRoot, process.env.BPR_MF_MODEL_PATH);
-    if (fs.existsSync(envPath2)) {
-      return envPath2;
-    }
-  }
-  
-  // Priority 2: current_model.json pointer
-  const pointerPath = path.join(projectRoot, 'storage/recommendation/models/current_model.json');
+  const raw = fs.readFileSync(filePath, 'utf8');
   try {
-    if (fs.existsSync(pointerPath)) {
-      const pointerData = JSON.parse(fs.readFileSync(pointerPath, 'utf8'));
-      if (pointerData && pointerData.model_path) {
-        const activeModelPath = path.isAbsolute(pointerData.model_path) 
-          ? pointerData.model_path 
-          : path.join(projectRoot, pointerData.model_path);
-          
-        if (fs.existsSync(activeModelPath)) {
-          console.log(`[RecommendationModel] Loaded active model: ${pointerData.active_version || 'unknown'} from ${activeModelPath}`);
-          return activeModelPath;
-        } else {
-          console.warn(`[RecommendationModel] Warning: current_model.json points to non-existent model_path: ${activeModelPath}. Falling back.`);
-        }
-      }
-    }
+    return JSON.parse(raw);
   } catch (err) {
-    console.warn(`[RecommendationModel] Error reading current_model.json: ${err.message}. Falling back.`);
+    throw new Error(`Corrupt V4 JSON artifact at ${filePath}: ${err.message}`);
+  }
+}
+
+function loadArtifactByKey(key) {
+  if (!V4_ARTIFACTS[key]) {
+    throw new Error(`Unknown V4 artifact key: ${key}`);
+  }
+  if (cachedV4[key]) {
+    return cachedV4[key];
   }
 
-  // Priority 3: V3 fallback if exists
-  const v3Path = path.join(projectRoot, 'storage/recommendation/models/v3/bpr_mf_v3.json');
-  if (fs.existsSync(v3Path)) {
-    console.log(`[RecommendationModel] Loaded active model: v3 (fallback) from ${v3Path}`);
-    return v3Path;
+  const artifact = loadArtifact(V4_ARTIFACTS[key]);
+  cachedV4[key] = artifact;
+  loadStatus = {
+    ok: true,
+    error: null,
+    loadedAt: loadStatus.loadedAt || new Date().toISOString(),
+    paths: { ...loadStatus.paths, [key]: V4_ARTIFACTS[key] }
+  };
+  if (process.env.DEBUG_RECOMMENDATION_MODEL === 'true') {
+    console.log(`[RecommendationModel] Loaded V4 artifact: ${key}`);
   }
+  return artifact;
+}
 
-  // Priority 4: Legacy logic
-  const latestModelPath = findLatestFileByPrefix(recommendationFinalDir, 'recommendation_bpr_model_final_', '.json');
-  if (latestModelPath) {
-    if (process.argv.includes('--debug')) {
-      console.log(`[BPR-MF] Found latest model artifact: ${latestModelPath}`);
+function hasLoadedAllArtifacts() {
+  return Object.keys(V4_ARTIFACTS).every((key) => cachedV4[key]);
+}
+
+function load() {
+  if (hasLoadedAllArtifacts()) {
+    if (process.env.NODE_ENV === 'development' && process.env.DEBUG_RECOMMENDATION_MODEL === 'true') {
+      console.log('[RecommendationModel] V4 artifacts already loaded, using memory cache');
     }
-    return latestModelPath;
+    return cachedV4;
   }
-  
-  if (fs.existsSync(NEW_MODEL_PATH)) {
-    return NEW_MODEL_PATH;
-  }
-  return DEFAULT_MODEL_PATH;
-}
 
-function validate(artifact) {
-  const required = ['user_index_map', 'song_index_map', 'user_factors', 'item_factors'];
-  const missing = required.filter((k) => !artifact[k]);
-  if (missing.length) {
-    throw new Error(`BPR-MF model artifact missing required fields: ${missing.join(', ')}`);
-  }
-  if (!Array.isArray(artifact.user_factors) || !artifact.user_factors.length) {
-    throw new Error('user_factors must be a non-empty 2D array');
-  }
-  if (!Array.isArray(artifact.item_factors) || !artifact.item_factors.length) {
-    throw new Error('item_factors must be a non-empty 2D array');
-  }
-  const userDim = artifact.user_factors[0]?.length || 0;
-  const itemDim = artifact.item_factors[0]?.length || 0;
-  if (userDim !== itemDim) {
-    throw new Error(`user_factors dim (${userDim}) != item_factors dim (${itemDim})`);
-  }
-  if (artifact.user_biases && artifact.user_biases.length !== artifact.user_factors.length) {
-    throw new Error('user_biases length does not match user_factors rows');
-  }
-  if (artifact.item_biases && artifact.item_biases.length !== artifact.item_factors.length) {
-    throw new Error('item_biases length does not match item_factors rows');
-  }
-}
+  const models = {};
+  const paths = {};
 
-function load(overridePath) {
-  const modelPath = resolveModelPath(overridePath);
-  if (cached && cachedAt === fs.statSync(modelPath).mtimeMs && loadStatus.path === modelPath) {
-    return cached;
-  }
-  if (!fs.existsSync(modelPath)) {
-    const err = new Error(`BPR-MF model artifact not found at ${modelPath}`);
-    loadStatus = { ok: false, error: err.message, loadedAt: null, path: modelPath };
+  try {
+    for (const [key, filePath] of Object.entries(V4_ARTIFACTS)) {
+      models[key] = loadArtifactByKey(key);
+      paths[key] = filePath;
+    }
+
+    cachedV4 = { ...cachedV4, ...models };
+    loadStatus = { ok: true, error: null, loadedAt: new Date().toISOString(), paths };
+    console.log(`[RecommendationModel] Loaded active model: v4 LightGCN Hybrid`);
+    console.log(`[RecommendationModel] V4 artifacts loaded: serving, lightgcn, bpr, content_based, most_popular`);
+    return cachedV4;
+  } catch (err) {
+    loadStatus = { ok: false, error: err.message, loadedAt: null, paths: {} };
     throw err;
   }
-  const raw = fs.readFileSync(modelPath, 'utf8');
-  let artifact;
-  try {
-    artifact = JSON.parse(raw);
-  } catch (parseErr) {
-    const err = new Error(`BPR-MF model artifact is corrupt JSON: ${parseErr.message}`);
-    loadStatus = { ok: false, error: err.message, loadedAt: null, path: modelPath };
-    throw err;
-  }
-  try {
-    validate(artifact);
-  } catch (valErr) {
-    loadStatus = { ok: false, error: valErr.message, loadedAt: null, path: modelPath };
-    throw valErr;
-  }
-  cached = artifact;
-  cachedAt = fs.statSync(modelPath).mtimeMs;
-  loadStatus = { ok: true, error: null, loadedAt: new Date().toISOString(), path: modelPath };
-  if (process.argv.includes('--debug')) {
-    console.log(`[BPR-MF] model loaded: ${artifact.trained_users} users, ${artifact.trained_items} items, factors=${artifact.user_factors[0].length}`);
-  }
-  return cached;
 }
 
-function tryLoad(overridePath) {
+function tryLoad() {
   try {
-    return { ok: true, model: load(overridePath), status: loadStatus };
+    return { ok: true, model: load(), status: loadStatus };
   } catch (err) {
+    return { ok: false, model: null, status: loadStatus, error: err.message };
+  }
+}
+
+function tryLoadArtifact(key) {
+  try {
+    return { ok: true, model: loadArtifactByKey(key), status: loadStatus };
+  } catch (err) {
+    loadStatus = { ok: false, error: err.message, loadedAt: loadStatus.loadedAt, paths: loadStatus.paths || {} };
     return { ok: false, model: null, status: loadStatus, error: err.message };
   }
 }
@@ -182,18 +109,16 @@ function reloadModel() {
 }
 
 function getModelMetadata() {
-  if (!cached) return null;
+  const serving = cachedV4.serving?.metadata || null;
   return {
-    algorithm: cached.algorithm || 'BPR-MF',
-    generated_at: cached.generated_at || null,
-    hyperparameters: cached.hyperparameters || null,
-    trained_users: cached.trained_users || 0,
-    trained_items: cached.trained_items || 0,
-    train_positive_pairs: cached.train_positive_pairs || 0,
-    factors: cached.user_factors[0]?.length || 0,
-    dataset_source: cached.dataset_source || null,
-    notes: cached.notes || [],
-    limitations: cached.limitations || [],
+    algorithm: 'LightGCN Hybrid V4',
+    generated_at: loadStatus.loadedAt,
+    notes: ['V4 serving uses DB user ids; benchmark artifacts use csv user ids'],
+    dataset_source: 'v4_serving',
+    benchmark_users: serving?.benchmarkUsers,
+    existing_system_users: serving?.existingSystemUsers,
+    serving_coverage: serving?.servingCoverage,
+    fallback_policy: serving?.fallbackPolicy,
   };
 }
 
@@ -201,15 +126,10 @@ function getLoadStatus() {
   return { ...loadStatus };
 }
 
-function getUserIndex(userId) {
-  if (!cached) return -1;
-  return cached.user_index_map[String(userId)] ?? -1;
-}
-
-function getSongIndex(songId) {
-  if (!cached) return -1;
-  return cached.song_index_map[String(songId)] ?? -1;
-}
+// Stubs for legacy V3 compatibility to prevent crashes if other parts call these
+function getUserIndex(userId) { return -1; }
+function getSongIndex(songId) { return -1; }
+function resolveModelPath() { return V4_ARTIFACTS.lightgcn; }
 
 module.exports = {
   load,
@@ -217,9 +137,10 @@ module.exports = {
   reloadModel,
   getModelMetadata,
   getLoadStatus,
+  tryLoadArtifact,
   getUserIndex,
   getSongIndex,
   clearCache,
   resolveModelPath,
-  DEFAULT_MODEL_PATH,
+  DEFAULT_MODEL_PATH: V4_ARTIFACTS.lightgcn,
 };

@@ -1,0 +1,32 @@
+graph TD
+    subgraph Input ["User Behavior Data (V4 Experimental)"]
+        A1[Listening History]
+        A2[completion_rate]
+        A3[is_skip / is_like]
+        A4[playlist_add / repeat]
+    end
+
+    subgraph CandidateGen ["Candidate Generation"]
+        B1[Most Popular Baseline]
+        B2[Content-Based Baseline]
+        B3[BPR-MF V4 Model]
+        B4[LightGCN V4 Model]
+    end
+
+    subgraph HybridReranking ["Hybrid Re-ranking V4"]
+        C1[Normalized Model Score]
+        C2[Content Match Score]
+        C3[Recent Interest Score]
+        C4[Novelty Score]
+        C5[Diversity Penalty]
+    end
+
+    subgraph Output ["Recommendation Output"]
+        D1[Top 20 Recommendations]
+        D2[Discovery Mix]
+        D3[Reason/Explanation Generator]
+    end
+
+    Input --> CandidateGen
+    CandidateGen -->|Top 100-200 Candidates| HybridReranking
+    HybridReranking --> Output

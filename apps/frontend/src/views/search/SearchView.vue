@@ -33,7 +33,7 @@
       </div>
 
       <!-- Recent Searches Dropdown -->
-      <div v-if="!isAiMode && isInputFocused && query.length === 0 && recentSearches.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      <div v-if="!isAiMode && isInputFocused && query.length === 0 && recentSearches.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/5 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
         <div class="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-white/5">
           <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Tìm kiếm gần đây</span>
           <button class="text-xs font-semibold text-gray-400 hover:text-white transition-colors" @mousedown.prevent="clearHistory">Xóa tất cả</button>
@@ -55,7 +55,7 @@
       </div>
 
       <!-- Autocomplete Suggestions Dropdown -->
-      <div v-if="showSuggestions && suggestions.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      <div v-if="showSuggestions && suggestions.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/5 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
         <div class="px-4 py-3 border-b border-white/5 bg-white/5">
           <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Gợi ý tìm kiếm</span>
         </div>
@@ -98,6 +98,9 @@
             <div class="min-w-0">
               <p class="text-xs font-semibold text-[#1ed760] uppercase tracking-wider">AI Music Assistant</p>
               <p class="text-sm text-gray-300 truncate">{{ aiResult.message }}</p>
+              <div v-if="aiResult.tempoAware && aiResult.detectedIntent" class="mt-2 flex flex-wrap items-center gap-2">
+                <span class="tempo-intent-badge">Đã nhận diện: {{ aiResult.detectedIntent.label || formatTempoIntent(aiResult.detectedIntent) }}</span>
+              </div>
             </div>
             <button
               v-if="aiSongs.length > 0"
@@ -114,19 +117,24 @@
           </div>
 
           <div v-else class="px-2 pb-2">
-            <SongRow
-              v-for="(song, idx) in aiSongs.slice(0, 5)"
-              :key="song.id || idx"
-              :song="song"
-              :index="idx + 1"
-              :showIndex="false"
-              :showAlbum="false"
-              :compact="true"
-              @play="(selectedSong) => playAiSong(selectedSong, idx)"
-              @open-menu="handleOpenMenu"
-              @toggle-like="toggleLike"
-              class="hover:bg-[#252525] rounded-md transition-colors"
-            />
+            <template v-for="(song, idx) in aiSongs.slice(0, 5)" :key="song.id || idx">
+              <SongRow
+                :song="song"
+                :index="idx + 1"
+                :showIndex="false"
+                :showAlbum="false"
+                :compact="true"
+                @play="(selectedSong) => playAiSong(selectedSong, idx)"
+                @open-menu="handleOpenMenu"
+                @toggle-like="toggleLike"
+                class="hover:bg-[#252525] rounded-md transition-colors"
+              />
+              <div class="ml-[64px] -mt-1 mb-2 flex flex-wrap items-center gap-2 px-2">
+                <span v-if="song.tempoBucket" class="song-tempo-badge">{{ formatTempoBucket(song.tempoBucket) }}</span>
+                <span v-if="isHighEnergy(song)" class="song-energy-badge">High energy</span>
+                <span v-if="song.tempoReason" class="text-[11px] text-gray-400">{{ song.tempoReason }}</span>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -146,21 +154,21 @@
       <template v-else>
         <!-- Top Result + Songs -->
         <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[400px_1fr] gap-6" :class="{ '!grid-cols-1': artistResults.length > 0 }">
-          
+
           <!-- Top Result Card -->
           <div v-if="songResults.length > 0 && artistResults.length === 0" class="flex flex-col gap-4 search-reveal search-reveal-delay-1">
             <h2 class="text-xl font-bold text-white tracking-tight">Kết quả hàng đầu</h2>
-            <div 
+            <div
               class="relative flex flex-col p-6 rounded-xl bg-[#181818] hover:bg-[#252525] transition-colors cursor-pointer group border border-transparent hover:border-white/5"
               @click="$router.push(`/song/${songResults[0].id}`)"
             >
-              <div class="w-24 h-24 rounded-md shadow-lg mb-5 flex-shrink-0 bg-cover bg-center" :style="getCoverStyle(songResults[0])"></div>
-              <h3 class="text-3xl font-black text-white mb-2 truncate">{{ songResults[0].title }}</h3>
+              <div class="w-24 h-24 rounded-lg shadow-md mb-5 flex-shrink-0 bg-cover bg-center" :style="getCoverStyle(songResults[0])"></div>
+              <h3 class="text-3xl font-black tracking-tight text-white mb-2 truncate">{{ songResults[0].title }}</h3>
               <div class="flex items-center gap-2 text-sm mt-auto">
                 <span class="text-gray-400 hover:text-white transition-colors truncate font-medium" @click.stop="goToArtist(songResults[0])">{{ songResults[0].artist_name || songResults[0].artist }}</span>
                 <span class="px-2.5 py-1 rounded-full bg-[#121212] text-white text-[11px] font-bold uppercase tracking-widest">Bài hát</span>
               </div>
-              <button 
+              <button
                 class="absolute bottom-6 right-6 w-12 h-12 rounded-full bg-[#1ed760] flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 hover:scale-105 shadow-[0_8px_16px_rgba(0,0,0,0.3)]"
                 @click.stop="playSong(songResults[0])"
               >
@@ -189,7 +197,6 @@
             </TransitionGroup>
           </div>
         </div>
-
         <!-- ── Artist Cards ── -->
         <div v-if="artistResults.length > 0" class="space-y-4 search-reveal search-reveal-delay-2">
           <h2 class="text-xl font-bold text-white tracking-tight">Nghệ sĩ</h2>
@@ -198,6 +205,7 @@
               v-for="artist in artistResults"
               :key="artist.id || artist.artist_id"
               :artist="artist"
+              :show-stats="false"
             />
           </TransitionGroup>
         </div>
@@ -238,6 +246,7 @@
               v-for="artist in genreArtists"
               :key="artist.id || artist.name"
               :artist="artist"
+              :show-stats="false"
             />
           </TransitionGroup>
           <div v-else class="p-6 rounded-xl bg-[#181818] border border-white/5 text-center">
@@ -255,7 +264,7 @@
 
     <!-- ═══ BROWSE SECTION (no search) ═══ -->
     <section v-if="!hasSearched && !isSearching" class="space-y-10 search-reveal search-reveal-delay-1">
-      
+
       <!-- Popular Artists -->
       <div class="space-y-4">
         <div class="flex items-center justify-between">
@@ -273,13 +282,13 @@
 
             <!-- Actual Content -->
             <div v-else-if="popularArtists.length > 0" class="relative">
-              <button 
+              <button
                 @click="scrollPopularArtists('left')"
             :disabled="arrivedState.left"
             class="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
             :class="[
-              !arrivedState.left 
-                ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer' 
+              !arrivedState.left
+                ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer'
                 : 'bg-black/40 text-gray-500 opacity-0 group-hover:opacity-50 cursor-not-allowed'
             ]"
             aria-label="Cuộn sang trái"
@@ -287,7 +296,7 @@
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
 
-          <div 
+          <div
             ref="popularArtistsContainer"
             class="flex overflow-x-auto gap-5 pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 scroll-smooth"
           >
@@ -295,17 +304,18 @@
               v-for="artist in popularArtists"
               :key="artist.id"
               :artist="artist"
+              :show-stats="false"
               class="min-w-[150px] w-[150px] sm:min-w-[180px] sm:w-[180px] flex-shrink-0"
             />
           </div>
 
-              <button 
+              <button
                 @click="scrollPopularArtists('right')"
                 :disabled="arrivedState.right"
                 class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
                 :class="[
-                  !arrivedState.right 
-                    ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer' 
+                  !arrivedState.right
+                    ? 'bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-[#1ed760] hover:text-black hover:scale-105 cursor-pointer'
                     : 'bg-black/40 text-gray-500 opacity-0 group-hover:opacity-50 cursor-not-allowed'
                 ]"
                 aria-label="Cuộn sang phải"
@@ -329,7 +339,7 @@
           <div
             v-for="genre in displayBrowseGenres"
             :key="genre.key"
-            class="relative h-[110px] sm:h-[140px] rounded-xl overflow-hidden cursor-pointer group bg-[#181818] border border-white/5"
+            class="relative h-[110px] sm:h-[140px] rounded-xl overflow-hidden cursor-pointer group bg-[#181818] border border-white/5 hover:border-white/10 transition-all duration-300"
             @click="selectGenre(genre)"
           >
             <img
@@ -455,13 +465,13 @@ const selectedGenre = computed(() => {
 
 const genreArtists = computed(() => {
   if (!selectedGenre.value) return []
-  
+
   const map = new Map()
   for (const song of songResults.value || []) {
     const artistId = song.artist_id || song.artist?.id
     const artistName = song.artist_name || song.artist?.name || song.artist
     if (!artistName) continue
-    
+
     const key = artistId || artistName
     if (!map.has(key)) {
       map.set(key, {
@@ -474,7 +484,7 @@ const genreArtists = computed(() => {
     }
     map.get(key).songCount += 1
   }
-  
+
   return Array.from(map.values())
     .sort((a, b) => b.songCount - a.songCount)
     .slice(0, 12)
@@ -550,6 +560,7 @@ const displayBrowseGenres = computed(() => {
     if (selected.length >= MAX_BROWSE_GENRES) return selected
   }
 
+
   const fallbackKeys = [
     'kpop-gen4', 'kpop-gen5', 'vpop-mainstream', 'vpop-genz',
     'vpop-indie-chill', 'usuk-pop', 'usuk-rnb', 'usuk-edm'
@@ -566,28 +577,36 @@ const displayBrowseGenres = computed(() => {
   return selected
 })
 
-onMounted(async () => {
+onMounted(() => {
   updateSearchPlaceholder()
   library.fetchLikedSongs()
   try {
     const saved = localStorage.getItem('musicflow_recent_searches')
     if (saved) recentSearches.value = JSON.parse(saved)
   } catch {}
-  try {
-    isLoadingPopular.value = true
-    const res = await artistApi.getPopular({ period: '7d', limit: 12 })
-    if (res.data?.success) popularArtists.value = res.data.data
-  } catch (err) {
-    console.warn('Failed to load popular artists', err)
-  } finally {
-    isLoadingPopular.value = false
-  }
-  try {
-    const res = await api.get('/users/me/profile')
-    if (res.data?.success && res.data.data?.top_genres) {
-      userTopGenres.value = res.data.data.top_genres
+
+  const loadPopular = async () => {
+    try {
+      isLoadingPopular.value = true
+      const res = await artistApi.getPopular({ period: '7d', limit: 12 })
+      if (res.data?.success) popularArtists.value = res.data.data
+    } catch (err) {
+      console.warn('Failed to load popular artists', err)
+    } finally {
+      isLoadingPopular.value = false
     }
-  } catch {}
+  }
+
+  const loadProfile = async () => {
+    try {
+      const res = await api.get('/users/me/profile')
+      if (res.data?.success && res.data.data?.top_genres) {
+        userTopGenres.value = res.data.data.top_genres
+      }
+    } catch {}
+  }
+
+  Promise.allSettled([loadPopular(), loadProfile()])
 })
 
 // ── Real-time search as user types ──
@@ -598,6 +617,11 @@ watch(query, (val) => {
   }
 
   clearTimeout(suggestionTimer)
+
+  if (suggestionAbortController) {
+    suggestionAbortController.abort()
+    suggestionAbortController = null
+  }
 
   if (isAiMode.value) {
     suggestions.value = []
@@ -611,10 +635,11 @@ watch(query, (val) => {
     return
   }
 
-  // Suggestions dropdown (debounce 250ms)
+  // Suggestions dropdown (debounce 350ms)
   suggestionTimer = setTimeout(async () => {
     try {
-      const res = await songApi.getSuggestions(q)
+      suggestionAbortController = new AbortController()
+      const res = await songApi.getSuggestions(q, { signal: suggestionAbortController.signal })
       if (res.data?.success) {
         const all = (res.data.data || []).map(normalizeSuggestionItem)
         const songs = all.filter(s => s.type === 'song').slice(0, 3)
@@ -624,8 +649,12 @@ watch(query, (val) => {
         const others = all.filter(s => !['song', 'artist', 'album', 'playlist'].includes(s.type))
         suggestions.value = [...songs, ...artists, ...albums, ...playlists, ...others]
       }
-    } catch {}
-  }, 250)
+    } catch (err) {
+      if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+        // ignore cancellation error
+      }
+    }
+  }, 350)
 })
 
 function normalizeSuggestionItem(item) {
@@ -638,6 +667,8 @@ function normalizeSuggestionItem(item) {
 function handleSuggestionImageError(s) {
   s.imageUrl = null
 }
+
+let searchAbortController = null
 
 async function submitSearch() {
   const q = query.value.trim()
@@ -656,8 +687,13 @@ async function submitSearch() {
   lastQuery.value = q
   suggestions.value = []
 
+  if (searchAbortController) {
+    searchAbortController.abort()
+  }
+  searchAbortController = new AbortController()
+
   try {
-    const res = await songApi.search(q, 15)
+    const res = await songApi.search(q, 15, { signal: searchAbortController.signal })
     if (res.data?.success) {
       const data = res.data.data
       songResults.value = library.applyLikedStateToSongs((data.songs || []).map(normalizeSong))
@@ -666,13 +702,16 @@ async function submitSearch() {
       genreResults.value = data.genres || []
     }
   } catch (err) {
+    if (err.name === 'CanceledError' || err.message === 'canceled') return;
     console.warn('Search error:', err)
     songResults.value = []
     artistResults.value = []
     albumResults.value = []
     genreResults.value = []
   } finally {
-    isSearching.value = false
+    if (!searchAbortController || !searchAbortController.signal.aborted) {
+      isSearching.value = false
+    }
   }
 }
 
@@ -731,7 +770,7 @@ async function playAiSong(song, index = 0) {
 function applySuggestion(s) {
   const term = s.text || s.title || s.name
   saveRecent(term)
-  
+
   if (s.type === 'song' && s.id) {
     router.push(`/song/${s.id}`)
   } else if (s.type === 'artist' && s.id) {
@@ -811,6 +850,25 @@ function normalizeSong(song) {
   }
 }
 
+function formatTempoBucket(bucket) {
+  if (bucket === 'fast') return 'Fast tempo'
+  if (bucket === 'medium') return 'Medium tempo'
+  if (bucket === 'slow') return 'Slow tempo'
+  return ''
+}
+
+function formatTempoIntent(intent) {
+  if (!intent) return ''
+  const bucket = formatTempoBucket(intent.tempoBucket).replace(' tempo', '')
+  const energy = intent.energyTarget === 'high' ? 'Năng lượng cao' : intent.energyTarget === 'low' ? 'Năng lượng nhẹ' : 'Năng lượng vừa'
+  const activity = intent.activity === 'workout' ? 'Tập luyện' : intent.activity === 'focus' ? 'Tập trung' : intent.activity === 'relax' ? 'Thư giãn' : 'Party'
+  return [bucket, energy, activity].filter(Boolean).join(' · ')
+}
+
+function isHighEnergy(song) {
+  return Number(song.energyScore) >= 0.65
+}
+
 function formatDuration(song) {
   if (song.duration && song.duration.includes(':')) return song.duration
   const s = Number(song.duration_sec || 0)
@@ -860,8 +918,8 @@ function handleAddToQueue(song) { player.addToQueue(song) }
 function handleGoToSong(song) { router.push(`/song/${song.id || song.song_id}`) }
 function handleGoToArtist(song) { if (song.artist_id) router.push(`/artist/${song.artist_id}`) }
 function handleGoToAlbum(song) { if (song.album_id) router.push(`/album/${song.album_id}`) }
-function handleShare(song) { 
-  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`) 
+function handleShare(song) {
+  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`)
 }
 </script>
 
@@ -971,12 +1029,12 @@ input::placeholder {
 }
 
 .search-v6-wrapper.is-focused {
-  box-shadow: 0 0 20px rgba(30, 215, 96, 0.15);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
 }
 
 .search-v6-wrapper.is-ai-mode {
   background: rgba(30, 215, 96, 0.45);
-  box-shadow: 0 0 18px rgba(30, 215, 96, 0.14);
+  box-shadow: 0 0 15px rgba(30, 215, 96, 0.1);
 }
 
 .search-v6-wrapper::before {
@@ -1102,6 +1160,36 @@ input::placeholder {
 .ai-search-play-button:hover {
   transform: scale(1.04);
   filter: brightness(1.04);
+}
+
+.tempo-intent-badge,
+.song-tempo-badge,
+.song-energy-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tempo-intent-badge {
+  padding: 5px 8px;
+  background: rgba(30, 215, 96, 0.12);
+  color: #86efac;
+  border: 1px solid rgba(30, 215, 96, 0.24);
+}
+
+.song-tempo-badge,
+.song-energy-badge {
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+}
+
+.song-energy-badge {
+  color: #fbbf24;
 }
 
 @keyframes rotate {

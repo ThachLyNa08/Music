@@ -1,7 +1,7 @@
 <template>
   <div class="home-page home-page-bg pb-4">
     <div class="relative z-10 max-w-[1920px] mx-auto home-shell" :class="{ 'home-shell--entered': isHomeEntered }">
-      
+
       <!-- Error Banner -->
       <div v-if="homeError" class="mb-3 p-4 mx-4 sm:mx-6 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm flex items-center gap-3">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -9,7 +9,7 @@
       </div>
 
       <!-- Hero Section -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 w-full">
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 w-full">
         <div class="h-[280px] w-full bg-white/5 rounded-none md:rounded-2xl animate-pulse"></div>
       </div>
       <HomeHero
@@ -18,46 +18,46 @@
         :featuredItem="featuredItem"
         @play="handlePlayFeatured"
         @explore="$router.push('/search')"
-        class="mb-3 rounded-none md:rounded-none"
+        class="mb-4 md:mb-5 rounded-none md:rounded-none"
       />
 
       <!-- Quick Access Section -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-           <div v-for="i in 6" :key="i" class="h-20 bg-white/5 rounded-2xl animate-pulse"></div>
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+           <div v-for="i in 6" :key="i" class="h-20 bg-white/5 rounded-xl animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="quickAccess.length > 0" class="home-panel-soft mb-3">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div 
-            v-for="item in displayQuickAccess" 
+      <section v-else-if="quickAccess.length > 0" class="home-panel-soft mb-4 md:mb-5">
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          <div
+            v-for="item in displayQuickAccess"
             :key="`qa-${item.id}`"
-            class="home-card home-card-hover group relative flex h-20 cursor-pointer items-center overflow-hidden rounded-2xl"
+            class="home-card home-card-hover group relative flex h-16 md:h-20 cursor-pointer items-center overflow-hidden rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/[0.08] transition-all duration-300"
             @click="goToPlaylist(item)"
           >
-            <img :src="getPlaylistCover(item)" loading="lazy" decoding="async" @error="e => e.target.src='/default-cover.png'" class="w-20 h-20 object-cover flex-shrink-0 shadow-md" />
-            <div class="flex-1 min-w-0 px-4">
-              <h3 class="text-white font-bold text-base truncate">{{ item.name }}</h3>
+            <img :src="getPlaylistCover(item)" loading="lazy" decoding="async" @error="e => e.target.src='/default-cover.png'" class="w-16 h-16 md:w-20 md:h-20 object-cover flex-shrink-0 shadow-md" />
+            <div class="flex-1 min-w-0 px-2 md:px-4">
+              <h3 class="text-white font-bold tracking-tight text-[13px] md:text-base truncate">{{ item.name }}</h3>
             </div>
-            <button 
-              class="home-play-btn absolute right-4 z-10 h-10 w-10 flex-shrink-0 cursor-pointer border-none opacity-0 group-hover:opacity-100"
+            <button
+              class="home-play-btn absolute right-2 md:right-4 z-10 h-8 w-8 md:h-10 md:w-10 flex-shrink-0 cursor-pointer border-none opacity-0 group-hover:opacity-100"
               @click.stop="playPlaylist(item)"
             >
-              <svg viewBox="0 0 24 24" class="w-5 h-5 fill-black ml-1"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+              <svg viewBox="0 0 24 24" class="w-4 h-4 md:w-5 md:h-5 fill-black ml-1 md:ml-1"><polygon points="5 3 19 12 5 21 5 3" /></svg>
             </button>
           </div>
         </div>
       </section>
 
       <!-- Section: Mix cá nhân của bạn (Made For You) -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="madeForYouPlaylists.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="madeForYouPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           title="Mix cá nhân của bạn"
           subtitle="Những danh sách phát cá nhân hóa dựa trên thói quen nghe nhạc của bạn"
           @viewAll="router.push('/library')"
@@ -76,14 +76,14 @@
       </section>
 
       <!-- Section: Đề xuất từ gu nghe của bạn (BPR-MF) -->
-      <div v-if="loadingRecommendations" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingRecommendations" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedSongs.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="recommendedSongs.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           :title="recommendTitle"
           :subtitle="recommendSubtitle"
           @viewAll="router.push('/recommendations/for-you')"
@@ -100,14 +100,14 @@
       </section>
 
       <!-- Section: Nghe gần đây (Compact list) -->
-      <div v-if="loadingRecent" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingRecent" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recentSongs.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="recentSongs.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           title="Nghe gần đây"
           subtitle="Tiếp tục từ nơi bạn đã dừng lại"
           @viewAll="$router.push('/recently-played')"
@@ -124,14 +124,14 @@
       </section>
 
       <!-- Section: Gợi ý hôm nay -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedToday.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="recommendedToday.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           title="Gợi ý hôm nay"
           subtitle="Playlist phù hợp với thời điểm và thói quen nghe nhạc của bạn"
         />
@@ -149,19 +149,19 @@
       </section>
 
       <!-- Section: Xu hướng (Trending Now) -->
-      <div v-if="loadingTrending" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingTrending" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-2 space-y-2">
+        <div class="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2 space-y-2">
            <div v-for="j in 5" :key="j" class="h-14 w-full bg-white/5 rounded-md animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="trendingSongs.length > 0" class="home-panel mb-3">
+      <section v-else-if="trendingSongs.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Xu hướng"
           subtitle="Những bài hát hot nhất hiện nay"
           @viewAll="onTrendingViewAll"
         />
-        <div class="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-2">
+        <div class="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2">
           <SongRow
             v-for="(song, idx) in trendingSongs"
             :key="song.id || idx"
@@ -178,17 +178,17 @@
       </section>
 
       <!-- Weekly Chart -->
-      <WeeklyChartSection class="home-panel mb-3" @open-menu="handleOpenMenu" />
+      <WeeklyChartSection class="home-panel mb-4 md:mb-5" @open-menu="handleOpenMenu" />
 
       <!-- Section: Danh sách phát của bạn -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[220px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="userPlaylists.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="userPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           title="Danh sách phát của bạn"
           subtitle="Những playlist do bạn tạo"
         />
@@ -205,14 +205,14 @@
       </section>
 
       <!-- Section: Nghệ sĩ quan tâm / Nổi bật -->
-      <div v-if="loadingHomeBase" class="px-4 sm:px-6 py-4 space-y-4 w-full">
+      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[160px] h-[160px] rounded-full bg-white/5 animate-pulse flex-shrink-0"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[124px] rounded-full bg-white/5 animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="displayArtists.length > 0" class="home-panel mb-3">
-        <SectionHeader 
+      <section v-else-if="displayArtists.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
           :title="hasFollowedArtists ? 'Từ nghệ sĩ bạn quan tâm' : 'Nghệ sĩ nổi bật'"
           :subtitle="hasFollowedArtists ? 'Những nghệ sĩ bạn đang theo dõi' : 'Khám phá những nghệ sĩ được yêu thích'"
           :showViewAll="hasFollowedArtists"
@@ -232,14 +232,14 @@
 
       <!-- Empty States -->
       <div v-if="!isAnyLoading && !hasAnyData" class="text-center py-20">
-        <div class="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-6">
+        <div class="w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-500 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-violet-900/20">
           <svg viewBox="0 0 24 24" fill="white" class="w-10 h-10">
             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
           </svg>
         </div>
         <h3 class="text-xl font-bold text-white mb-2">Chưa có gợi ý nào</h3>
         <p class="text-gray-400 mb-6">Hãy nghe thêm nhạc để chúng tôi hiểu bạn hơn</p>
-        <button 
+        <button
           @click="$router.push('/search')"
           class="px-6 py-3 bg-[#1ed760] text-black font-bold rounded-full hover:bg-[#1fdf64] transition"
         >
@@ -248,7 +248,7 @@
       </div>
 
     </div>
-    
+
     <!-- Action Menu -->
     <SongActionMenu
       :show="menuState.show"
@@ -380,7 +380,7 @@ function uniqueByPlaylist(items) {
 }
 
 const MADE_FOR_YOU_ORDER = [
-  'weekly_mix', 'dailymix_01', 'dailymix_02', 'dailymix_03', 
+  'weekly_mix', 'dailymix_01', 'dailymix_02', 'dailymix_03',
   'dailymix_04', 'dailymix_05', 'dailymix_06', 'weeklymix'
 ];
 
@@ -434,8 +434,8 @@ const isAnyLoading = computed(() => loadingHomeBase.value || loadingTrending.val
 
 // Check if has any data
 const hasAnyData = computed(() => {
-  return trendingSongs.value.length > 0 || 
-         quickAccess.value.length > 0 || 
+  return trendingSongs.value.length > 0 ||
+         quickAccess.value.length > 0 ||
          madeForYouPlaylists.value.length > 0 ||
          recommendedToday.value.length > 0 ||
          recentSongs.value.length > 0 ||
@@ -449,7 +449,7 @@ function loadDataParallel() {
       const recRes = await recommendApi.getHomeRecommendations()
       if (recRes.data?.success) {
         const d = recRes.data.data
-        
+
         // Heavy processing once
         _rawQuickAccess = uniqueByPlaylist(d.quickAccess || [])
         _rawMadeForYou = processMadeForYou(d.madeForYouPlaylists || [])
@@ -457,16 +457,16 @@ function loadDataParallel() {
         _rawUserPlaylists = d.userPlaylists || []
         _rawFollowedArtists = d.followed_artists || []
         _rawPopularArtists = d.popular_artists || []
-        
+
         quickAccess.value = _rawQuickAccess
         madeForYouPlaylists.value = _rawMadeForYou
         recommendedToday.value = _rawRecommendedToday
         userPlaylists.value = _rawUserPlaylists
         displayArtistsRaw.value = _rawFollowedArtists.length > 0 ? _rawFollowedArtists : _rawPopularArtists
-        
+
         hasFollowedArtists.value = d.has_followed_artists || false
         trendingNowPlaylist.value = d.trendingNowPlaylist || null
-        
+
         _homeCache.homeBaseData = d
       } else {
         homeError.value = 'Không thể tải đầy đủ gợi ý cá nhân hóa.'
@@ -477,7 +477,7 @@ function loadDataParallel() {
     } finally {
       loadingHomeBase.value = false
       performance.mark('home-homebase-ready')
-      
+
       // Once homeBase is done, trigger trending
       fetchTrending()
     }
@@ -500,6 +500,15 @@ function loadDataParallel() {
       _homeCache.trendingSongs = _rawTrending
     } catch (err) {
       console.warn('Không thể tải bảng xếp hạng:', err)
+      if (err?.response?.status === 404) {
+        trendingNowPlaylist.value = null
+        if (_homeCache.homeBaseData) {
+          _homeCache.homeBaseData.trendingNowPlaylist = null
+        }
+      }
+      await fallbackTrending()
+      trendingSongs.value = _rawTrending
+      _homeCache.trendingSongs = _rawTrending
     } finally {
       loadingTrending.value = false
     }
@@ -554,7 +563,7 @@ function loadDataParallel() {
 
   // Execute in parallel (non-blocking)
   fetchHomeBase() // fetchTrending depends on this
-  
+
   const runIdle = (fn) => {
     if ('requestIdleCallback' in window) {
       window.requestIdleCallback(fn, { timeout: 1000 })
@@ -673,8 +682,8 @@ function handleAddToQueue(song) { player.addToQueue(song) }
 function handleGoToSong(song) { router.push(`/song/${song.id || song.song_id}`) }
 function handleGoToArtist(song) { if (song.artist_id) router.push(`/artist/${song.artist_id}`) }
 function handleGoToAlbum(song) { if (song.album_id) router.push(`/album/${song.album_id}`) }
-function handleShare(song) { 
-  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`) 
+function handleShare(song) {
+  navigator.clipboard.writeText(`${window.location.origin}/song/${song.id || song.song_id}`)
 }
 
 onMounted(() => {
@@ -686,7 +695,7 @@ onMounted(() => {
     performance.mark('home-enter-class-set')
     performance.measure('mount-to-enter', 'home-mount-start', 'home-enter-class-set')
   })
-  
+
   // Non-blocking fetch delayed until after first paint
   afterFirstPaint(() => {
     performance.mark('home-first-fetch-start')
@@ -754,8 +763,15 @@ section {
 }
 
 .home-panel, .home-panel-soft {
-  padding-left: 24px;
-  padding-right: 24px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+@media (min-width: 640px) {
+  .home-panel, .home-panel-soft {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
 }
 
 @media (min-width: 640px) {

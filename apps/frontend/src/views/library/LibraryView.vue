@@ -34,19 +34,19 @@
         </div>
       </div>
     </section>
-    
+
     <!-- Tabs -->
     <div class="library-grid-wrap" ref="gridWrapRef">
       <div class="tabs-container">
       <div class="flex gap-2 overflow-x-auto pb-2">
-        <button 
+        <button
           class="tab-btn px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap"
           :class="{ 'active': activeTab === 'playlists' }"
           @click="switchTab('playlists')"
         >
           Playlist
         </button>
-        <button 
+        <button
           class="tab-btn px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap"
           :class="{ 'active': activeTab === 'albums' }"
           @click="switchTab('albums')"
@@ -54,7 +54,7 @@
           Album
           <span v-if="albumCount > 0" class="ml-1 text-xs opacity-70">({{ albumCount }})</span>
         </button>
-        <button 
+        <button
           class="tab-btn px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap"
           :class="{ 'active': activeTab === 'singles' }"
           @click="switchTab('singles')"
@@ -62,7 +62,7 @@
           Single
           <span v-if="singleCount > 0" class="ml-1 text-xs opacity-70">({{ singleCount }})</span>
         </button>
-        <button 
+        <button
           class="tab-btn px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap"
           :class="{ 'active': activeTab === 'artists' }"
           @click="switchTab('artists')"
@@ -88,9 +88,9 @@
 
       <div v-else class="library-grid-wrap">
         <div class="playlist-grid">
-          <RouterLink 
-            v-for="p in paginatedPlaylists" 
-            :key="`playlist-${p.id || p.name}`" 
+          <RouterLink
+            v-for="p in paginatedPlaylists"
+            :key="`playlist-${p.id || p.name}`"
             class="playlist-card user-card user-card-hover"
             :to="`/playlist/${p.id}`"
           >
@@ -130,8 +130,8 @@
       <div v-else class="library-grid-wrap">
         <div class="library-cards-grid">
           <MediaCard
-            v-for="a in paginatedAlbums" 
-            :key="`album-${a.id}`" 
+            v-for="a in paginatedAlbums"
+            :key="`album-${a.id}`"
             :item="a"
             type="album"
           />
@@ -163,8 +163,8 @@
       <div v-else class="library-grid-wrap">
         <div class="library-cards-grid">
           <MediaCard
-            v-for="s in paginatedSingles" 
-            :key="`single-${s.id}`" 
+            v-for="s in paginatedSingles"
+            :key="`single-${s.id}`"
             :item="s"
             type="single"
           />
@@ -214,8 +214,8 @@
     </div>
 
     <!-- Create Modal -->
-    <CreatePlaylistModal 
-      v-if="showCreateModal" 
+    <CreatePlaylistModal
+      v-if="showCreateModal"
       :creating="creating"
       @close="showCreateModal = false"
       @create="handleCreate"
@@ -224,10 +224,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { playlistApi } from '@/api/playlist'
 import { useFollowedArtistsStore } from '@/stores/followedArtists'
 import { useToastStore } from '@/stores/toast'
+import { useLibraryStore } from '@/stores/library'
 import CreatePlaylistModal from '@/components/playlist/CreatePlaylistModal.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import MediaCard from '@/components/common/MediaCard.vue'
@@ -238,9 +241,10 @@ const gridWrapRef = ref(null)
 const columnsCount = ref(6)
 let resizeObserver = null
 
+const libraryStore = useLibraryStore()
+const { myPlaylists: playlists } = storeToRefs(libraryStore)
 const toast = useToastStore()
 
-const playlists = ref([])
 const loading = ref(true)
 const showCreateModal = ref(false)
 const creating = ref(false)
@@ -404,17 +408,8 @@ watch([playlistItems, albumItems, singleItems, itemsPerPage], () => {
 })
 
 async function fetchPlaylists() {
-  loading.value = true
-  try {
-    const res = await playlistApi.getMyPlaylists()
-    if (res.data?.success) {
-      playlists.value = res.data.data
-    }
-  } catch (err) {
-    console.error(err)
-  } finally {
-    loading.value = false
-  }
+  await libraryStore.fetchMyPlaylists()
+  loading.value = false
 }
 
 onMounted(() => {
@@ -433,7 +428,7 @@ onMounted(() => {
       columnsCount.value = Math.max(2, Math.floor((width + gap) / (minWidth + gap)))
     }
   })
-  
+
   if (gridWrapRef.value) {
     resizeObserver.observe(gridWrapRef.value)
   }
@@ -448,7 +443,7 @@ onBeforeUnmount(() => {
 
 async function handleCreate(form) {
   creating.value = true
-  
+
   const fd = new FormData()
   fd.append('name', form.name)
   fd.append('description', form.description)
@@ -458,8 +453,9 @@ async function handleCreate(form) {
   try {
     const res = await playlistApi.create(fd)
     if (res.data?.success) {
+      creating.value = false
+      libraryStore.fetchMyPlaylists(true)
       showCreateModal.value = false
-      await fetchPlaylists() // reload list
       toast.showToast('Đã tạo danh sách phát')
     }
   } catch (err) {
@@ -800,18 +796,18 @@ async function handleCreate(form) {
     margin-top: -22px;
     padding: 24px 20px;
   }
-  
+
   .library-cover {
     width: 160px;
     height: 160px;
     margin: 0 auto;
   }
-  
+
   .library-hero-content {
     text-align: center;
     width: 100%;
   }
-  
+
   .library-actions {
     justify-content: center;
   }

@@ -1,14 +1,14 @@
 <template>
-  <article 
-    class="media-card user-card" 
+  <article
+    class="media-card user-card"
     :class="{ 'media-card--clickable': clickable }"
     @click="handleClick"
   >
     <div class="media-card__cover-wrap">
-      <CoverImage 
+      <CoverImage
         v-if="mediaCover"
-        :src="mediaCover" 
-        :alt="mediaTitle" 
+        :src="mediaCover"
+        :alt="mediaTitle"
       />
       <div v-else class="media-card__cover-placeholder">
         <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -16,7 +16,7 @@
     </div>
 
     <h3 class="media-card__title">{{ mediaTitle }}</h3>
-    
+
     <p v-if="showMeta && mediaMeta" class="media-card__meta">
       {{ mediaMeta }}
     </p>
@@ -73,7 +73,7 @@ const mediaCover = computed(() => {
     null
 
   if (!raw) return null
-  
+
   const trimmed = typeof raw === 'string' ? raw.trim() : ''
   if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null
 
@@ -133,9 +133,9 @@ function handleClick() {
   if (!id) return
 
   const mediaType = getMediaType()
-  
+
   emit('click', { item: props.item, type: mediaType })
-  
+
   // Navigate to album detail (single cũng dùng chung album detail)
   router.push(`/album/${id}`)
 }
@@ -207,5 +207,18 @@ function handleClick() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+  .media-card {
+    padding: 10px;
+  }
+  .media-card__title {
+    font-size: 12px;
+    margin: 8px 0 4px;
+  }
+  .media-card__meta {
+    font-size: 11px;
+  }
 }
 </style>

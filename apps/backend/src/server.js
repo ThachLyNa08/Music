@@ -14,6 +14,30 @@ async function bootstrap() {
   // 1. Kiểm tra kết nối DB & Cache
   await testConnection();
 
+  // Inject index creation
+  try {
+    console.log('Ensuring DB indexes...');
+    const queries = [
+      'CREATE INDEX idx_listening_history_created_at ON listening_history(created_at)',
+      'CREATE INDEX idx_listening_history_song_id ON listening_history(song_id)',
+      'CREATE INDEX idx_listening_history_created_at_song_id ON listening_history(created_at, song_id)',
+      'CREATE INDEX idx_listening_history_source_created_at ON listening_history(source, created_at)',
+      'CREATE INDEX idx_songs_artist_id ON songs(artist_id)'
+    ];
+    for (const query of queries) {
+      try {
+        await pool.query(query);
+      } catch (err) {
+        if (err.code !== 'ER_DUP_KEYNAME') {
+          console.error(`Index creation failed for: ${query}`, err.message);
+        }
+      }
+    }
+    console.log('DB indexes check complete.');
+  } catch (e) {
+    console.error('Error in index check:', e.message);
+  }
+
   await connectRedis();
 
   const { ensureLogTableExists } = require('./services/systemPlaylistRunLog.service');
@@ -34,7 +58,7 @@ async function bootstrap() {
 
   // 4. Khởi chạy scheduled jobs (cron)
   require('./services/scheduler.service');
-  
+
   const { startSystemPlaylistScheduler } = require('./schedulers/systemPlaylistScheduler');
   startSystemPlaylistScheduler();
 

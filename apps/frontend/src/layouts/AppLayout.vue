@@ -1,33 +1,33 @@
 <template>
   <div class="user-layout-surface min-h-screen w-full overflow-x-hidden text-gray-200 font-sans">
     <!-- SIDEBAR DRAWER OVERLAY -->
-    <div 
+    <div
       v-if="isLeftSidebarOpen"
       class="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm md:hidden"
       @click="isLeftSidebarOpen = false"
     ></div>
 
     <!-- SIDEBAR -->
-    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[90] flex w-[280px] md:w-[220px] flex-col overflow-y-auto border-r border-white/10 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl transition-transform duration-300 md:translate-x-0"
+    <aside class="sidebar-scroll fixed left-0 top-0 bottom-0 z-[90] flex w-[280px] md:w-[240px] flex-col overflow-y-auto border-r border-white/5 bg-[#080b14]/95 p-4 pb-28 backdrop-blur-xl transition-transform duration-300 md:translate-x-0"
            :class="isLeftSidebarOpen ? 'translate-x-0' : '-translate-x-full'">
       <!-- Brand -->
-      <div class="mb-5 flex h-20 items-center gap-3 px-2">
+      <div class="mb-6 flex h-16 items-center gap-3 px-2">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-500/20 shadow-lg shadow-violet-950/30">
           <img src="/logo.png" alt="MusicFlow" class="h-8 w-8 object-contain opacity-95" />
         </div>
         <div class="min-w-0">
-          <h1 class="truncate text-lg font-extrabold text-white">MusicFlow</h1>
+          <h1 class="truncate text-lg font-extrabold tracking-tight text-white">MusicFlow</h1>
           <p class="text-xs font-semibold text-slate-400">Premium Audio</p>
         </div>
       </div>
 
       <!-- Nav -->
       <nav class="flex flex-col gap-1.5" @click="isLeftSidebarOpen = false">
-        <RouterLink 
-          v-for="item in navItems" 
-          :key="item.to" 
-          :to="item.to" 
-          class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm no-underline transition-all duration-200 group"
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm no-underline transition-all duration-200 group"
           :class="isActive(item.to) ? 'border border-white/10 bg-white/[0.10] font-bold text-white shadow-lg shadow-black/10' : 'border border-transparent font-semibold text-slate-400 hover:bg-white/[0.06] hover:text-white'"
         >
           <MfIcon :name="item.icon" size="20" className="shrink-0 transition-colors" :class="isActive(item.to) ? 'text-white' : 'text-slate-500 group-hover:text-white'" />
@@ -40,7 +40,7 @@
           </span>
         </RouterLink>
 
-        <div class="my-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div class="my-3 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
       </nav>
 
@@ -49,22 +49,22 @@
       <!-- Playlists section -->
       <div class="py-4" @click="isLeftSidebarOpen = false">
         <div class="px-4 pb-2 pt-5 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Thư viện</div>
-        
-        <RouterLink to="/liked-songs" class="flex items-center gap-3 rounded-2xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/liked-songs') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
+
+        <RouterLink to="/liked-songs" class="flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/liked-songs') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md transition-transform group-hover:scale-105">
             <MfIcon name="favorite" filled size="18" />
           </div>
           <span class="truncate text-sm font-semibold" :class="isActive('/liked-songs') ? 'text-white' : 'text-slate-400 group-hover:text-white'">Bài hát yêu thích</span>
         </RouterLink>
-        
-        <RouterLink to="/recently-played" class="flex items-center gap-3 rounded-2xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/recently-played') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
+
+        <RouterLink to="/recently-played" class="flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/recently-played') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md transition-transform group-hover:scale-105">
             <MfIcon name="history" size="18" />
           </div>
           <span class="truncate text-sm font-semibold" :class="isActive('/recently-played') ? 'text-white' : 'text-slate-400 group-hover:text-white'">Nghe gần đây</span>
         </RouterLink>
-        
-        <RouterLink to="/me/followed-artists" class="flex items-center gap-3 rounded-2xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/me/followed-artists') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
+
+        <RouterLink to="/me/followed-artists" class="flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-all duration-200 no-underline group" :class="isActive('/me/followed-artists') ? 'border border-white/10 bg-white/[0.10]' : 'border border-transparent hover:bg-white/[0.06]'">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md transition-transform group-hover:scale-105">
             <MfIcon name="group" filled size="18" />
           </div>
@@ -73,7 +73,7 @@
       </div>
 
       <!-- Create playlist -->
-      <button class="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-extrabold text-white transition hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-950/40" @click="$router.push('/library')">
+      <button class="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-bold tracking-wide text-white transition hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-950/40" @click="$router.push('/library')">
         <MfIcon name="add" size="18" />
         Tạo Playlist
       </button>
@@ -81,13 +81,13 @@
 
     <!-- MAIN AREA -->
     <div
-      class="relative flex min-h-screen flex-col user-layout-surface overflow-hidden md:ml-[220px]"
+      class="relative flex min-h-screen flex-col user-layout-surface overflow-hidden md:ml-[240px]"
       :class="isRightSidebarOpen ? '2xl:mr-[320px]' : '2xl:mr-0'"
     >
       <UserTopbar :is-queue-open="isRightSidebarOpen" />
 
       <!-- Page content -->
-      <main class="relative z-10 flex-1 pt-16" :class="isActive('/messages') ? 'pb-[80px]' : 'pb-[96px]'">
+      <main class="relative z-10 flex-1 pt-16" :class="isActive('/messages') ? 'pb-[80px]' : 'pb-[100px] md:pb-[96px]'">
         <RouterView />
       </main>
     </div>
@@ -101,16 +101,16 @@
 
     <!-- RIGHT SIDEBAR -->
     <aside
-      class="fixed inset-x-0 bottom-[80px] z-[90] flex flex-col w-full max-h-[75vh] md:max-h-none md:inset-auto md:right-0 md:top-0 md:bottom-[80px] md:w-[320px] overflow-hidden md:border-l border-t md:border-t-0 border-white/10 rounded-t-2xl md:rounded-none bg-[#070a12]/95 backdrop-blur-xl shadow-[0_-18px_45px_rgba(0,0,0,0.38)] md:shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
+      class="fixed inset-x-0 bottom-[80px] z-[90] flex flex-col w-full max-h-[75vh] md:max-h-none md:inset-auto md:right-0 md:top-0 md:bottom-[80px] md:w-[320px] overflow-hidden md:border-l border-t md:border-t-0 border-white/5 rounded-t-2xl md:rounded-none bg-[#070a12]/95 backdrop-blur-xl shadow-[0_-18px_45px_rgba(0,0,0,0.38)] md:shadow-[0_18px_45px_rgba(0,0,0,0.38)] transition-transform duration-300 ease-out will-change-transform"
       :class="isRightSidebarOpen ? 'translate-y-0 md:translate-y-0 md:translate-x-0' : 'translate-y-full md:translate-y-0 md:translate-x-full'"
     >
       <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-        <h3 class="text-sm font-bold text-white m-0">Danh sách chờ</h3>
+        <h3 class="text-sm font-semibold tracking-tight text-white m-0">Danh sách chờ</h3>
         <button class="bg-transparent border-none text-gray-500 cursor-pointer p-1.5 rounded-full hover:bg-white/10 hover:text-white transition-colors" @click="isRightSidebarOpen = false">
           <MfIcon name="close" size="18" />
         </button>
       </div>
-      
+
       <div class="sidebar-scroll flex-1 overflow-y-auto p-5">
         <div class="mb-6" v-if="player.currentSong">
           <div class="text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-3">Đang phát</div>
@@ -169,9 +169,9 @@
             </template>
           </draggable>
           <div class="flex flex-col gap-1.5" v-else>
-            <div 
-              v-for="(song, idx) in upcomingSongs" 
-              :key="song.id + '-' + idx" 
+            <div
+              v-for="(song, idx) in upcomingSongs"
+              :key="song.id + '-' + idx"
               class="queue-row user-row flex items-center gap-3 p-2.5 cursor-pointer group border border-transparent hover:border-white/10"
               @click="player.setSong(song)"
             >
@@ -194,7 +194,7 @@
     </aside>
 
     <!-- PLAYER BAR -->
-    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[64px] md:h-[80px] items-center justify-between border-t border-white/10 bg-[#05070d]/95 px-3 md:px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+    <footer class="fixed bottom-0 left-0 right-0 z-[999] flex h-[64px] md:h-[80px] items-center justify-between border-t border-white/5 bg-[#05070d]/95 px-3 md:px-4 shadow-[0_-18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
       <!-- Now playing -->
       <div class="flex items-center gap-2 md:gap-3 min-w-0 md:min-w-[200px] flex-1">
         <div class="w-10 h-10 md:w-[52px] md:h-[52px] rounded-[4px] bg-white/10 flex items-center justify-center shrink-0 overflow-hidden group shadow-lg">
@@ -222,32 +222,32 @@
       <div class="flex flex-row md:flex-col items-center gap-2 md:gap-1.5 md:flex-[2] md:max-w-[640px] shrink-0">
         <div class="flex items-center gap-1 md:gap-4">
           <!-- Shuffle -->
-          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200" 
-            :class="player.shuffle ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'" 
-            @click="player.toggleShuffle()" 
+          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200"
+            :class="player.shuffle ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'"
+            @click="player.toggleShuffle()"
             :title="player.shuffle ? 'Tắt phát ngẫu nhiên' : 'Bật phát ngẫu nhiên'">
             <MfIcon name="shuffle" size="20" />
           </button>
-          
+
           <!-- Previous -->
           <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.prev()" title="Previous">
             <MfIcon name="skip_previous" size="20" />
           </button>
-          
+
           <!-- Play/Pause -->
-          <button class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer mx-1" @click="player.togglePlay()" title="Play/Pause">
+          <button class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white text-black flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg border-none cursor-pointer mx-1 shrink-0" @click="player.togglePlay()" title="Play/Pause">
             <MfIcon v-if="!player.isPlaying" name="play_arrow" filled size="24" className="ml-0.5" />
             <MfIcon v-else name="pause" filled size="24" />
           </button>
-          
+
           <!-- Next -->
           <button class="bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 text-gray-400 hover:text-white" @click="player.next()" title="Next">
             <MfIcon name="skip_next" size="20" />
           </button>
-          
+
           <!-- Repeat -->
-          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 relative" 
-            :class="player.repeat !== 'none' ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'" 
+          <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1 md:p-1.5 rounded-full transition-all duration-200 relative"
+            :class="player.repeat !== 'none' ? 'text-[#1ed760] hover:text-[#1fdf64]' : 'text-gray-500 hover:text-white'"
             :title="player.repeat === 'none' ? 'Bật lặp lại' : player.repeat === 'all' ? 'Đang lặp danh sách' : 'Đang lặp một bài'"
             @click="player.toggleRepeat()">
             <MfIcon name="repeat" size="20" />
@@ -256,7 +256,7 @@
             </span>
           </button>
         </div>
-        
+
         <!-- Progress -->
         <div class="absolute top-[-8px] left-0 right-0 h-[16px] md:relative md:top-auto md:left-auto md:right-auto md:h-1 flex items-center gap-2 w-full md:max-w-[500px] z-50">
           <span class="hidden md:block text-[11px] font-semibold text-gray-400 min-w-[36px] text-right">{{ formatTime(displayCurrentTime) }}</span>
@@ -278,10 +278,10 @@
 
       <!-- Right controls -->
       <div class="flex items-center gap-1 md:gap-3 flex-none md:flex-1 justify-end shrink-0">
-        <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" :class="{ 'text-[#1ed760]': isRightSidebarOpen }" @click="isRightSidebarOpen = !isRightSidebarOpen" title="Danh sách chờ">
+        <button class="hidden sm:block bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" :class="{ 'text-[#1ed760]': isRightSidebarOpen }" @click="isRightSidebarOpen = !isRightSidebarOpen" title="Danh sách chờ">
           <MfIcon name="queue_music" size="20" />
         </button>
-        
+
         <button
           class="hidden sm:block bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white"
           :class="{ 'text-[#1ed760]': isActive('/karaoke') }"
@@ -291,7 +291,7 @@
         >
           <MfIcon name="mic_external_on" size="20" />
         </button>
-        
+
         <div class="hidden md:flex items-center gap-1 group relative">
           <MfIcon :name="player.volume === 0 ? 'volume_off' : 'volume_up'" size="20" className="text-gray-500 group-hover:text-white transition-colors" />
           <div class="w-[80px] lg:w-[96px] h-1 bg-white/15 rounded-full relative cursor-pointer group-hover:bg-white/30">
@@ -299,7 +299,7 @@
             <div class="absolute left-0 h-full bg-white rounded-full group-hover:bg-[#1ed760] transition-colors" :style="`width:${player.volume * 100}%`"></div>
           </div>
         </div>
-        
+
         <button class="bg-transparent border-none cursor-pointer p-1.5 rounded-full transition-all duration-200 text-gray-500 hover:text-white" @click="player.isNowPlayingExpanded = true" title="Mở rộng">
           <MfIcon name="open_in_full" size="20" />
         </button>

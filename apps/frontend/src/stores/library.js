@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { songApi } from '@/api/song'
 import { addToast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
+import { playlistApi } from '@/api/playlist'
 
 const LOCAL_LIKED_KEY = 'musicflowLikedSongs'
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100&q=80'
@@ -104,6 +105,10 @@ export const useLibraryStore = defineStore('library', () => {
   const likedSongsLoaded = ref(false)
   const pendingLikeIds = ref(new Set())
 
+  const myPlaylists = ref([])
+  const myPlaylistsLoaded = ref(false)
+  const loadingMyPlaylists = ref(false)
+
   function replaceLikedIds(ids) {
     likedSongIds.value = new Set(
       ids
@@ -187,6 +192,9 @@ export const useLibraryStore = defineStore('library', () => {
     pendingLikeIds.value = new Set()
     loadingLikedSongs.value = false
     likedSongsLoaded.value = false
+    myPlaylists.value = []
+    myPlaylistsLoaded.value = false
+    loadingMyPlaylists.value = false
     localStorage.removeItem(LOCAL_LIKED_KEY)
   }
 
@@ -223,6 +231,28 @@ export const useLibraryStore = defineStore('library', () => {
       likedSongsLoaded.value = true
     } finally {
       loadingLikedSongs.value = false
+    }
+  }
+
+  async function fetchMyPlaylists(force = false) {
+    const auth = useAuthStore()
+    if (!auth.isLoggedIn) {
+      clearLikedState()
+      return
+    }
+    if (loadingMyPlaylists.value || (myPlaylistsLoaded.value && !force)) return
+
+    loadingMyPlaylists.value = true
+    try {
+      const res = await playlistApi.getMyPlaylists()
+      if (res.data?.success) {
+        myPlaylists.value = res.data.data
+        myPlaylistsLoaded.value = true
+      }
+    } catch (err) {
+      console.warn('Cannot load my playlists:', err)
+    } finally {
+      loadingMyPlaylists.value = false
     }
   }
 
@@ -341,5 +371,9 @@ export const useLibraryStore = defineStore('library', () => {
     songToAdd,
     openPlaylistModal,
     closePlaylistModal,
+    myPlaylists,
+    myPlaylistsLoaded,
+    loadingMyPlaylists,
+    fetchMyPlaylists,
   }
 })
