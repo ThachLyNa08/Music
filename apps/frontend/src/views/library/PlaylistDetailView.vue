@@ -107,7 +107,7 @@
     </section>
 
     <!-- Song List Section -->
-    <div class="mx-6 px-6 py-4 user-panel-soft flex-1 relative">
+    <div class="mx-6 px-6 py-4 flex-1 relative">
 
       <!-- Table Header -->
       <div class="relative z-10 w-full mb-4 px-4 flex items-center gap-4 text-xs font-bold text-white uppercase tracking-wider border-b border-white/10 pb-2 mt-4 h-10">

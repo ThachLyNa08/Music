@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const bcrypt = require('bcryptjs');
 const { publicSongCondition } = require('../utils/public.utils');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
 
@@ -493,6 +494,125 @@ exports.updateProfile = async (req, res, next) => {
 };
 
 // Lấy danh sách nghệ sĩ đã follow
+exports.verifyCurrentPassword = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword } = req.body || {};
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập mật khẩu hiện tại',
+      });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, password_hash
+       FROM users
+       WHERE id = ? AND role = 'user' AND status = 'active'
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tài khoản người dùng không hợp lệ',
+      });
+    }
+
+    const currentOk = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!currentOk) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu hiện tại không đúng',
+        code: 'CURRENT_PASSWORD_INCORRECT',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Mật khẩu hiện tại chính xác',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập đầy đủ thông tin mật khẩu',
+      });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu mới tối thiểu 6 ký tự',
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu xác nhận không khớp',
+      });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, password_hash
+       FROM users
+       WHERE id = ? AND role = 'user' AND status = 'active'
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tài khoản người dùng không hợp lệ',
+      });
+    }
+
+    const user = rows[0];
+    const currentOk = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!currentOk) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu hiện tại không đúng',
+        code: 'CURRENT_PASSWORD_INCORRECT',
+      });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu mới không được trùng mật khẩu hiện tại',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query(
+      'UPDATE users SET password_hash = ? WHERE id = ?',
+      [passwordHash, userId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Đổi mật khẩu thành công',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getFollowedArtists = async (req, res, next) => {
   try {
     const userId = req.user.id;

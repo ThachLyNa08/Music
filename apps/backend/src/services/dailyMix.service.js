@@ -180,10 +180,6 @@ function getNextRefreshDateForDailyMix(systemKey) {
 // Helpers về date / weekday mapping
 // ---------------------------------------------------------------------------
 
-/**
- * Trả về system_key tương ứng với ngày ICT truyền vào.
- * Saturday hoặc Sunday đều map dailymix_06 (weekend mix).
- */
 function weekdayToSystemKey(date) {
   const w = date.getDay();
   switch (w) {
@@ -206,36 +202,25 @@ function weekdayFull(date) {
   return WEEKDAY_LABELS_VI_FULL[date.getDay()];
 }
 
-/**
- * Tính range [start, end) trong ICT (tính theo day-of-month) cho target date.
- * - dateObj: Date object ở ICT (vd new Date('2026-06-17') cho Wed 17/06 ICT).
- * - includeWeekend: nếu true và dateObj là Sat hoặc Sun, range = cả Sat+Sun.
- */
 function computeTargetRange(dateObj) {
   const wd = dateObj.getDay();
   let start, end;
   if (wd === 0) {
-    // Sunday: range = Sat 00:00 -> Mon 00:00
     const sat = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() - 1);
     const mon = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() + 1);
     start = sat;
     end = mon;
   } else if (wd === 6) {
-    // Saturday: range = Sat 00:00 -> Mon 00:00
     const mon = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() + 2);
     start = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
     end = mon;
   } else {
-    // Mon..Fri: range = 1 ngày
     start = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
     end = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() + 1);
   }
   return { start, end, isWeekend: wd === 0 || wd === 6 };
 }
 
-/**
- * Format Date thành 'YYYY-MM-DD' theo local time (ICT).
- */
 function fmtDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -260,11 +245,6 @@ const DAILY_MIX_MYSQL_DAYS = {
 // Helpers về target range + listened rows (DAYOFWEEK-based tiered fetch)
 // ---------------------------------------------------------------------------
 
-/**
- * Tier 1: Lấy listening rows trên đúng DAYOFWEEK trong 4 tuần gần nhất.
- * Tier 2: Mở rộng lên 8 tuần.
- * Trả về { rows, tierUsed, candidateCountByTier }.
- */
 async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
   const mysqlDays = DAILY_MIX_MYSQL_DAYS[systemKey];
   if (!mysqlDays) throw new Error(`No DAYOFWEEK mapping for ${systemKey}`);
@@ -274,7 +254,7 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
   const tierResults = { tier1: 0, tier2: 0, tier3: 0, tier4: 0 };
 
   // Tier 1: same weekday within 4 weeks
-  const [tier1Rows] = await pool.query(
+  const [tier1Rows] = await conn.query(
     `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
             s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
             s.audio_url, s.is_active, s.release_status, s.play_count
@@ -296,7 +276,7 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
   }
 
   // Tier 2: same weekday within 8 weeks
-  const [tier2Rows] = await pool.query(
+  const [tier2Rows] = await conn.query(
     `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
             s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
             s.audio_url, s.is_active, s.release_status, s.play_count
@@ -317,8 +297,6 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
     return { rows: tier2Rows, tierUsed: 'tier_2_same_weekday_8_weeks', tierResults };
   }
 
-  // Tier 3 will be handled in fetchDiscoveryCandidates (genre/artist match)
-  // Return whatever we have from tier 2
   return {
     rows: tier2Rows,
     tierUsed: tier2Rows.length > 0 ? 'tier_2_same_weekday_8_weeks_partial' : 'tier_3_genre_artist_fallback',
@@ -326,9 +304,6 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
   };
 }
 
-/**
- * Lấy bài trong Daily Mix khác để tính cross-overlap penalty.
- */
 async function getSongsInOtherDailyMixes(conn, systemKey) {
   const [rows] = await conn.query(
     `SELECT DISTINCT ps.song_id
@@ -342,9 +317,6 @@ async function getSongsInOtherDailyMixes(conn, systemKey) {
   return new Set(rows.map(r => Number(r.song_id)));
 }
 
-/**
- * Tính cross-overlap ratio: bao nhiêu % bài trong finalIds trùng với Daily Mix khác.
- */
 function calculateCrossOverlapRatio(finalIds, otherDailyMixSongs) {
   if (!finalIds.length || !otherDailyMixSongs.size) return 0;
   let overlap = 0;
@@ -358,7 +330,7 @@ function calculateCrossOverlapRatio(finalIds, otherDailyMixSongs) {
 async function fetchListeningRowsInRange(conn, userId, start, end) {
   const startStr = fmtDate(start) + ' 00:00:00';
   const endStr = fmtDate(end) + ' 00:00:00';
-  const [rows] = await pool.query(
+  const [rows] = await conn.query(
     `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
             s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
             s.audio_url, s.is_active, s.release_status, s.play_count
@@ -386,7 +358,7 @@ function buildDailyProfile(rows) {
     genreCounts: new Map(),
     artistCounts: new Map(),
     marketCounts: new Map(),
-    songStats: new Map(), // song_id -> { count, totalCompletion, skipCount, likeCount, implicitSum, lastListenedAt }
+    songStats: new Map(),
     distinctSongIds: new Set(),
   };
   for (const r of rows) {
@@ -430,9 +402,6 @@ function topNFromMap(map, n = 5) {
 }
 
 async function fetchLikedSongIdsInRange(conn, userId, start, end) {
-  // Lấy bài đã like trong target range. joined_at = liked_at (không có trong
-  // listening_history). Dùng khoảng [start - 30d, end) để cover lịch sử like
-  // vì user thường like sau khi nghe.
   const startStr = fmtDate(new Date(
     start.getFullYear(), start.getMonth(), start.getDate() - 30,
   )) + ' 00:00:00';
@@ -449,15 +418,6 @@ async function fetchLikedSongIdsInRange(conn, userId, start, end) {
 // Anchor + Discovery logic
 // ---------------------------------------------------------------------------
 
-/**
- * Chọn anchor songs từ các bài đã nghe trong target range.
- * Ưu tiên:
- *   - completion_rate cao
- *   - không skip
- *   - nghe lặp nhiều lần
- *   - đã like
- *   - artist cap (không quá nhiều bài cùng artist)
- */
 function selectAnchorSongs(profile, likedSet, anchorTarget) {
   const candidates = [];
   for (const [sid, stat] of profile.songStats.entries()) {
@@ -490,14 +450,6 @@ function selectAnchorSongs(profile, likedSet, anchorTarget) {
   return selected;
 }
 
-/**
- * Lấy discovery candidates dựa trên profile. Trả về Map<song_id, score>.
- * Ưu tiên:
- *   - cùng top genre
- *   - cùng top artist
- *   - cùng top market
- *   - play_count cao (popularity nhẹ)
- */
 async function fetchDiscoveryCandidates(conn, profile, excludeSet, limit) {
   const topGenres = topNFromMap(profile.genreCounts, 5).map((x) => x.id);
   const topArtists = topNFromMap(profile.artistCounts, 8).map((x) => x.id);
@@ -551,8 +503,6 @@ async function fetchDiscoveryCandidates(conn, profile, excludeSet, limit) {
     ORDER BY theme_score DESC, s.play_count DESC, s.id DESC
     LIMIT ?
   `;
-  // MySQL không cho phép placeholder rỗng; thay NULL thành CAST(NULL AS UNSIGNED) hoặc ép kiểu
-  // để SQL chạy được. Đơn giản: nếu mảng rỗng, thay bằng `0` để tránh lỗi.
   const fixed = sql
     .replace('IN (NULL)', 'IN (0)')
     .replace('IN (NULL)', 'IN (0)')
@@ -562,7 +512,7 @@ async function fetchDiscoveryCandidates(conn, profile, excludeSet, limit) {
     ...params,
     limit,
   ];
-  const [rows] = await pool.query(fixed, finalParams);
+  const [rows] = await conn.query(fixed, finalParams);
   return rows;
 }
 
@@ -582,12 +532,11 @@ async function fetchPopularCandidates(conn, excludeSet, limit) {
   const sql = `
     SELECT s.id, s.artist_id, s.genre_id, s.market, s.play_count, 0 AS theme_score
     FROM songs s
-    JOIN song_audio_features saf ON saf.song_id = s.id
     WHERE ${parts.join(' AND ')}
     ORDER BY s.play_count DESC, s.id DESC
     LIMIT ?
   `;
-  const [rows] = await pool.query(sql, [...params, limit]);
+  const [rows] = await conn.query(sql, [...params, limit]);
   return rows;
 }
 
@@ -603,20 +552,12 @@ function buildDiscoveryFromRecommendations(recItems) {
   }));
 }
 
-// selectDiscoverySongs đã được inline lại trong generateDailyMixForDate
-// (có 2 phase: tránh listened trong target range, sau đó soft anchor).
-
-/**
- * Trộn thứ tự anchor + discovery. Không để toàn bộ anchor ở đầu, mà xen kẽ
- * nhẹ: cứ mỗi discovery thì có anchor, nhưng vẫn giữ tỉ lệ.
- */
 function interleaveAnchorDiscovery(anchorIds, discoveryIds) {
   const out = [];
   const a = [...anchorIds];
   const d = [...discoveryIds];
   let ai = 0;
   let di = 0;
-  // Tỉ lệ anchor/total ~ 30%; xen kẽ 1 anchor mỗi ~3 discovery
   while (ai < a.length || di < d.length) {
     if (ai < a.length) {
       out.push(a[ai]);
@@ -634,14 +575,6 @@ function interleaveAnchorDiscovery(anchorIds, discoveryIds) {
 // Core API: generateDailyMixForDate
 // ---------------------------------------------------------------------------
 
-/**
- * Tạo/cập nhật 1 Daily Mix playlist cho user, dựa trên hành vi nghe nhạc
- * theo DAYOFWEEK (multi-tier: 4w → 8w → genre/artist → popular).
- *
- * Cross-playlist penalty: bài đã có trong Daily Mix khác bị giảm điểm.
- * Diversity quotas: maxSameArtistRatio <= 30%, maxSameGenreRatio <= 60%.
- * Cross-overlap gate: nếu after >= 90% thì không apply.
- */
 async function generateDailyMixForDate(userId, date, options = {}) {
   if (!Number.isInteger(Number(userId)) || Number(userId) <= 0) {
     throw new Error('userId must be a positive integer');
@@ -707,6 +640,7 @@ async function generateDailyMixForDate(userId, date, options = {}) {
     try {
       const rec = await recommendationService.getRecommendationsForUser(uid, {
         limit: RECOMMEND_PULL,
+        context: 'daily_mix'
       });
       recStrategy = rec.strategy;
       recReason = rec.reason;
@@ -1083,11 +1017,9 @@ async function generateDailyMixForDate(userId, date, options = {}) {
 
 function parseDateInput(date) {
   if (date instanceof Date) {
-    // Trả về bản sao chỉ giữ yyyy-mm-dd (bỏ phần time).
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
   if (typeof date === 'string') {
-    // 'YYYY-MM-DD' -> parse local (ICT) midnight
     const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) throw new Error(`Invalid date string: ${date} (expected YYYY-MM-DD)`);
     return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
@@ -1096,36 +1028,29 @@ function parseDateInput(date) {
 }
 
 // ---------------------------------------------------------------------------
-// Backward-compat wrappers (giữ API cũ để không vỡ chỗ khác)
+// Backward-compat wrappers
 // ---------------------------------------------------------------------------
 
 async function generateDailyMixesForUser(userId, options = {}) {
-  // Backward-compat: cập nhật 6 Daily Mix theo 6 ngày gần nhất (Mon..Sun của
-  // tuần vừa kết thúc). Daily Mix 06 (weekend) chỉ chạy 1 lần với target =
-  // Sun, range sẽ tự mở rộng thành Sat+Sun.
   const perMix = clampPerMix(options.perMix);
   const dryRun = Boolean(options.dryRun);
   const today = new Date();
   const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const dayOfWeek = today0.getDay(); // 0=Sun, 1=Mon, ...
-  const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 0=Mon
-  // last Monday = today - (offsetToThisMonday + 7) days
+  const dayOfWeek = today0.getDay();
+  const offsetToThisMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const lastMonday = new Date(
     today0.getFullYear(),
     today0.getMonth(),
     today0.getDate() - offsetToThisMonday - 7,
   );
-  // 6 dates: Mon..Sat tuần trước
   const dates = [];
   for (let i = 0; i < 6; i += 1) {
     const d = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + i);
     dates.push(d);
   }
-  // dates[5] = Sat (i=5), dates[6] = Sun. Thay thành Sun để analyze weekend.
   dates[5] = new Date(lastMonday.getFullYear(), lastMonday.getMonth(), lastMonday.getDate() + 6);
 
-  // Dedupe theo system_key (Sat+Sun cùng map dailymix_06, chỉ giữ lần đầu).
   const seen = new Set();
   const results = [];
   for (const d of dates) {
@@ -1213,7 +1138,7 @@ async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
     else if (systemKey === 'dailymix_03') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 2);
     else if (systemKey === 'dailymix_04') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 3);
     else if (systemKey === 'dailymix_05') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 4);
-    else if (systemKey === 'dailymix_06') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1); // Sunday for weekend
+    else if (systemKey === 'dailymix_06') targetDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1);
   }
   if (!targetDate) throw new Error('Invalid daily mix key');
 
@@ -1246,7 +1171,6 @@ async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
         stats.songsInserted += m.insertedSongs || 0;
       }
       
-      // Aggregate metrics
       if (m.candidateCount !== undefined) {
         totalCandidateCount += m.candidateCount;
         totalFreshCandidateCount += (m.freshCandidateCount || 0);

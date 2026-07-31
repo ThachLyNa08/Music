@@ -32,6 +32,20 @@ function generateTokens(user) {
   return { accessToken, refreshToken };
 }
 
+// ── GET /api/auth/check-email ────────────────────
+exports.checkEmail = async (req, res, next) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    return res.json({ success: true, exists: existing.length > 0 });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── POST /api/auth/register ──────────────────────
 exports.register = async (req, res, next) => {
   try {
@@ -48,7 +62,7 @@ exports.register = async (req, res, next) => {
       'SELECT id FROM users WHERE email = ?', [email]
     );
     if (existing.length > 0) {
-      return res.status(409).json({ success: false, message: 'Email đã được sử dụng' });
+      return res.status(409).json({ success: false, message: 'Email đã được sử dụng', code: 'EMAIL_EXISTS' });
     }
 
     // 3. Hash password

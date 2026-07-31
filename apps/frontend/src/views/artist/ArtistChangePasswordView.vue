@@ -15,15 +15,17 @@
 
         <label>
           Mật khẩu mới
-          <input v-model="form.newPassword" type="password" autocomplete="new-password" required>
+          <input v-model="form.newPassword" type="password" autocomplete="new-password" required @input="validateNewPassword" @blur="validateNewPassword">
+          <span v-if="newPasswordError" class="inline-error">{{ newPasswordError }}</span>
         </label>
 
         <label>
           Nhập lại mật khẩu mới
-          <input v-model="form.confirmPassword" type="password" autocomplete="new-password" required>
+          <input v-model="form.confirmPassword" type="password" autocomplete="new-password" required @input="validateConfirmPassword" @blur="validateConfirmPassword">
+          <span v-if="confirmPasswordError" class="inline-error">{{ confirmPasswordError }}</span>
         </label>
 
-        <button type="submit" :disabled="loading">
+        <button type="submit" :disabled="loading || !!newPasswordError || !!confirmPasswordError || !form.newPassword || !form.confirmPassword">
           {{ loading ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}
         </button>
       </form>
@@ -50,8 +52,38 @@ const form = reactive({
   confirmPassword: '',
 })
 
+const newPasswordError = ref('')
+const confirmPasswordError = ref('')
+
+function validateNewPassword() {
+  if (form.newPassword && form.newPassword.length < 6) {
+    newPasswordError.value = 'Mật khẩu phải có ít nhất 6 ký tự.'
+  } else {
+    newPasswordError.value = ''
+  }
+}
+
+function validateConfirmPassword() {
+  if (form.confirmPassword && form.newPassword && form.confirmPassword !== form.newPassword) {
+    confirmPasswordError.value = 'Mật khẩu nhập lại không khớp.'
+  } else {
+    confirmPasswordError.value = ''
+  }
+}
+
 async function submit() {
   errorMsg.value = ''
+  validateNewPassword()
+  validateConfirmPassword()
+
+  if (newPasswordError.value || confirmPasswordError.value) {
+    return
+  }
+
+  if (form.newPassword.length < 6) {
+    errorMsg.value = 'Mật khẩu phải có ít nhất 6 ký tự.'
+    return
+  }
   if (form.newPassword !== form.confirmPassword) {
     errorMsg.value = 'Mật khẩu xác nhận không khớp.'
     return
@@ -179,5 +211,11 @@ button:disabled {
   border-radius: 8px;
   font-weight: 500;
   font-size: 14px;
+}
+
+.inline-error {
+  color: #fca5a5;
+  font-size: 12px;
+  margin-top: -4px;
 }
 </style>

@@ -2,7 +2,7 @@
   <div class="artist-shell">
     <aside class="artist-sidebar">
       <div class="logo-area">
-        <div class="logo-box">MF</div>
+        <img src="/logo.png" alt="MusicFlow" style="width: 36px; height: 36px; object-fit: contain; margin-right: 8px;" />
         <div class="logo-text">
           <span class="title">Artist Studio</span>
           <span class="subtitle">MusicFlow</span>
@@ -138,20 +138,7 @@ const performLogout = () => {
   padding: 0 24px;
   margin-bottom: 36px;
 }
-.logo-box {
-  width: 42px;
-  height: 42px;
-  background: linear-gradient(135deg, var(--accent), #00b894);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 15px;
-  color: white;
-  letter-spacing: -0.5px;
-  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.25);
-}
+
 .logo-text {
   display: flex;
   flex-direction: column;

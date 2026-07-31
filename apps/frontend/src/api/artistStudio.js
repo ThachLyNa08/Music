@@ -3,7 +3,7 @@ import api from './axios'
 export const artistStudioApi = {
   getDashboard: (params) => api.get('/artist/dashboard', { params }),
   getUploadOptions: () => api.get('/artist/upload-options'),
-  getAlbumSongOptions: () => api.get('/artist/album-song-options'),
+  getAlbumSongOptions: (params) => api.get('/artist/album-song-options', { params }),
   getSongs: (params) => api.get('/artist/songs', { params: { ...params, _t: Date.now() } }),
   getSongDetail: (songId) => api.get(`/artist/songs/${songId}`),
   uploadArtistSong: (formData) => api.post('/artist/songs', formData, {

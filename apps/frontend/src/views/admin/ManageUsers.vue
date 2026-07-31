@@ -116,25 +116,25 @@
             </tr>
           </tbody>
         </table>
+
+        <!-- Pagination -->
+        <template #footer v-if="totalPages > 1 || filteredUsers.length > 0">
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <label>Hiển thị:</label>
+            <select v-model="pageSize" @change="currentPage = 1" class="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+          </div>
+
+          <AdminPagination
+            :limit="pageSize"
+            v-model:currentPage="currentPage"
+            :totalPages="totalPages"
+          />
+        </template>
       </AdminTableShell>
-
-      <!-- Pagination -->
-      <div v-if="totalPages > 1 || filteredUsers.length > 0" class="flex items-center justify-between mt-4">
-        <div class="flex items-center gap-1.5 text-xs text-slate-500">
-          <label>Hiển thị:</label>
-          <select v-model="pageSize" @change="currentPage = 1" class="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none">
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-          </select>
-        </div>
-
-        <AdminPagination
-          :limit="pageSize"
-          v-model:currentPage="currentPage"
-          :totalPages="totalPages"
-        />
-      </div>
 
       <!-- New Sections: Recent Activities & Top Users -->
       <div v-if="overviewData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">

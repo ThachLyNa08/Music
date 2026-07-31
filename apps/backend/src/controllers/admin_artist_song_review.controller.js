@@ -292,7 +292,7 @@ exports.approveArtistSong = async (req, res, next) => {
 
     try {
       const [songRows] = await pool.query(
-        `SELECT s.title, a.id as artist_id, a.name as artist_name, s.genre_id, a.user_id as artist_user_id
+        `SELECT s.title, s.cover_url, a.id as artist_id, a.name as artist_name, s.genre_id, a.user_id as artist_user_id
          FROM songs s
          LEFT JOIN artists a ON s.artist_id = a.id
          WHERE s.id = ?`,
@@ -300,33 +300,17 @@ exports.approveArtistSong = async (req, res, next) => {
       );
 
       if (songRows.length > 0) {
-        const { title: songTitle, artist_id: artistId, artist_name: artistName, genre_id: genreId, artist_user_id: artistUserId } = songRows[0];
+        const { title: songTitle, cover_url: coverUrl, artist_id: artistId, artist_name: artistName, artist_user_id: artistUserId } = songRows[0];
 
         if (artistUserId) {
-          notifyUser(getIo(), artistUserId, 'artist:review_status_changed', { type: 'song', id: songId, status: 'approved', title: songTitle });
+          await notificationService.notifyArtistContentApproved({
+            userId: artistUserId, contentType: 'song', contentId: songId, title: songTitle
+          });
         }
 
-        const [targetUsers] = await pool.query(`
-          SELECT DISTINCT user_id
-          FROM (
-            SELECT user_id FROM user_artist_preferences WHERE artist_id = ?
-            UNION
-            SELECT user_id FROM user_genre_preferences WHERE genre_id = ?
-          ) as t
-        `, [artistId, genreId]);
-
-        if (targetUsers.length > 0) {
-          const notificationsPromises = targetUsers.map(u =>
-            notificationService.createNotification({
-              userId: u.user_id,
-              title: 'Bài hát mới',
-              message: `Bài hát "${songTitle}" của ${artistName || 'nghệ sĩ'} vừa được thêm vào hệ thống!`,
-              type: 'new_song',
-              link: `/song/${songId}`
-            }).catch(err => console.warn('Failed to notify user', u.user_id, err))
-          );
-          await Promise.all(notificationsPromises);
-        }
+        await notificationService.notifyInterestedUsersContentApproved({
+          contentType: 'song', contentId: songId, title: songTitle, artistId, artistName: artistName || 'Nghệ sĩ', coverUrl: coverUrl || ''
+        });
       }
     } catch (notifErr) {
       console.warn('Notification error on approve (ignored):', notifErr);
@@ -405,7 +389,9 @@ exports.rejectArtistSong = async (req, res, next) => {
       );
 
       if (artistRows.length > 0 && artistRows[0].artist_user_id) {
-        notifyUser(getIo(), artistRows[0].artist_user_id, 'artist:review_status_changed', { type: 'song', id: songId, status: 'rejected', title: songRecord.title });
+        await notificationService.notifyArtistContentRejected({
+          userId: artistRows[0].artist_user_id, contentType: 'song', contentId: songId, title: songRecord.title, reason: reason.trim()
+        });
       }
     } catch (notifErr) {
       console.warn('Notification error on reject (ignored):', notifErr);
@@ -529,7 +515,7 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
     }
 
     const [songs] = await pool.query(
-      `SELECT s.id, s.title, s.artist_id, s.review_status, s.moderation_level, s.risk_score, s.metadata_score, s.moderation_flags, a.user_id as artist_user_id
+      `SELECT s.id, s.title, s.cover_url, s.artist_id, s.review_status, s.moderation_level, s.risk_score, s.metadata_score, s.moderation_flags, a.user_id as artist_user_id, a.name as artist_name
        FROM songs s
        LEFT JOIN artists a ON s.artist_id = a.id
        WHERE s.id IN (?) AND s.submitted_by_artist_id IS NOT NULL`,
@@ -607,7 +593,12 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
 
           if (song.artist_user_id) {
             try {
-              notifyUser(getIo(), song.artist_user_id, 'artist:review_status_changed', { type: 'song', id: approvedId, status: 'approved', title: song.title });
+              await notificationService.notifyArtistContentApproved({
+                userId: song.artist_user_id, contentType: 'song', contentId: approvedId, title: song.title
+              });
+              await notificationService.notifyInterestedUsersContentApproved({
+                contentType: 'song', contentId: approvedId, title: song.title, artistId: song.artist_id, artistName: song.artist_name || 'Nghệ sĩ', coverUrl: song.cover_url || ''
+              });
             } catch (err) {
               console.warn('Bulk approve notify error:', err);
             }
@@ -728,7 +719,9 @@ exports.bulkRejectArtistSongs = async (req, res, next) => {
 
       if (song.artist_user_id) {
         try {
-          notifyUser(getIo(), song.artist_user_id, 'artist:review_status_changed', { type: 'song', id: song.id, status: 'rejected', title: song.title, reason: itemReason });
+          await notificationService.notifyArtistContentRejected({
+            userId: song.artist_user_id, contentType: 'song', contentId: song.id, title: song.title, reason: itemReason
+          });
         } catch (err) {
           console.warn('Bulk reject notify error:', err);
         }

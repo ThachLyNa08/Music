@@ -13,6 +13,7 @@
         :value="modelValue"
         @input="$emit('update:modelValue', $event.target.value)"
         @keyup.enter="$emit('enter')"
+        @blur="$emit('blur', $event)"
         :placeholder="placeholder"
         :required="required"
         :minlength="minlength"
@@ -42,7 +43,7 @@ defineProps({
   required: Boolean,
   minlength: String
 })
-defineEmits(['update:modelValue', 'enter'])
+defineEmits(['update:modelValue', 'enter', 'blur'])
 </script>
 
 <style scoped>

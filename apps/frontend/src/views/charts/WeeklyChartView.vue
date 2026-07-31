@@ -107,11 +107,13 @@ const menuState = ref({ show: false, position: { x: 0, y: 0 }, song: null })
 
 const region = computed(() => String(route.params.region || 'vn').toUpperCase())
 const apiRegion = computed(() => {
+  if (region.value === 'ALL' || region.value === 'GLOBAL') return 'ALL'
   if (region.value === 'KPOP' || region.value === 'K-POP') return 'KPOP'
   if (region.value === 'USUK' || region.value === 'US-UK') return 'USUK'
   return 'VN'
 })
 const chartTitle = computed(() => {
+  if (apiRegion.value === 'ALL') return 'Xu hướng MusicFlow'
   if (apiRegion.value === 'KPOP') return 'Bảng Xếp Hạng K-Pop'
   if (apiRegion.value === 'USUK') return 'Bảng Xếp Hạng US-UK'
   return 'Bảng Xếp Hạng Việt Nam'

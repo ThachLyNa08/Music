@@ -167,25 +167,31 @@ const generatedAt = ref('')
 const menuState = ref({ show: false, position: { x: 0, y: 0 }, song: null })
 
 const STRATEGY_TITLES = {
-  cold_start_preferences: 'Bắt đầu với gu bạn chọn',
-  behavior_based_content: 'Đề xuất từ gu nghe của bạn',
-  content_based_fallback: 'Đề xuất từ gu nghe của bạn',
-  bpr_mf: 'Đề xuất từ gu nghe của bạn',
-  bpr_mf_rerank: 'Đề xuất từ gu nghe của bạn',
+  model_personalized: 'Gợi ý cá nhân hóa',
+  content_based_onboarding: 'Gợi ý theo sở thích ban đầu',
+  most_popular_fallback: 'Bài hát phổ biến',
+  cold_start_preferences: 'Đề xuất nghe',
+  behavior_based_content: 'Đề xuất nghe',
+  content_based_fallback: 'Đề xuất nghe',
+  bpr_mf: 'Đề xuất nghe',
+  bpr_mf_rerank: 'Đề xuất nghe',
   popular_fallback: 'Đang thịnh hành trên MusicFlow',
 }
 
 const STRATEGY_SUBTITLES = {
-  behavior_based_content: 'Dựa trên những bài hát bạn đã nghe gần đây',
-  content_based_fallback: 'Dựa trên những bài hát bạn đã nghe gần đây',
-  bpr_mf: 'Dựa trên thói quen nghe của bạn',
-  bpr_mf_rerank: 'Dựa trên thói quen nghe của bạn',
-  cold_start_preferences: 'Dựa trên thể loại và nghệ sĩ bạn chọn khi đăng ký',
+  model_personalized: 'Dựa trên thói quen nghe nhạc của bạn',
+  content_based_onboarding: 'Người dùng chưa có đủ lịch sử nghe hoặc chưa có trong serving artifact.',
+  most_popular_fallback: 'Không có đủ dữ liệu cá nhân hóa hoặc sở thích ban đầu.',
+  behavior_based_content: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  content_based_fallback: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  bpr_mf: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  bpr_mf_rerank: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  cold_start_preferences: 'Dựa trên sở thích ban đầu và xu hướng hiện tại',
   popular_fallback: 'Những bài hát được nghe nhiều gần đây',
 }
 
-const title = computed(() => STRATEGY_TITLES[strategy.value] || 'Đề xuất từ gu nghe của bạn')
-const subtitle = computed(() => reason.value || STRATEGY_SUBTITLES[strategy.value] || 'Dựa trên thói quen nghe của bạn')
+const title = computed(() => STRATEGY_TITLES[strategy.value] || 'Đề xuất nghe')
+const subtitle = computed(() => reason.value || STRATEGY_SUBTITLES[strategy.value] || 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay')
 const coverSongs = computed(() => songs.value.slice(0, 4))
 const heroBackground = computed(() => (songs.value[0] ? getItemCover(songs.value[0]) : ''))
 const generatedAtLabel = computed(() => {

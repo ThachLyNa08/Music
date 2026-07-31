@@ -26,6 +26,7 @@ function normalizeSearchText(value = '') {
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .replace(/&/g, 'and')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/[-_/]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -34,6 +35,15 @@ function normalizeSearchText(value = '') {
 // Helper: compact version không space
 function compactSearchText(value = '') {
   return normalizeSearchText(value).replace(/\s+/g, '');
+}
+
+function isMeaningfulReverseMatch(query, value) {
+  if (!query || !value || !query.includes(value)) return false;
+  return value.length >= 4 && value.length >= Math.ceil(query.length * 0.45);
+}
+
+function sqlSearchExpr(field) {
+  return `REPLACE(LOWER(COALESCE(${field}, '')), 'đ', 'd')`;
 }
 
 // Helper: lấy genre key từ query
@@ -146,28 +156,35 @@ async function hydrateLikedState(rows, userId) {
 }
 
 exports.uploadSong = async (req, res, next) => {
+  const { title, artist_name, album_title, genre_id, duration_sec } = req.body;
+
+  const missing = [];
+  if (!title) missing.push('title');
+  if (!artist_name) missing.push('artist_name');
+  if (!genre_id) missing.push('genre_id');
+
+  if (missing.length > 0) {
+    return res.status(400).json({
+      success: false,
+      missing,
+      message: 'Thiếu thông tin bắt buộc'
+    });
+  }
+
+  if (!req.files || !req.files.audio) {
+    return res.status(400).json({ success: false, message: 'Thiếu file âm thanh' });
+  }
+
+  let releasePayload;
+  try {
+    releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const { title, artist_name, album_title, genre_id, duration_sec } = req.body;
-    const releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
-
-    const missing = [];
-    if (!title) missing.push('title');
-    if (!artist_name) missing.push('artist_name');
-    if (!genre_id) missing.push('genre_id');
-
-    if (missing.length > 0) {
-      return res.status(400).json({
-        success: false,
-        missing,
-        message: 'Thiếu thông tin bắt buộc'
-      });
-    }
-
-    if (!req.files || !req.files.audio) {
-      return res.status(400).json({ success: false, message: 'Thiếu file âm thanh' });
-    }
 
     const audioUrl = '/uploads/audio/' + req.files.audio[0].filename;
     let coverUrl = null;
@@ -210,56 +227,62 @@ exports.uploadSong = async (req, res, next) => {
     );
 
     await conn.commit();
+    conn.release();
 
-    if (isNewArtist && artistId) {
-      const { ensureArtistAvatar } = require('../services/artistImage.service');
-      ensureArtistAvatar(artistId).catch(error => {
-        console.error("Auto fetch artist avatar in uploadSong failed:", error.message);
-      });
-    }
-
-    // Gửi thông báo cho người theo dõi nghệ sĩ (không phải global)
-    try {
-      const [followers] = await pool.query(
-        'SELECT user_id FROM artist_follows WHERE artist_id = ?',
-        [artistId]
-      );
-
-      if (followers.length > 0) {
-        const notificationPromises = followers.map(f =>
-          notificationService.createNotification({
-            userId: f.user_id,
-            title: 'Nghệ sĩ bạn theo dõi vừa ra mắt bài hát mới!',
-            message: `Nghệ sĩ ${artist_name} vừa phát hành bài hát mới: ${title}`,
-            type: 'new_song',
-            link: `/song/${songRes.insertId}`
-          })
-        );
-        await Promise.allSettled(notificationPromises);
-      }
-    } catch (notiErr) {
-      console.error('Lỗi khi gửi thông báo cho người theo dõi:', notiErr);
-    }
-
-    // Gửi thông báo global
-    try {
-      await notificationService.createGlobalNotification({
-        title: 'Bài hát mới',
-        message: `Bài hát ${title} của ${artist_name} vừa được thêm vào hệ thống!`,
-        type: 'new_song',
-        link: `/song/${songRes.insertId}`
-      });
-    } catch (notiErr) {
-      console.error('Lỗi khi gửi thông báo global:', notiErr);
-    }
-
+    // Phản hồi thành công ngay lập tức để tránh client timeout
     res.json({ success: true, message: 'Upload thành công', song_id: songRes.insertId });
 
+    // Thực hiện các tác vụ phụ (lấy avatar nghệ sĩ, gửi thông báo) bất đồng bộ ở background
+    setImmediate(async () => {
+      if (isNewArtist && artistId) {
+        const { ensureArtistAvatar } = require('../services/artistImage.service');
+        ensureArtistAvatar(artistId).catch(error => {
+          console.error("Auto fetch artist avatar in uploadSong failed:", error.message);
+        });
+      }
+
+      // Gửi thông báo cho người theo dõi nghệ sĩ
+      try {
+        const [followers] = await pool.query(
+          'SELECT user_id FROM artist_follows WHERE artist_id = ?',
+          [artistId]
+        );
+
+        if (followers.length > 0) {
+          const notificationPromises = followers.map(f =>
+            notificationService.createNotification({
+              userId: f.user_id,
+              title: 'Nghệ sĩ bạn theo dõi vừa ra mắt bài hát mới!',
+              message: `Nghệ sĩ ${artist_name} vừa phát hành bài hát mới: ${title}`,
+              type: 'new_song',
+              link: `/song/${songRes.insertId}`
+            })
+          );
+          await Promise.allSettled(notificationPromises);
+        }
+      } catch (notiErr) {
+        console.error('Lỗi khi gửi thông báo cho người theo dõi:', notiErr);
+      }
+
+      // Gửi thông báo global
+      try {
+        await notificationService.createGlobalNotification({
+          title: 'Bài hát mới',
+          message: `Bài hát ${title} của ${artist_name} vừa được thêm vào hệ thống!`,
+          type: 'new_song',
+          link: `/song/${songRes.insertId}`
+        });
+      } catch (notiErr) {
+        console.error('Lỗi khi gửi thông báo global:', notiErr);
+      }
+    });
+
   } catch (err) {
-    await conn.rollback();
+    if (conn) {
+      try { await conn.rollback(); } catch (e) {}
+      conn.release();
+    }
     next(err);
-  } finally {
-    conn.release();
   }
 };
 
@@ -361,34 +384,90 @@ exports.searchSongs = async (req, res, next) => {
     // Kiểm tra xem query có phải là genre alias không
     const matchedGenreKey = getGenreKeyFromQuery(q);
 
-    // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu + genre aliases) ──
-    let songWhere = `
-      ${publicSongCondition('s')}
-      AND (
-        s.title LIKE ? OR a.name LIKE ? OR al.title LIKE ?
-        OR s.title LIKE ? OR a.name LIKE ?
-        OR s.lyrics LIKE ? OR s.lyrics LIKE ?
-    `;
-    let songParams = [searchTerm, searchTerm, searchTerm, searchTermNoAccent, searchTermNoAccent, searchTerm, searchTermNoAccent];
+    // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu, không dấu, LOWER case, token matching + genre aliases) ──
+    const tokens = q.split(/\s+/).filter(t => t.length > 0);
+    const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
+
+    const lyricSql = `COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, ''), NULLIF(sl.synced_lyrics, ''))`;
+    let songWhereConditions = [
+      `LOWER(s.title) LIKE LOWER(?)`,
+      `LOWER(a.name) LIKE LOWER(?)`,
+      `LOWER(al.title) LIKE LOWER(?)`,
+      `${sqlSearchExpr('s.title')} LIKE LOWER(?)`,
+      `${sqlSearchExpr('a.name')} LIKE LOWER(?)`,
+      `${sqlSearchExpr('al.title')} LIKE LOWER(?)`,
+      `LOWER(${lyricSql}) LIKE LOWER(?)`,
+      `${sqlSearchExpr(lyricSql)} LIKE LOWER(?)`
+    ];
+    let songParams = [
+      searchTerm, searchTerm, searchTerm,
+      searchTermNoAccent, searchTermNoAccent, searchTermNoAccent,
+      searchTerm, searchTermNoAccent
+    ];
+
+    tokens.forEach(t => {
+      songWhereConditions.push(`LOWER(s.title) LIKE LOWER(?)`);
+      songWhereConditions.push(`LOWER(a.name) LIKE LOWER(?)`);
+      songWhereConditions.push(`LOWER(al.title) LIKE LOWER(?)`);
+      songWhereConditions.push(`LOWER(${lyricSql}) LIKE LOWER(?)`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+    });
+    normTokens.forEach(t => {
+      songWhereConditions.push(`${sqlSearchExpr('s.title')} LIKE LOWER(?)`);
+      songWhereConditions.push(`${sqlSearchExpr('a.name')} LIKE LOWER(?)`);
+      songWhereConditions.push(`${sqlSearchExpr('al.title')} LIKE LOWER(?)`);
+      songWhereConditions.push(`${sqlSearchExpr(lyricSql)} LIKE LOWER(?)`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+    });
 
     if (matchedGenreKey) {
-      songWhere += ` OR g.slug = ? OR g.slug LIKE ? OR g.slug LIKE ?`;
+      songWhereConditions.push(`g.slug = ?`, `g.slug LIKE ?`, `g.slug LIKE ?`);
       songParams.push(matchedGenreKey, `%${matchedGenreKey}%`, `%${compactQ}%`);
     }
 
-    songWhere += `)`;
+    const songWhere = `${publicSongCondition('s')} AND (${songWhereConditions.join(' OR ')})`;
 
     const [rows] = await pool.query(`
-      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count, s.lyrics,
+      SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count,
+             ${lyricSql} AS lyrics,
              al.title as album, al.id as album_id,
              a.name as artist, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre
       FROM songs s
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
+      LEFT JOIN song_lyrics sl ON sl.song_id = s.id
       WHERE ${songWhere}
-      LIMIT 100
-    `, songParams);
+      ORDER BY
+        CASE
+          WHEN LOWER(s.title) = LOWER(?) OR ${sqlSearchExpr('s.title')} = LOWER(?) THEN 0
+          WHEN LOWER(s.title) LIKE LOWER(?) OR ${sqlSearchExpr('s.title')} LIKE LOWER(?) THEN 1
+          WHEN LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) THEN 2
+          WHEN LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) THEN 3
+          WHEN LOWER(${lyricSql}) LIKE LOWER(?) OR ${sqlSearchExpr(lyricSql)} LIKE LOWER(?) THEN 4
+          ELSE 5
+        END,
+        s.play_count DESC
+      LIMIT 1000
+    `, [
+      ...songParams,
+      q,
+      normalizedQ,
+      `${q}%`,
+      `${normalizedQ}%`,
+      searchTerm,
+      searchTermNoAccent,
+      searchTerm,
+      searchTermNoAccent,
+      searchTerm,
+      searchTermNoAccent
+    ]);
 
     const scoredSongs = rows.map(row => {
       let score = 0;
@@ -407,20 +486,20 @@ exports.searchSongs = async (req, res, next) => {
         score += 120;
         matchType = 'title';
         matchedField = 'title';
-      } else if (normTitle.includes(normQuery)) {
+      } else if (normTitle.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normTitle)) {
         score += 90;
         matchType = 'title';
         matchedField = 'title';
-      } else if (normArtist === normQuery || normArtist.includes(normQuery)) {
+      } else if (normArtist === normQuery || normArtist.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normArtist)) {
         score += 80;
         matchType = 'artist';
         matchedField = 'artist';
-      } else if (normAlbum && normAlbum.includes(normQuery)) {
+      } else if (normAlbum && (normAlbum.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normAlbum))) {
         score += 50;
         matchType = 'album';
         matchedField = 'album';
       } else if (normLyrics.includes(normQuery)) {
-        score += 45;
+        score += 70;
         matchType = 'lyrics';
         matchedField = 'lyrics';
         const idx = normLyrics.indexOf(normQuery);
@@ -430,18 +509,25 @@ exports.searchSongs = async (req, res, next) => {
         if (start > 0) matchedSnippet = '... ' + matchedSnippet;
         if (end < cleanLyrics.length) matchedSnippet = matchedSnippet + ' ...';
       } else {
-        const queryTokens = normQuery.split(' ').filter(x => x.length >= 2);
+        const queryTokens = normQuery.split(' ').filter(x => x.length >= 1);
         if (queryTokens.length > 0) {
+          const titleTokens = new Set(normTitle.split(' '));
+          const artistTokens = new Set(normArtist.split(' '));
+          const albumTokens = new Set(normAlbum.split(' '));
           const lyricsTokens = new Set(normLyrics.split(' '));
-          const matchCount = queryTokens.filter(t => lyricsTokens.has(t)).length;
-          if (matchCount === queryTokens.length) {
-             score += 30;
-             matchType = 'lyrics';
-             matchedField = 'lyrics';
-          } else if (matchCount > 0) {
-             score += 10;
-             matchType = 'lyrics';
-             matchedField = 'lyrics';
+
+          let matchCount = 0;
+          queryTokens.forEach(t => {
+            if (titleTokens.has(t) || normTitle.includes(t)) matchCount += 2;
+            else if (artistTokens.has(t) || normArtist.includes(t)) matchCount += 1.5;
+            else if (albumTokens.has(t) || normAlbum.includes(t)) matchCount += 1;
+            else if (lyricsTokens.has(t) || normLyrics.includes(t)) matchCount += 0.5;
+          });
+
+          if (matchCount > 0) {
+            score += matchCount * 15;
+            matchType = 'token';
+            matchedField = 'token';
           }
         }
       }
@@ -476,16 +562,16 @@ exports.searchSongs = async (req, res, next) => {
               ORDER BY s2.play_count DESC LIMIT 1) as sample_cover
       FROM artists a
       LEFT JOIN songs s ON s.artist_id = a.id AND ${publicSongCondition('s')}
-      WHERE a.name LIKE ? OR a.name LIKE ?
+      WHERE LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?)
       GROUP BY a.id
       ORDER BY
-        CASE WHEN a.name LIKE ? OR a.name LIKE ? THEN 0 ELSE 1 END,
+        CASE WHEN LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) THEN 0 ELSE 1 END,
         total_plays DESC
       LIMIT 5
     `, [searchTerm, searchTermNoAccent, `${q}%`, `${normalizedQ}%`]);
 
     // ── 3. Tìm album khớp (có fallback: album cover → first song cover) ──
-    let albumWhere = `al.title LIKE ? OR al.title LIKE ? OR a.name LIKE ? OR a.name LIKE ?`;
+    let albumWhere = `LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) OR LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?)`;
     let albumParams = [searchTerm, searchTermNoAccent, searchTerm, searchTermNoAccent];
 
     if (matchedGenreKey) {
@@ -531,7 +617,7 @@ exports.searchSongs = async (req, res, next) => {
     `, [...albumParams, `${q}%`, `${normalizedQ}%`]);
 
     // ── 4. Tìm thể loại khớp (hỗ trợ genre aliases) ──
-    let genreWhere = `(g.name LIKE ? OR g.name LIKE ? OR g.slug LIKE ? OR g.slug LIKE ?)`;
+    let genreWhere = `(LOWER(g.name) LIKE LOWER(?) OR ${sqlSearchExpr('g.name')} LIKE LOWER(?) OR g.slug LIKE ? OR g.slug LIKE ?)`;
     let genreParams = [searchTerm, searchTermNoAccent, searchTerm, searchTermNoAccent];
 
     if (matchedGenreKey) {
@@ -593,15 +679,39 @@ exports.getSuggestions = async (req, res, next) => {
     // Kiểm tra xem query có phải là genre alias không
     const matchedGenreKey = getGenreKeyFromQuery(q);
 
-    // Get song title suggestions (hỗ trợ genre)
-    let songWhere = `${publicSongCondition('s')} AND (s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ? OR s.title LIKE ?`;
-    let songParams = [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent];
+    // Get song title suggestions (hỗ trợ tiếng Việt có dấu, không dấu, LOWER case, token matching)
+    const tokens = q.split(/\s+/).filter(t => t.length > 0);
+    const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
+
+    let songWhereConditions = [
+      `LOWER(s.title) LIKE LOWER(?)`,
+      `LOWER(s.title) LIKE LOWER(?)`,
+      `${sqlSearchExpr('s.title')} LIKE LOWER(?)`,
+      `${sqlSearchExpr('s.title')} LIKE LOWER(?)`,
+      `LOWER(a.name) LIKE LOWER(?)`,
+      `${sqlSearchExpr('a.name')} LIKE LOWER(?)`
+    ];
+    let songParams = [searchTerm, searchTermContains, searchTermNoAccent, searchTermContainsNoAccent, searchTermContains, searchTermContainsNoAccent];
+
+    tokens.forEach(t => {
+      songWhereConditions.push(`LOWER(s.title) LIKE LOWER(?)`);
+      songWhereConditions.push(`LOWER(a.name) LIKE LOWER(?)`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+    });
+    normTokens.forEach(t => {
+      songWhereConditions.push(`${sqlSearchExpr('s.title')} LIKE LOWER(?)`);
+      songWhereConditions.push(`${sqlSearchExpr('a.name')} LIKE LOWER(?)`);
+      songParams.push(`%${t}%`);
+      songParams.push(`%${t}%`);
+    });
 
     if (matchedGenreKey) {
-      songWhere += ` OR g.slug = ? OR g.slug LIKE ?`;
+      songWhereConditions.push(`g.slug = ?`, `g.slug LIKE ?`);
       songParams.push(matchedGenreKey, `%${matchedGenreKey}%`);
     }
-    songWhere += `)`;
+
+    const songWhere = `${publicSongCondition('s')} AND (${songWhereConditions.join(' OR ')})`;
 
     const [titleSuggestions] = await pool.query(`
       SELECT s.id, s.title as text, 'song' as type, a.name as subtitle, s.cover_url, al.cover_url as album_cover
@@ -611,7 +721,7 @@ exports.getSuggestions = async (req, res, next) => {
       LEFT JOIN albums al ON s.album_id = al.id
       WHERE ${songWhere}
       ORDER BY
-        CASE WHEN s.title LIKE ? OR s.title LIKE ? THEN 0 ELSE 1 END,
+        CASE WHEN LOWER(s.title) LIKE LOWER(?) OR ${sqlSearchExpr('s.title')} LIKE LOWER(?) THEN 0 ELSE 1 END,
         s.play_count DESC
       LIMIT 4
     `, [...songParams, searchTerm, searchTermNoAccent]);
@@ -621,10 +731,10 @@ exports.getSuggestions = async (req, res, next) => {
       SELECT a.id, a.name as text, 'artist' as type, NULL as subtitle, a.avatar_url
       FROM artists a
       JOIN songs s ON s.artist_id = a.id
-      WHERE ${publicSongCondition('s')} AND (a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ? OR a.name LIKE ?)
+      WHERE ${publicSongCondition('s')} AND (LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) OR LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?))
       GROUP BY a.id, a.name, a.avatar_url
       ORDER BY
-        CASE WHEN a.name LIKE ? OR a.name LIKE ? THEN 0 ELSE 1 END
+        CASE WHEN LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) THEN 0 ELSE 1 END
       LIMIT 3
     `, [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent, searchTerm, searchTermNoAccent]);
 
@@ -635,9 +745,9 @@ exports.getSuggestions = async (req, res, next) => {
       JOIN artists a ON al.artist_id = a.id
       WHERE ${publicAlbumCondition('al')}
         AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = al.id AND ${publicSongCondition('s')})
-        AND (al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ? OR al.title LIKE ?)
+        AND (LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) OR LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?))
       ORDER BY
-        CASE WHEN al.title LIKE ? OR al.title LIKE ? THEN 0 ELSE 1 END
+        CASE WHEN LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) THEN 0 ELSE 1 END
       LIMIT 2
     `, [searchTerm, searchTermNoAccent, searchTermContains, searchTermContainsNoAccent, searchTerm, searchTermNoAccent]);
 

@@ -41,6 +41,12 @@ export const useNotificationStore = defineStore('notification', {
           await api.put('/notifications/read-all')
           this.notifications.forEach(n => { n.is_read = true })
         } else {
+          if (!id || id === 'undefined') {
+            const noti = this.notifications.find(item => !item.id || item.id === id)
+            if (noti) noti.is_read = true
+            this.updateUnreadCount()
+            return
+          }
           await api.put(`/notifications/${id}/read`)
           const notification = this.notifications.find(item => item.id === id)
           if (notification) notification.is_read = true
@@ -78,26 +84,33 @@ export const useNotificationStore = defineStore('notification', {
       const handleNewNotification = (payload) => {
         const notification = normalizeNotification(payload)
         if (!notification) return
+        
+        // Anti-duplication: check by ID or title+message
         if (notification.id && this.notifications.some(item => item.id === notification.id)) return
+        if (!notification.id && this.notifications.some(item => item.title === notification.title && item.message === notification.message)) return
 
         this.notifications.unshift(notification)
         this.updateUnreadCount()
 
         if (notification.type === 'karaoke_ready') {
           useToastStore().showToast(notification.title || 'Karaoke đã sẵn sàng', 'success')
+        } else if (notification.type === 'artist_content_approved') {
+          useToastStore().showToast(notification.title || 'Nội dung đã được duyệt', 'success')
+          window.dispatchEvent(new CustomEvent('artist:review_status_changed'))
+        } else if (notification.type === 'artist_content_rejected') {
+          useToastStore().showToast(notification.title || 'Nội dung bị từ chối', 'error')
+          window.dispatchEvent(new CustomEvent('artist:review_status_changed'))
+        } else if (notification.type === 'new_artist_submission') {
+          useToastStore().showToast(notification.title || 'Nội dung mới chờ duyệt', 'info')
+          window.dispatchEvent(new CustomEvent('admin:review_updated'))
+        } else if (notification.type === 'new_song' || notification.type === 'new_album') {
+          useToastStore().showToast(notification.message || 'Nội dung mới từ nghệ sĩ bạn theo dõi', 'info')
+        } else if (notification.priority === 'high') {
+          useToastStore().showToast(notification.title || 'Thông báo mới', 'info')
         }
       }
 
       this.socket.on('notification:new', handleNewNotification)
-      this.socket.on('new_notification', handleNewNotification)
-
-      this.socket.on('artist:review_status_changed', (payload) => {
-        const { type, title, status } = payload
-        const typeStr = type === 'song' ? 'Bài hát' : 'Album'
-        const statusStr = status === 'approved' ? 'đã được duyệt' : 'đã bị từ chối'
-        useToastStore().showToast(`${typeStr} "${title || ''}" ${statusStr}`, status === 'approved' ? 'success' : 'error')
-        window.dispatchEvent(new CustomEvent('artist:review_status_changed'))
-      })
     },
     disconnectSocket() {
       if (this.socket) {

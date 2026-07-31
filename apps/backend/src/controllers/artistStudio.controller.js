@@ -1080,13 +1080,17 @@ exports.uploadSong = async (req, res, next) => {
       songId: result.insertId
     });
 
-    // Notify admins
-    notificationService.createAdminNotification({
-      title: 'Bài hát mới chờ duyệt',
-      message: `Nghệ sĩ vừa tải lên bài hát mới "${title.trim()}" và đang chờ duyệt.`,
-      type: 'system',
-      link: '/admin/artist-song-reviews'
-    }).catch(err => console.error('Error notifying admins:', err));
+    // Notify admins and artist
+    try {
+      await notificationService.notifyAdminsNewArtistSubmission({
+        contentType: 'song', contentId: newSongId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+      });
+      await notificationService.notifyArtistSubmissionReceived({
+        userId, contentType: 'song', contentId: newSongId, title: title.trim()
+      });
+    } catch (err) {
+      console.warn('Notification service error:', err);
+    }
   } catch (error) {
     next(error);
   }
@@ -1116,6 +1120,7 @@ exports.getAlbums = async (req, res, next) => {
       albumColumns.has('resubmission_count') ? 'al.resubmission_count as resubmissionCount' : '0 as resubmissionCount',
       albumColumns.has('can_resubmit') ? 'al.can_resubmit as canResubmit' : '1 as canResubmit',
       albumColumns.has('resubmit_locked_reason') ? 'al.resubmit_locked_reason as resubmitLockedReason' : 'NULL as resubmitLockedReason',
+      albumColumns.has('submission_note') ? 'al.submission_note as submissionNote' : 'NULL as submissionNote',
       albumColumns.has('published_at') ? 'al.published_at as publishedAt' : 'NULL as publishedAt',
       '(SELECT COUNT(*) FROM songs s WHERE s.album_id = al.id) as songCount',
       approvedSongCountSql
@@ -1155,6 +1160,7 @@ exports.getAlbumDetail = async (req, res, next) => {
       albumColumns.has('resubmission_count') ? 'al.resubmission_count as resubmissionCount' : '0 as resubmissionCount',
       albumColumns.has('can_resubmit') ? 'al.can_resubmit as canResubmit' : '1 as canResubmit',
       albumColumns.has('resubmit_locked_reason') ? 'al.resubmit_locked_reason as resubmitLockedReason' : 'NULL as resubmitLockedReason',
+      albumColumns.has('submission_note') ? 'al.submission_note as submissionNote' : 'NULL as submissionNote',
       albumColumns.has('published_at') ? 'al.published_at as publishedAt' : 'NULL as publishedAt',
     ];
 
@@ -1203,18 +1209,22 @@ exports.getAlbumDetail = async (req, res, next) => {
 exports.getAlbumSongOptions = async (req, res, next) => {
   try {
     const artistId = req.artist.id;
+    const rawAlbumId = req.query.albumId || req.query.currentAlbumId;
+    const albumId = (rawAlbumId && rawAlbumId !== 'null' && rawAlbumId !== 'undefined') ? parseInt(rawAlbumId, 10) : null;
     const songColumns = await getSongColumns();
     const orderClause = songColumns.has('created_at') ? 'ORDER BY created_at DESC' : 'ORDER BY id DESC';
     const selectParts = ['id', 'title', 'cover_url AS coverUrl', 'duration_sec AS duration', 'play_count AS playCount'];
     if (songColumns.has('submitted_at')) {
       selectParts.push('submitted_at AS approvedAt');
     }
-    const [songs] = await pool.query(`
+    const queryStr = `
       SELECT ${selectParts.join(', ')}
       FROM songs
-      WHERE artist_id = ? AND review_status = 'approved' AND album_id IS NULL
+      WHERE artist_id = ? AND review_status = 'approved' AND (album_id IS NULL${(albumId && !isNaN(albumId)) ? ' OR album_id = ?' : ''})
       ${orderClause}
-    `, [artistId]);
+    `;
+    const queryParams = (albumId && !isNaN(albumId)) ? [artistId, albumId] : [artistId];
+    const [songs] = await pool.query(queryStr, queryParams);
     res.json({ success: true, songs });
   } catch (error) {
     next(error);
@@ -1394,15 +1404,17 @@ exports.createAlbum = async (req, res, next) => {
       }
     });
 
-    // Notify admins
-    const notificationService = require('../services/notification.service');
-    notificationService.createAdminNotification({
-      title: 'Album mới chờ duyệt',
-      message: `Nghệ sĩ vừa tạo album mới "${title.trim()}" với ${songIds.length} bài hát và đang chờ duyệt.`,
-      type: 'system',
-      link: '/admin/artist-song-reviews'
-    }).catch(err => console.error('Error notifying admins:', err));
-
+    // Notify admins and artist
+    try {
+      await notificationService.notifyAdminsNewArtistSubmission({
+        contentType: 'album', contentId: newAlbumId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+      });
+      await notificationService.notifyArtistSubmissionReceived({
+        userId: req.user.id, contentType: 'album', contentId: newAlbumId, title: title.trim()
+      });
+    } catch (err) {
+      console.warn('Notification service error:', err);
+    }
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -1601,13 +1613,12 @@ exports.resubmitSong = async (req, res, next) => {
     });
 
     try {
-      const notificationService = require('../services/notification.service');
-      notificationService.createAdminNotification({
-        title: 'Bài hát gửi lại chờ duyệt',
-        message: `Nghệ sĩ vừa gửi lại bài hát "${title.trim()}" sau khi sửa và đang chờ duyệt.`,
-        type: 'system',
-        link: '/admin/artist-song-reviews'
-      }).catch(err => console.error('Error notifying admins:', err));
+      await notificationService.notifyAdminsNewArtistSubmission({
+        contentType: 'song', contentId: songId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+      });
+      await notificationService.notifyArtistSubmissionReceived({
+        userId: req.user.id, contentType: 'song', contentId: songId, title: title.trim()
+      });
     } catch (err) {
       console.warn('Notification service error:', err);
     }
@@ -1791,13 +1802,12 @@ exports.resubmitAlbum = async (req, res, next) => {
     });
 
     try {
-      const notificationService = require('../services/notification.service');
-      notificationService.createAdminNotification({
-        title: 'Album gửi lại chờ duyệt',
-        message: `Nghệ sĩ vừa gửi lại album "${title.trim()}" sau khi sửa và đang chờ duyệt.`,
-        type: 'system',
-        link: '/admin/artist-song-reviews'
-      }).catch(err => console.error('Error notifying admins:', err));
+      await notificationService.notifyAdminsNewArtistSubmission({
+        contentType: 'album', contentId: albumId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+      });
+      await notificationService.notifyArtistSubmissionReceived({
+        userId: req.user.id, contentType: 'album', contentId: albumId, title: title.trim()
+      });
     } catch (err) {
       console.warn('Notification service error:', err);
     }

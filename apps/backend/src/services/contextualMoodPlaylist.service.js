@@ -327,56 +327,72 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
   }
 }
 
-async function generateContextualMoodPlaylistsForUser(userId, options = {}) {
-  const requestedSlots = options.timeSlot ? [normalizeTimeSlot(options.timeSlot)] : TIME_SLOTS;
-  const results = [];
+const userGenerationInFlight = new Map();
 
-  for (const slot of requestedSlots) {
-    const result = await generateContextualMoodPlaylistForSlot(userId, slot, options);
-    results.push(result);
+async function generateContextualMoodPlaylistsForUser(userId, options = {}) {
+  const inFlightKey = `${userId}:${options.timeSlot || 'all'}`;
+  if (userGenerationInFlight.has(inFlightKey)) {
+    return await userGenerationInFlight.get(inFlightKey);
   }
 
-  return {
-    userId: Number(userId),
-    dryRun: options.dryRun === true,
-    playlistsProcessed: results.length,
-    playlistsCreated: results.filter((item) => item.created).length,
-    playlistsUpdated: results.filter((item) => !item.created && !item.dryRun).length,
-    songsInserted: results.reduce((sum, item) => sum + Number(item.insertedSongs || 0), 0),
-    candidateCount: results.reduce((sum, item) => sum + (item.candidateCount || 0), 0),
-    candidateCountByTier: {
-      tier1: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier1 || 0), 0),
-      tier2: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier2 || 0), 0),
-      tier3: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier3 || 0), 0),
-      tier4: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier4 || 0), 0)
-    },
-    missingAudioFeatureRatioSum: results.reduce((sum, item) => sum + (item.missingAudioFeatureRatio || 0), 0),
-    audioFeatureCoverage: {
-      covered: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0),
-      total: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0),
-      ratio: (() => {
-        const covered = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0);
-        const total = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0);
-        return total ? Number((covered / total).toFixed(4)) : 0;
-      })()
-    },
-    avgBpm: (() => {
-      const bpmItems = results.filter((item) => item.avgBpm !== null && item.avgBpm !== undefined);
-      if (!bpmItems.length) return null;
-      const weighted = bpmItems.reduce((sum, item) => sum + Number(item.avgBpm) * Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
-      const weight = bpmItems.reduce((sum, item) => sum + Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
-      return weight ? Number((weighted / weight).toFixed(2)) : null;
-    })(),
-    tempoAwareApplied: results.some((item) => item.tempoAwareApplied),
-    overlapRatioSum: results.reduce((sum, item) => sum + (item.overlapRatio || 0), 0),
-    addedSongs: results.reduce((sum, item) => sum + (item.addedSongs || 0), 0),
-    removedSongs: results.reduce((sum, item) => sum + (item.removedSongs || 0), 0),
-    artistRatioSum: results.reduce((sum, item) => sum + (item.actualMaxSameArtistRatio || 0), 0),
-    genreRatioSum: results.reduce((sum, item) => sum + (item.actualMaxSameGenreRatio || 0), 0),
-    fallbackUsed: results.some(item => item.fallbackUsed),
-    fallbackReasons: results.map(item => item.fallbackReason).filter(Boolean),
-    results
-  };
+  const promise = (async () => {
+    const requestedSlots = options.timeSlot ? [normalizeTimeSlot(options.timeSlot)] : TIME_SLOTS;
+    const results = [];
+
+    for (const slot of requestedSlots) {
+      const result = await generateContextualMoodPlaylistForSlot(userId, slot, options);
+      results.push(result);
+    }
+    return results;
+  })();
+
+  userGenerationInFlight.set(inFlightKey, promise);
+  try {
+    const results = await promise;
+    return {
+      userId: Number(userId),
+      dryRun: options.dryRun === true,
+      playlistsProcessed: results.length,
+      playlistsCreated: results.filter((item) => item.created).length,
+      playlistsUpdated: results.filter((item) => !item.created && !item.dryRun).length,
+      songsInserted: results.reduce((sum, item) => sum + Number(item.insertedSongs || 0), 0),
+      candidateCount: results.reduce((sum, item) => sum + (item.candidateCount || 0), 0),
+      candidateCountByTier: {
+        tier1: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier1 || 0), 0),
+        tier2: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier2 || 0), 0),
+        tier3: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier3 || 0), 0),
+        tier4: results.reduce((sum, item) => sum + (item.candidateCountByTier?.tier4 || 0), 0)
+      },
+      missingAudioFeatureRatioSum: results.reduce((sum, item) => sum + (item.missingAudioFeatureRatio || 0), 0),
+      audioFeatureCoverage: {
+        covered: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0),
+        total: results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0),
+        ratio: (() => {
+          const covered = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.covered || 0), 0);
+          const total = results.reduce((sum, item) => sum + Number(item.audioFeatureCoverage?.total || 0), 0);
+          return total ? Number((covered / total).toFixed(4)) : 0;
+        })()
+      },
+      avgBpm: (() => {
+        const bpmItems = results.filter((item) => item.avgBpm !== null && item.avgBpm !== undefined);
+        if (!bpmItems.length) return null;
+        const weighted = bpmItems.reduce((sum, item) => sum + Number(item.avgBpm) * Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
+        const weight = bpmItems.reduce((sum, item) => sum + Math.max(Number(item.audioFeatureCoverage?.covered || 0), 1), 0);
+        return weight ? Number((weighted / weight).toFixed(2)) : null;
+      })(),
+      tempoAwareApplied: results.some((item) => item.tempoAwareApplied),
+      overlapRatioSum: results.reduce((sum, item) => sum + (item.overlapRatio || 0), 0),
+      addedSongs: results.reduce((sum, item) => sum + (item.addedSongs || 0), 0),
+      removedSongs: results.reduce((sum, item) => sum + (item.removedSongs || 0), 0),
+      artistRatioSum: results.reduce((sum, item) => sum + (item.actualMaxSameArtistRatio || 0), 0),
+      genreRatioSum: results.reduce((sum, item) => sum + (item.actualMaxSameGenreRatio || 0), 0),
+      fallbackUsed: results.some(item => item.fallbackUsed),
+      fallbackReasons: results.map(item => item.fallbackReason).filter(Boolean),
+      results
+    };
+  } finally {
+    userGenerationInFlight.delete(inFlightKey);
+  }
 }
 
 async function getEligibleUserIds(limit = null) {

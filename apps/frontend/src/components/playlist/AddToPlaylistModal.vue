@@ -9,7 +9,7 @@
       </div>
 
       <div class="song-preview" v-if="library.songToAdd">
-        <img :src="library.songToAdd.cover || library.songToAdd.cover_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100'" class="preview-img" />
+        <img :src="formatImageUrl(library.songToAdd.cover || library.songToAdd.cover_url || library.songToAdd.coverUrl)" class="preview-img" />
         <div class="preview-info">
           <div class="preview-title">{{ library.songToAdd.title }}</div>
           <div class="preview-artist">{{ library.songToAdd.artist_name || library.songToAdd.artist }}</div>

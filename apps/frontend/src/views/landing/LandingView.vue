@@ -1,10 +1,10 @@
 <template>
   <div ref="landingRef" class="musicflow-landing min-h-screen bg-[#090B14] text-[#B8C1D1] font-sans selection:bg-[#1ED760] selection:text-black overflow-x-hidden">
     <!-- Navbar -->
-    <nav class="mf-navbar fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-[#090B14]/70 backdrop-blur-xl border-b border-white/5 transition-all">
+    <nav class="mf-navbar fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 bg-[#090B14]/70 backdrop-blur-xl border-b border-white/5 transition-all">
       <div class="flex items-center gap-8">
-        <RouterLink to="/landing" class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-          <MfIcon name="music" size="24" class="text-[#1ED760]" />
+        <RouterLink to="/landing" class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+          <MfIcon name="music" size="20" class="text-[#1ED760]" />
           MusicFlow
         </RouterLink>
         <div class="hidden md:flex items-center gap-6 text-sm font-semibold text-[#8B93A7]">
@@ -13,13 +13,18 @@
         </div>
       </div>
       <div class="flex items-center gap-5 text-sm font-semibold">
-        <RouterLink to="/login" class="text-[#8B93A7] hover:text-white transition-colors hidden sm:block">Đăng nhập</RouterLink>
-        <RouterLink to="/login" class="bg-white text-black px-6 py-2.5 rounded-full hover:scale-105 transition-transform font-bold shadow-lg">Bắt đầu miễn phí</RouterLink>
+        <template v-if="auth.isAuthenticated">
+          <RouterLink to="/" @click="handleLandingAction" class="bg-[#1ED760] text-black px-5 py-2 rounded-full hover:scale-105 transition-transform font-bold shadow-lg">Vào MusicFlow</RouterLink>
+        </template>
+        <template v-else>
+          <RouterLink to="/login?fresh=1" @click="handleLandingAction" class="text-[#8B93A7] hover:text-white transition-colors hidden sm:block">Đăng nhập</RouterLink>
+          <RouterLink to="/register?fresh=1" @click="handleLandingAction" class="bg-white text-black px-5 py-2 rounded-full hover:scale-105 transition-transform font-bold shadow-lg">Bắt đầu miễn phí</RouterLink>
+        </template>
       </div>
     </nav>
 
     <!-- Hero Section -->
-    <section class="hero-section relative w-full h-[100vh] min-h-[850px] flex items-center justify-center overflow-hidden bg-[#090B14]">
+    <section class="hero-section relative w-full h-[100vh] min-h-[700px] flex items-center justify-center overflow-hidden bg-[#090B14]">
       <!-- Wave glow background layers (CSS only) -->
       <div class="wave-glow-container" aria-hidden="true">
         <div class="wave-glow-bg green"></div>
@@ -42,74 +47,86 @@
       <div class="absolute inset-0 bg-gradient-to-r from-[#090B14]/90 via-[#090B14]/50 to-transparent z-10"></div>
       
       <!-- Content Area -->
-      <div class="hero-content relative z-20 max-w-7xl mx-auto px-6 w-full h-full flex flex-col lg:flex-row items-center justify-between gap-12 pt-20">
+      <div class="hero-content relative z-20 max-w-7xl mx-auto px-6 w-full h-full flex flex-col lg:flex-row items-center justify-between gap-10 pt-16">
 
         <!-- Left Content -->
         <div class="flex-1 text-left mt-10 lg:mt-0">
-          <div class="hero-badge reveal-up inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-white text-xs font-bold uppercase tracking-widest mb-8 shadow-xl shadow-black/20">
+          <div class="hero-badge reveal-up inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-white text-[11px] font-bold uppercase tracking-widest mb-6 shadow-xl shadow-black/20">
             <span class="badge-dot"></span>
             MusicFlow AI
           </div>
-          <h1 class="hero-headline reveal-up text-5xl lg:text-7xl xl:text-8xl font-extrabold text-white leading-[1.05] tracking-tight mb-8 drop-shadow-2xl">
-            Âm nhạc hiểu bạn <br/><span class="accent-text text-transparent bg-clip-text bg-gradient-to-r from-white to-[#B8C1D1]">hơn mỗi ngày.</span>
-          </h1>
-          <p class="hero-subtitle reveal-up text-lg lg:text-xl text-[#B8C1D1] max-w-xl mb-12 leading-relaxed drop-shadow-md font-medium">
+          <div class="hero-headline reveal-up flex flex-col mb-6">
+            <h1 class="text-[4rem] sm:text-[5rem] lg:text-[7rem] xl:text-[8rem] font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-[#cbd5e1] tracking-tighter leading-none drop-shadow-[0_10px_30px_rgba(255,255,255,0.15)] uppercase" style="padding-bottom: 0.1em; margin-bottom: -0.1em;">
+              Âm Nhạc
+            </h1>
+            <p class="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-white tracking-tight mt-1 sm:mt-2 drop-shadow-lg">
+              Hiểu bạn hơn mỗi ngày
+            </p>
+          </div>
+          <p class="hero-subtitle reveal-up text-base lg:text-lg text-[#B8C1D1] max-w-xl mb-8 leading-relaxed drop-shadow-md font-medium">
             Nghe nhạc, khám phá nghệ sĩ và tạo playlist cá nhân hóa dựa trên hành vi nghe thực tế của bạn.
           </p>
-          <div class="hero-cta-group reveal-up flex flex-wrap items-center gap-5">
-            <RouterLink to="/login" class="btn-primary bg-[#1ED760] text-black px-9 py-4 rounded-full font-bold text-lg hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.25)]">
-              Bắt đầu miễn phí
-            </RouterLink>
-            <a href="#features" class="btn-secondary px-9 py-4 rounded-full font-bold text-white text-lg border border-white/20 hover:border-white hover:bg-white/10 backdrop-blur-md transition-all">
+          <div class="hero-cta-group reveal-up flex flex-wrap items-center gap-4">
+            <template v-if="auth.isAuthenticated">
+              <RouterLink to="/" @click="handleLandingAction" class="btn-primary bg-[#1ED760] text-black px-7 py-3 rounded-full font-bold text-base hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.25)]">
+                Vào MusicFlow
+              </RouterLink>
+            </template>
+            <template v-else>
+              <RouterLink to="/register?fresh=1" @click="handleLandingAction" class="btn-primary bg-[#1ED760] text-black px-7 py-3 rounded-full font-bold text-base hover:scale-105 hover:bg-[#1fdf64] transition-all shadow-[0_0_30px_rgba(30,215,96,0.25)]">
+                Bắt đầu miễn phí
+              </RouterLink>
+            </template>
+            <a href="#features" class="btn-secondary px-7 py-3 rounded-full font-bold text-white text-base border border-white/20 hover:border-white hover:bg-white/10 backdrop-blur-md transition-all">
               Xem Demo
             </a>
           </div>
         </div>
 
         <!-- Right Content: Floating Stage Card -->
-        <div class="reveal-right float-animation relative w-full max-w-lg xl:max-w-xl mx-auto lg:ml-auto mt-12 lg:mt-0 perspective-1000">
+        <div class="reveal-right float-animation relative w-full max-w-md xl:max-w-lg mx-auto lg:ml-auto mt-12 lg:mt-0 perspective-1000">
           <!-- Stage Arc Glow behind the card -->
           <div class="absolute -top-32 -inset-x-20 h-80 bg-gradient-to-b from-[#1ED760]/20 via-[#8B5CF6]/10 to-transparent blur-[80px] rounded-[100%] pointer-events-none transform rotate-12"></div>
           <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[#111827]/50 blur-[100px] rounded-full pointer-events-none"></div>
 
           <!-- Stage Card -->
           <div class="hero-card relative bg-[#151A28]/80 backdrop-blur-3xl rounded-3xl border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden transform-gpu hover:-translate-y-2 transition-transform duration-500">
-            <div class="p-8">
-              <div class="flex items-center justify-between mb-8">
-                <span class="text-xs font-bold uppercase tracking-widest text-[#1ED760] flex items-center gap-2">
+            <div class="p-6">
+              <div class="flex items-center justify-between mb-6">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-[#1ED760] flex items-center gap-2">
                   <span class="w-1.5 h-1.5 bg-[#1ED760] rounded-full animate-pulse"></span>
                   Now Playing
                 </span>
-                <MfIcon name="more_horiz" size="24" class="text-white/50 cursor-pointer hover:text-white transition-colors" />
+                <MfIcon name="more_horiz" size="20" class="text-white/50 cursor-pointer hover:text-white transition-colors" />
               </div>
               
-              <div class="flex items-end justify-between mb-8">
+              <div class="flex items-end justify-between mb-6">
                 <div>
-                  <h3 class="text-3xl font-extrabold text-white mb-2 drop-shadow-md">Daily Mix #01</h3>
-                  <p class="text-base text-[#B8C1D1] font-medium">Dựa trên gu nghe nhạc của bạn</p>
+                  <h3 class="text-2xl font-extrabold text-white mb-1 drop-shadow-md">Daily Mix #01</h3>
+                  <p class="text-sm text-[#B8C1D1] font-medium">Dựa trên gu nghe nhạc của bạn</p>
                 </div>
-                <button class="w-16 h-16 bg-[#1ED760] text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-105 hover:bg-[#1fdf64] transition-all shrink-0 group">
-                  <MfIcon name="play" size="32" filled class="ml-1 group-hover:scale-110 transition-transform" />
+                <button class="w-12 h-12 bg-[#1ED760] text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-105 hover:bg-[#1fdf64] transition-all shrink-0 group">
+                  <MfIcon name="play" size="24" filled class="ml-1 group-hover:scale-110 transition-transform" />
                 </button>
               </div>
 
               <!-- Song List -->
-              <div class="space-y-4">
+              <div class="space-y-3">
                 <div v-for="(song, index) in landingDemoData.songs" :key="index" class="flex items-center gap-4 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-white/5 transition-colors">
-                  <div class="w-14 h-14 rounded-lg bg-[#111827] border border-white/5 flex items-center justify-center shrink-0 shadow-md relative overflow-hidden">
+                  <div class="w-12 h-12 rounded-lg bg-[#111827] border border-white/5 flex items-center justify-center shrink-0 shadow-md relative overflow-hidden">
                      <img v-if="song.cover" :src="apiMediaUrl(song.cover)" class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                      <!-- CSS Mini Equalizer overlay on hover -->
                      <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-0.5 backdrop-blur-sm">
-                       <span class="w-1 bg-[#1ED760] rounded-full h-3 animate-[equalizer_1s_ease-in-out_infinite]"></span>
-                       <span class="w-1 bg-[#1ED760] rounded-full h-5 animate-[equalizer_1.2s_ease-in-out_infinite_0.1s]"></span>
-                       <span class="w-1 bg-[#1ED760] rounded-full h-2 animate-[equalizer_0.9s_ease-in-out_infinite_0.2s]"></span>
+                       <span class="w-1 bg-[#1ED760] rounded-full h-2 animate-[equalizer_1s_ease-in-out_infinite]"></span>
+                       <span class="w-1 bg-[#1ED760] rounded-full h-4 animate-[equalizer_1.2s_ease-in-out_infinite_0.1s]"></span>
+                       <span class="w-1 bg-[#1ED760] rounded-full h-1.5 animate-[equalizer_0.9s_ease-in-out_infinite_0.2s]"></span>
                      </div>
                   </div>
                   <div class="flex-1 min-w-0">
-                    <p class="text-white font-bold text-base truncate group-hover:text-[#1ED760] transition-colors">{{ song.title }}</p>
-                    <p class="text-[#8B93A7] text-sm font-medium truncate mt-0.5">{{ song.artist }}</p>
+                    <p class="text-white font-bold text-sm truncate group-hover:text-[#1ED760] transition-colors">{{ song.title }}</p>
+                    <p class="text-[#8B93A7] text-xs font-medium truncate mt-0.5">{{ song.artist }}</p>
                   </div>
-                  <div class="text-sm font-medium text-[#8B93A7] group-hover:text-white transition-colors">{{ song.duration }}</div>
+                  <div class="text-xs font-medium text-[#8B93A7] group-hover:text-white transition-colors">{{ song.duration }}</div>
                 </div>
               </div>
 
@@ -133,52 +150,52 @@
       </div>
     </section>
 
-    <main class="pb-24">
+    <main class="pb-16">
       <!-- Personalization Grid -->
-      <section id="features" class="personalization-section section-line max-w-7xl mx-auto px-6 py-28">
-        <div class="mb-20 reveal-up">
-          <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Mọi thứ được cá nhân hóa</h2>
-          <p class="text-[#8B93A7] text-xl font-medium max-w-2xl">Hệ thống phân tích hành vi và tạo ra một không gian âm nhạc dành riêng cho bạn.</p>
+      <section id="features" class="personalization-section section-line max-w-7xl mx-auto px-6 py-20">
+        <div class="mb-16 reveal-up">
+          <h2 class="text-3xl lg:text-4xl font-extrabold text-white mb-4 tracking-tight">Mọi thứ được cá nhân hóa</h2>
+          <p class="text-[#8B93A7] text-lg font-medium max-w-2xl">Hệ thống phân tích hành vi và tạo ra một không gian âm nhạc dành riêng cho bạn.</p>
         </div>
 
-        <div class="stagger-children grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="stagger-children grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Card 1: Dành cho bạn -->
-          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between group cursor-pointer shadow-xl hover:shadow-2xl">
+          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-[1.5rem] p-8 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between group cursor-pointer shadow-xl hover:shadow-2xl">
             <div>
-              <h3 class="text-3xl font-bold text-white mb-3">Dành cho bạn</h3>
-              <p class="text-[#8B93A7] text-base font-medium">Playlist được cập nhật mỗi tuần dựa trên gu nhạc của bạn.</p>
+              <h3 class="text-2xl font-bold text-white mb-2">Dành cho bạn</h3>
+              <p class="text-[#8B93A7] text-sm font-medium">Playlist được cập nhật mỗi tuần dựa trên gu nhạc của bạn.</p>
             </div>
-            <div class="mt-10 flex items-center gap-6">
-              <div class="w-32 h-32 rounded-xl bg-[#1B2235] shadow-2xl flex-shrink-0 relative overflow-hidden border border-white/10">
+            <div class="mt-8 flex items-center gap-5">
+              <div class="w-24 h-24 rounded-xl bg-[#1B2235] shadow-2xl flex-shrink-0 relative overflow-hidden border border-white/10">
                 <img :src="apiMediaUrl('/uploads/playlist_cover/weeklymix.png')" alt="Weekly Mix" class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                 <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                   <div class="w-12 h-12 bg-[#1ED760] rounded-full flex items-center justify-center shadow-lg transform scale-50 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300">
-                     <MfIcon name="play" size="24" filled class="text-black ml-1" />
+                   <div class="w-10 h-10 bg-[#1ED760] rounded-full flex items-center justify-center shadow-lg transform scale-50 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300">
+                     <MfIcon name="play" size="20" filled class="text-black ml-0.5" />
                    </div>
                 </div>
               </div>
               <div>
-                <p class="text-white font-bold text-2xl drop-shadow-sm mb-1">Weekly Mix</p>
-                <p class="text-sm font-medium text-[#8B93A7] mb-4">20 bài hát • 1 giờ 24 phút</p>
-                <span class="bg-white/10 text-white text-xs font-bold px-4 py-2 rounded-full uppercase tracking-wider group-hover:bg-white group-hover:text-black transition-colors">Khám phá</span>
+                <p class="text-white font-bold text-xl drop-shadow-sm mb-1">Weekly Mix</p>
+                <p class="text-xs font-medium text-[#8B93A7] mb-3">20 bài hát • 1 giờ 24 phút</p>
+                <span class="bg-white/10 text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider group-hover:bg-white group-hover:text-black transition-colors">Khám phá</span>
               </div>
             </div>
           </div>
 
           <!-- Card 2: Khám phá nghệ sĩ -->
-          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between cursor-pointer group shadow-xl hover:shadow-2xl">
+          <div class="personalization-card reveal-up glass-card bg-[#111827] rounded-[1.5rem] p-8 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all flex flex-col justify-between cursor-pointer group shadow-xl hover:shadow-2xl">
             <div>
-              <h3 class="text-3xl font-bold text-white mb-3">Khám phá nghệ sĩ</h3>
-              <p class="text-[#8B93A7] text-base font-medium">Kết nối với những giọng ca đồng điệu.</p>
+              <h3 class="text-2xl font-bold text-white mb-2">Khám phá nghệ sĩ</h3>
+              <p class="text-[#8B93A7] text-sm font-medium">Kết nối với những giọng ca đồng điệu.</p>
             </div>
-            <div class="mt-10 flex items-center gap-6">
-              <div class="w-28 h-28 rounded-full bg-[#1B2235] p-1 relative overflow-hidden shadow-2xl border border-white/10">
+            <div class="mt-8 flex items-center gap-5">
+              <div class="w-24 h-24 rounded-full bg-[#1B2235] p-1 relative overflow-hidden shadow-2xl border border-white/10">
                 <img :src="apiMediaUrl('/uploads/playlist_cover/top_artists.png')" class="absolute inset-0 w-full h-full object-cover rounded-full group-hover:scale-110 transition-transform duration-700" />
               </div>
               <div class="flex-1">
-                <p class="text-white font-extrabold text-2xl mb-1">Top Artists</p>
-                <p class="text-sm font-medium text-[#8B93A7] mb-4">Nghệ sĩ bạn yêu thích nhất</p>
-                <span class="border border-white/20 text-white group-hover:border-white group-hover:bg-white group-hover:text-black px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors">
+                <p class="text-white font-extrabold text-xl mb-1">Top Artists</p>
+                <p class="text-xs font-medium text-[#8B93A7] mb-3">Nghệ sĩ bạn yêu thích nhất</p>
+                <span class="border border-white/20 text-white group-hover:border-white group-hover:bg-white group-hover:text-black px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors">
                   Xem thêm
                 </span>
               </div>
@@ -186,34 +203,34 @@
           </div>
 
           <!-- Card 3: AI Playlist -->
-          <div class="ai-playlist-card reveal-up bg-[#111827] rounded-3xl p-10 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all md:col-span-2 shadow-xl">
-            <div class="flex flex-col lg:flex-row gap-10 items-center">
+          <div class="ai-playlist-card reveal-up bg-[#111827] rounded-[1.5rem] p-8 border border-white/5 hover:bg-[#151A28] hover:border-white/10 transition-all md:col-span-2 shadow-xl">
+            <div class="flex flex-col lg:flex-row gap-8 items-center">
               <div class="ai-input-block reveal-left flex-1 w-full">
-                <h3 class="text-3xl font-bold text-white mb-3">AI Playlist</h3>
-                <p class="text-[#8B93A7] text-base font-medium mb-8">Mô tả tâm trạng bằng ngôn ngữ tự nhiên, hệ thống sẽ tạo một playlist hoàn hảo cho riêng bạn.</p>
+                <h3 class="text-2xl font-bold text-white mb-2">AI Playlist</h3>
+                <p class="text-[#8B93A7] text-sm font-medium mb-6">Mô tả tâm trạng bằng ngôn ngữ tự nhiên, hệ thống sẽ tạo một playlist hoàn hảo cho riêng bạn.</p>
                 <div class="relative">
-                  <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <MfIcon name="search" size="20" class="text-[#1ED760]" />
+                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MfIcon name="search" size="18" class="text-[#1ED760]" />
                   </div>
-                  <input type="text" disabled class="block w-full pl-12 pr-4 py-4 bg-[#1B2235] border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1ED760] text-sm font-medium" placeholder="Nhạc acoustic chill để code đêm khuya..." />
+                  <input type="text" disabled class="block w-full pl-10 pr-3 py-3 bg-[#1B2235] border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1ED760] text-sm font-medium" placeholder="Nhạc acoustic chill để code đêm khuya..." />
                   <div class="absolute inset-y-0 right-2 flex items-center">
-                     <button disabled class="bg-[#1ED760] text-black px-4 py-2 rounded-lg font-bold text-sm">Tạo</button>
+                     <button disabled class="bg-[#1ED760] text-black px-3 py-1.5 rounded-lg font-bold text-xs">Tạo</button>
                   </div>
                 </div>
               </div>
 
-              <div class="ai-result-block reveal-right flex-1 w-full bg-[#090B14] rounded-2xl p-6 border border-white/5 shadow-inner">
-                <p class="text-xs font-bold text-[#8B93A7] uppercase tracking-wider mb-4">Kết quả gợi ý</p>
-                <div class="space-y-4">
-                  <div class="ai-playlist-item reveal-up flex items-center gap-4" v-for="(song, i) in landingDemoData.aiSongs" :key="i">
-                    <div class="w-10 h-10 rounded bg-[#1B2235] overflow-hidden shrink-0">
+              <div class="ai-result-block reveal-right flex-1 w-full bg-[#090B14] rounded-xl p-5 border border-white/5 shadow-inner">
+                <p class="text-[10px] font-bold text-[#8B93A7] uppercase tracking-wider mb-3">Kết quả gợi ý</p>
+                <div class="space-y-3">
+                  <div class="ai-playlist-item reveal-up flex items-center gap-3" v-for="(song, i) in landingDemoData.aiSongs" :key="i">
+                    <div class="w-8 h-8 rounded bg-[#1B2235] overflow-hidden shrink-0">
                       <img :src="apiMediaUrl(song.cover)" class="w-full h-full object-cover opacity-80" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <p class="text-white text-sm font-bold truncate">{{ song.title }}</p>
-                      <p class="text-[#8B93A7] text-xs font-medium truncate">{{ song.artist }}</p>
+                      <p class="text-white text-xs font-bold truncate">{{ song.title }}</p>
+                      <p class="text-[#8B93A7] text-[10px] font-medium truncate">{{ song.artist }}</p>
                     </div>
-                    <MfIcon name="check_circle" size="18" class="text-[#1ED760]" />
+                    <MfIcon name="check_circle" size="16" class="text-[#1ED760]" />
                   </div>
                 </div>
               </div>
@@ -223,132 +240,132 @@
       </section>
 
       <!-- Smart Workflow Timeline -->
-      <section class="workflow-section section-line max-w-7xl mx-auto px-6 py-28 border-t border-white/5 bg-gradient-to-b from-[#090B14] to-[#111827]/30">
+      <section class="workflow-section section-line max-w-7xl mx-auto px-6 py-20 border-t border-white/5 bg-gradient-to-b from-[#090B14] to-[#111827]/30">
         <div class="workflow-grid-bg" aria-hidden="true"></div>
         <div class="relative">
-          <div class="text-center mb-20 reveal-up">
-            <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Luồng hoạt động thông minh</h2>
-            <p class="text-[#8B93A7] text-xl font-medium">Quy trình cá nhân hóa diễn ra âm thầm phía sau mỗi lượt nghe.</p>
+          <div class="text-center mb-16 reveal-up">
+            <h2 class="text-3xl lg:text-4xl font-extrabold text-white mb-4 tracking-tight">Luồng hoạt động thông minh</h2>
+            <p class="text-[#8B93A7] text-lg font-medium">Quy trình cá nhân hóa diễn ra âm thầm phía sau mỗi lượt nghe.</p>
           </div>
 
-          <div class="workflow-steps flex flex-col lg:flex-row items-center justify-between gap-8 max-w-5xl mx-auto relative">
+          <div class="workflow-steps flex flex-col lg:flex-row items-center justify-between gap-6 max-w-5xl mx-auto relative">
             <!-- Desktop connecting line + progress fill -->
-            <div class="hidden lg:block absolute top-12 left-16 right-16 h-1 bg-white/10 rounded-full z-0 overflow-hidden" aria-hidden="true">
+            <div class="hidden lg:block absolute top-10 left-16 right-16 h-1 bg-white/10 rounded-full z-0 overflow-hidden" aria-hidden="true">
               <div class="workflow-progress-fill h-full w-0 bg-gradient-to-r from-[#1ED760] to-[#3b82f6] rounded-full"></div>
             </div>
 
             <!-- Steps -->
             <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
-              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-white/10 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
-                <MfIcon name="headphones" size="40" class="text-white" />
+              <div class="step-number w-20 h-20 rounded-[1rem] bg-[#111827] border border-white/10 flex items-center justify-center mb-4 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
+                <MfIcon name="headphones" size="32" class="text-white" />
               </div>
-              <h4 class="text-white font-bold text-xl mb-2">1. Nghe nhạc</h4>
-              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Ghi nhận lịch sử và thói quen nghe nhạc của bạn.</p>
+              <h4 class="text-white font-bold text-lg mb-1">1. Nghe nhạc</h4>
+              <p class="text-xs font-medium text-[#8B93A7] text-center px-2">Ghi nhận lịch sử và thói quen nghe nhạc của bạn.</p>
             </div>
 
-            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-white/20 my-2" />
+            <MfIcon name="arrow_downward" size="20" class="lg:hidden text-white/20 my-2" />
 
             <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
-              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-white/10 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
-                <MfIcon name="analytics" size="40" class="text-white" />
+              <div class="step-number w-20 h-20 rounded-[1rem] bg-[#111827] border border-white/10 flex items-center justify-center mb-4 shadow-xl group-hover:scale-110 group-hover:border-white/30 transition-all duration-300">
+                <MfIcon name="analytics" size="32" class="text-white" />
               </div>
-              <h4 class="text-white font-bold text-xl mb-2">2. Phân tích hành vi</h4>
-              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Xử lý dữ liệu tương tác, bỏ qua, lặp lại.</p>
+              <h4 class="text-white font-bold text-lg mb-1">2. Phân tích hành vi</h4>
+              <p class="text-xs font-medium text-[#8B93A7] text-center px-2">Xử lý dữ liệu tương tác, bỏ qua, lặp lại.</p>
             </div>
 
-            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-white/20 my-2" />
+            <MfIcon name="arrow_downward" size="20" class="lg:hidden text-white/20 my-2" />
 
             <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
-              <div class="step-number w-24 h-24 rounded-2xl bg-[#111827] border border-[#1ED760]/20 flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:border-[#1ED760]/50 transition-all duration-300">
-                <MfIcon name="auto_awesome" size="40" class="text-[#1ED760]" />
+              <div class="step-number w-20 h-20 rounded-[1rem] bg-[#111827] border border-[#1ED760]/20 flex items-center justify-center mb-4 shadow-xl group-hover:scale-110 group-hover:border-[#1ED760]/50 transition-all duration-300">
+                <MfIcon name="auto_awesome" size="32" class="text-[#1ED760]" />
               </div>
-              <h4 class="text-white font-bold text-xl mb-2">3. Gợi ý bài hát</h4>
-              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Đối chiếu và tìm ra các bài hát có đặc điểm tương đồng.</p>
+              <h4 class="text-white font-bold text-lg mb-1">3. Gợi ý bài hát</h4>
+              <p class="text-xs font-medium text-[#8B93A7] text-center px-2">Đối chiếu và tìm ra các bài hát có đặc điểm tương đồng.</p>
             </div>
 
-            <MfIcon name="arrow_downward" size="24" class="lg:hidden text-[#1ED760]/50 my-2" />
+            <MfIcon name="arrow_downward" size="20" class="lg:hidden text-[#1ED760]/50 my-2" />
 
             <div class="workflow-step reveal-up flex flex-col items-center w-full lg:w-1/4 relative z-10 group">
-              <div class="step-number w-24 h-24 rounded-2xl bg-[#1ED760] flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(30,215,96,0.3)] group-hover:scale-110 group-hover:shadow-[0_0_40px_rgba(30,215,96,0.5)] transition-all duration-300">
-                <MfIcon name="playlist_play" size="48" class="text-black" />
+              <div class="step-number w-20 h-20 rounded-[1rem] bg-[#1ED760] flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(30,215,96,0.3)] group-hover:scale-110 group-hover:shadow-[0_0_40px_rgba(30,215,96,0.5)] transition-all duration-300">
+                <MfIcon name="queue_music" size="40" class="text-black" />
               </div>
-              <h4 class="text-white font-bold text-xl mb-2">4. Playlist cá nhân hóa</h4>
-              <p class="text-sm font-medium text-[#8B93A7] text-center px-4">Đề xuất âm nhạc khớp hoàn toàn với gu của bạn.</p>
+              <h4 class="text-white font-bold text-lg mb-1">4. Playlist cá nhân hóa</h4>
+              <p class="text-xs font-medium text-[#8B93A7] text-center px-2">Đề xuất âm nhạc khớp hoàn toàn với gu của bạn.</p>
             </div>
           </div>
         </div>
       </section>
 
       <!-- Premium Comparison -->
-      <section id="premium" class="pricing-section section-line max-w-5xl mx-auto px-6 py-28 border-t border-white/5">
-        <div class="text-center mb-20 reveal-up">
-          <h2 class="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight">Trải nghiệm âm nhạc nâng cao</h2>
-          <p class="text-[#8B93A7] text-xl font-medium">Nâng cấp để mở khóa toàn bộ tính năng cao cấp của hệ thống.</p>
+      <section id="premium" class="pricing-section section-line max-w-5xl mx-auto px-6 py-20 border-t border-white/5">
+        <div class="text-center mb-16 reveal-up">
+          <h2 class="text-3xl lg:text-4xl font-extrabold text-white mb-4 tracking-tight">Trải nghiệm âm nhạc nâng cao</h2>
+          <p class="text-[#8B93A7] text-lg font-medium">Nâng cấp để mở khóa toàn bộ tính năng cao cấp của hệ thống.</p>
         </div>
 
-        <div class="stagger-children pricing-grid grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div class="stagger-children pricing-grid grid grid-cols-1 md:grid-cols-2 gap-8">
           <!-- Free Tier -->
-          <div class="pricing-card glass-card reveal-up rounded-[2.5rem] p-12 border border-white/5 shadow-xl">
-            <h3 class="text-2xl font-extrabold text-white mb-2">Miễn phí</h3>
-            <p class="text-5xl font-black text-white mb-10 tracking-tight">0đ <span class="text-lg font-bold text-[#8B93A7]">/tháng</span></p>
-            <ul class="space-y-6 mb-12">
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-white/40 shrink-0" />
-                <span class="text-[#B8C1D1] font-semibold text-lg">Phát nhạc tiêu chuẩn</span>
+          <div class="pricing-card glass-card reveal-up rounded-[2rem] p-10 border border-white/5 shadow-xl">
+            <h3 class="text-xl font-extrabold text-white mb-2">Miễn phí</h3>
+            <p class="text-4xl font-black text-white mb-8 tracking-tight">0đ <span class="text-base font-bold text-[#8B93A7]">/tháng</span></p>
+            <ul class="space-y-5 mb-8">
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-white/40 shrink-0" />
+                <span class="text-[#B8C1D1] font-semibold text-base">Phát nhạc tiêu chuẩn</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-white/40 shrink-0" />
-                <span class="text-[#B8C1D1] font-semibold text-lg">Khám phá nghệ sĩ & thể loại</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-white/40 shrink-0" />
+                <span class="text-[#B8C1D1] font-semibold text-base">Khám phá nghệ sĩ & thể loại</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
-                <span class="text-[#8B93A7] font-semibold text-lg line-through">Trải nghiệm không quảng cáo</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="cancel" size="20" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-base line-through">Trải nghiệm không quảng cáo</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
-                <span class="text-[#8B93A7] font-semibold text-lg line-through">Tạo AI Playlist không giới hạn</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="cancel" size="20" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-base line-through">Tạo AI Playlist không giới hạn</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="cancel" size="24" class="text-white/10 shrink-0" />
-                <span class="text-[#8B93A7] font-semibold text-lg line-through">Chất lượng âm thanh nâng cao</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="cancel" size="20" class="text-white/10 shrink-0" />
+                <span class="text-[#8B93A7] font-semibold text-base line-through">Chất lượng âm thanh nâng cao</span>
               </li>
             </ul>
-            <RouterLink to="/login" class="block w-full py-4 text-center rounded-full font-bold text-white text-lg border-2 border-white/10 hover:border-white/30 hover:bg-white/5 transition-all">
+            <RouterLink to="/register?fresh=1" @click="handleLandingAction" class="block w-full py-3 text-center rounded-full font-bold text-white text-base border-2 border-white/10 hover:border-white/30 hover:bg-white/5 transition-all">
               Đăng ký miễn phí
             </RouterLink>
           </div>
 
           <!-- Premium Tier -->
-          <div class="pricing-card glass-card premium reveal-up rounded-[2.5rem] p-12 border border-[#1ED760]/30 relative shadow-[0_30px_60px_rgba(30,215,96,0.1)] transform md:-translate-y-4">
-            <div class="absolute -top-5 left-1/2 -translate-x-1/2 bg-[#1ED760] text-black text-sm font-black uppercase tracking-widest py-2 px-6 rounded-full shadow-lg shadow-[#1ED760]/30 border border-[#1fdf64]">Khuyên dùng</div>
-            <div class="flex items-center gap-3 mb-2">
-              <MfIcon name="workspace_premium" size="32" class="text-[#1ED760]" />
-              <h3 class="text-2xl font-extrabold text-white">Premium</h3>
+          <div class="pricing-card glass-card premium reveal-up rounded-[2rem] p-10 border border-[#1ED760]/30 relative shadow-[0_30px_60px_rgba(30,215,96,0.1)] transform md:-translate-y-4">
+            <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#1ED760] text-black text-xs font-black uppercase tracking-widest py-1.5 px-5 rounded-full shadow-lg shadow-[#1ED760]/30 border border-[#1fdf64]">Khuyên dùng</div>
+            <div class="flex items-center gap-2 mb-2">
+              <MfIcon name="workspace_premium" size="24" class="text-[#1ED760]" />
+              <h3 class="text-xl font-extrabold text-white">Premium</h3>
             </div>
-            <p class="text-5xl font-black text-white mb-10 tracking-tight">59.000đ <span class="text-lg font-bold text-[#8B93A7]">/tháng</span></p>
-            <ul class="space-y-6 mb-12">
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
-                <span class="text-white font-bold text-lg">Chất lượng âm thanh nâng cao</span>
+            <p class="text-4xl font-black text-white mb-8 tracking-tight">59.000đ <span class="text-base font-bold text-[#8B93A7]">/tháng</span></p>
+            <ul class="space-y-5 mb-8">
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-base">Chất lượng âm thanh nâng cao</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
-                <span class="text-white font-bold text-lg">Trải nghiệm không quảng cáo</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-base">Trải nghiệm không quảng cáo</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
-                <span class="text-white font-bold text-lg">Tạo AI Playlist không giới hạn</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-base">Tạo AI Playlist không giới hạn</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
-                <span class="text-white font-bold text-lg">Hỗ trợ tính năng Karaoke AI</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-base">Hỗ trợ tính năng Karaoke AI</span>
               </li>
-              <li class="flex items-center gap-4">
-                <MfIcon name="check_circle" size="24" class="text-[#1ED760] shrink-0" />
-                <span class="text-white font-bold text-lg">Tải nhạc & nghe offline</span>
+              <li class="flex items-center gap-3">
+                <MfIcon name="check_circle" size="20" class="text-[#1ED760] shrink-0" />
+                <span class="text-white font-bold text-base">Tải nhạc & nghe offline</span>
               </li>
             </ul>
-            <RouterLink to="/login" class="block w-full py-4 text-center rounded-full font-bold bg-[#1ED760] text-black text-lg hover:bg-[#1fdf64] hover:scale-105 transition-all shadow-[0_0_30px_rgba(30,215,96,0.2)]">
+            <RouterLink to="/register?fresh=1" @click="handleLandingAction" class="block w-full py-3 text-center rounded-full font-bold bg-[#1ED760] text-black text-base hover:bg-[#1fdf64] hover:scale-105 transition-all shadow-[0_0_30px_rgba(30,215,96,0.2)]">
               Dùng thử Premium
             </RouterLink>
           </div>
@@ -357,17 +374,17 @@
     </main>
 
     <!-- Footer -->
-    <footer class="musicflow-footer reveal border-t border-white/5 bg-[#090B14] py-16">
-      <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8">
-        <div class="flex items-center gap-3 text-white font-extrabold text-2xl tracking-tight">
-          <MfIcon name="music" size="32" class="text-[#1ED760]" />
+    <footer class="musicflow-footer reveal border-t border-white/5 bg-[#090B14] py-12">
+      <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-2 text-white font-extrabold text-xl tracking-tight">
+          <MfIcon name="music" size="24" class="text-[#1ED760]" />
           MusicFlow
         </div>
         <div class="flex flex-wrap justify-center gap-8 text-base text-[#8B93A7] font-semibold">
           <a href="#features" class="hover:text-white transition-colors">Tính năng</a>
           <a href="#premium" class="hover:text-white transition-colors">Premium</a>
-          <RouterLink to="/login" class="hover:text-white transition-colors">AI Playlist</RouterLink>
-          <RouterLink to="/login" class="hover:text-white transition-colors">Karaoke AI</RouterLink>
+          <RouterLink to="/login?fresh=1" @click="handleLandingAction" class="hover:text-white transition-colors">AI Playlist</RouterLink>
+          <RouterLink to="/login?fresh=1" @click="handleLandingAction" class="hover:text-white transition-colors">Karaoke AI</RouterLink>
           <a href="#" class="hover:text-white transition-colors">Hỗ trợ</a>
         </div>
         <p class="text-sm font-medium text-[#8B93A7]">
@@ -380,11 +397,17 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import MfIcon from '@/components/common/MfIcon.vue'
 import { useScrollReveal } from '@/composables/useScrollReveal'
 
+const auth = useAuthStore()
 const landingRef = ref(null)
 useScrollReveal(landingRef)
+
+const handleLandingAction = () => {
+  localStorage.setItem('musicflow_has_seen_landing', 'true')
+}
 
 const apiMediaUrl = (url) => {
   if (!url) return ''
@@ -681,7 +704,6 @@ html {
   background: linear-gradient(180deg, rgba(30, 215, 96, 0.05), var(--bg-glass));
   border-color: rgba(30, 215, 96, 0.2);
   position: relative;
-  overflow: hidden;
 }
 .musicflow-landing .pricing-card.premium::before {
   content: '';

@@ -88,7 +88,7 @@
                   </td>
                   <td class="text-right actions-cell">
                     <button @click="openDetailModal(album.id)" class="btn-icon">Chi tiết</button>
-                    <button v-if="album.reviewStatus === 'rejected' && album.canResubmit && album.resubmissionCount < 3" @click="openResubmitModal(album)" class="btn-icon">Sửa lại</button>
+                    <button v-if="album.reviewStatus === 'rejected'" @click="openResubmitModal(album)" class="btn-icon">Sửa lại</button>
                   </td>
                 </tr>
               </tbody>
@@ -289,7 +289,7 @@
         </div>
         <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px;">
           <button @click="closeDetailModal" class="btn-secondary">Đóng</button>
-          <button v-if="selectedAlbum && selectedAlbum.reviewStatus === 'rejected' && selectedAlbum.canResubmit && selectedAlbum.resubmissionCount < 3" @click="openResubmitModal(selectedAlbum)" class="btn-primary">Chỉnh sửa và gửi lại</button>
+          <button v-if="selectedAlbum && selectedAlbum.reviewStatus === 'rejected'" @click="openResubmitModal(selectedAlbum)" class="btn-primary">Chỉnh sửa và gửi lại</button>
         </div>
       </div>
     </div>
@@ -307,21 +307,26 @@
           </div>
           <form @submit.prevent="submitResubmit" class="upload-form">
             <div class="form-section">
-              <h3 style="font-size: 15px; margin-bottom: 12px;">1. Thông tin album</h3>
-              <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
-                <div class="form-group">
+              <div class="form-grid">
+                <div class="form-group full-width">
                   <label>Tên album <span class="text-warning">*</span></label>
-                  <input v-model.trim="resubmitForm.title" type="text" class="input-dark" placeholder="VD: Mùa Hè Của Tôi" required />
+                  <input v-model.trim="resubmitForm.title" type="text" class="input-dark" required placeholder="Nhập tên album" />
                 </div>
 
-                <div class="form-group">
-                  <label>Ảnh bìa mới <span class="muted">(tùy chọn)</span></label>
-                  <input type="file" class="input-dark" @change="onResubmitCoverChange" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
-                  <div class="text-success mt-1" v-if="resubmitForm.coverFile">{{ resubmitForm.coverFile.name }}</div>
-                  <div class="helper-text mt-1" v-else>Giữ nguyên ảnh bìa cũ nếu không chọn.</div>
+                <div class="form-group full-width">
+                  <label>Ảnh bìa (Cover) <span class="text-warning">*</span></label>
+                  <div v-if="resubmitForm.coverUrl && !resubmitForm.coverFile" style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                    <img :src="normalizeImageUrl(resubmitForm.coverUrl) || fallbackCover" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;" alt="Cover" />
+                    <div>
+                      <div style="font-size: 14px; font-weight: 500; color: #fff;">Ảnh bìa hiện tại</div>
+                      <div style="font-size: 12px; color: var(--text-muted);">Giữ nguyên ảnh bìa cũ nếu không chọn tệp mới</div>
+                    </div>
+                  </div>
+                  <input type="file" @change="onResubmitCoverChange" accept="image/*" />
+                  <span class="file-info" v-if="resubmitForm.coverFile">{{ resubmitForm.coverFile.name }}</span>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group full-width">
                   <label>Ngày phát hành dự kiến</label>
                   <input v-model="resubmitForm.releaseDate" type="date" class="input-dark" />
                 </div>
@@ -330,15 +335,16 @@
                   <label>Mô tả / Ghi chú</label>
                   <textarea v-model="resubmitForm.description" class="input-dark textarea-dark" placeholder="Mô tả về album..."></textarea>
                 </div>
+
                 <div class="form-group full-width">
-                  <label>Ghi chú gửi Admin duyệt</label>
-                  <textarea v-model="resubmitForm.submissionNote" class="input-dark textarea-dark" rows="3"></textarea>
+                  <label>Ghi chú gửi Admin duyệt <span class="text-warning">*</span></label>
+                  <textarea v-model="resubmitForm.submissionNote" class="input-dark textarea-dark" placeholder="Giải trình về các chỉnh sửa và lý do gửi duyệt lại..." rows="3" required></textarea>
                 </div>
               </div>
             </div>
 
             <div class="form-section" style="margin-top: 20px;">
-              <h3 style="font-size: 15px; margin-bottom: 12px;">2. Chọn lại bài hát cho album <span class="text-warning">*</span></h3>
+              <h3 style="font-size: 15px; margin-bottom: 12px;">2. Chọn bài hát cho album <span class="text-warning">*</span></h3>
               <p class="muted" style="margin-bottom: 16px; font-size: 13px;">Chỉ hiển thị các bài hát đã được duyệt và chưa thuộc album nào (hoặc đã thuộc album này).</p>
 
               <div v-if="songOptions.length === 0" class="empty-state" style="padding: 30px; border: 1px dashed rgba(255,255,255,0.1); background: transparent;">
@@ -560,6 +566,17 @@ const filteredSongOptions = computed(() => {
   return songOptions.value.filter(s => s.title.toLowerCase().includes(q))
 })
 
+const fetchAlbumSongOptions = async (albumId = null) => {
+  try {
+    const res = await artistStudioApi.getAlbumSongOptions(albumId ? { albumId } : {})
+    if (res.data.success) {
+      songOptions.value = res.data.songs || []
+    }
+  } catch (err) {
+    console.error('Error fetching song options:', err)
+  }
+}
+
 const openUploadModal = async () => {
   uploadForm.value = { title: '', description: '', releaseDate: '', coverFile: null }
   uploadError.value = ''
@@ -569,14 +586,7 @@ const openUploadModal = async () => {
   showUploadModal.value = true
 
   // Fetch available songs
-  try {
-    const res = await artistStudioApi.getAlbumSongOptions()
-    if (res.data.success) {
-      songOptions.value = res.data.songs || []
-    }
-  } catch (err) {
-    console.error('Error fetching song options:', err)
-  }
+  await fetchAlbumSongOptions()
 }
 
 const closeUploadModal = () => {
@@ -636,6 +646,7 @@ const resubmitError = ref('')
 const resubmitForm = ref({
   id: null,
   title: '',
+  coverUrl: '',
   description: '',
   releaseDate: '',
   submissionNote: '',
@@ -645,29 +656,35 @@ const resubmitForm = ref({
 const resubmitSelectedSongs = ref([])
 
 const openResubmitModal = async (album) => {
+  let targetAlbum = { ...album }
+  try {
+    const res = await artistStudioApi.getAlbumDetail(album.id)
+    if (res.data.success && res.data.album) {
+      targetAlbum = res.data.album
+    }
+  } catch (err) {
+    console.error('Error fetching album detail for resubmit:', err)
+  }
+
   resubmitForm.value = {
-    id: album.id,
-    title: album.name || '',
-    description: album.description || '',
-    releaseDate: album.releaseDate ? album.releaseDate.split('T')[0] : '',
-    submissionNote: album.submissionNote || album.submission_note || '',
-    rejectionReason: album.rejectionReason || album.rejection_reason || '',
+    id: targetAlbum.id,
+    title: targetAlbum.name || targetAlbum.title || '',
+    coverUrl: targetAlbum.coverUrl || targetAlbum.cover_url || '',
+    description: targetAlbum.description || '',
+    releaseDate: targetAlbum.releaseDate ? targetAlbum.releaseDate.split('T')[0] : (targetAlbum.release_date ? targetAlbum.release_date.split('T')[0] : ''),
+    submissionNote: targetAlbum.submissionNote || targetAlbum.submission_note || '',
+    rejectionReason: targetAlbum.rejectionReason || targetAlbum.rejection_reason || '',
     coverFile: null
   }
   resubmitSelectedSongs.value = []
   // Select songs that were in the album
-  if (album.songs && Array.isArray(album.songs)) {
-    resubmitSelectedSongs.value = album.songs.map(s => s.id)
+  if (targetAlbum.songs && Array.isArray(targetAlbum.songs)) {
+    resubmitSelectedSongs.value = targetAlbum.songs.map(s => s.id)
   }
   resubmitError.value = ''
 
-  // Ensure we have latest song options
-  await fetchAlbumSongOptions()
-
-  // Combine current options with the selected songs if they are not in the list (because they might still be linked to album_id)
-  // fetchAlbumSongOptions from backend already includes (album_id IS NULL OR album_id = currentAlbumId) if we passed currentAlbumId,
-  // but it doesn't take an argument right now. It just returns album_id IS NULL. Let's rely on backend to allow it or we fetch it.
-  // Actually, we don't need to change `fetchAlbumSongOptions` backend if the rejected songs were already `album_id IS NULL`.
+  // Ensure we have latest song options including songs currently assigned to this album
+  await fetchAlbumSongOptions(targetAlbum.id)
 
   showResubmitModal.value = true
 }
@@ -710,7 +727,7 @@ const submitResubmit = async () => {
       toast.showToast('Album đã được gửi lại Admin duyệt.', 'success')
       closeResubmitModal()
       if (showDetailModal.value) closeDetailModal()
-      fetchAlbums(1)
+      fetchAlbums()
     } else {
       resubmitError.value = res.data.message || 'Lỗi khi gửi lại'
     }

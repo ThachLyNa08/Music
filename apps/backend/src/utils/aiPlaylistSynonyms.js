@@ -33,7 +33,7 @@ const SYNONYM_RULES = [
     },
     {
         id: 'chill_calm',
-        phrases: ['chill', 'nhe nhang', 'em', 'thu gian', 'de nghe', 'nhe dau', 'khong gat', 'khong on', 'diu', 'binh yen'],
+        phrases: ['chill', 'nhe nhang', 'em', 'thu gian', 'de nghe', 'nhe dau', 'khong gat', 'khong on', 'diu', 'binh yen', 'buoi toi', 'toi', 'cham', 'lofi'],
         apply: {
             mood: ['chill', 'calm'],
             energy: 'low',
@@ -122,7 +122,7 @@ const ACTIVITY_RULES = [
     { activity: 'coding', phrases: ['coding', 'code', 'lap trinh'] },
     { activity: 'work', phrases: ['lam viec', 'deadline', 'chay deadline', 'tap trung'] },
     { activity: 'gym', phrases: ['tap gym', 'gym', 'workout', 'the duc', 'van dong', 'dance'] },
-    { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax'] },
+    { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax', 'buoi toi', 'toi', 'chill'] },
     { activity: 'sleep', phrases: ['ngu', 'de ngu', 'ru ngu'] },
     { activity: 'party', phrases: ['party', 'tiec', 'quay', 'club', 'bar'] },
     { activity: 'travel', phrases: ['du lich', 'di choi', 'di xa'] },
@@ -134,7 +134,7 @@ const ACTIVITY_RULES = [
 const CONTEXT_RULES = [
     { context: 'morning', phrases: ['sang', 'buoi sang'] },
     { context: 'afternoon', phrases: ['chieu', 'buoi chieu'] },
-    { context: 'night', phrases: ['buoi toi', 'toi nay', 'ban dem', 'dem'] },
+    { context: 'night', phrases: ['buoi toi', 'toi nay', 'ban dem', 'dem', 'toi'] },
     { context: 'late_night', phrases: ['khuya', 'dem muon', 'dem khuya'] },
     { context: 'rain', phrases: ['mua', 'troi mua', 'ngay mua'] },
     { context: 'deadline', phrases: ['deadline', 'chay deadline'] },

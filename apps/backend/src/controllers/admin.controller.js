@@ -1295,6 +1295,8 @@ exports.getAllUsers = async (req, res, next) => {
       whereClause += " AND u.role = ?";
       params.push(req.query.role);
       countParams.push(req.query.role);
+    } else {
+      whereClause += " AND u.role != 'artist'";
     }
     if (req.query.status) {
       whereClause += " AND u.status = ?";
@@ -1562,7 +1564,7 @@ exports.getUserDetail = async (req, res, next) => {
     const [users] = await pool.query(
       `SELECT id, email, display_name, avatar_url, role, status,
               premium_plan_id, premium_expires_at, total_listen_sec, created_at
-       FROM users WHERE id = ?`,
+       FROM users WHERE id = ? AND role != 'artist'`,
       [id]
     );
 
@@ -4823,6 +4825,8 @@ exports.exportUsers = async (req, res, next) => {
     if (role) {
       query += ` AND u.role = ?`;
       params.push(role);
+    } else {
+      query += ` AND u.role != 'artist'`;
     }
     if (status) {
       query += ` AND u.status = ?`;

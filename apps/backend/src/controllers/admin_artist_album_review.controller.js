@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { getIo, notifyUser } = require('../services/socket.service');
+const notificationService = require('../services/notification.service');
 
 let cachedSongColumns = null;
 async function getSongColumns() {
@@ -185,7 +186,7 @@ exports.approveArtistAlbum = async (req, res) => {
     const { albumId } = req.params;
     const adminId = req.user.id;
 
-    const [albums] = await pool.query('SELECT al.id, al.title, al.artist_id, al.metadata_score, al.risk_score, al.moderation_level, a.user_id as artist_user_id FROM albums al LEFT JOIN artists a ON al.artist_id = a.id WHERE al.id = ? AND al.submitted_by_artist_id IS NOT NULL', [albumId]);
+    const [albums] = await pool.query('SELECT al.id, al.title, al.cover_url, al.artist_id, al.metadata_score, al.risk_score, al.moderation_level, a.user_id as artist_user_id, a.name as artist_name FROM albums al LEFT JOIN artists a ON al.artist_id = a.id WHERE al.id = ? AND al.submitted_by_artist_id IS NOT NULL', [albumId]);
     if (albums.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy album' });
     }
@@ -222,7 +223,12 @@ exports.approveArtistAlbum = async (req, res) => {
 
     try {
       if (albumRecord.artist_user_id) {
-        notifyUser(getIo(), albumRecord.artist_user_id, 'artist:review_status_changed', { type: 'album', id: albumId, status: 'approved', title: albumRecord.title });
+        await notificationService.notifyArtistContentApproved({
+          userId: albumRecord.artist_user_id, contentType: 'album', contentId: albumId, title: albumRecord.title
+        });
+        await notificationService.notifyInterestedUsersContentApproved({
+          contentType: 'album', contentId: albumId, title: albumRecord.title, artistId: albumRecord.artist_id, artistName: albumRecord.artist_name || 'Nghệ sĩ', coverUrl: albumRecord.cover_url || ''
+        });
       }
     } catch (notifErr) {
       console.warn('Notification error on album approve (ignored):', notifErr);
@@ -272,9 +278,6 @@ exports.rejectArtistAlbum = async (req, res) => {
       WHERE id = ?
     `, [adminId, reason.trim(), canResubmit, lockedReason, albumId]);
 
-    // Unlink songs from album
-    await pool.query('UPDATE songs SET album_id = NULL WHERE album_id = ?', [albumId]);
-
     pool.query(
       `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, admin_id, action, reason, score_snapshot)
        VALUES ('album', ?, ?, ?, 'rejected', ?, ?)`,
@@ -294,7 +297,9 @@ exports.rejectArtistAlbum = async (req, res) => {
 
     try {
       if (albumRecord.artist_user_id) {
-        notifyUser(getIo(), albumRecord.artist_user_id, 'artist:review_status_changed', { type: 'album', id: albumId, status: 'rejected', title: albumRecord.title });
+        await notificationService.notifyArtistContentRejected({
+          userId: albumRecord.artist_user_id, contentType: 'album', contentId: albumId, title: albumRecord.title, reason: reason.trim()
+        });
       }
     } catch (notifErr) {
       console.warn('Notification error on album reject (ignored):', notifErr);
@@ -325,7 +330,7 @@ exports.bulkApproveArtistAlbums = async (req, res) => {
     }
 
     const [albums] = await pool.query(
-      `SELECT al.id, al.title, al.artist_id, al.review_status, al.moderation_level, al.risk_score, al.metadata_score, a.user_id as artist_user_id,
+      `SELECT al.id, al.title, al.cover_url, al.artist_id, al.review_status, al.moderation_level, al.risk_score, al.metadata_score, a.user_id as artist_user_id, a.name as artist_name,
               (SELECT COUNT(*) FROM songs s WHERE s.album_id = al.id AND s.review_status = 'approved') as approved_song_count
        FROM albums al
        LEFT JOIN artists a ON al.artist_id = a.id
@@ -397,7 +402,12 @@ exports.bulkApproveArtistAlbums = async (req, res) => {
 
           if (album.artist_user_id) {
             try {
-              notifyUser(getIo(), album.artist_user_id, 'artist:review_status_changed', { type: 'album', id: approvedId, status: 'approved', title: album.title });
+              await notificationService.notifyArtistContentApproved({
+                userId: album.artist_user_id, contentType: 'album', contentId: approvedId, title: album.title
+              });
+              await notificationService.notifyInterestedUsersContentApproved({
+                contentType: 'album', contentId: approvedId, title: album.title, artistId: album.artist_id, artistName: album.artist_name || 'Nghệ sĩ', coverUrl: album.cover_url || ''
+              });
             } catch (err) {
               console.warn('Bulk approve album notify error:', err);
             }
@@ -486,10 +496,6 @@ exports.bulkRejectArtistAlbums = async (req, res) => {
     }
 
     if (rejectedList.length > 0) {
-      const rejectedAlbumIds = rejectedList.map(r => r.album.id);
-      // Unlink songs from rejected albums
-      await pool.query('UPDATE songs SET album_id = NULL WHERE album_id IN (?)', [rejectedAlbumIds]);
-
       for (const { album, reason: itemReason } of rejectedList) {
         const currentResubmits = album.resubmission_count || 0;
         const canResubmit = (allowResubmit !== false && currentResubmits < 3) ? 1 : 0;
@@ -525,7 +531,9 @@ exports.bulkRejectArtistAlbums = async (req, res) => {
 
         if (album.artist_user_id) {
           try {
-            notifyUser(getIo(), album.artist_user_id, 'artist:review_status_changed', { type: 'album', id: album.id, status: 'rejected', title: album.title, reason: itemReason });
+            await notificationService.notifyArtistContentRejected({
+              userId: album.artist_user_id, contentType: 'album', contentId: album.id, title: album.title, reason: itemReason
+            });
           } catch (err) {
             console.warn('Bulk reject album notify error:', err);
           }

@@ -81,33 +81,7 @@
           />
         </section>
 
-        <section v-if="previewData" class="mf-glass-panel p-5">
-          <h2 class="mb-3 text-[11px] font-bold uppercase tracking-widest text-white/70">Tinh chỉnh Playlist</h2>
-          <textarea
-            v-model="refinePrompt"
-            :disabled="loading || saving || refining"
-            class="min-h-[84px] w-full resize-y rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-white/30 hover:bg-black/30 focus:bg-black/40 focus:border-[#1ed760]/30 focus:ring-1 focus:ring-[#1ed760]/20"
-            placeholder="Ví dụ: nhẹ hơn, bớt buồn, thêm vài bài tempo nhanh..."
-          />
-          <div class="mt-4 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              :disabled="regenerating || loading || saving"
-              class="h-10 rounded-full border border-white/10 bg-transparent text-sm font-bold text-white transition hover:border-white/30 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
-              @click="handleRegenerate"
-            >
-              {{ regenerating ? 'Đang tạo...' : 'Tạo lại' }}
-            </button>
-            <button
-              type="button"
-              :disabled="!refinePrompt.trim() || refining || loading || saving"
-              class="h-10 rounded-full bg-[#1ed760] text-sm font-bold text-black transition hover:bg-[#1ed760]/90 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-              @click="handleRefine"
-            >
-              {{ refining ? 'Đang chỉnh...' : 'Tinh chỉnh' }}
-            </button>
-          </div>
-        </section>
+
       </aside>
 
       <section class="relative z-10 min-w-0 space-y-5">

@@ -129,6 +129,12 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
+  // 1. Landing state handling
+  const hasSeenLanding = localStorage.getItem('musicflow_has_seen_landing') === 'true'
+  if (to.path === '/' && !hasSeenLanding) {
+    return '/landing'
+  }
+
   if (auth.isAuthenticated && !auth.user) {
     await auth.fetchMe()
   }
@@ -199,10 +205,16 @@ router.beforeEach(async (to) => {
   }
 
   // 4. Xử lý trang Login/Register của User
-  if (isGuest && auth.isAuthenticated) {
-    if (auth.userRole === 'admin') return '/admin/dashboard'
-    if (auth.userRole === 'artist') return '/artist/dashboard'
-    return '/'
+  if (isGuest) {
+    if (to.query.fresh === '1') {
+      auth.logoutSilently()
+    }
+    
+    if (auth.isAuthenticated) {
+      if (auth.userRole === 'admin') return '/admin/dashboard'
+      if (auth.userRole === 'artist') return '/artist/dashboard'
+      return '/'
+    }
   }
 })
 

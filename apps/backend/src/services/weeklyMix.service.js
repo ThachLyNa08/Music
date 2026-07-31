@@ -157,7 +157,7 @@ async function generateWeeklyMixForUser(userId, options = {}) {
     }
     const recentSystemSongs = await getRecentSystemPlaylistSongs(conn, SYSTEM_KEY);
 
-    const result = await recommendationService.getRecommendationsForUser(uid, { limit: limit * 5, listeningWindow });
+    const result = await recommendationService.getRecommendationsForUser(uid, { limit: limit * 5, listeningWindow, context: 'weekly_mix' });
     // result.items is [{ id, score, ... }]
     const candidateObjs = result.items.map(c => {
        let score = c.score || 0;

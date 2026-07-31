@@ -4,6 +4,7 @@ const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.ut
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const recommendationService = require('../services/recommendation.service');
 const contextualMoodService = require('../services/contextualMood.service');
+const contextualPlaylistService = require('../services/contextualMoodPlaylist.service');
 const modelService = require('../services/recommendationModel.service');
 const { getSystemPlaylistTempoMetadata, isTempoAwareSystemPlaylist } = require('../config/systemPlaylistTempo.config');
 const {
@@ -54,14 +55,6 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
 
   const coverUrl = resolvePlaylistCoverUrl(systemKey);
 
-  console.log('[ENSURE PLAYLIST]', {
-    userId,
-    name,
-    system_key: systemKey,
-    type: 'system',
-    cover_url: coverUrl
-  });
-  // Check if playlist already exists by system_key to avoid UNIQUE constraint violation
   const [playlists] = await conn.query(
     'SELECT id, type FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1',
     [userId, systemKey]
@@ -70,17 +63,43 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
   let playlistId;
   let shouldPopulate = false;
   if (playlists.length === 0) {
-    const [result] = await conn.query(
-      `INSERT INTO playlists (user_id, name, cover_url, description, type, is_public, system_key, is_system)
-       VALUES (?, ?, ?, ?, 'system', 0, ?, 1)`,
-      [userId, name, coverUrl, description, systemKey]
-    );
-    playlistId = result.insertId;
-    shouldPopulate = true;
+    try {
+      const [result] = await conn.query(
+        `INSERT IGNORE INTO playlists (user_id, name, cover_url, description, type, is_public, system_key, is_system)
+         VALUES (?, ?, ?, ?, 'system', 0, ?, 1)`,
+        [userId, name, coverUrl, description, systemKey]
+      );
+      if (result.insertId) {
+        playlistId = result.insertId;
+        shouldPopulate = true;
+      } else {
+        const [existing] = await conn.query(
+          'SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1',
+          [userId, systemKey]
+        );
+        if (existing.length > 0) {
+          playlistId = existing[0].id;
+          const [songs] = await conn.query('SELECT 1 FROM playlist_songs WHERE playlist_id = ? LIMIT 1', [playlistId]);
+          if (songs.length === 0) {
+            shouldPopulate = true;
+          }
+        }
+      }
+    } catch (error) {
+      const [existing] = await conn.query(
+        'SELECT id FROM playlists WHERE user_id = ? AND system_key = ? LIMIT 1',
+        [userId, systemKey]
+      );
+      if (existing.length > 0) {
+        playlistId = existing[0].id;
+        const [songs] = await conn.query('SELECT 1 FROM playlist_songs WHERE playlist_id = ? LIMIT 1', [playlistId]);
+        if (songs.length === 0) shouldPopulate = true;
+      } else {
+        throw error;
+      }
+    }
   } else {
     playlistId = playlists[0].id;
-    // Bỏ qua UPDATE không cần thiết trên GET request
-    // Check if empty
     const [songs] = await conn.query('SELECT 1 FROM playlist_songs WHERE playlist_id = ? LIMIT 1', [playlistId]);
     if (songs.length === 0) {
       shouldPopulate = true;
@@ -91,7 +110,6 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
     if (isTempoAwareSystemPlaylist(systemKey)) {
       return playlistId;
     }
-    // Get songs to populate
     const [songs] = await conn.query(songQuery, queryParams);
     if (songs.length > 0) {
       const values = songs.map(s => [playlistId, s.id]);
@@ -102,7 +120,6 @@ async function getOrCreateSystemPlaylist(conn, userId, playlistConfig, songQuery
   return playlistId;
 }
 
-// Lấy danh sách artist_id mà user đã quan tâm (từ follows và preferences)
 async function getFollowedArtistIds(conn, userId) {
   try {
     const [follows] = await conn.query('SELECT artist_id FROM artist_follows WHERE user_id = ?', [userId]);
@@ -110,31 +127,26 @@ async function getFollowedArtistIds(conn, userId) {
 
     const idSet = new Set([...follows.map(r => r.artist_id), ...prefs.map(r => r.artist_id)]);
     const ids = Array.from(idSet);
-    return ids.length > 0 ? ids : [0]; // Tránh lỗi SQL Syntax khi mảng rỗng
+    return ids.length > 0 ? ids : [0];
   } catch (e) {
     return [0];
   }
 }
 
-exports.getHomeRecommendations = async (req, res, next) => {
-  const userId = req.user.id;
-  console.log(`[API Home] getHomeRecommendations called for user_id = ${userId}`);
-  const conn = await pool.getConnection();
+// Non-blocking background system playlist creator
+async function ensureSystemPlaylistsForUserAsync(userId) {
+  let conn;
   try {
-    await conn.beginTransaction();
-
-    // 0. Lấy danh sách nghệ sĩ user đã follow
+    conn = await pool.getConnection();
     const followedArtistIds = await getFollowedArtistIds(conn, userId);
     const [systemUsers] = await conn.query(`SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`);
     const globalSystemUserId = systemUsers[0]?.id || userId;
 
-    // 1. Fetch user preferred genres to personalize the Weekly Mix
     const [prefGenres] = await conn.query('SELECT genre_id FROM user_genre_preferences WHERE user_id = ?', [userId]);
     let weeklySongQuery, weeklyQueryParams;
 
     if (prefGenres.length > 0) {
       const genreIds = prefGenres.map(g => g.genre_id);
-      // Ưu tiên bài từ nghệ sĩ đã follow
       weeklySongQuery = `
         SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
@@ -145,7 +157,6 @@ exports.getHomeRecommendations = async (req, res, next) => {
       `;
       weeklyQueryParams = [followedArtistIds, genreIds];
     } else {
-      // Không có genre preferences, ưu tiên followed artists
       weeklySongQuery = `
         SELECT id,
                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
@@ -157,51 +168,15 @@ exports.getHomeRecommendations = async (req, res, next) => {
       weeklyQueryParams = [followedArtistIds];
     }
 
-    // 2. Ensure all Spotify-like playlists exist for this user
-
-    // Weekly Mix - Ưu tiên followed artists + genre preferences
-    const weeklyId = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Weekly Mix',
-      resolvePlaylistCoverUrl('weeklymix'),
+      resolvePlaylistCoverUrl('weekly_mix'),
       'Gợi ý âm nhạc hàng tuần được cá nhân hóa dựa trên gu của bạn.',
       weeklySongQuery, weeklyQueryParams,
-      'weeklymix'
+      'weekly_mix'
     );
 
-    // Morning Mix (EDM, Pop, Rock, Indie) - Ưu tiên followed artists
-    const morningId = await getOrCreateSystemPlaylist(
-      conn, userId, 'system', 'Morning Mix',
-      resolvePlaylistCoverUrl('morning_vibes'),
-      'Chào ngày mới với những giai điệu đầy hứng khởi.',
-      `
-        SELECT id,
-               CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs
-        WHERE ${publicSongCondition('songs')}
-        ORDER BY (genre_id IN (3, 4, 7, 8, 12)) DESC, is_followed_bonus DESC, RAND()
-        LIMIT 20
-      `, [followedArtistIds],
-      'morning_vibes'
-    );
-
-    // Evening Mix (Lofi, Jazz, Ballad, Classical) - Ưu tiên followed artists
-    const eveningId = await getOrCreateSystemPlaylist(
-      conn, userId, 'system', 'Evening Mix',
-      resolvePlaylistCoverUrl('night_vibes'),
-      'Thư giãn cuối ngày với những âm điệu êm dịu.',
-      `
-        SELECT id,
-               CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-        FROM songs
-        WHERE ${publicSongCondition('songs')}
-        ORDER BY (genre_id IN (1, 2, 6, 9)) DESC, is_followed_bonus DESC, RAND()
-        LIMIT 20
-      `, [followedArtistIds],
-      'night_vibes'
-    );
-
-    // Daily Mix 1 (Pop, R&B, K-pop, V-pop) - Ưu tiên followed artists
-    const daily1Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 01',
       resolvePlaylistCoverUrl('dailymix_01'),
       'Giai điệu Pop, R&B và nhạc trẻ yêu thích.',
@@ -216,8 +191,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_01'
     );
 
-    // Daily Mix 2 (Lofi, Indie) - Ưu tiên followed artists
-    const daily2Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 02',
       resolvePlaylistCoverUrl('dailymix_02'),
       'Không gian Lofi và Indie mộc mạc.',
@@ -232,8 +206,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_02'
     );
 
-    // Daily Mix 3 (EDM, Rock, Hip-hop) - Ưu tiên followed artists
-    const daily3Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 03',
       resolvePlaylistCoverUrl('dailymix_03'),
       'Giai điệu EDM sảng khoái và Rock mạnh mẽ.',
@@ -248,8 +221,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_03'
     );
 
-    // Daily Mix 4
-    const daily4Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 04',
       resolvePlaylistCoverUrl('dailymix_04'),
       'Giai điệu Ballad và Acoustic sâu lắng.',
@@ -264,8 +236,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_04'
     );
 
-    // Daily Mix 5
-    const daily5Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 05',
       resolvePlaylistCoverUrl('dailymix_05'),
       'Những bản hit nhạc Việt và Châu Á.',
@@ -280,8 +251,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_05'
     );
 
-    // Daily Mix 6
-    const daily6Id = await getOrCreateSystemPlaylist(
+    await getOrCreateSystemPlaylist(
       conn, userId, 'system', 'Daily Mix 06',
       resolvePlaylistCoverUrl('dailymix_06'),
       'Năng lượng mạnh mẽ từ Remix và EDM.',
@@ -296,71 +266,58 @@ exports.getHomeRecommendations = async (req, res, next) => {
       'dailymix_06'
     );
 
-    // Ensure the remaining Home system playlists before fetching the response.
-    try {
-      await getOrCreateSystemPlaylist(
-        conn, userId, getSystemPlaylistConfig('moodmix'),
-        `SELECT id,
-                CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
-         FROM songs WHERE ${publicSongCondition('songs')}
-         ORDER BY is_followed_bonus DESC, RAND()
-         LIMIT 25`,
-        [followedArtistIds]
-      );
+    await getOrCreateSystemPlaylist(
+      conn, userId, getSystemPlaylistConfig('moodmix'),
+      `SELECT id,
+              CASE WHEN artist_id IN (?) THEN 1 ELSE 0 END as is_followed_bonus
+       FROM songs WHERE ${publicSongCondition('songs')}
+       ORDER BY is_followed_bonus DESC, RAND()
+       LIMIT 25`,
+      [followedArtistIds]
+    );
 
-      await getOrCreateSystemPlaylist(
-        conn, userId, getSystemPlaylistConfig('favorite_songs'),
-        `SELECT song_id as id FROM song_likes WHERE user_id = ? ORDER BY liked_at DESC LIMIT 30`,
-        [userId]
-      );
+    await getOrCreateSystemPlaylist(
+      conn, userId, getSystemPlaylistConfig('favorite_songs'),
+      `SELECT song_id as id FROM song_likes WHERE user_id = ? ORDER BY liked_at DESC LIMIT 30`,
+      [userId]
+    );
 
-      await getOrCreateSystemPlaylist(
-        conn, userId, getSystemPlaylistConfig('recently_played'),
-        `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY MAX(created_at) DESC LIMIT 30`,
-        [userId]
-      );
+    await getOrCreateSystemPlaylist(
+      conn, userId, getSystemPlaylistConfig('recently_played'),
+      `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY MAX(created_at) DESC LIMIT 30`,
+      [userId]
+    );
 
-      await getOrCreateSystemPlaylist(
-        conn, userId, getSystemPlaylistConfig('top_tracks'),
-        `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY COUNT(*) DESC LIMIT 30`,
-        [userId]
-      );
+    await getOrCreateSystemPlaylist(
+      conn, userId, getSystemPlaylistConfig('top_tracks'),
+      `SELECT song_id as id FROM listening_history WHERE user_id = ? GROUP BY song_id ORDER BY COUNT(*) DESC LIMIT 30`,
+      [userId]
+    );
 
-      await getOrCreateSystemPlaylist(
-        conn, globalSystemUserId, getSystemPlaylistConfig('trending_now'),
-        `SELECT id FROM songs WHERE ${publicSongCondition('songs')} ORDER BY play_count DESC LIMIT 30`,
-        []
-      );
-    } catch (error) {
-      console.error('[HOME] ensureSystemPlaylistsForUser failed:', error);
-      throw error;
-    }
+    await getOrCreateSystemPlaylist(
+      conn, globalSystemUserId, getSystemPlaylistConfig('trending_now'),
+      `SELECT id FROM songs WHERE ${publicSongCondition('songs')} ORDER BY play_count DESC LIMIT 30`,
+      []
+    );
+  } catch (err) {
+    console.error(`[HOME] Background system playlist warmup failed for user ${userId}:`, err.message);
+  } finally {
+    if (conn) conn.release();
+  }
+}
 
-    // Update descriptions dynamically for all 6 system playlists based on actual songs
-    // Thay vì UPDATE DB, tính toán và lưu vào một map để áp dụng vào response
-    const dynamicDescMap = {};
-    const allSystemIds = [weeklyId, daily1Id, daily2Id, daily3Id, daily4Id, daily5Id, daily6Id];
-    for (const plId of allSystemIds) {
-      const [artists] = await conn.query(`
-        SELECT DISTINCT a.name
-        FROM playlist_songs ps
-        JOIN songs s ON ps.song_id = s.id
-        JOIN artists a ON s.artist_id = a.id
-        WHERE ps.playlist_id = ?
-        LIMIT 3
-      `, [plId]);
+exports.getHomeRecommendations = async (req, res, next) => {
+  const userId = req.user.id;
+  console.log(`[API Home] getHomeRecommendations called for user_id = ${userId}`);
+  const conn = await pool.getConnection();
+  try {
+    const followedArtistIds = await getFollowedArtistIds(conn, userId);
+    const [systemUsers] = await conn.query(`SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`);
+    const globalSystemUserId = systemUsers[0]?.id || userId;
 
-      if (artists.length > 0) {
-        const artistNames = artists.map(a => a.name).join(', ');
-        dynamicDescMap[plId] = `${artistNames} và nhiều hơn nữa...`;
-      }
-    }
-
-    await conn.commit();
-
-    // 3. Fetch full playlist details to return to the frontend
+    // Fetch existing system playlists (READ-ONLY, zero blocking)
     const [playlists] = await conn.query(`
-      SELECT p.id, p.name, p.description as \`desc\`, p.type, p.cover_url, p.system_key, p.is_system, COALESCE(p.last_refreshed_at, p.updated_at) AS updated_at, p.next_refresh_at,
+      SELECT p.id, p.name, p.description as \`desc\`, p.system_key, p.cover_url, p.is_system, p.next_refresh_at,
              IF(usp.id IS NULL, 0, 1) AS is_saved,
              COALESCE(
                NULLIF(p.cover_url, ''),
@@ -386,10 +343,27 @@ exports.getHomeRecommendations = async (req, res, next) => {
       GROUP BY p.id
     `, [userId, userId, globalSystemUserId]);
 
-    // Format output
-    const listMap = {};
+    // If system playlists are missing for this user, trigger background warmup non-blockingly
+    if (playlists.length < 5) {
+      setImmediate(() => ensureSystemPlaylistsForUserAsync(userId));
+    }
 
-    // Deduplicate Weekly Mixes
+    // Dynamic description generation from existing songs in DB
+    const dynamicDescMap = {};
+    for (const pl of playlists) {
+      const [artists] = await conn.query(`
+        SELECT DISTINCT a.name
+        FROM playlist_songs ps
+        JOIN songs s ON ps.song_id = s.id
+        JOIN artists a ON s.artist_id = a.id
+        WHERE ps.playlist_id = ?
+        LIMIT 3
+      `, [pl.id]);
+      if (artists.length > 0) {
+        dynamicDescMap[pl.id] = `Gồm các nghệ sĩ: ${artists.map(a => a.name).join(', ')}.`;
+      }
+    }
+
     const weeklyMixes = playlists.filter(pl => pl.system_key === 'weeklymix' || pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix'));
     let selectedWeeklyMixId = null;
     if (weeklyMixes.length > 0) {
@@ -406,7 +380,7 @@ exports.getHomeRecommendations = async (req, res, next) => {
     const madeForYouPlaylists = [];
     playlists.forEach(pl => {
       const isWeekly = pl.system_key === 'weeklymix' || pl.system_key === 'weekly_mix' || String(pl.name).toLowerCase().includes('weekly mix');
-      if (isWeekly && pl.id !== selectedWeeklyMixId) return; // filter out duplicate Weekly Mix
+      if (isWeekly && pl.id !== selectedWeeklyMixId) return;
 
       pl.cover_url = normalizeCoverUrl(pl.cover_url, req);
       pl.effective_cover_url = normalizeCoverUrl(pl.effective_cover_url, req);
@@ -419,7 +393,15 @@ exports.getHomeRecommendations = async (req, res, next) => {
       madeForYouPlaylists.push(pl);
     });
 
-    // Fetch user manual playlists as well
+    const SYSTEM_KEYS_MADE_FOR_YOU = MADE_FOR_YOU_ORDER;
+    const finalMadeForYou = uniqueByPlaylist(madeForYouPlaylists)
+      .filter(p => p.is_system && SYSTEM_KEYS_MADE_FOR_YOU.includes(p.system_key))
+      .sort((a, b) => {
+        const aIndex = SYSTEM_KEYS_MADE_FOR_YOU.indexOf(a.system_key);
+        const bIndex = SYSTEM_KEYS_MADE_FOR_YOU.indexOf(b.system_key);
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      });
+
     const [userManualPlaylists] = await conn.query(`
       SELECT p.id, p.name, p.description as \`desc\`, p.type, p.cover_url, p.updated_at,
              IF(usp.id IS NULL, 0, 1) AS is_saved,
@@ -450,7 +432,6 @@ exports.getHomeRecommendations = async (req, res, next) => {
       pl.effective_cover_url = normalizeCoverUrl(pl.effective_cover_url, req);
     });
 
-    // 4. Lấy followed artists cho trang chủ (8 nghệ sĩ)
     let followedArtistsForHome = [];
     if (followedArtistIds.length > 0 && followedArtistIds[0] !== 0) {
       const [followedArtists] = await conn.query(`
@@ -463,16 +444,16 @@ exports.getHomeRecommendations = async (req, res, next) => {
         LEFT JOIN artist_follows af ON af.artist_id = a.id
         WHERE a.id IN (?)
         GROUP BY a.id
-        ORDER BY FIELD(a.id, ?)
         LIMIT 8
-      `, [followedArtistIds, followedArtistIds.join(',')]);
-      followedArtists.forEach(a => {
+      `, [followedArtistIds]);
+      const artistMap = new Map(followedArtists.map(a => [Number(a.id), a]));
+      const orderedArtists = followedArtistIds.map(id => artistMap.get(Number(id))).filter(Boolean);
+      orderedArtists.forEach(a => {
         a.avatar_url = resolveArtistAvatar(a, req);
       });
-      followedArtistsForHome = followedArtists;
+      followedArtistsForHome = orderedArtists;
     }
 
-    // Nếu chưa follow ai, lấy nghệ sĩ phổ biến nhất
     let popularArtistsFallback = [];
     if (followedArtistsForHome.length === 0) {
       const [popularArtists] = await conn.query(`
@@ -493,25 +474,9 @@ exports.getHomeRecommendations = async (req, res, next) => {
       popularArtistsFallback = popularArtists;
     }
 
-    // Prepare home response structure matching the new frontend requirements
-
-    const SYSTEM_KEYS_MADE_FOR_YOU = MADE_FOR_YOU_ORDER;
-
-    // 1. madeForYouPlaylists: ONLY system personalized playlists
-    const finalMadeForYou = uniqueByPlaylist(madeForYouPlaylists)
-      .filter(p => p.is_system && SYSTEM_KEYS_MADE_FOR_YOU.includes(p.system_key))
-      .sort((a, b) => {
-        const aIndex = SYSTEM_KEYS_MADE_FOR_YOU.indexOf(a.system_key);
-        const bIndex = SYSTEM_KEYS_MADE_FOR_YOU.indexOf(b.system_key);
-        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-      });
-
-    // 2. userPlaylists: ONLY manual user playlists
     const finalUserPlaylists = uniqueByPlaylist(userManualPlaylists)
       .filter(p => !p.is_system && !p.system_key);
 
-    // 3. quickAccess: 3 items for top greeting grid
-    // Combine recently opened / manual / madeForYou, prioritize manual or recently accessed
     let rawQuickAccess = [
       ...finalUserPlaylists,
       ...finalMadeForYou
@@ -519,30 +484,23 @@ exports.getHomeRecommendations = async (req, res, next) => {
 
     const finalQuickAccess = uniqueByPlaylist(rawQuickAccess).slice(0, 3);
 
-    // Track used keys to avoid duplication
     const usedKeys = new Set([
       ...finalQuickAccess.map(getPlaylistUniqueKey),
       ...finalMadeForYou.map(getPlaylistUniqueKey),
       ...finalUserPlaylists.map(getPlaylistUniqueKey)
     ]);
 
-    // Define which system_keys belong to "Gợi ý hôm nay"
     const RECOMMENDED_TODAY_KEYS = RECOMMENDED_TODAY_ORDER;
 
-    // Smart ordering based on time of day
     const currentHour = new Date().getHours();
     let todayOrder;
     if (currentHour >= 5 && currentHour < 12) {
-      // Morning: keep the four contextual mood playlists visible, with morning first.
       todayOrder = ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes', 'moodmix', 'favorite_songs', 'trending_now', 'recently_played', 'top_tracks'];
     } else if (currentHour >= 12 && currentHour < 17) {
-      // Afternoon: afternoon first, but still expose the full contextual mood set.
       todayOrder = ['afternoon_vibes', 'morning_vibes', 'evening_vibes', 'night_vibes', 'moodmix', 'favorite_songs', 'trending_now', 'recently_played', 'top_tracks'];
     } else if (currentHour >= 17 && currentHour < 22) {
-      // Evening: evening first, then the rest.
       todayOrder = ['evening_vibes', 'morning_vibes', 'afternoon_vibes', 'night_vibes', 'moodmix', 'favorite_songs', 'trending_now', 'recently_played', 'top_tracks'];
     } else {
-      // Night: night first, then the rest.
       todayOrder = ['night_vibes', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'moodmix', 'favorite_songs', 'trending_now', 'recently_played', 'top_tracks'];
     }
 
@@ -556,9 +514,6 @@ exports.getHomeRecommendations = async (req, res, next) => {
         return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
       });
 
-    // Fetch Trending Now playlist details (the system playlist created/updated
-    // by trendingPlaylist.service + this controller's ensure step).
-    // Returns null if not present, so frontend can fallback gracefully.
     let trendingNowPlaylist = null;
     try {
       const [tnRows] = await conn.query(
@@ -594,8 +549,106 @@ exports.getHomeRecommendations = async (req, res, next) => {
       console.warn('[HOME] fetch trendingNowPlaylist failed:', tnErr.message);
     }
 
+    const feedbackStatus = await recommendationService.getUserFeedbackStatus(userId);
+    const isColdStartUser = feedbackStatus.isColdStartUser;
+
+    if (isColdStartUser) {
+      const starterRecsRaw = await recommendationService.getRecommendationsForUserRaw(userId, 20, { feedbackStatus });
+      let starterItems = [];
+      if (starterRecsRaw && starterRecsRaw.items && starterRecsRaw.items.length > 0) {
+        const songIds = starterRecsRaw.items.map(r => Number(r.song_id || r.id)).filter(id => Number.isFinite(id));
+        if (songIds.length > 0) {
+          const [songs] = await conn.query(`
+            SELECT s.*, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre_name 
+            FROM songs s 
+            LEFT JOIN artists a ON s.artist_id = a.id
+            LEFT JOIN genres g ON s.genre_id = g.id
+            WHERE s.id IN (?)
+          `, [songIds]);
+          const songMap = new Map(songs.map(s => [Number(s.id), s]));
+          starterItems = songIds.map(id => songMap.get(id)).filter(Boolean);
+        }
+      }
+
+      const vibeKeys = ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'];
+      const currentPeriod = currentHour >= 5 && currentHour < 12 ? 'morning_vibes' 
+                          : currentHour >= 12 && currentHour < 17 ? 'afternoon_vibes'
+                          : currentHour >= 17 && currentHour < 22 ? 'evening_vibes'
+                          : 'night_vibes';
+      
+      let timeBasedVibesItems = playlists.filter(p => p.is_system && vibeKeys.includes(p.system_key));
+      timeBasedVibesItems.forEach(pl => {
+        pl.cover_url = normalizeCoverUrl(pl.cover_url, req);
+        pl.effective_cover_url = normalizeCoverUrl(pl.effective_cover_url, req);
+        pl.creator_name = 'MusicFlow';
+        pl.isCurrent = (pl.system_key === currentPeriod);
+      });
+      timeBasedVibesItems.sort((a, b) => {
+        if (a.system_key === currentPeriod) return -1;
+        if (b.system_key === currentPeriod) return 1;
+        return vibeKeys.indexOf(a.system_key) - vibeKeys.indexOf(b.system_key);
+      });
+
+      const onboardingArtistsItems = followedArtistsForHome.length > 0 ? followedArtistsForHome : popularArtistsFallback;
+
+      let trendingSongs = [];
+      try {
+        const [ts] = await conn.query(`
+          SELECT s.*, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre_name 
+          FROM songs s 
+          LEFT JOIN artists a ON s.artist_id = a.id
+          LEFT JOIN genres g ON s.genre_id = g.id
+          WHERE ${publicSongCondition('s')}
+          ORDER BY s.play_count DESC 
+          LIMIT 15
+        `);
+        trendingSongs = ts;
+      } catch (e) {}
+
+      let discoveryGenres = [];
+      try {
+        const [genres] = await conn.query('SELECT * FROM genres ORDER BY RAND() LIMIT 8');
+        discoveryGenres = genres;
+      } catch (e) {}
+
+      return res.json({
+        success: true,
+        userState: {
+          isColdStartUser: true,
+          hasOnboardingPreferences: feedbackStatus.hasOnboardingPreferences
+        },
+        newUserExperience: true,
+        sections: {
+          starterRecommendations: {
+            source: starterRecsRaw.source || 'content_based_v4',
+            items: starterItems
+          },
+          timeBasedVibes: {
+            source: 'system_global',
+            currentPeriod: currentPeriod,
+            items: timeBasedVibesItems
+          },
+          onboardingArtists: {
+            source: feedbackStatus.hasOnboardingPreferences ? 'onboarding_preferences' : 'popular_fallback',
+            items: onboardingArtistsItems
+          },
+          trending: {
+            source: 'global_trending',
+            items: trendingSongs
+          },
+          discoveryGenres: {
+            source: 'cold_start_taxonomy',
+            items: discoveryGenres
+          }
+        }
+      });
+    }
+
+    const sectionSource = 'personalized';
+
     res.json({
       success: true,
+      newUserExperience: false,
       data: {
         quickAccess: finalQuickAccess,
         madeForYouPlaylists: finalMadeForYou,
@@ -606,17 +659,16 @@ exports.getHomeRecommendations = async (req, res, next) => {
         trendingNowPlaylist,
         artistsForYou: followedArtistsForHome.length > 0 ? followedArtistsForHome : popularArtistsFallback,
         followed_artists: followedArtistsForHome,
-        popular_artists: popularArtistsFallback, // fallback khi chưa follow ai
-        has_followed_artists: followedArtistIds.length > 0
+        popular_artists: popularArtistsFallback,
+        has_followed_artists: followedArtistIds.length > 0,
+        isColdStartUser: false,
+        hasOnboardingPreferences: feedbackStatus.hasOnboardingPreferences,
+        sectionSource,
+        basisLabel: 'Dựa trên thói quen của bạn'
       }
     });
-
   } catch (err) {
-    if (conn) await conn.rollback();
     console.error("Home Recommendations Error:", err.message);
-    try {
-      require('fs').writeFileSync(require('path').join(__dirname, '../../error.log'), err.stack);
-    } catch(e) {}
     res.status(500).json({
       success: false,
       message: 'Không thể tải gợi ý trang chủ',
@@ -642,18 +694,32 @@ exports.getHomeSongRecommendations = async (req, res) => {
       reason: recommendationService.reasonForStrategy(serving.strategy),
     }));
 
+    let publicStrategy = 'most_popular_fallback';
+    let publicStrategyLabel = 'Bài hát phổ biến';
+    let publicFallbackReason = 'Không có đủ dữ liệu cá nhân hóa hoặc sở thích ban đầu.';
+
+    if (serving.strategy.includes('lightgcn') || serving.strategy.includes('bpr') || serving.strategy === 'content_based_v4') {
+      publicStrategy = 'model_personalized';
+      publicStrategyLabel = 'Gợi ý cá nhân hóa';
+      publicFallbackReason = null;
+    } else if (serving.strategy === 'cold_start_preferences' || serving.strategy === 'content_based_onboarding') {
+      publicStrategy = 'content_based_onboarding';
+      publicStrategyLabel = 'Gợi ý theo sở thích ban đầu';
+      publicFallbackReason = 'Người dùng chưa có đủ lịch sử nghe hoặc chưa có trong serving artifact.';
+    }
+
     console.log(
       `[RecommendationServing] userId=${userId} strategy=${serving.strategy} servingVersion=${serving.servingVersion} fallbackUsed=${serving.fallbackUsed} legacyV3Used=${serving.legacyV3Used} itemCount=${itemsWithReason.length}`
     );
 
     res.json({
       success: true,
-      strategy: serving.strategy,
-      strategyLabel: serving.strategyLabel,
+      strategy: publicStrategy,
+      strategyLabel: publicStrategyLabel,
       servingVersion: serving.servingVersion,
       coreModel: serving.coreModel,
       fallbackUsed: serving.fallbackUsed,
-      fallbackReason: serving.fallbackReason,
+      fallbackReason: publicFallbackReason,
       legacyV3Used: serving.legacyV3Used,
       tempoAware: result.tempoAware,
       tempoProfile: result.tempoProfile,
@@ -669,6 +735,9 @@ exports.getHomeSongRecommendations = async (req, res) => {
         ? result.tasteProfile.genres.slice(0, 5)
         : [],
       taste_profile: result.tasteProfile,
+      isColdStartUser: result.feedbackStatus?.isColdStartUser || false,
+      hasOnboardingPreferences: result.feedbackStatus?.hasOnboardingPreferences || false,
+      recommendationSource: serving.source || 'default',
       generatedAt: new Date().toISOString(),
       model: meta ? {
         algorithm: meta.algorithm,
@@ -693,11 +762,6 @@ exports.getHomeSongRecommendations = async (req, res) => {
   }
 };
 
-// Contextual mood recommendation (theo buổi trong ngày).
-// Query params:
-//   limit: số item (mặc định 20, tối đa 40)
-//   timeSlot: auto | morning | afternoon | evening | night (mặc định auto)
-//   now: ISO datetime (optional, dùng để test)
 exports.getContextualMoodRecommendations = async (req, res) => {
   const userId = req.user.id;
   const limit = contextualMoodService.clampLimit(req.query.limit);

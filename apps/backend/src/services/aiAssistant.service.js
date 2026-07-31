@@ -6,6 +6,7 @@ const {
   computeTempoMatchScore,
   computeEnergyMatchScore,
   computeDanceabilityMatchScore,
+  computeBrightnessMatchScore,
   buildTempoReason,
 } = require('../utils/tempoFeature.util');
 const recommendationService = require('./recommendation.service');
@@ -32,16 +33,20 @@ const MARKET_RULES = [
 ];
 
 const ENERGY_RULES = [
-  { terms: ['nang luong', 'soi dong', 'boc', 'chay', 'manh', 'tap gym', 'workout', 'chay bo', 'upbeat'], energy: 'high', keywords: ['energetic', 'workout', 'party', 'dance', 'edm'] }
+  { terms: ['nang luong', 'soi dong', 'boc', 'chay', 'manh', 'tap gym', 'workout', 'chay bo', 'upbeat'], energy: 'high', keywords: ['energetic', 'workout', 'party', 'dance', 'edm'] },
+  { terms: ['cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'ngu', 'sau lang', 'buon', 'suy', 'diu', 'binh yen', 'lofi'], energy: 'low', keywords: ['chill', 'acoustic', 'ballad', 'indie', 'lofi'] },
+  { terms: ['vua phai', 'tap trung', 'hoc bai', 'lam viec', 'coding', 'doc sach'], energy: 'medium', keywords: ['indie', 'pop', 'acoustic'] }
 ];
 
 const KEYWORD_RULES = [
   { terms: ['buon', 'tam trang', 'sad', 'suy'], keywords: ['buon', 'ballad', 'chill', 'sad'] },
-  { terms: ['nhe', 'nhe nhang', 'chill', 'thu gian'], keywords: ['chill', 'acoustic', 'ballad', 'indie'] },
+  { terms: ['nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'cham', 'ngu', 'sau lang', 'diu', 'binh yen', 'lofi'], keywords: ['chill', 'acoustic', 'ballad', 'indie', 'lofi'] },
   { terms: ['rap', 'hip hop', 'hiphop'], keywords: ['rap', 'hip hop', 'hiphop'] },
   { terms: ['rnb', 'r&b'], keywords: ['rnb', 'r&b'] },
   { terms: ['rock', 'indie'], keywords: ['rock', 'indie'] },
-];function extractSongTitleQuery(prompt = '') {
+];
+
+function extractSongTitleQuery(prompt = '') {
   const normalized = normalizeText(prompt);
   const rawMatch = String(prompt).trim().match(/^(?:mở|mo|phát|phat|nghe|bật|bat|play)\s+(?:bài\s+hát|bai\s+hat|bài|bai)\s+(.+)$/i);
   const normalizedMatch = normalized.match(/^(?:mo|phat|nghe|bat|play)\s+(?:bai\s+hat|bai)\s+(.+)$/);
@@ -223,6 +228,13 @@ function scoreTitleCandidate(row, titleQuery) {
   return score;
 }
 
+function isLowEnergyIntent(intent) {
+  if (!intent) return false;
+  if (intent.energy === 'low') return true;
+  const kws = (intent.keywords || []).map(k => normalizeText(k));
+  return kws.some(k => ['chill', 'acoustic', 'ballad', 'indie', 'lofi', 'buoi toi', 'toi', 'cham', 'thu gian', 'nhe nhang', 'buon', 'suy', 'diu', 'binh yen', 'ngu'].includes(k));
+}
+
 function scoreSemanticCandidate(row, intent) {
   let score = 0;
 
@@ -272,10 +284,20 @@ function scoreSemanticCandidate(row, intent) {
     }
   }
 
-  if (intent.energy === 'high') {
+  const isLow = isLowEnergyIntent(intent);
+  if (intent.energy === 'high' && !isLow) {
     const genreSlug = String(row.genre_slug || '').toLowerCase();
     if (genreSlug.includes('dance') || genreSlug.includes('edm') || genreSlug.includes('rap') || genreSlug.includes('pop')) {
       score += 20;
+    }
+  } else if (isLow) {
+    const genreSlug = String(row.genre_slug || '').toLowerCase();
+    const textStr = `${row.title} ${row.artist_name} ${row.genre_name} ${genreSlug}`.toLowerCase();
+    if (genreSlug.includes('ballad') || genreSlug.includes('indie') || genreSlug.includes('acoustic') || genreSlug.includes('lofi') || genreSlug.includes('chill') || textStr.includes('chill') || textStr.includes('lofi') || textStr.includes('acoustic')) {
+      score += 60;
+    }
+    if (genreSlug.includes('dance') || genreSlug.includes('edm') || genreSlug.includes('remix') || genreSlug.includes('vinahouse') || textStr.includes('remix') || textStr.includes('vinahouse') || textStr.includes('dj') || textStr.includes('club') || textStr.includes('party')) {
+      score -= 200;
     }
   }
 
@@ -320,12 +342,13 @@ function formatSong(row) {
     if (row.audioFeature.tempo_bucket && row.audioFeature.tempo_bucket !== 'unknown') song.tempoBucket = row.audioFeature.tempo_bucket;
     if (row.audioFeature.energy_score !== null && row.audioFeature.energy_score !== undefined) song.energyScore = Number(row.audioFeature.energy_score);
     if (row.audioFeature.danceability_score !== null && row.audioFeature.danceability_score !== undefined) song.danceabilityScore = Number(row.audioFeature.danceability_score);
+    if (row.audioFeature.brightness_score !== null && row.audioFeature.brightness_score !== undefined) song.brightnessScore = Number(row.audioFeature.brightness_score);
     if (row.tempoReason) song.tempoReason = row.tempoReason;
   }
   return song;
 }
 
-async function applyTempoSearchRerank(rows, tempoIntent) {
+async function applyTempoSearchRerank(rows, tempoIntent, intent = null) {
   if (!tempoIntent || !Array.isArray(rows) || rows.length === 0) {
     return { rows, coverage: { covered: 0, total: rows?.length || 0, ratio: 0 } };
   }
@@ -336,6 +359,12 @@ async function applyTempoSearchRerank(rows, tempoIntent) {
   const max = Math.max(...textScores);
   const range = max - min || 1;
 
+  const isLowIntent =
+    tempoIntent.energyTarget === 'low' ||
+    tempoIntent.tempoBucket === 'slow' ||
+    tempoIntent.activity === 'relax' ||
+    isLowEnergyIntent(intent);
+
   const reranked = rows.map((row) => {
     const feature = featureMap.get(Number(row.id)) || null;
     const textSearchScore = (Number(row._score || 0) - min) / range;
@@ -343,11 +372,41 @@ async function applyTempoSearchRerank(rows, tempoIntent) {
     const tempoMatchScore = computeTempoMatchScore(feature, tempoIntent);
     const energyMatchScore = computeEnergyMatchScore(feature, tempoIntent);
     const danceabilityMatchScore = computeDanceabilityMatchScore(feature, tempoIntent);
-    const finalSearchScore = textSearchScore * 0.55
+    const brightnessMatchScore = computeBrightnessMatchScore(feature, tempoIntent);
+    let finalSearchScore = textSearchScore * 0.50
       + semanticScore * 0.15
       + tempoMatchScore * 0.15
-      + energyMatchScore * 0.10
-      + danceabilityMatchScore * 0.05;
+      + energyMatchScore * 0.12
+      + brightnessMatchScore * 0.05
+      + danceabilityMatchScore * 0.03;
+
+    if (isLowIntent) {
+      const genreSlug = String(row.genre_slug || '').toLowerCase();
+      const textStr = `${row.title} ${row.artist_name} ${row.genre_name} ${genreSlug}`.toLowerCase();
+      if (genreSlug.includes('dance') || genreSlug.includes('edm') || genreSlug.includes('remix') || genreSlug.includes('vinahouse') || textStr.includes('remix') || textStr.includes('vinahouse') || textStr.includes('dj') || textStr.includes('club') || textStr.includes('party')) {
+        finalSearchScore -= 5.0;
+      }
+      if (genreSlug.includes('ballad') || genreSlug.includes('indie') || genreSlug.includes('acoustic') || genreSlug.includes('lofi') || genreSlug.includes('chill') || textStr.includes('chill') || textStr.includes('lofi') || textStr.includes('acoustic')) {
+        finalSearchScore += 0.3;
+      }
+
+      if (feature) {
+        const eScore = Number(feature.energy_score !== null && feature.energy_score !== undefined ? feature.energy_score : (feature.energy === 'high' ? 0.85 : feature.energy === 'low' ? 0.25 : 0.5));
+        const tBucket = feature.tempo_bucket || feature.tempoBucket || feature.tempo_level || feature.tempoLevel || '';
+        if (eScore >= 0.65) {
+          finalSearchScore -= 5.0;
+        } else if (eScore >= 0.58) {
+          finalSearchScore -= 2.0;
+        }
+        if (tBucket === 'fast') {
+          finalSearchScore -= 4.0;
+        }
+        const bScore = Number(feature.brightness_score !== null && feature.brightness_score !== undefined ? feature.brightness_score : (feature.brightness === 'high' ? 0.85 : 0.5));
+        if (bScore <= 0.6) {
+          finalSearchScore += 0.15;
+        }
+      }
+    }
 
     return {
       ...row,
@@ -431,7 +490,8 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
   queryParams.push(...likeParams);
   if (currentSongId) queryParams.push(Number(currentSongId) || 0);
 
-  const fetchLimit = intent.market || intent.artistQuery ? Math.max(limit * 5, 100) : limit * 2;
+  const isLowEnergyTempo = intent.energy === 'low' || intent.keywords.some(k => ['chill', 'acoustic', 'ballad', 'indie', 'lofi', 'buoi toi', 'toi', 'cham', 'thu gian', 'nhe nhang', 'buon', 'suy', 'diu', 'binh yen', 'ngu'].includes(normalizeText(k)));
+  const fetchLimit = intent.market || intent.artistQuery ? Math.max(limit * 5, 100) : (isLowEnergyTempo ? Math.max(limit * 10, 150) : limit * 2);
   queryParams.push(`%${prompt}%`, `%${prompt}%`, `%${prompt}%`, `%${prompt}%`, fetchLimit);
 
   const [rows] = await pool.query(`
@@ -455,9 +515,10 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
     return { ...row, _score: scoreSemanticCandidate(row, intent) };
   });
 
+  const returnLimit = intent.energy || isLowEnergyTempo ? Math.max(limit * 6, 90) : limit;
   return scoredRows
     .sort((a, b) => b._score - a._score)
-    .slice(0, limit);
+    .slice(0, returnLimit);
 }
 
 async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId = null, userId = null }) {
@@ -499,11 +560,23 @@ async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId
   }
 
   let tempoCoverage = { covered: 0, total: rows.length, ratio: 0 };
-  if (tempoIntent && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery) {
-    const rerank = await applyTempoSearchRerank(rows, tempoIntent);
-    rows = rerank.rows.slice(0, limit);
+  const shouldRerankTempo = (tempoIntent || isLowEnergyIntent(intent)) && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery;
+  if (shouldRerankTempo) {
+    const effectiveTempoIntent = tempoIntent || {
+      tempoBucket: 'slow',
+      energyTarget: 'low',
+      danceabilityTarget: 'low',
+      brightnessTarget: 'low',
+      activity: 'relax',
+      label: 'Nhạc chậm · Năng lượng nhẹ · Thư giãn'
+    };
+    const rerank = await applyTempoSearchRerank(rows, effectiveTempoIntent, intent);
+    const validRows = rerank.rows.filter(r => r._score > -2.0);
+    rows = (validRows.length >= 3 ? validRows : rerank.rows).slice(0, limit);
     tempoCoverage = rerank.coverage;
     strategy = `${strategy}_tempo_aware`;
+  } else if (rows.length > limit) {
+    rows = rows.slice(0, limit);
   }
 
   const songs = rows.map(formatSong);

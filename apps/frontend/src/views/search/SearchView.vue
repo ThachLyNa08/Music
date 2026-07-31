@@ -26,8 +26,15 @@
             @keyup.enter="submitSearch"
           />
           <span v-if="isAiMode" class="ai-search-badge">AI</span>
-          <button v-if="query.length > 0 || committedQuery.length > 0 || aiResult" class="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex-shrink-0 z-10" @click="clearSearch" aria-label="Xóa">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          <button
+            v-if="query.length > 0 || committedQuery.length > 0 || aiResult"
+            type="button"
+            class="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex-shrink-0 z-20 cursor-pointer"
+            @mousedown.prevent.stop
+            @click.stop.prevent="clearSearch"
+            aria-label="Xóa"
+          >
+            <svg class="w-4 h-4 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
       </div>
@@ -55,7 +62,7 @@
       </div>
 
       <!-- Autocomplete Suggestions Dropdown -->
-      <div v-if="showSuggestions && suggestions.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border border-white/5 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      <div v-if="showSuggestions && suggestions.length > 0" class="absolute top-full mt-2 left-0 right-0 bg-[#181818] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
         <div class="px-4 py-3 border-b border-white/5 bg-white/5">
           <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider">Gợi ý tìm kiếm</span>
         </div>
@@ -83,7 +90,7 @@
         </div>
       </div>
 
-      <div v-if="isAiMode && (aiLoading || aiError || aiResult)" class="ai-search-panel mt-3">
+      <div v-if="isAiMode && (aiLoading || aiError || aiResult)" class="ai-search-panel absolute top-full left-0 right-0 z-50 mt-3">
         <div v-if="aiLoading" class="ai-search-panel-state">
           <div class="w-5 h-5 border-2 border-white/10 border-t-[#1ed760] rounded-full animate-spin"></div>
           <span>Đang hỏi AI Music Assistant...</span>
@@ -141,13 +148,19 @@
     </section>
 
     <!-- ═══ SEARCH RESULTS ═══ -->
-    <section v-if="hasSearched && !isSearching" class="space-y-10 min-w-0 search-reveal search-reveal-delay-1">
+    <section v-if="!isAiMode && shouldShowResults" class="space-y-10 min-w-0 search-reveal search-reveal-delay-1">
+      <!-- Initial Loading State -->
+      <div v-if="isWaitingForSearch && totalResults === 0" class="flex flex-col items-center justify-center py-20 space-y-4">
+        <div class="w-8 h-8 border-2 border-white/10 border-t-[#1ed760] rounded-full animate-spin"></div>
+        <p class="text-sm text-gray-400 font-medium">Đang tìm kiếm...</p>
+      </div>
+
       <!-- No results -->
-      <div v-if="totalResults === 0" class="flex flex-col items-center justify-center py-20 text-center">
+      <div v-else-if="!isWaitingForSearch && totalResults === 0" class="flex flex-col items-center justify-center py-20 text-center">
         <div class="w-16 h-16 mb-4 rounded-full bg-white/5 flex items-center justify-center">
           <svg class="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
         </div>
-        <h3 class="text-xl font-bold text-white mb-2">Không tìm thấy kết quả phù hợp cho "{{ lastQuery }}"</h3>
+        <h3 class="text-xl font-bold text-white mb-2">Không tìm thấy kết quả phù hợp cho "{{ completedQuery || query }}"</h3>
         <p class="text-sm text-gray-400">Hãy thử tìm kiếm bằng từ khóa khác hoặc kiểm tra chính tả.</p>
       </div>
 
@@ -256,14 +269,8 @@
       </template>
     </section>
 
-    <!-- Loading State -->
-    <section v-if="isSearching" class="flex flex-col items-center justify-center py-20 space-y-4">
-      <div class="w-8 h-8 border-2 border-white/10 border-t-[#1ed760] rounded-full animate-spin"></div>
-      <p class="text-sm text-gray-400 font-medium">Đang tìm kiếm...</p>
-    </section>
-
     <!-- ═══ BROWSE SECTION (no search) ═══ -->
-    <section v-if="!hasSearched && !isSearching" class="space-y-10 search-reveal search-reveal-delay-1">
+    <section v-if="!hasSearched" class="space-y-10 search-reveal search-reveal-delay-1">
 
       <!-- Popular Artists -->
       <div class="space-y-4">
@@ -413,10 +420,12 @@ const { arrivedState } = useScroll(popularArtistsContainer)
 const hasSearched = computed(() => committedQuery.value.length > 0)
 const isSearching = ref(false)
 const lastQuery = ref('')
+const completedQuery = ref('')
 const recentSearches = ref([])
 const userTopGenres = ref([])
 
 let suggestionTimer = null
+let suggestionAbortController = null
 const normalSearchPlaceholder = 'Bạn muốn nghe gì?'
 const aiSearchPlaceholder = 'Bạn muốn nghe gì? Ví dụ: mở nhạc buồn nhẹ...'
 
@@ -429,10 +438,24 @@ const totalResults = computed(() => {
   return songResults.value.length + artistResults.value.length + albumResults.value.length + genreResults.value.length
 })
 
+const isWaitingForSearch = computed(() => {
+  const q = committedQuery.value
+  return Boolean(q) && (isSearching.value || completedQuery.value !== q)
+})
+
 const aiSongs = computed(() => aiResult.value?.songs || [])
 
+const isTypingSearch = computed(() => {
+  const q = query.value.trim()
+  return Boolean(q) && q !== committedQuery.value
+})
+
+const shouldShowResults = computed(() => {
+  return hasSearched.value && !isTypingSearch.value
+})
+
 const showSuggestions = computed(() => {
-  return !isAiMode.value && isInputFocused.value && query.value.length >= 1 && !hasSearched.value
+  return !isAiMode.value && isInputFocused.value && isTypingSearch.value
 })
 
 const isGenreMode = ref(false)
@@ -443,7 +466,7 @@ function selectGenre(genre) {
   explicitGenreName.value = genreName
   isGenreMode.value = true
   query.value = genreName
-  executeSearch()
+  executeSearch(genreName)
 }
 
 function normalizeForMatch(str) {
@@ -623,19 +646,27 @@ watch(query, (val) => {
     suggestionAbortController = null
   }
 
+  const q = val.trim()
+
+  if (!q) {
+    committedQuery.value = ''
+    lastQuery.value = ''
+    completedQuery.value = ''
+    songResults.value = []
+    artistResults.value = []
+    albumResults.value = []
+    genreResults.value = []
+    suggestions.value = []
+    isSearching.value = false
+    return
+  }
+
   if (isAiMode.value) {
     suggestions.value = []
     return
   }
 
-  const q = val.trim()
-
-  if (q.length < 1) {
-    suggestions.value = []
-    return
-  }
-
-  // Suggestions dropdown (debounce 350ms)
+  // Suggestions dropdown (debounce 250ms)
   suggestionTimer = setTimeout(async () => {
     try {
       suggestionAbortController = new AbortController()
@@ -654,7 +685,7 @@ watch(query, (val) => {
         // ignore cancellation error
       }
     }
-  }, 350)
+  }, 250)
 })
 
 function normalizeSuggestionItem(item) {
@@ -669,6 +700,57 @@ function handleSuggestionImageError(s) {
 }
 
 let searchAbortController = null
+let searchRequestId = 0
+
+async function executeSearch(q) {
+  if (!q) return
+  const requestId = ++searchRequestId
+  committedQuery.value = q
+  lastQuery.value = q
+  isSearching.value = true
+
+  if (searchAbortController) {
+    searchAbortController.abort()
+  }
+  const controller = new AbortController()
+  searchAbortController = controller
+
+  try {
+    const res = await songApi.search(q, 15, { signal: controller.signal })
+    if (requestId !== searchRequestId) return
+    completedQuery.value = q
+    if (res.data?.success) {
+      const data = Array.isArray(res.data.data)
+        ? { songs: res.data.data, artists: [], albums: [], genres: [] }
+        : (res.data.data || {})
+      songResults.value = library.applyLikedStateToSongs((data.songs || []).map(normalizeSong))
+      artistResults.value = data.artists || []
+      albumResults.value = data.albums || []
+      genreResults.value = data.genres || []
+    } else {
+      songResults.value = []
+      artistResults.value = []
+      albumResults.value = []
+      genreResults.value = []
+    }
+  } catch (err) {
+    if (err.name === 'CanceledError' || err.message === 'canceled') return;
+    if (requestId !== searchRequestId) return
+    completedQuery.value = q
+    console.warn('Search error:', err)
+    songResults.value = []
+    artistResults.value = []
+    albumResults.value = []
+    genreResults.value = []
+  } finally {
+    if (requestId === searchRequestId) {
+      isSearching.value = false
+      if (searchAbortController === controller) {
+        searchAbortController = null
+      }
+    }
+  }
+}
 
 async function submitSearch() {
   const q = query.value.trim()
@@ -679,40 +761,12 @@ async function submitSearch() {
     return
   }
 
-  committedQuery.value = q
+  clearTimeout(suggestionTimer)
   isInputFocused.value = false
+  suggestions.value = []
   saveRecent(q)
 
-  isSearching.value = true
-  lastQuery.value = q
-  suggestions.value = []
-
-  if (searchAbortController) {
-    searchAbortController.abort()
-  }
-  searchAbortController = new AbortController()
-
-  try {
-    const res = await songApi.search(q, 15, { signal: searchAbortController.signal })
-    if (res.data?.success) {
-      const data = res.data.data
-      songResults.value = library.applyLikedStateToSongs((data.songs || []).map(normalizeSong))
-      artistResults.value = data.artists || []
-      albumResults.value = data.albums || []
-      genreResults.value = data.genres || []
-    }
-  } catch (err) {
-    if (err.name === 'CanceledError' || err.message === 'canceled') return;
-    console.warn('Search error:', err)
-    songResults.value = []
-    artistResults.value = []
-    albumResults.value = []
-    genreResults.value = []
-  } finally {
-    if (!searchAbortController || !searchAbortController.signal.aborted) {
-      isSearching.value = false
-    }
-  }
+  await executeSearch(q)
 }
 
 async function submitAiSearch(prompt) {
@@ -806,16 +860,34 @@ function goToArtist(song) {
 }
 
 function clearSearch() {
+  clearTimeout(suggestionTimer)
+  if (suggestionAbortController) {
+    suggestionAbortController.abort()
+    suggestionAbortController = null
+  }
+  if (searchAbortController) {
+    searchAbortController.abort()
+    searchAbortController = null
+  }
+
+  query.value = ''
+  committedQuery.value = ''
+  lastQuery.value = ''
+  completedQuery.value = ''
+  isGenreMode.value = false
+  explicitGenreName.value = null
   aiError.value = ''
   aiResult.value = null
-  if (query.value.length > 0) {
-    query.value = ''
+  songResults.value = []
+  artistResults.value = []
+  albumResults.value = []
+  genreResults.value = []
+  suggestions.value = []
+  isSearching.value = false
+
+  nextTick(() => {
     searchInput.value?.focus()
-  } else if (committedQuery.value.length > 0) {
-    committedQuery.value = ''
-    songResults.value = []; artistResults.value = []; albumResults.value = []; genreResults.value = []
-    suggestions.value = []
-  }
+  })
 }
 
 function handleBlur() { setTimeout(() => { isInputFocused.value = false }, 200) }

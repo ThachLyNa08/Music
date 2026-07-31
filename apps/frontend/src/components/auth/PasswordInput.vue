@@ -5,6 +5,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     @enter="$emit('enter')"
+    @blur="$emit('blur', $event)"
     :type="showPass ? 'text' : 'password'"
     :placeholder="placeholder"
     :required="required"
@@ -49,7 +50,7 @@ defineProps({
   required: Boolean,
   minlength: String
 })
-defineEmits(['update:modelValue', 'enter'])
+defineEmits(['update:modelValue', 'enter', 'blur'])
 
 const showPass = ref(false)
 </script>

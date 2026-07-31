@@ -492,6 +492,7 @@ function releaseBadgeClass(song) {
   }[song?.release_status] || 'bg-gray-100 text-gray-700'
 }
 
+
 // Preview Audio
 const previewUrl = ref(null);
 function previewSong(song) {
@@ -564,25 +565,20 @@ async function submitForm(submitData) {
 
   try {
     if (isEditing.value) {
-      await api.put(`/admin/songs/${selectedSongId.value}`, submitData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      statusMessage.value = 'Đã cập nhật bài hát thành công!';
+      await api.put(`/admin/songs/${selectedSongId.value}`, submitData);
       toast.showToast('Cập nhật bài hát thành công!', 'success');
     } else {
-      await api.post('/songs/upload', submitData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      statusMessage.value = 'Tải lên thành công!';
+      await api.post('/songs/upload', submitData);
       toast.showToast('Thêm bài hát thành công!', 'success');
     }
 
-    // Re-fetch data from store
-    await store.fetchGroupsSummary();
-    await store.fetchSongs();
-
     isError.value = false;
-    setTimeout(() => { closeModal(); }, 1000);
+    saving.value = false;
+    isModalOpen.value = false;
+
+    // Refresh danh sách & thống kê ngầm không làm trễ việc đóng modal
+    store.fetchGroupsSummary();
+    store.fetchSongs();
 
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.';
@@ -597,7 +593,6 @@ async function toggleStatus(song) {
   const newStatus = !song.is_active;
   try {
     await api.put(`/admin/songs/${song.id}`, { is_active: newStatus ? 1 : 0 });
-    // Update locally or refetch
     store.fetchSongs();
     store.fetchGroupsSummary();
     toast.showToast('Đã cập nhật trạng thái', 'success');

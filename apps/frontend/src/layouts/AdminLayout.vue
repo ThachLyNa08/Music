@@ -5,7 +5,7 @@
       <div class="brand">
         <div class="brand-left" v-if="!isSidebarCollapsed">
           <span class="brand-icon">
-            <MfIcon name="album" filled size="28" />
+            <img src="/logo.png" alt="MusicFlow" style="width: 28px; height: 28px; object-fit: contain;" />
           </span>
           <div class="brand-text">
             <div class="brand-name">MusicFlow</div>
@@ -14,7 +14,7 @@
         </div>
         <div class="brand-left collapsed" v-else>
           <span class="brand-icon">
-            <MfIcon name="album" filled size="28" />
+            <img src="/logo.png" alt="MusicFlow" style="width: 28px; height: 28px; object-fit: contain;" />
           </span>
         </div>
 
@@ -303,11 +303,13 @@ onMounted(() => {
   document.documentElement.classList.remove('dark')
   document.body.classList.remove('dark')
   document.addEventListener('click', closeDropdown)
+  window.addEventListener('admin:review_updated', handleReviewUpdated)
   notifStore.fetchSummary()
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
+  window.removeEventListener('admin:review_updated', handleReviewUpdated)
   if (globalNotifStore.socket) {
     globalNotifStore.socket.off('admin:review_updated', handleReviewUpdated)
   }

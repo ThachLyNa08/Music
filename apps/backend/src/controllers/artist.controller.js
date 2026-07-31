@@ -466,15 +466,36 @@ exports.getPopularArtistsGlobally = async (req, res, next) => {
         ORDER BY ast.listen_count DESC, ast.total_seconds DESC
       `, [limit]);
 
-      artists.forEach(a => {
+      let finalArtists = [...artists];
+      if (finalArtists.length < limit) {
+        const remaining = limit - finalArtists.length;
+        const excludeIds = finalArtists.length > 0 ? finalArtists.map(a => a.id) : [0];
+        
+        const [fallbackArtists] = await pool.query(`
+          SELECT id, name, avatar_url, followers
+          FROM artists
+          WHERE id NOT IN (?)
+          ORDER BY followers DESC, popularity DESC
+          LIMIT ?
+        `, [excludeIds, remaining]);
+        
+        finalArtists = finalArtists.concat(fallbackArtists.map(a => ({
+          ...a,
+          listen_count: 0,
+          song_count: 0,
+          total_seconds: 0
+        })));
+      }
+
+      finalArtists.forEach(a => {
         a.avatar_url = resolveArtistAvatar(a, req);
       });
 
-      popularArtistsCache.set(cacheKey, { timestamp: now, data: artists });
+      popularArtistsCache.set(cacheKey, { timestamp: now, data: finalArtists });
 
       return res.json({
         success: true,
-        data: artists
+        data: finalArtists
       });
     } catch (dbError) {
       if (cachedData) {

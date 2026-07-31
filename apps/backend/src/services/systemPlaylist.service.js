@@ -42,30 +42,6 @@ const PERSONALIZED_SYSTEM_PLAYLISTS = [
     description: 'Tong hop am nhac phu hop voi ban trong tuan'
   },
   {
-    system_key: 'morning_vibes',
-    name: 'Morning Vibes',
-    coverBaseName: 'Morning_Vibes',
-    description: 'Những gợi ý phù hợp để khởi động ngày mới.'
-  },
-  {
-    system_key: 'afternoon_vibes',
-    name: 'Afternoon Vibes',
-    coverBaseName: 'afternoon_vibes',
-    description: 'Những bài hát có năng lượng phù hợp cho buổi chiều.'
-  },
-  {
-    system_key: 'evening_vibes',
-    name: 'Evening Vibes',
-    coverBaseName: 'evening_vibes',
-    description: 'Những gợi ý nhẹ nhàng cho khoảng thời gian cuối ngày.'
-  },
-  {
-    system_key: 'night_vibes',
-    name: 'Night Vibes',
-    coverBaseName: 'Night_Vibes',
-    description: 'Những bài hát phù hợp để thư giãn về đêm.'
-  },
-  {
     system_key: 'moodmix',
     name: 'Mood Mix',
     coverBaseName: 'moodmix',
@@ -106,6 +82,30 @@ const GLOBAL_SYSTEM_PLAYLISTS = [
     name: 'Trending Now',
     coverBaseName: 'Trending_Now',
     description: 'Nhung bai hat dang thinh hanh'
+  },
+  {
+    system_key: 'morning_vibes',
+    name: 'Morning Vibes',
+    coverBaseName: 'Morning_Vibes',
+    description: 'Những gợi ý phù hợp để khởi động ngày mới.'
+  },
+  {
+    system_key: 'afternoon_vibes',
+    name: 'Afternoon Vibes',
+    coverBaseName: 'afternoon_vibes',
+    description: 'Những bài hát có năng lượng phù hợp cho buổi chiều.'
+  },
+  {
+    system_key: 'evening_vibes',
+    name: 'Evening Vibes',
+    coverBaseName: 'evening_vibes',
+    description: 'Những gợi ý nhẹ nhàng cho khoảng thời gian cuối ngày.'
+  },
+  {
+    system_key: 'night_vibes',
+    name: 'Night Vibes',
+    coverBaseName: 'Night_Vibes',
+    description: 'Những bài hát phù hợp để thư giãn về đêm.'
   }
 ];
 

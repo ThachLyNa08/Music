@@ -39,9 +39,14 @@ exports.markAsRead = async (req, res) => {
         [userId]
       );
     } else {
+      const parsedId = parseInt(notificationId, 10);
+      if (!parsedId || isNaN(parsedId)) {
+        return res.json({ success: true, message: 'Ignored non-persisted notification' });
+      }
+
       await pool.query(
         'UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND id = ?',
-        [userId, notificationId]
+        [userId, parsedId]
       );
     }
     res.json({ success: true });

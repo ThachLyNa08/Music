@@ -36,6 +36,9 @@ const artistAuthLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// GET /api/auth/check-email
+router.get('/check-email', authController.checkEmail);
+
 // POST /api/auth/register
 router.post('/register', registerRules, authController.register);
 

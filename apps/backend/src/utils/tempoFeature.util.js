@@ -33,13 +33,15 @@ function getTempoBucket(normalizedBpm) {
 }
 
 function featureBucket(feature = {}) {
-  return feature.tempo_bucket || feature.tempoBucket || feature.tempo_level || feature.tempoLevel || getTempoBucket(feature.normalized_bpm ?? feature.normalizedBpm ?? feature.bpm);
+  const f = feature || {};
+  return f.tempo_bucket || f.tempoBucket || f.tempo_level || f.tempoLevel || getTempoBucket(f.normalized_bpm ?? f.normalizedBpm ?? f.bpm);
 }
 
 function featureEnergy(feature = {}) {
-  const direct = feature.energy_score ?? feature.energyScore;
+  const f = feature || {};
+  const direct = f.energy_score ?? f.energyScore;
   if (Number.isFinite(Number(direct))) return clamp01(direct, 0.5);
-  const label = normalizeText(feature.energy || '');
+  const label = normalizeText(f.energy || '');
   if (label === 'high') return 0.85;
   if (label === 'low') return 0.25;
   if (label === 'medium') return 0.55;
@@ -47,7 +49,8 @@ function featureEnergy(feature = {}) {
 }
 
 function featureDanceability(feature = {}) {
-  const direct = feature.danceability_score ?? feature.danceabilityScore ?? feature.danceability;
+  const f = feature || {};
+  const direct = f.danceability_score ?? f.danceabilityScore ?? f.danceability;
   return Number.isFinite(Number(direct)) ? clamp01(direct, 0.5) : 0.5;
 }
 
@@ -71,13 +74,22 @@ function computeTempoMatchScore(songFeature, target = {}) {
   if (!targetBucket || targetBucket === 'unknown') return 0.5;
   if (!bucket || bucket === 'unknown') return 0.5;
   if (bucket === targetBucket) return 1;
-  if ((bucket === 'slow' && targetBucket === 'fast') || (bucket === 'fast' && targetBucket === 'slow')) return 0.25;
+  if ((bucket === 'slow' && targetBucket === 'fast') || (bucket === 'fast' && targetBucket === 'slow')) return 0.0;
+  if (targetBucket === 'slow' && bucket === 'medium') return 0.4;
   return 0.6;
 }
 
 function computeEnergyMatchScore(songFeature, target = {}) {
   if (!songFeature) return 0.5;
-  return scoreAround(featureEnergy(songFeature), target.energyTarget || target.energy || 'medium');
+  const targetVal = target.energyTarget || target.energy || 'medium';
+  const val = featureEnergy(songFeature);
+  if (targetVal === 'low') {
+    if (val <= 0.35) return 1.0;
+    if (val <= 0.50) return clamp01(0.8 - (val - 0.35) * 2);
+    if (val >= 0.60) return 0.0;
+    return clamp01(0.5 - (val - 0.50) * 5);
+  }
+  return scoreAround(val, targetVal);
 }
 
 function computeDanceabilityMatchScore(songFeature, target = {}) {
@@ -85,22 +97,94 @@ function computeDanceabilityMatchScore(songFeature, target = {}) {
   return scoreAround(featureDanceability(songFeature), target.danceabilityTarget || target.danceability || 'medium');
 }
 
+function featureBrightness(feature = {}) {
+  const direct = feature.brightness_score ?? feature.brightnessScore ?? feature.brightness;
+  if (Number.isFinite(Number(direct))) return clamp01(direct, 0.5);
+  const label = normalizeText(feature.brightness || '');
+  if (label === 'high') return 0.85;
+  if (label === 'low') return 0.25;
+  if (label === 'medium') return 0.55;
+  return 0.5;
+}
+
+function computeBrightnessMatchScore(songFeature, target = {}) {
+  if (!songFeature) return 0.5;
+  const targetVal = target.brightnessTarget || target.brightness;
+  if (!targetVal) return 0.5;
+  const val = featureBrightness(songFeature);
+  if (targetVal === 'low') {
+    if (val <= 0.45) return 1.0;
+    if (val <= 0.60) return clamp01(0.8 - (val - 0.45) * 2);
+    return clamp01(0.5 - (val - 0.60) * 2);
+  }
+  return scoreAround(val, targetVal);
+}
+
 function buildTempoReason(songFeature, target = {}) {
-  const activity = target.activity;
-  const bucket = target.tempoBucket || target.preferredTempoBucket || featureBucket(songFeature);
-  if (activity === 'workout' || activity === 'party' || bucket === 'fast') {
-    return activity === 'party'
-      ? 'Tiết tấu nhanh, năng lượng cao, phù hợp không khí sôi động.'
-      : 'Tiết tấu nhanh, năng lượng cao, phù hợp tập luyện.';
+  const targetActivity = target.activity;
+  const targetBucket = target.tempoBucket || target.preferredTempoBucket;
+
+  if (!songFeature) {
+    if (targetActivity === 'workout' || targetActivity === 'party' || targetBucket === 'fast') {
+      return targetActivity === 'party'
+        ? 'Tiết tấu nhanh, năng lượng cao, phù hợp không khí sôi động.'
+        : 'Tiết tấu nhanh, năng lượng cao, phù hợp tập luyện.';
+    }
+    if (targetActivity === 'focus' || targetBucket === 'medium') {
+      return 'Nhịp vừa phải, phù hợp để tập trung.';
+    }
+    if (targetActivity === 'relax' || targetBucket === 'slow') {
+      return 'Tiết tấu chậm, êm dịu, rất phù hợp để thư giãn buổi tối.';
+    }
+    return 'Phù hợp với nhịp độ nghe gần đây của bạn.';
   }
-  if (activity === 'focus' || bucket === 'medium') {
-    return 'Nhịp vừa phải, phù hợp để tập trung.';
+
+  const actualBucket = featureBucket(songFeature);
+  const actualEnergy = featureEnergy(songFeature);
+
+  if (actualBucket === 'fast' || actualEnergy >= 0.75) {
+    if (targetActivity === 'party') return 'Tiết tấu nhanh, năng lượng cao, phù hợp không khí sôi động.';
+    if (targetActivity === 'workout') return 'Tiết tấu nhanh, năng lượng cao, thúc đẩy động lực tập luyện.';
+    if (targetActivity === 'relax' || targetBucket === 'slow') {
+      return actualEnergy >= 0.65
+        ? 'Giai điệu nhanh với nguồn năng lượng cao, tạo điểm nhấn sôi động cho danh sách.'
+        : 'Tiết tấu nhanh, mang lại nhịp điệu tươi vui và năng lượng tích cực cho trải nghiệm nghe.';
+    }
+    return 'Tiết tấu nhanh, mang lại giai điệu sôi nổi và năng lượng tích cực.';
   }
-  if (activity === 'relax' || bucket === 'slow') {
-    return 'Tiết tấu chậm, phù hợp thư giãn buổi tối.';
+
+  if (actualBucket === 'slow') {
+    if (actualEnergy >= 0.65) {
+      return 'Tiết tấu chậm rãi nhưng sở hữu cao trào cảm xúc sâu lắng và mạnh mẽ.';
+    }
+    if (targetActivity === 'relax' || targetBucket === 'slow') {
+      return 'Tiết tấu chậm, êm dịu, rất phù hợp để thư giãn buổi tối.';
+    }
+    return 'Tiết tấu chậm rãi, mang lại không khí nhẹ nhàng và sâu lắng.';
+  }
+
+  if (actualBucket === 'medium') {
+    if (actualEnergy >= 0.65) {
+      return 'Nhịp điệu vừa phải, điểm xuyết cao trào cảm xúc sống động và lôi cuốn.';
+    }
+    if (targetActivity === 'relax' || targetBucket === 'slow') {
+      return 'Nhịp điệu vừa phải, êm dịu, mang lại cảm giác thư thái và thoải mái.';
+    }
+    if (targetActivity === 'focus' || targetBucket === 'medium') {
+      return 'Nhịp vừa phải, ổn định, phù hợp để giữ sự tập trung.';
+    }
+    return 'Giai điệu hài hòa với nhịp độ vừa phải, dễ nghe trong nhiều hoàn cảnh.';
+  }
+
+  if (actualEnergy >= 0.65) {
+    return 'Giai điệu mang cao trào cảm xúc mạnh mẽ, tạo điểm nhấn sâu lắng.';
+  }
+  if (targetActivity === 'relax' || targetBucket === 'slow') {
+    return 'Giai điệu êm dịu, mang lại không khí thư thái và nhẹ nhàng.';
   }
   return 'Phù hợp với nhịp độ nghe gần đây của bạn.';
 }
+
 
 function detectTempoIntent(text = '') {
   const normalized = normalizeText(text);
@@ -110,7 +194,7 @@ function detectTempoIntent(text = '') {
 
   const fastTerms = ['nhanh', 'soi dong', 'boc', 'chay', 'manh', 'dance', 'party', 'tap gym', 'gym', 'workout', 'chay bo', 'cardio'];
   const mediumTerms = ['tiet tau vua', 'vua phai', 'hoc bai', 'lam viec', 'tap trung', 'coding', 'doc sach'];
-  const slowTerms = ['cham', 'nhe', 'chill', 'thu gian', 'buoi toi', 'ngu', 'acoustic', 'sau lang'];
+  const slowTerms = ['cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'ngu', 'acoustic', 'sau lang', 'buon', 'suy', 'diu', 'lofi', 'binh yen'];
 
   if (includesAny(fastTerms)) {
     return {
@@ -137,6 +221,7 @@ function detectTempoIntent(text = '') {
       tempoBucket: 'slow',
       energyTarget: 'low',
       danceabilityTarget: 'low',
+      brightnessTarget: 'low',
       activity: 'relax',
       label: 'Nhạc chậm · Năng lượng nhẹ · Thư giãn',
     };
@@ -151,6 +236,7 @@ module.exports = {
   computeTempoMatchScore,
   computeEnergyMatchScore,
   computeDanceabilityMatchScore,
+  computeBrightnessMatchScore,
   buildTempoReason,
   detectTempoIntent,
   clamp01,

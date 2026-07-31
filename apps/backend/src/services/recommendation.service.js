@@ -948,6 +948,7 @@ async function getRecommendationsForUser(userId, options = {}) {
     tempoAware: Boolean(result.tempoAware),
     tempoProfile: result.tempoProfile || null,
     audioFeatureCoverage: result.audioFeatureCoverage || { covered: 0, total: items.length, ratio: 0 },
+    feedbackStatus: result.feedbackStatus || null,
     items,
   };
 }
@@ -998,78 +999,357 @@ async function fetchValidSongs(songIds) {
   return validSongs.map((row) => ({ ...row }));
 }
 
-async function getRecommendationsForUserRaw(userId, limit, options = {}) {
-  if (!options.bypassServingArtifact) {
-    const servingResult = await getServingArtifactResult(userId, limit);
-    if (servingResult) return servingResult;
-  }
+async function getUserFeedbackStatus(userId) {
+  const [[histRow]] = await pool.query('SELECT COUNT(*) AS listen_count FROM listening_history WHERE user_id = ?', [userId]);
+  const [[likeRow]] = await pool.query('SELECT COUNT(*) AS like_count FROM song_likes WHERE user_id = ?', [userId]);
+  const [[playlistSongRow]] = await pool.query(
+    `SELECT COUNT(*) AS playlist_song_count 
+     FROM playlist_songs ps 
+     JOIN playlists p ON p.id = ps.playlist_id 
+     WHERE p.user_id = ? AND p.type = 'manual'`, 
+    [userId]
+  );
+  const [prefGenres] = await pool.query('SELECT genre_id FROM user_genre_preferences WHERE user_id = ?', [userId]);
+  const [prefArtists] = await pool.query('SELECT artist_id FROM user_artist_preferences WHERE user_id = ?', [userId]);
 
-  const loadResult = typeof modelService.tryLoadArtifact === 'function'
-    ? modelService.tryLoadArtifact('lightgcn')
-    : modelService.tryLoad();
-  const lightgcn = loadResult.model?.lightgcn || loadResult.model;
-  const recs = loadResult.ok && lightgcn ? lightgcn[String(userId)] : null;
+  const listenCount = Number(histRow?.listen_count || 0);
+  const likeCount = Number(likeRow?.like_count || 0);
+  const playlistSongCount = Number(playlistSongRow?.playlist_song_count || 0);
 
-  if (recs && recs.length > 0) {
-    const songIds = recs.map(r => r.song_id || r.id);
-    const validSongs = await fetchValidSongs(songIds);
+  // Cold Start threshold: listenCount < 5 AND likeCount === 0 AND playlistSongCount === 0
+  const hasImplicitFeedback = listenCount >= 5 || likeCount > 0 || playlistSongCount > 0;
+  const hasOnboardingPreferences = prefGenres.length > 0 || prefArtists.length > 0;
+  const isColdStartUser = !hasImplicitFeedback;
 
-    const scoreMap = new Map();
-    recs.forEach(r => scoreMap.set(Number(r.song_id || r.id), r.finalScore ?? r.final_score ?? r.score ?? 0));
-    validSongs.forEach(s => s.finalScore = scoreMap.get(Number(s.id)));
+  return {
+    listenCount,
+    likeCount,
+    playlistSongCount,
+    hasImplicitFeedback,
+    hasOnboardingPreferences,
+    isColdStartUser,
+    prefGenreIds: prefGenres.map(g => g.genre_id),
+    prefArtistIds: prefArtists.map(a => a.artist_id),
+  };
+}
 
-    if (validSongs.length >= Math.min(5, limit)) {
-      const layered = await applyTempoAwareLayer(userId, {
-        strategy: 'lightgcn_hybrid_v4',
-        reason: 'ok',
-        items: validSongs.slice(0, limit)
-      }, limit);
-      return withV4Serving(layered, { fallbackUsed: false });
+const coldStartCache = new Map();
+const coldStartInFlight = new Map();
+
+async function buildMultiTierColdStartRecommendations(userId, limit, feedbackStatus, options = {}) {
+  const {
+    context = 'home'
+  } = options;
+  const defaultCandidateLimit = context === 'vibes' ? limit : Math.max(limit * 3, 60);
+  const candidateLimit = options.candidateLimit !== undefined ? options.candidateLimit : defaultCandidateLimit;
+
+  const targetCount = Math.max(limit, candidateLimit);
+  const accepted = [];
+  const seenSongIds = new Set();
+
+  function addCandidates(songs, sourceTag) {
+    for (const song of songs) {
+      if (accepted.length >= targetCount) break;
+      const songId = Number(song.id);
+      if (!seenSongIds.has(songId)) {
+        seenSongIds.add(songId);
+        accepted.push({ ...song, recommendation_source: sourceTag });
+      }
     }
   }
 
-  // Fallback for new user missing from LightGCN completely
-  const listened = await fetchAllListenedSongIds(userId, options);
+  const { prefGenreIds, prefArtistIds } = feedbackStatus;
+  const getTierFetchLimit = () => Math.min(Math.max(targetCount - accepted.length + 15, 20), 100);
 
-  if (listened.size === 0) {
-    const pref = await buildRegistrationPreferenceMap(userId);
-    if (pref.genreCounts.size > 0 || pref.artistCounts.size > 0) {
-      const cold = await buildColdStartRecommendations(userId, limit, pref);
-      return withV4Serving(cold, {
+  const baseSelect = `
+      SELECT s.id, s.title, s.artist_id, s.album_id, s.genre_id, s.market, s.duration_sec,
+             s.cover_url, s.audio_url, s.play_count, s.created_at,
+             a.name AS artist_name, al.title AS album_title, g.name AS genre_name
+      FROM songs s
+      LEFT JOIN artists a ON a.id = s.artist_id
+      LEFT JOIN albums al ON al.id = s.album_id
+      LEFT JOIN genres g ON g.id = s.genre_id
+      WHERE ${publicSongCondition('s')}
+        AND s.audio_url IS NOT NULL AND s.audio_url <> ''
+  `;
+
+  // Tier 1a: Onboarding Artists (Prioritized & Interleaved)
+  if (prefArtistIds.length > 0 && accepted.length < targetCount) {
+    const sql = baseSelect + ` AND s.artist_id IN (?) ORDER BY s.play_count DESC, s.id DESC LIMIT ${getTierFetchLimit()}`;
+    const [tier1aSongs] = await pool.query(sql, [prefArtistIds]);
+    console.log(`[ColdStart][ctx=${context}] Tier 1a (Onboarding Artists): found ${tier1aSongs.length} songs.`);
+
+    const songsByArtist = new Map();
+    for (const song of tier1aSongs) {
+      const aId = Number(song.artist_id);
+      if (!songsByArtist.has(aId)) songsByArtist.set(aId, []);
+      songsByArtist.get(aId).push(song);
+    }
+
+    const orderedArtistIds = prefArtistIds.map(id => Number(id)).filter(id => songsByArtist.has(id));
+    for (const aId of songsByArtist.keys()) {
+      if (!orderedArtistIds.includes(aId)) orderedArtistIds.push(aId);
+    }
+
+    const balancedTier1a = [];
+    let addedAny = true;
+    let roundIdx = 0;
+    while (addedAny) {
+      addedAny = false;
+      for (const aId of orderedArtistIds) {
+        const list = songsByArtist.get(aId);
+        if (list && roundIdx < list.length) {
+          balancedTier1a.push(list[roundIdx]);
+          addedAny = true;
+        }
+      }
+      roundIdx++;
+    }
+
+    addCandidates(balancedTier1a, 'onboarding_artists');
+  }
+
+  // Tier 1b: Onboarding Genres (Interleaved)
+  if (accepted.length < targetCount && prefGenreIds.length > 0) {
+    const sql = baseSelect + ` AND s.genre_id IN (?) ORDER BY s.play_count DESC, s.id DESC LIMIT ${getTierFetchLimit()}`;
+    const [tier1bSongs] = await pool.query(sql, [prefGenreIds]);
+    console.log(`[ColdStart][ctx=${context}] Tier 1b (Onboarding Genres): found ${tier1bSongs.length} songs.`);
+
+    const songsByGenre = new Map();
+    for (const song of tier1bSongs) {
+      const gId = Number(song.genre_id);
+      if (!songsByGenre.has(gId)) songsByGenre.set(gId, []);
+      songsByGenre.get(gId).push(song);
+    }
+
+    const orderedGenreIds = prefGenreIds.map(id => Number(id)).filter(id => songsByGenre.has(id));
+    for (const gId of songsByGenre.keys()) {
+      if (!orderedGenreIds.includes(gId)) orderedGenreIds.push(gId);
+    }
+
+    const balancedTier1b = [];
+    let addedAny = true;
+    let roundIdx = 0;
+    while (addedAny) {
+      addedAny = false;
+      for (const gId of orderedGenreIds) {
+        const list = songsByGenre.get(gId);
+        if (list && roundIdx < list.length) {
+          balancedTier1b.push(list[roundIdx]);
+          addedAny = true;
+        }
+      }
+      roundIdx++;
+    }
+
+    addCandidates(balancedTier1b, 'onboarding_genres');
+  }
+
+  // Tier 3: Time-based / Contextual Global System Playlists
+  if (accepted.length < targetCount) {
+    const [tier3Songs] = await pool.query(`
+      SELECT s.id, s.title, s.artist_id, s.album_id, s.genre_id, s.market, s.duration_sec,
+             s.cover_url, s.audio_url, s.play_count, s.created_at,
+             a.name AS artist_name, al.title AS album_title, g.name AS genre_name
+      FROM playlist_songs ps
+      JOIN playlists p ON p.id = ps.playlist_id
+      JOIN songs s ON s.id = ps.song_id
+      LEFT JOIN artists a ON a.id = s.artist_id
+      LEFT JOIN albums al ON al.id = s.album_id
+      LEFT JOIN genres g ON g.id = s.genre_id
+      WHERE p.is_system = 1 AND ${publicSongCondition('s')}
+      ORDER BY ps.added_at DESC LIMIT ${getTierFetchLimit()}
+    `);
+    console.log(`[ColdStart][ctx=${context}] Tier 3 (Time-Based): found ${tier3Songs.length} songs.`);
+    addCandidates(tier3Songs, 'time_based_global_playlist');
+  }
+
+  // Tier 4: Trending / Popular Songs
+  if (accepted.length < targetCount) {
+    const [tier4Songs] = await pool.query(`
+      SELECT s.id, s.title, s.artist_id, s.album_id, s.genre_id, s.market, s.duration_sec,
+             s.cover_url, s.audio_url, s.play_count, s.created_at,
+             a.name AS artist_name, al.title AS album_title, g.name AS genre_name
+      FROM songs s
+      LEFT JOIN artists a ON a.id = s.artist_id
+      LEFT JOIN albums al ON al.id = s.album_id
+      LEFT JOIN genres g ON g.id = s.genre_id
+      WHERE ${publicSongCondition('s')}
+        AND s.audio_url IS NOT NULL AND s.audio_url <> ''
+      ORDER BY s.play_count DESC, s.id DESC LIMIT ${getTierFetchLimit()}
+    `);
+    console.log(`[ColdStart][ctx=${context}] Tier 4 (Trending): found ${tier4Songs.length} songs.`);
+    addCandidates(tier4Songs, 'trending_fallback');
+  }
+
+  // Tier 5: Diverse Discovery (popular songs with random order)
+  if (accepted.length < targetCount) {
+    const [tier5Songs] = await pool.query(`
+      SELECT s.id, s.title, s.artist_id, s.album_id, s.genre_id, s.market, s.duration_sec,
+             s.cover_url, s.audio_url, s.play_count, s.created_at,
+             a.name AS artist_name, al.title AS album_title, g.name AS genre_name
+      FROM songs s
+      LEFT JOIN artists a ON a.id = s.artist_id
+      LEFT JOIN albums al ON al.id = s.album_id
+      LEFT JOIN genres g ON g.id = s.genre_id
+      WHERE ${publicSongCondition('s')}
+        AND s.audio_url IS NOT NULL AND s.audio_url <> ''
+      ORDER BY RAND() LIMIT ${getTierFetchLimit()}
+    `);
+    console.log(`[ColdStart][ctx=${context}] Tier 5 (Diverse Discovery): found ${tier5Songs.length} songs.`);
+    addCandidates(tier5Songs, 'diverse_discovery');
+  }
+
+  // Tier 6: Default Active Songs
+  if (accepted.length < targetCount) {
+    const [tier6Songs] = await pool.query(`
+      SELECT s.id, s.title, s.artist_id, s.album_id, s.genre_id, s.market, s.duration_sec,
+             s.cover_url, s.audio_url, s.play_count, s.created_at,
+             a.name AS artist_name, al.title AS album_title, g.name AS genre_name
+      FROM songs s
+      LEFT JOIN artists a ON a.id = s.artist_id
+      LEFT JOIN albums al ON al.id = s.album_id
+      LEFT JOIN genres g ON g.id = s.genre_id
+      WHERE ${publicSongCondition('s')}
+      ORDER BY s.id DESC LIMIT ${getTierFetchLimit()}
+    `);
+    console.log(`[ColdStart][ctx=${context}] Tier 6 (Default Active): found ${tier6Songs.length} songs.`);
+    addCandidates(tier6Songs, 'default_active_songs');
+  }
+
+  console.log(`[ColdStart][ctx=${context}] Final accepted items count: ${accepted.length}`);
+  const primarySource = feedbackStatus.hasOnboardingPreferences ? 'onboarding_preferences' : 'trending_fallback';
+
+  return {
+    strategy: feedbackStatus.hasOnboardingPreferences ? 'cold_start_preferences' : 'most_popular_v4',
+    reason: primarySource === 'onboarding_preferences'
+      ? 'Dựa trên sở thích ban đầu và xu hướng hiện tại'
+      : 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+    source: primarySource,
+    items: accepted.slice(0, limit),
+  };
+}
+
+async function getColdStartRecommendations(userId, options = {}) {
+  const {
+    limit = 20,
+    context = 'home',
+    vibeKey = null,
+    useCache = true,
+    feedbackStatus: customFeedbackStatus = null
+  } = options;
+  const defaultCandidateLimit = context === 'vibes' ? limit : Math.max(limit * 3, 60);
+  const candidateLimit = options.candidateLimit !== undefined ? options.candidateLimit : defaultCandidateLimit;
+
+  const cacheKey = `coldstart:${userId}:${context}:${vibeKey || 'default'}`;
+
+  if (useCache && coldStartCache.has(cacheKey)) {
+    const cached = coldStartCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 mins TTL
+      return {
+        ...cached.data,
+        items: cached.data.items.slice(0, limit)
+      };
+    }
+  }
+
+  if (coldStartInFlight.has(cacheKey)) {
+    const data = await coldStartInFlight.get(cacheKey);
+    return {
+      ...data,
+      items: data.items.slice(0, limit)
+    };
+  }
+
+  const promise = (async () => {
+    const feedbackStatus = customFeedbackStatus || await getUserFeedbackStatus(userId);
+    const result = await buildMultiTierColdStartRecommendations(userId, limit, feedbackStatus, options);
+    if (useCache) {
+      coldStartCache.set(cacheKey, { timestamp: Date.now(), data: result });
+    }
+    return result;
+  })();
+
+  coldStartInFlight.set(cacheKey, promise);
+  try {
+    const res = await promise;
+    return res;
+  } finally {
+    coldStartInFlight.delete(cacheKey);
+  }
+}
+
+async function getRecommendationsForUserRaw(userId, limit, options = {}) {
+  const feedbackStatus = options.feedbackStatus || await getUserFeedbackStatus(userId);
+
+  if (feedbackStatus.hasImplicitFeedback) {
+    if (!options.bypassServingArtifact) {
+      const servingResult = await getServingArtifactResult(userId, limit);
+      if (servingResult && servingResult.items?.length >= Math.min(5, limit)) {
+        return { ...servingResult, feedbackStatus };
+      }
+    }
+
+    const loadResult = typeof modelService.tryLoadArtifact === 'function'
+      ? modelService.tryLoadArtifact('lightgcn')
+      : modelService.tryLoad();
+    const lightgcn = loadResult.model?.lightgcn || loadResult.model;
+    const recs = loadResult.ok && lightgcn ? lightgcn[String(userId)] : null;
+
+    if (recs && recs.length > 0) {
+      const songIds = recs.map(r => r.song_id || r.id);
+      const validSongs = await fetchValidSongs(songIds);
+
+      const scoreMap = new Map();
+      recs.forEach(r => scoreMap.set(Number(r.song_id || r.id), r.finalScore ?? r.final_score ?? r.score ?? 0));
+      validSongs.forEach(s => s.finalScore = scoreMap.get(Number(s.id)));
+
+      if (validSongs.length >= Math.min(5, limit)) {
+        const layered = await applyTempoAwareLayer(userId, {
+          strategy: 'lightgcn_hybrid_v4',
+          reason: 'ok',
+          items: validSongs.slice(0, limit)
+        }, limit);
+        return withV4Serving(layered, { fallbackUsed: false, feedbackStatus });
+      }
+    }
+
+    const cb = await buildContentBasedRecommendations(userId, limit, options);
+    if (cb.items.length >= Math.min(5, limit)) {
+      return withV4Serving(cb, {
         strategy: 'content_based_v4',
         fallbackUsed: true,
-        fallbackReason: 'cold_start_preferences',
+        fallbackReason: 'user_not_in_lightgcn_model',
         fallbackChain: ['content_based_v4', 'most_popular_v4'],
+        feedbackStatus,
       });
     }
-    const pop = await buildPopularRecommendations(userId, limit, options);
-    return withV4Serving(pop, {
-      strategy: 'most_popular_v4',
-      fallbackUsed: true,
-      fallbackReason: 'no_history_or_preferences',
-      fallbackChain: ['most_popular_v4'],
-    });
   }
 
-  const cb = await buildContentBasedRecommendations(userId, limit, options);
-  if (cb.items.length >= Math.min(5, limit)) {
-    return withV4Serving(cb, {
-      strategy: 'content_based_v4',
-      fallbackUsed: true,
-      fallbackReason: 'user_not_in_lightgcn_model',
-      fallbackChain: ['content_based_v4', 'most_popular_v4'],
-    });
-  }
-  const pop = await buildPopularRecommendations(userId, limit, options);
-  return withV4Serving(pop, {
-    strategy: 'most_popular_v4',
+  // Cold Start user or insufficient model results -> execute 6-tier fallback pipeline
+  const coldStartResult = await getColdStartRecommendations(userId, {
+    limit,
+    feedbackStatus,
+    context: options.context || 'home',
+    vibeKey: options.vibeKey || null,
+    useCache: options.useCache !== false
+  });
+
+  return withV4Serving(coldStartResult, {
+    strategy: feedbackStatus.hasOnboardingPreferences ? 'cold_start_preferences' : 'most_popular_v4',
     fallbackUsed: true,
-    fallbackReason: 'content_based_v4_empty',
-    fallbackChain: ['most_popular_v4'],
+    fallbackReason: feedbackStatus.hasOnboardingPreferences ? 'cold_start_preferences' : 'no_history_or_preferences',
+    fallbackChain: ['cold_start_preferences', 'content_based_cold_start', 'time_based_global', 'most_popular_v4'],
+    source: coldStartResult.source,
+    reason: coldStartResult.reason,
+    feedbackStatus, // Pass it up
   });
 }
 
-function reasonForStrategy(strategy) {
+function reasonForStrategy(strategy, source) {
+  if (source === 'onboarding_preferences' || strategy === 'cold_start_preferences') {
+    return 'Dựa trên sở thích ban đầu và xu hướng hiện tại';
+  }
   switch (strategy) {
     case 'lightgcn_hybrid_v4':
     case 'bpr_hybrid_v4':
@@ -1077,22 +1357,24 @@ function reasonForStrategy(strategy) {
     case 'content_based_v4':
     case 'content_based_v4_runtime':
     case 'content_based_fallback':
-      return 'Dựa trên những bài hát bạn đã nghe gần đây';
+      return 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay';
     case 'cold_start_preferences':
     case 'cold_start_v4':
-      return 'Dựa trên thể loại và nghệ sĩ bạn đã chọn khi đăng ký';
+      return 'Dựa trên sở thích ban đầu và xu hướng hiện tại';
     case 'most_popular_v4':
     case 'popular_fallback':
       return 'Những bài hát được nghe nhiều gần đây';
     default:
-      return 'Gợi ý dành cho bạn';
+      return 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay';
   }
 }
 
 module.exports = {
   getRecommendationsForUser,
   getRecommendationsForUserRaw,
+  getColdStartRecommendations,
   getServingMetadata,
+  getUserFeedbackStatus,
   reasonForStrategy,
   SERVING_WEIGHTS,
   clampLimit,

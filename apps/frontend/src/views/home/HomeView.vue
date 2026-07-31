@@ -13,7 +13,7 @@
         <div class="h-[280px] w-full bg-white/5 rounded-none md:rounded-2xl animate-pulse"></div>
       </div>
       <HomeHero
-        v-else-if="featuredItem"
+        v-else
         :displayName="auth.user?.display_name || 'bạn'"
         :featuredItem="featuredItem"
         @play="handlePlayFeatured"
@@ -21,13 +21,13 @@
         class="mb-4 md:mb-5 rounded-none md:rounded-none"
       />
 
-      <!-- Quick Access Section -->
-      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+      <!-- Quick Access (Personalized) -->
+      <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
            <div v-for="i in 6" :key="i" class="h-20 bg-white/5 rounded-xl animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="quickAccess.length > 0" class="home-panel-soft mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && quickAccess.length > 0" class="home-panel-soft mb-4 md:mb-5">
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           <div
             v-for="item in displayQuickAccess"
@@ -49,17 +49,25 @@
         </div>
       </section>
 
-      <!-- Section: Mix cá nhân của bạn (Made For You) -->
-      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+      <!-- Bắt đầu từ sở thích của bạn (Cold Start) -->
+      <section v-if="newUserExperience && starterRecommendations.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader title="Bắt đầu từ sở thích của bạn" subtitle="Dựa trên thể loại và nghệ sĩ bạn vừa chọn" @viewAll="router.push('/search')" />
+        <div class="user-horizontal-row">
+          <RecentSongCard v-for="song in displayStarterRecommendations" :key="'start-'+(song.id || song.song_id)" :song="song" class="user-horizontal-card user-playlist-card-size" @play="playStarterSong" />
+        </div>
+      </section>
+
+      <!-- Mix cá nhân của bạn (Personalized) -->
+      <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
           <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="madeForYouPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && madeForYouPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Mix cá nhân của bạn"
-          subtitle="Những danh sách phát cá nhân hóa dựa trên thói quen nghe nhạc của bạn"
+          :subtitle="madeForYouSubtitle"
           @viewAll="router.push('/library')"
         />
         <div class="user-horizontal-row">
@@ -75,14 +83,22 @@
         </div>
       </section>
 
-      <!-- Section: Đề xuất từ gu nghe của bạn (BPR-MF) -->
-      <div v-if="loadingRecommendations" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+      <!-- Vibes theo thời điểm (Both: Normal user fetches it from recommendation service, New user gets it injected) -->
+      <section v-if="timeBasedVibes.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader title="Vibes theo thời điểm" subtitle="Âm nhạc phù hợp với từng khoảnh khắc trong ngày" />
+        <div class="user-horizontal-row">
+          <PlaylistCard v-for="item in timeBasedVibes" :key="'vibe-'+item.system_key" :playlist="item" :customBottomLabel="item.isCurrent ? 'Phù hợp lúc này' : getSystemMixBasisLabel(item)" class="user-horizontal-card user-playlist-card-size" @click="goToPlaylist(item)" @play="playPlaylist(item)" />
+        </div>
+      </section>
+
+      <!-- Đề xuất nghe (Personalized) -->
+      <div v-if="loadingRecommendations && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
           <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedSongs.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && recommendedSongs.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           :title="recommendTitle"
           :subtitle="recommendSubtitle"
@@ -99,14 +115,14 @@
         </div>
       </section>
 
-      <!-- Section: Nghe gần đây (Compact list) -->
-      <div v-if="loadingRecent" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+      <!-- Nghe gần đây (Personalized) -->
+      <div v-if="loadingRecent && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
           <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recentSongs.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && recentSongs.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Nghe gần đây"
           subtitle="Tiếp tục từ nơi bạn đã dừng lại"
@@ -123,17 +139,17 @@
         </div>
       </section>
 
-      <!-- Section: Gợi ý hôm nay -->
-      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+      <!-- Gợi ý hôm nay (Personalized) -->
+      <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
           <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="recommendedToday.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && recommendedToday.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Gợi ý hôm nay"
-          subtitle="Playlist phù hợp với thời điểm và thói quen nghe nhạc của bạn"
+          :subtitle="recommendedTodaySubtitle"
         />
         <div class="user-horizontal-row">
           <PlaylistCard
@@ -148,20 +164,20 @@
         </div>
       </section>
 
-      <!-- Section: Xu hướng (Trending Now) -->
+      <!-- Xu hướng (Trending Now) (Both) -->
       <div v-if="loadingTrending" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2 space-y-2">
            <div v-for="j in 5" :key="j" class="h-14 w-full bg-white/5 rounded-md animate-pulse"></div>
         </div>
       </div>
-      <section v-else-if="trendingSongs.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Xu hướng"
-          subtitle="Những bài hát hot nhất hiện nay"
+          subtitle="Những bài hát được nghe nhiều nhất trên hệ thống"
           @viewAll="onTrendingViewAll"
         />
-        <div class="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2">
+        <div v-if="trendingSongs.length > 0" class="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-2">
           <SongRow
             v-for="(song, idx) in trendingSongs"
             :key="song.id || idx"
@@ -175,43 +191,33 @@
             @toggle-like="toggleLike"
           />
         </div>
-      </section>
-
-      <!-- Weekly Chart -->
-      <WeeklyChartSection class="home-panel mb-4 md:mb-5" @open-menu="handleOpenMenu" />
-
-      <!-- Section: Danh sách phát của bạn -->
-      <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
-        <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
-        <div class="flex gap-3 md:gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        <div v-else-if="globalChartError" class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm font-semibold text-slate-400">
+          Khong the tai du lieu xu huong. Vui long thu lai.
         </div>
-      </div>
-      <section v-else-if="userPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
-        <SectionHeader
-          title="Danh sách phát của bạn"
-          subtitle="Những playlist do bạn tạo"
-        />
-        <div class="user-horizontal-row">
-          <PlaylistCard
-            v-for="item in displayUserPlaylists"
-            :key="`up-${item.id || item.name}`"
-            :playlist="item"
-            class="user-horizontal-card user-playlist-card-size"
-            @click="goToPlaylist(item)"
-            @play="playPlaylist(item)"
-          />
+        <div v-else-if="globalChartLoaded" class="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm font-semibold text-slate-400">
+          Chưa có dữ liệu xu hướng
         </div>
       </section>
 
-      <!-- Section: Nghệ sĩ quan tâm / Nổi bật -->
+      <WeeklyChartSection
+        class="home-panel mb-4 md:mb-5"
+        @open-menu="handleOpenMenu"
+      />
+
+      <!-- Nghệ sĩ bạn đã chọn / Nghệ sĩ quan tâm -->
       <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
           <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[124px] rounded-full bg-white/5 animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="displayArtists.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="newUserExperience && onboardingArtists.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader :title="hasFollowedArtists ? 'Nghệ sĩ bạn đã chọn' : 'Nghệ sĩ nổi bật'" subtitle="Dựa trên lựa chọn của bạn" />
+        <div class="user-horizontal-row">
+          <ArtistCard v-for="artist in displayOnboardingArtists" :key="'onb-'+artist.id" :artist="artist" size="compact" :show-stats="false" class="user-horizontal-card user-artist-card-size" />
+        </div>
+      </section>
+      <section v-else-if="!newUserExperience && displayArtists.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           :title="hasFollowedArtists ? 'Từ nghệ sĩ bạn quan tâm' : 'Nghệ sĩ nổi bật'"
           :subtitle="hasFollowedArtists ? 'Những nghệ sĩ bạn đang theo dõi' : 'Khám phá những nghệ sĩ được yêu thích'"
@@ -226,6 +232,30 @@
             size="compact"
             :show-stats="false"
             class="user-horizontal-card user-artist-card-size"
+          />
+        </div>
+      </section>
+
+      <!-- Danh sách phát của bạn (Personalized) -->
+      <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
+        <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
+        <div class="flex gap-3 md:gap-4 overflow-hidden">
+          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+        </div>
+      </div>
+      <section v-else-if="!newUserExperience && userPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
+        <SectionHeader
+          title="Danh sách phát của bạn"
+          subtitle="Những playlist do bạn tạo"
+        />
+        <div class="user-horizontal-row">
+          <PlaylistCard
+            v-for="item in displayUserPlaylists"
+            :key="`up-${item.id || item.name}`"
+            :playlist="item"
+            class="user-horizontal-card user-playlist-card-size"
+            @click="goToPlaylist(item)"
+            @play="playPlaylist(item)"
           />
         </div>
       </section>
@@ -275,8 +305,8 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 import { recommendApi } from '@/api/recommend'
-import { songApi } from '@/api/song'
 import { playlistApi } from '@/api/playlist'
+import { chartApi } from '@/api/chart'
 import api from '@/api/axios'
 import { useResponsivePreviewLimit } from '@/composables/useResponsivePreviewLimit'
 
@@ -326,13 +356,18 @@ const isHomeEntered = ref(false)
 const _homeCache = {
   homeBaseData: null,
   trendingSongs: null,
+  chartLoaded: false,
   recentSongs: null,
   recommendedSongs: null,
   recommendStrategy: ''
 }
 
 const loadingHomeBase = ref(!_homeCache.homeBaseData)
-const loadingTrending = ref(!_homeCache.trendingSongs)
+const globalChartSongs = ref(_homeCache.trendingSongs || [])
+const globalChartLoading = ref(!_homeCache.chartLoaded)
+const globalChartLoaded = ref(_homeCache.chartLoaded)
+const globalChartError = ref(null)
+const loadingTrending = globalChartLoading
 const loadingRecent = ref(!_homeCache.recentSongs)
 const loadingRecommendations = ref(!_homeCache.recommendedSongs)
 const homeError = ref('')
@@ -355,11 +390,42 @@ let _rawRecent = _homeCache.recentSongs || []
 let _rawRecommendedSongs = _homeCache.recommendedSongs || []
 
 // Fast reactive refs for template logic and fast computed slice
+const newUserExperience = ref(false)
+const starterRecommendations = ref([])
+const timeBasedVibes = ref([])
+const onboardingArtists = ref([])
+const trendingSongsList = ref([])
+const discoveryGenres = ref([])
+
+const displayStarterRecommendations = computed(() => starterRecommendations.value)
+const displayOnboardingArtists = computed(() => onboardingArtists.value)
+const displayTrendingSongsList = computed(() => trendingSongsList.value)
+
+function playStarterRecommendations() {
+  if (starterRecommendations.value.length > 0) {
+    player.setQueue(starterRecommendations.value, 0)
+    player.play()
+  } else {
+    router.push('/search')
+  }
+}
+function playStarterSong(song) {
+  if (!song) return
+  player.setQueue([song], 0)
+  player.play()
+}
+function playTrendingSongRaw(song) {
+  if (!song) return
+  player.setQueue([song], 0)
+  player.play()
+}
+
+// Fast reactive refs for template logic and fast computed slice
 const quickAccess = ref(_rawQuickAccess)
 const madeForYouPlaylists = ref(_rawMadeForYou)
 const recommendedToday = ref(_rawRecommendedToday)
 const userPlaylists = ref(_rawUserPlaylists)
-const trendingSongs = ref(_rawTrending)
+const trendingSongs = globalChartSongs
 const recentSongs = ref(_rawRecent)
 const recommendedSongs = ref(_rawRecommendedSongs)
 const displayArtistsRaw = ref(_rawFollowedArtists.length > 0 ? _rawFollowedArtists : _rawPopularArtists)
@@ -404,23 +470,46 @@ const displayRecommendedSongs = computed(() => recommendedSongs.value.slice(0, p
 const displayArtists = computed(() => displayArtistsRaw.value.slice(0, previewLimit.value));
 
 const STRATEGY_TITLES = {
-  bpr_mf: 'Đề xuất từ gu nghe của bạn',
-  bpr_mf_rerank: 'Đề xuất từ gu nghe của bạn',
-  content_based_fallback: 'Đề xuất từ gu nghe của bạn',
-  cold_start_preferences: 'Bắt đầu với gu bạn chọn',
+  model_personalized: 'Gợi ý cá nhân hóa',
+  content_based_onboarding: 'Gợi ý theo sở thích ban đầu',
+  most_popular_fallback: 'Bài hát phổ biến',
+  bpr_mf: 'Đề xuất nghe',
+  bpr_mf_rerank: 'Đề xuất nghe',
+  content_based_fallback: 'Đề xuất nghe',
+  cold_start_preferences: 'Đề xuất nghe',
   popular_fallback: 'Đang thịnh hành trên MusicFlow',
+  most_popular_v4: 'Đề xuất nghe',
 };
 
 const STRATEGY_SUBTITLES = {
-  bpr_mf: 'Dựa trên thói quen nghe của bạn',
-  bpr_mf_rerank: 'Dựa trên thói quen nghe của bạn',
-  content_based_fallback: 'Dựa trên những bài hát bạn đã nghe gần đây',
-  cold_start_preferences: 'Dựa trên thể loại và nghệ sĩ bạn chọn khi đăng ký',
+  model_personalized: 'Dựa trên thói quen nghe nhạc của bạn',
+  content_based_onboarding: 'Người dùng chưa có đủ lịch sử nghe hoặc chưa có trong serving artifact.',
+  most_popular_fallback: 'Không có đủ dữ liệu cá nhân hóa hoặc sở thích ban đầu.',
+  bpr_mf: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  bpr_mf_rerank: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  content_based_fallback: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
+  cold_start_preferences: 'Dựa trên sở thích ban đầu và xu hướng hiện tại',
   popular_fallback: 'Những bài hát được nghe nhiều gần đây',
+  most_popular_v4: 'Dành cho bạn để bắt đầu khám phá âm nhạc',
 };
 
-const recommendTitle = computed(() => STRATEGY_TITLES[recommendStrategy.value] || 'Đề xuất từ gu nghe của bạn');
-const recommendSubtitle = computed(() => STRATEGY_SUBTITLES[recommendStrategy.value] || 'Dựa trên thói quen nghe nhạc của bạn');
+const recommendTitle = computed(() => STRATEGY_TITLES[recommendStrategy.value] || 'Đề xuất nghe');
+const recommendSubtitle = computed(() => STRATEGY_SUBTITLES[recommendStrategy.value] || 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay');
+
+const isColdStartUser = ref(_homeCache.homeBaseData?.isColdStartUser || false);
+
+const madeForYouSubtitle = computed(() => {
+  return isColdStartUser.value
+    ? 'Danh sách phát dành cho bạn dựa trên sở thích và xu hướng'
+    : 'Những danh sách phát cá nhân hóa dựa trên thói quen nghe nhạc của bạn';
+});
+
+const recommendedTodaySubtitle = computed(() => {
+  return isColdStartUser.value
+    ? 'Những gợi ý theo thời điểm để bạn bắt đầu nghe hôm nay'
+    : 'Playlist phù hợp với thời điểm và thói quen nghe nhạc của bạn';
+});
+
 
 // Featured item for hero
 const featuredItem = computed(() => {
@@ -448,9 +537,20 @@ function loadDataParallel() {
     try {
       const recRes = await recommendApi.getHomeRecommendations()
       if (recRes.data?.success) {
-        const d = recRes.data.data
-
-        // Heavy processing once
+        if (recRes.data.newUserExperience) {
+          newUserExperience.value = true
+          const sections = recRes.data.sections || {}
+          starterRecommendations.value = sections.starterRecommendations?.items || []
+          timeBasedVibes.value = sections.timeBasedVibes?.items || []
+          onboardingArtists.value = sections.onboardingArtists?.items || []
+          trendingSongsList.value = sections.trending?.items || []
+          discoveryGenres.value = sections.discoveryGenres?.items || []
+          _homeCache.newUserExperience = true
+          _homeCache.sections = sections
+        } else {
+          newUserExperience.value = false
+          const d = recRes.data.data
+          // Heavy processing once
         _rawQuickAccess = uniqueByPlaylist(d.quickAccess || [])
         _rawMadeForYou = processMadeForYou(d.madeForYouPlaylists || [])
         _rawRecommendedToday = d.recommendedToday || []
@@ -466,8 +566,10 @@ function loadDataParallel() {
 
         hasFollowedArtists.value = d.has_followed_artists || false
         trendingNowPlaylist.value = d.trendingNowPlaylist || null
+        isColdStartUser.value = d.isColdStartUser || false
 
         _homeCache.homeBaseData = d
+        } // close else block for newUserExperience
       } else {
         homeError.value = 'Không thể tải đầy đủ gợi ý cá nhân hóa.'
       }
@@ -477,47 +579,54 @@ function loadDataParallel() {
     } finally {
       loadingHomeBase.value = false
       performance.mark('home-homebase-ready')
-
-      // Once homeBase is done, trigger trending
-      fetchTrending()
     }
   }
 
   const fetchTrending = async () => {
+    globalChartLoading.value = !globalChartLoaded.value
+    globalChartError.value = null
+
     try {
-      if (trendingNowPlaylist.value?.id) {
-        const detailRes = await playlistApi.getDetail(trendingNowPlaylist.value.id)
-        const songs = detailRes.data?.data?.songs || []
-        if (songs.length) {
-          _rawTrending = library.applyLikedStateToSongs(songs.slice(0, 10))
+      const chartRes = await chartApi.getGlobal({ limit: 10 }, { timeout: 20000 })
+      if (chartRes.data?.success && chartRes.data.data) {
+        const raw = chartRes.data.data
+        let combined = []
+        if (Array.isArray(raw)) {
+          combined = raw
+        } else if (typeof raw === 'object') {
+          combined = Array.isArray(raw.all) ? raw.all : []
+        }
+        if (combined.length) {
+          combined.sort((a, b) => (Number(b.weekly_plays || b.play_count || 0) - Number(a.weekly_plays || a.play_count || 0)))
+          const seen = new Set()
+          const uniqueSongs = []
+          for (const s of combined) {
+            const id = s.id || s.song_id
+            if (id && !seen.has(id)) {
+              seen.add(id)
+              uniqueSongs.push({
+                ...s,
+                artist_name: s.artist_name || s.artist,
+                duration_sec: s.duration_sec || s.duration || 0
+              })
+            }
+          }
+          _rawTrending = library.applyLikedStateToSongs(uniqueSongs.slice(0, 10))
         } else {
-          await fallbackTrending()
+          _rawTrending = []
         }
       } else {
-        await fallbackTrending()
+        _rawTrending = []
       }
       trendingSongs.value = _rawTrending
+      globalChartLoaded.value = true
       _homeCache.trendingSongs = _rawTrending
+      _homeCache.chartLoaded = true
     } catch (err) {
-      console.warn('Không thể tải bảng xếp hạng:', err)
-      if (err?.response?.status === 404) {
-        trendingNowPlaylist.value = null
-        if (_homeCache.homeBaseData) {
-          _homeCache.homeBaseData.trendingNowPlaylist = null
-        }
-      }
-      await fallbackTrending()
-      trendingSongs.value = _rawTrending
-      _homeCache.trendingSongs = _rawTrending
+      console.warn('Không thể tải bảng xếp hạng weekly:', err)
+      globalChartError.value = err
     } finally {
-      loadingTrending.value = false
-    }
-  }
-
-  const fallbackTrending = async () => {
-    const trendRes = await songApi.getTrending()
-    if (trendRes.data?.success && trendRes.data.data?.length) {
-      _rawTrending = library.applyLikedStateToSongs(trendRes.data.data.slice(0, 10))
+      globalChartLoading.value = false
     }
   }
 
@@ -562,7 +671,8 @@ function loadDataParallel() {
   }
 
   // Execute in parallel (non-blocking)
-  fetchHomeBase() // fetchTrending depends on this
+  fetchHomeBase()
+  fetchTrending()
 
   const runIdle = (fn) => {
     if ('requestIdleCallback' in window) {
@@ -643,17 +753,12 @@ function playTrendingSong(song) {
     ...s,
     artist_name: s.artist_name || s.artist
   }))
-  player.playbackSource = 'recommend'
+  player.playbackSource = 'chart'
   player.setSong(queue[trendingSongs.value.indexOf(song)], queue)
 }
 
 function onTrendingViewAll() {
-  const tn = trendingNowPlaylist.value
-  if (tn && tn.id) {
-    router.push(`/playlist/${tn.id}`)
-  } else {
-    router.push('/search')
-  }
+  router.push('/charts/all')
 }
 
 function playRecommendedSong(song) {

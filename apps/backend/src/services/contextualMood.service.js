@@ -18,7 +18,7 @@ const recommendationService = require('./recommendation.service');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 150; // Increased to allow diversity quotas to work
-const CANDIDATE_PULL = 300; // Pull large amount
+const CANDIDATE_PULL = 80; // Pull optimized candidate pool size
 const ARTIST_CAP_TOP10 = 2;
 const ARTIST_CAP_TOP20 = 4;
 // Nới lỏng cap nếu chưa đủ candidate
@@ -151,16 +151,43 @@ async function fetchAudioFeaturesForSongs(songIds) {
 //   3. Vẫn ít: popular thuần (không filter audio_features).
 // ---------------------------------------------------------------------------
 
+const candidatesCache = new Map();
+const candidatesInFlight = new Map();
+
 async function fetchCandidatesFromService(userId) {
-  try {
-    const res = await recommendationService.getRecommendationsForUser(userId, { limit: CANDIDATE_PULL });
-    if (res && Array.isArray(res.items) && res.items.length) {
-      return { items: res.items, strategy: res.strategy };
+  const cacheKey = String(userId);
+  if (candidatesCache.has(cacheKey)) {
+    const cached = candidatesCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < 15 * 60 * 1000) { // 15 mins TTL
+      return cached.data;
     }
-  } catch (err) {
-    console.warn('[contextualMood] getRecommendationsForUser failed:', err.message);
   }
-  return { items: [], strategy: 'empty' };
+
+  if (candidatesInFlight.has(cacheKey)) {
+    return await candidatesInFlight.get(cacheKey);
+  }
+
+  const promise = (async () => {
+    try {
+      const res = await recommendationService.getRecommendationsForUser(userId, { limit: CANDIDATE_PULL, context: 'vibes' });
+      if (res && Array.isArray(res.items) && res.items.length) {
+        const data = { items: res.items, strategy: res.strategy };
+        candidatesCache.set(cacheKey, { timestamp: Date.now(), data });
+        return data;
+      }
+    } catch (err) {
+      console.warn('[contextualMood] getRecommendationsForUser failed:', err.message);
+    }
+    return { items: [], strategy: 'empty' };
+  })();
+
+  candidatesInFlight.set(cacheKey, promise);
+  try {
+    const result = await promise;
+    return result;
+  } finally {
+    candidatesInFlight.delete(cacheKey);
+  }
 }
 
 async function fetchPopularCandidatesWithAudio(limit) {

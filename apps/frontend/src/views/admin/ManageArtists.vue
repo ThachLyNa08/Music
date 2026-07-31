@@ -134,7 +134,6 @@
         <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
             <thead>
               <tr class="bg-gray-50 dark:bg-bg-card sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0] dark:shadow-[0_1px_0_0_#334155]">
-                <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 w-48">Metadata</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 min-w-[200px]">Nghệ sĩ</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Khu vực / Thế hệ</th>
                 <th class="py-2.5 px-3 font-bold text-black dark:text-gray-300 text-center">Số bài hát</th>
@@ -145,16 +144,6 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-bg-border">
               <tr v-for="artist in paginatedArtists" :key="artist.id" class="hover:bg-gray-50 dark:hover:bg-bg-card transition-colors group" :class="{ 'bg-emerald-50 dark:bg-emerald-500/10': route.query.focus == artist.id }">
-                <td class="py-2.5 px-3">
-                  <div class="flex flex-wrap gap-1.5 max-w-[260px]">
-                    <span v-for="issue in getArtistMetadataIssues(artist)" :key="issue.key" :class="['inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold', issue.class]">
-                      {{ issue.label }}
-                    </span>
-                    <span v-if="getArtistMetadataIssues(artist).length === 0" class="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                      Đủ dữ liệu
-                    </span>
-                  </div>
-                </td>
                 <td class="py-2.5 px-3">
                   <div @click="goToDetail(artist.id)" class="flex items-center gap-3 max-w-[300px] cursor-pointer hover:opacity-80">
                     <img :src="formatAvatarUrl(artist.avatar_url)" @error="handleImageError" class="w-9 h-9 rounded-full object-cover shadow-sm bg-gray-100" />

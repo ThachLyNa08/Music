@@ -29,6 +29,11 @@
         </div>
       </div>
     </div>
+
+    <!-- Footer Slot -->
+    <div v-if="$slots.footer" class="w-full bg-white border-t border-slate-200 px-4 py-3 rounded-b-2xl flex items-center justify-between">
+      <slot name="footer"></slot>
+    </div>
   </div>
 </template>
 

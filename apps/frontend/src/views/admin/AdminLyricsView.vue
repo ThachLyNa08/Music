@@ -281,18 +281,6 @@ onMounted(() => {
         <p class="text-sm text-slate-500 mt-1">Xem, kiểm tra và chỉnh sửa lời bài hát trong hệ thống</p>
       </div>
       <div class="flex items-center gap-2 md:gap-3">
-        <button @click="fetchSummary(); fetchSongs(pagination.page)" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition">
-          <MfIcon name="refresh" size="18" class="mr-1.5" />
-          Refresh
-        </button>
-        <button @click="exportBacklog" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-white bg-primary rounded-xl hover:bg-primary-dark transition shadow-sm">
-          <MfIcon name="download" size="18" class="mr-1.5" />
-          Export Backlog
-        </button>
-        <button @click="exportAudit" class="inline-flex items-center justify-center h-9 px-3.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm">
-          <MfIcon name="policy" size="18" class="mr-1.5" />
-          Export Audit
-        </button>
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
       </div>
     </header>

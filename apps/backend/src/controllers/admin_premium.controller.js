@@ -123,7 +123,7 @@ exports.getPremiumUsers = async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const offset = (page - 1) * limit;
 
-    let whereClause = '1=1';
+    let whereClause = "u.role != 'artist'";
     const params = [];
 
     if (q) {
@@ -397,7 +397,7 @@ exports.exportPremium = async (req, res, next) => {
   try {
     const { q = '', status = '', plan = '', expiresFrom = '', expiresTo = '' } = req.query;
 
-    let whereClause = '1=1';
+    let whereClause = "u.role != 'artist'";
     const params = [];
 
     if (q) {

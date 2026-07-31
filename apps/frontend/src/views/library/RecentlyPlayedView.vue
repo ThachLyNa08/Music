@@ -42,7 +42,7 @@
       </div>
     </section>
 
-    <div class="content user-panel-soft mx-6">
+    <div class="content mx-6">
       <!-- Loading Skeleton -->
       <div v-if="loading" class="flex flex-col gap-6">
         <div v-for="i in 3" :key="i" class="animate-pulse">

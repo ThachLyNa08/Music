@@ -120,11 +120,13 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await authApi.register(payload)
       setAuth(data.data)
       await fetchMe()
-      if (isAdmin.value) router.push('/admin')
-      else router.push('/')
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || 'Dang ky that bai' }
+      return { 
+        success: false, 
+        message: err.response?.data?.message || 'Dang ky that bai',
+        code: err.response?.data?.code
+      }
     } finally {
       loading.value = false
     }

@@ -21,7 +21,7 @@ const SEMANTIC_DICTIONARY = [
         apply: { mood: 'sad', context: 'breakup', energy: 'low', tempo: 'slow' }
     },
     {
-        names: ['chill', 'thu gian', 'thư giãn', 'nhe nhang', 'nhẹ nhàng', 'em', 'êm', 'diu', 'dịu', 'healing', 'chua lanh', 'chữa lành', 'binh yen', 'bình yên', 'yen tinh', 'yên tĩnh', 'cafe', 'cà phê', 'doc sach', 'đọc sách', 'nghi ngoi', 'nghỉ ngơi', 'buoi sang nhe nhang', 'buổi sáng nhẹ nhàng', 'acoustic nhe', 'acoustic nhẹ', 'calm', 'peaceful', 'relaxing', 'soft'],
+        names: ['chill', 'thu gian', 'thư giãn', 'nhe nhang', 'nhẹ nhàng', 'em', 'êm', 'diu', 'dịu', 'healing', 'chua lanh', 'chữa lành', 'binh yen', 'bình yên', 'yen tinh', 'yên tĩnh', 'cafe', 'cà phê', 'doc sach', 'đọc sách', 'nghi ngoi', 'nghỉ ngơi', 'buoi sang nhe nhang', 'buổi sáng nhẹ nhàng', 'acoustic nhe', 'acoustic nhẹ', 'cham', 'chậm', 'lofi', 'calm', 'peaceful', 'relaxing', 'soft'],
         apply: { mood: 'chill', context: 'relax', energy: 'low', tempo: 'slow' }
     },
     {
@@ -37,7 +37,7 @@ const SEMANTIC_DICTIONARY = [
         apply: { mood: 'party', energy: 'high', tempo: 'fast' }
     },
     {
-        names: ['ngu', 'ngủ', 'de ngu', 'dễ ngủ', 'ru ngu', 'ru ngủ', 'khuya', 'dem khuya', 'đêm khuya', 'ban dem', 'ban đêm', 'truoc khi ngu', 'trước khi ngủ', 'nam nghe', 'nằm nghe', 'insomnia', 'sleep', 'sleepy', 'midnight', 'late night'],
+        names: ['ngu', 'ngủ', 'de ngu', 'dễ ngủ', 'ru ngu', 'ru ngủ', 'khuya', 'dem khuya', 'đêm khuya', 'ban dem', 'ban đêm', 'buoi toi', 'buổi tối', 'toi', 'tối', 'truoc khi ngu', 'trước khi ngủ', 'nam nghe', 'nằm nghe', 'insomnia', 'sleep', 'sleepy', 'midnight', 'late night', 'evening'],
         apply: { mood: 'calm', context: 'night', energy: 'low', tempo: 'slow' }
     },
     {

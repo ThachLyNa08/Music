@@ -48,55 +48,109 @@
              <h1 class="text-3xl font-bold text-white tracking-tight" style="font-family: 'Space Grotesk', sans-serif;">MusicFlow</h1>
           </div>
 
-          <div class="mb-10 text-center lg:text-left">
-            <h2 class="text-3xl font-bold text-white mb-2 tracking-tight">Tạo tài khoản</h2>
-            <p class="text-[15px] font-medium text-white/50">Bắt đầu xây dựng gu âm nhạc của riêng bạn</p>
+          <div v-if="accountSubStep === 1">
+            <div class="mb-8 text-center lg:text-left">
+              <h2 class="text-3xl font-bold text-white mb-2 tracking-tight">Tạo tài khoản</h2>
+              <p class="text-[15px] font-medium text-white/50">Nhập email của bạn để bắt đầu</p>
+            </div>
+
+            <div v-if="errorMsg" class="mb-6 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
+              {{ errorMsg }}
+            </div>
+
+            <div class="space-y-5">
+              <AuthInput
+                id="display_name"
+                label="Tên hiển thị"
+                v-model="form.display_name"
+                placeholder="Tên của bạn"
+                @enter="goToPasswordSubStep"
+              >
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+                </template>
+              </AuthInput>
+              
+              <div>
+                <AuthInput
+                  id="email"
+                  label="Email"
+                  v-model="form.email"
+                  type="email"
+                  placeholder="you@example.com"
+                  @enter="goToPasswordSubStep"
+                  @blur="checkEmailExistence"
+                >
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+                  </template>
+                </AuthInput>
+                <div v-if="emailError" class="text-[#ffb4ab] text-xs font-medium mt-1.5 pl-1">{{ emailError }}</div>
+                <div v-else-if="isCheckingEmail" class="text-white/50 text-xs font-medium mt-1.5 pl-1 animate-pulse">Đang kiểm tra...</div>
+              </div>
+
+              <div class="pt-2">
+                <AuthButton :loading="isCheckingEmail" @click="goToPasswordSubStep">
+                  Tiếp theo
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18" class="ml-1"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
+                </AuthButton>
+              </div>
+            </div>
           </div>
 
-          <div v-if="errorMsg" class="mb-8 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
-            {{ errorMsg }}
-          </div>
+          <div v-else-if="accountSubStep === 2">
+            <button class="text-white/50 hover:text-white mb-6 flex items-center gap-1.5 text-sm font-semibold transition-colors" @click="accountSubStep = 1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+              Thay đổi Email
+            </button>
 
-          <div class="space-y-6">
-            <AuthInput
-              id="display_name"
-              label="Tên hiển thị"
-              v-model="form.display_name"
-              placeholder="Tên của bạn"
-              @enter="validateAndGoStep2"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
-              </template>
-            </AuthInput>
-            
-            <AuthInput
-              id="email"
-              label="Email"
-              v-model="form.email"
-              type="email"
-              placeholder="you@example.com"
-              @enter="validateAndGoStep2"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-              </template>
-            </AuthInput>
-            
-            <PasswordInput
-              id="password"
-              label="Mật khẩu"
-              v-model="form.password"
-              placeholder="Tối thiểu 6 ký tự"
-              minlength="6"
-              @enter="validateAndGoStep2"
-            />
+            <div class="mb-8 text-center lg:text-left">
+              <h2 class="text-3xl font-bold text-white mb-2 tracking-tight">Tạo mật khẩu</h2>
+              <p class="text-[15px] font-medium text-white/50">Thiết lập mật khẩu an toàn cho {{ form.email }}</p>
+            </div>
 
-            <div class="pt-4">
-              <AuthButton @click="validateAndGoStep2">
-                Tiếp theo
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18" class="ml-1"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
-              </AuthButton>
+            <div v-if="errorMsg" class="mb-6 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
+              {{ errorMsg }}
+            </div>
+
+            <div class="space-y-5">
+              <div>
+                <PasswordInput
+                  id="password"
+                  label="Mật khẩu"
+                  v-model="form.password"
+                  placeholder="Tối thiểu 6 ký tự"
+                  minlength="6"
+                  @enter="validatePasswordAndGoStep2"
+                  @blur="validatePasswordLength"
+                  @input="validatePasswordLength"
+                />
+                <div v-if="passwordError" class="text-[#ffb4ab] text-xs font-medium mt-1.5 pl-1">{{ passwordError }}</div>
+              </div>
+
+              <div>
+                <PasswordInput
+                  id="confirm_password"
+                  label="Nhập lại mật khẩu"
+                  v-model="form.confirm_password"
+                  placeholder="Nhập lại mật khẩu"
+                  minlength="6"
+                  @enter="validatePasswordAndGoStep2"
+                  @blur="validateConfirmPassword"
+                  @input="validateConfirmPassword"
+                />
+                <div v-if="confirmPasswordError" class="text-[#ffb4ab] text-xs font-medium mt-1.5 pl-1">{{ confirmPasswordError }}</div>
+              </div>
+
+              <div class="pt-2">
+                <AuthButton 
+                  @click="validatePasswordAndGoStep2"
+                  :disabled="!!passwordError || !!confirmPasswordError || !form.password || !form.confirm_password"
+                >
+                  Tiếp tục
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18" class="ml-1"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
+                </AuthButton>
+              </div>
             </div>
           </div>
 
@@ -237,9 +291,9 @@
                 </button>
                 <span class="text-sm font-bold text-white/50">{{ form.artist_ids.length }} nghệ sĩ đã chọn</span>
               </div>
-              <div class="w-36">
-                <AuthButton :disabled="form.artist_ids.length < 1" @click="goStepSmooth(4)">
-                  Tiếp tục
+              <div class="min-w-[180px] shrink-0">
+                <AuthButton :loading="loading" :disabled="form.artist_ids.length < 1 || loading" @click="handleRegister">
+                  <span class="whitespace-nowrap">Hoàn tất đăng ký</span>
                 </AuthButton>
               </div>
             </div>
@@ -264,13 +318,13 @@
             </div>
             
             <h2 class="text-3xl font-bold text-white mb-2 tracking-tight">Tất cả đã sẵn sàng!</h2>
-            <p class="text-[15px] font-medium text-white/50 mb-10">Tài khoản của bạn đã được tạo. Khám phá vũ trụ âm nhạc ngay bây giờ.</p>
+            <p class="text-[15px] font-medium text-white/50 mb-10">Tài khoản của bạn đã được tạo thành công. Khám phá vũ trụ âm nhạc ngay bây giờ.</p>
             
             <div v-if="errorMsg" class="mb-8 p-4 rounded-xl bg-[#93000a]/20 border border-[#93000a]/50 text-[#ffb4ab] text-sm animate-shake font-medium">
               {{ errorMsg }}
             </div>
 
-            <AuthButton :loading="loading" @click="handleRegister">
+            <AuthButton @click="finishOnboarding">
               Bắt đầu nghe nhạc
             </AuthButton>
           </AuthCard>
@@ -284,6 +338,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 import FloatingMusicBackground from '@/components/auth/FloatingMusicBackground.vue'
 import AuthCard from '@/components/auth/AuthCard.vue'
 import AuthInput from '@/components/auth/AuthInput.vue'
@@ -297,12 +352,18 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const displayedStep = ref(1)
+const accountSubStep = ref(1)
 const isScreenExiting = ref(false)
 const totalSteps = 4
 const loading = ref(false)
 const errorMsg = ref('')
 
-const form = reactive({ display_name: '', email: '', password: '', genre_ids: [], artist_ids: [] })
+const form = reactive({ display_name: '', email: '', password: '', confirm_password: '', genre_ids: [], artist_ids: [] })
+const emailError = ref('')
+const passwordError = ref('')
+const confirmPasswordError = ref('')
+const isCheckingEmail = ref(false)
+let emailCheckTimeout = null
 
 const genres = ref([])
 const artists = ref([])
@@ -390,6 +451,70 @@ watch(selectedMainGroups, () => {
   const validIds = displayedSubgenres.value.map(g => g.id)
   form.genre_ids = form.genre_ids.filter(id => validIds.includes(id))
 }, { deep: true })
+
+watch(() => form.email, (newVal) => {
+  if (emailError.value) emailError.value = ''
+  if (!newVal) {
+    isCheckingEmail.value = false
+    return
+  }
+  
+  if (emailCheckTimeout) clearTimeout(emailCheckTimeout)
+  isCheckingEmail.value = true
+  
+  emailCheckTimeout = setTimeout(() => {
+    checkEmailExistence()
+  }, 500)
+})
+
+watch(() => form.confirm_password, (newVal) => {
+  validateConfirmPassword()
+})
+
+watch(() => form.password, (newVal) => {
+  validatePasswordLength()
+  validateConfirmPassword()
+})
+
+function validatePasswordLength() {
+  if (form.password && form.password.length < 6) {
+    passwordError.value = 'Mật khẩu phải có ít nhất 6 ký tự.'
+  } else {
+    passwordError.value = ''
+  }
+}
+
+function validateConfirmPassword() {
+  if (form.confirm_password && form.password && form.confirm_password !== form.password) {
+    confirmPasswordError.value = 'Mật khẩu nhập lại không khớp.'
+  } else {
+    confirmPasswordError.value = ''
+  }
+}
+
+async function checkEmailExistence() {
+  if (!form.email) {
+    isCheckingEmail.value = false
+    return false
+  }
+  form.email = form.email.trim().toLowerCase()
+  isCheckingEmail.value = true
+  try {
+    const res = await authApi.checkEmail(form.email)
+    if (res.data?.exists) {
+      emailError.value = 'Email đã được sử dụng'
+      return true
+    } else {
+      emailError.value = ''
+      return false
+    }
+  } catch (err) {
+    console.error('Lỗi khi kiểm tra email:', err)
+    return false
+  } finally {
+    isCheckingEmail.value = false
+  }
+}
 
 onMounted(async () => {
   try {
@@ -494,11 +619,51 @@ function toggleArtist(id) {
   else form.artist_ids.splice(i, 1)
 }
 
-function validateAndGoStep2() {
-  if (!form.display_name || !form.email || !form.password) {
-    errorMsg.value = 'Vui lòng điền đầy đủ thông tin'; return
+async function goToPasswordSubStep() {
+  errorMsg.value = ''
+  if (!form.display_name?.trim()) {
+    errorMsg.value = 'Vui lòng nhập tên hiển thị'
+    return
   }
-  errorMsg.value = ''; 
+  if (!form.email?.trim()) {
+    errorMsg.value = 'Vui lòng nhập email'
+    return
+  }
+
+  form.email = form.email.trim().toLowerCase()
+  if (!/\S+@\S+\.\S+/.test(form.email)) {
+    emailError.value = 'Email không hợp lệ'
+    return
+  }
+
+  const exists = await checkEmailExistence()
+  if (exists || emailError.value) return
+
+  errorMsg.value = ''
+  accountSubStep.value = 2
+}
+
+function validatePasswordAndGoStep2() {
+  errorMsg.value = ''
+  validatePasswordLength()
+  validateConfirmPassword()
+
+  if (!form.password) {
+    errorMsg.value = 'Vui lòng nhập mật khẩu'
+    return
+  }
+  if (passwordError.value) {
+    return
+  }
+  if (!form.confirm_password) {
+    confirmPasswordError.value = 'Vui lòng nhập lại mật khẩu'
+    return
+  }
+  if (confirmPasswordError.value) {
+    return
+  }
+
+  errorMsg.value = ''
   goStepSmooth(2)
 }
 
@@ -517,13 +682,29 @@ function goBackToStep2() {
 }
 
 async function handleRegister() {
-  loading.value = true; errorMsg.value = ''
+  loading.value = true
+  errorMsg.value = ''
   const res = await auth.register(form)
   loading.value = false
+
   if (!res.success) {
-    errorMsg.value = res.message
+    if (res.code === 'EMAIL_EXISTS') {
+      emailError.value = 'Email đã được sử dụng'
+      accountSubStep.value = 1
+      goStepSmooth(1)
+    } else {
+      errorMsg.value = res.message || 'Đăng ký thất bại'
+    }
   } else {
-    await router.push('/')
+    goStepSmooth(4)
+  }
+}
+
+function finishOnboarding() {
+  if (auth.isAdmin) {
+    router.push('/admin')
+  } else {
+    router.push('/')
   }
 }
 </script>

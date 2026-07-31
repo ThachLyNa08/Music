@@ -126,7 +126,7 @@ function scoreIntentMatch(song, intent) {
             const energy = getEnergyScore(song);
             components.push(energy >= 0.25 && energy <= 0.7 ? 0.9 : 0.35);
         } else if (['sleep', 'relax', 'coffee', 'healing'].includes(soft.activity)) {
-            components.push(getEnergyScore(song) <= 0.6 ? 0.9 : 0.35);
+            components.push(getEnergyScore(song) <= 0.55 ? 1.0 : 0.0);
         } else {
             components.push(0.6);
         }
@@ -149,7 +149,7 @@ function scoreAudioFeature(song, intent) {
 
     const moods = new Set(soft.mood || []);
     if (moods.has('chill') || moods.has('calm') || soft.activity === 'relax' || soft.activity === 'coffee') {
-        scores.push(clamp01((1 - energy) * 0.55 + acoustic * 0.45));
+        scores.push(clamp01((1 - energy) * 0.65 + (1 - tempo) * 0.35));
     }
     if (moods.has('focus') || ['study', 'coding', 'work'].includes(soft.activity)) {
         const mediumEnergy = 1 - Math.abs(energy - 0.5) / 0.5;
@@ -213,6 +213,27 @@ function scorePenalty(song, intent) {
     }
     for (const keyword of neg.keywords || []) {
         if (songText.includes(normalizeText(keyword))) penalty += 0.08;
+    }
+
+    const soft = intent?.softPreferences || {};
+    const isLowEnergyIntent =
+        (soft.energy === 'low') ||
+        (soft.tempo === 'slow') ||
+        (intent?.tempoIntent?.energyTarget === 'low') ||
+        (intent?.tempoIntent?.tempoBucket === 'slow') ||
+        (soft.mood || []).some(m => ['chill', 'calm', 'sad', 'heartbreak'].includes(m)) ||
+        (soft.context || []).some(c => ['relax', 'night', 'late_night', 'sleep', 'breakup'].includes(c)) ||
+        (soft.activity || []).some(a => ['relax', 'sleep', 'healing'].includes(a));
+
+    if (isLowEnergyIntent) {
+        const eScore = getEnergyScore(song);
+        const tScore = getTempoScore(song);
+        if (eScore >= 0.65) penalty += 0.85;
+        else if (eScore >= 0.58) penalty += 0.40;
+        if (tScore >= 0.70) penalty += 0.60;
+        if (songText.includes('dance') || songText.includes('edm') || songText.includes('remix') || songText.includes('vinahouse')) {
+            penalty += 0.80;
+        }
     }
 
     return clamp01(penalty);
@@ -417,7 +438,7 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
         const semantic = semanticProfileService.scoreSongByPromptIntent(song, intent);
         const semanticRag = clamp01(song.rag_score || 0);
         const diversity = 0.7;
-        const aiScore = clamp01(
+        const baseScore = clamp01(
             DEFAULT_WEIGHTS.semanticRag * semanticRag
             + DEFAULT_WEIGHTS.intentMatch * intentMatch
             + DEFAULT_WEIGHTS.bpr * bprScore
@@ -427,8 +448,8 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.popularity * popularity
             + DEFAULT_WEIGHTS.semantic * semantic
             + DEFAULT_WEIGHTS.diversity * diversity
-            - penalty
         );
+        const aiScore = baseScore - penalty * 5;
 
         return {
             ...song,
@@ -452,9 +473,10 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
     });
 
     scored.sort((a, b) => b.aiScore - a.aiScore || Number(b.play_count || 0) - Number(a.play_count || 0) || a.id - b.id);
-    const selected = selectWithDiversity(scored, safeTarget, intent).map((song) => {
-        const aiScore = clamp01(
-            DEFAULT_WEIGHTS.semanticRag * song.scoreBreakdown.semanticRag
+    const validScored = scored.filter(s => s.aiScore > 0 && s.scoreBreakdown.penalty < 0.4);
+    const poolToSelect = validScored.length >= Math.min(5, safeTarget) ? validScored : scored;
+    const selected = selectWithDiversity(poolToSelect, safeTarget, intent).map((song) => {
+        const rawScore = DEFAULT_WEIGHTS.semanticRag * song.scoreBreakdown.semanticRag
             + DEFAULT_WEIGHTS.intentMatch * song.scoreBreakdown.intentMatch
             + DEFAULT_WEIGHTS.bpr * song.scoreBreakdown.bpr
             + DEFAULT_WEIGHTS.audioFeature * song.scoreBreakdown.audioFeature
@@ -463,8 +485,8 @@ async function rankAiPlaylistCandidates({ candidates = [], intent, userId = null
             + DEFAULT_WEIGHTS.popularity * song.scoreBreakdown.popularity
             + DEFAULT_WEIGHTS.semantic * song.scoreBreakdown.semantic
             + DEFAULT_WEIGHTS.diversity * song.scoreBreakdown.diversity
-            - song.scoreBreakdown.penalty
-        );
+            - song.scoreBreakdown.penalty * 5;
+        const aiScore = clamp01(Math.max(0, rawScore));
         const rounded = {
             ...song,
             aiScore: Number(aiScore.toFixed(4)),
