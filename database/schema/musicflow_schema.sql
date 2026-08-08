@@ -201,6 +201,9 @@ CREATE TABLE playlists (
     is_public   BOOLEAN         NOT NULL DEFAULT FALSE,
     is_system   BOOLEAN         NOT NULL DEFAULT FALSE,
     system_key  VARCHAR(100)    NULL,
+    ai_prompt   TEXT            NULL,
+    ai_intent_json LONGTEXT     NULL,
+    ai_provider VARCHAR(50)     NULL,
     created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -338,6 +341,27 @@ CREATE TABLE ai_playlists (
     CONSTRAINT fk_aip_playlist FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE SET NULL,
     INDEX idx_aip_user (user_id)
 ) COMMENT='Log yeu cau tao playlist bang AI va ket qua phan tich prompt';
+
+CREATE TABLE ai_playlist_generation_history (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id     INT UNSIGNED    NOT NULL,
+    prompt      TEXT            NOT NULL,
+    target_count INT            NOT NULL DEFAULT 20,
+    actual_count INT            NOT NULL DEFAULT 0,
+    status      ENUM('preview','saved','failed') NOT NULL DEFAULT 'preview',
+    playlist_id INT UNSIGNED    NULL,
+    provider    VARCHAR(50)     NULL,
+    intent_json LONGTEXT        NULL,
+    preview_snapshot_json LONGTEXT NULL,
+    error_message TEXT          NULL,
+    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_aiph_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_aiph_playlist FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE SET NULL,
+    INDEX idx_ai_playlist_history_user_created (user_id, created_at),
+    INDEX idx_ai_playlist_history_playlist (playlist_id)
+) COMMENT='Lich su preview AI Playlist dang snapshot de xem lai va luu sau';
 
 
 -- ============================================================

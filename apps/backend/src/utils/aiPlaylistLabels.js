@@ -48,6 +48,21 @@ const AI_PLAYLIST_LABELS = Object.freeze({
     familiarity: ['familiar', 'discover', 'balanced'],
     popularity: ['trending', 'popular', 'hidden_gems', 'balanced'],
     diversity: ['same_vibe', 'diverse_artist', 'diverse_genre', 'balanced'],
+    mode: [
+        'direct_song',
+        'direct_artist',
+        'direct_album',
+        'lyrics_search',
+        'mood_context',
+        'genre_market',
+        'similar_to_song',
+        'similar_to_artist',
+        'beat_rhythm',
+        'karaoke_instrumental',
+        'hybrid_seed',
+        'unknown'
+    ],
+    rhythm: ['low', 'medium', 'high', 'low_or_medium', 'medium_or_high', 'similar'],
     seed_type: ['artist_seed', 'song_seed', 'genre_seed', 'mood_seed', 'none'],
     playlist_goal: ['create_playlist', 'quick_mix', 'explore', 'replay_favorites']
 });

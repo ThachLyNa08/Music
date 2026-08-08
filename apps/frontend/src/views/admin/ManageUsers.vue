@@ -2,13 +2,12 @@
   <div class="-mt-6">
     <header class="flex flex-col md:flex-row items-start md:items-center justify-between sticky -top-6 z-40 bg-white border-b border-gray-200 -mx-6 px-6 pt-6 pb-4 mb-6">
       <div>
-        <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý Thành viên</h1>
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Quản lý thành viên</h1>
         <p class="text-gray-500 dark:text-text-secondary mt-1 text-xs font-medium">Quản trị phân quyền, trạng thái hoạt động và gói Premium của người dùng</p>
-        <p class="text-amber-600 mt-1 text-xs font-bold italic">Bao gồm dữ liệu thực nghiệm V4 được nạp vào môi trường demo.</p>
       </div>
       <div class="flex items-center gap-3 mt-4 md:mt-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
-        <AdminAddButton title="Thêm thành viên" @click="showAddUserModal = true" />
+        <AdminAddButton title="TỔNG THÀNH VIÊN" @click="showAddUserModal = true" />
       </div>
     </header>
 
@@ -38,8 +37,8 @@
             <option value="admin">Quản trị viên (Admin)</option>
           </select>
           <select v-model="filterStatus" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
-            <option value="">Tất cả trạng thái</option>
-            <option value="active">Hoạt động</option>
+            <option value="">Tất cả trang thái</option>
+            <option value="active">Đang hoạt động</option>
             <option value="locked">Bị khóa</option>
           </select>
           <select v-model="filterPremium" class="admin-input min-w-0 truncate w-full xl:w-40 cursor-pointer">
@@ -51,6 +50,53 @@
         <AdminResetButton :disabled="loading" @click="resetFilters" />
       </div>
     </div>
+
+    <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-sm font-black text-slate-900">Khiếu nại khóa tài khoản</h2>
+          <p class="text-xs font-medium text-slate-500">{{ pendingAppeals.length }} khiếu nại đang chờ xử lý</p>
+        </div>
+        <button class="admin-input w-full md:w-auto text-xs font-bold" @click="fetchAppeals" :disabled="appealsLoading">
+          {{ appealsLoading ? 'Đang tải...' : 'Làm mới' }}
+        </button>
+      </div>
+
+      <div v-if="pendingAppeals.length" class="mt-4 grid gap-3">
+        <article v-for="appeal in pendingAppeals" :key="appeal.id" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0">
+              <p class="text-sm font-black text-slate-900 truncate">{{ appeal.display_name || 'Người dùng' }}</p>
+              <p class="text-xs font-semibold text-slate-500 truncate">{{ appeal.email }}</p>
+              <p class="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-700">{{ appeal.reason }}</p>
+              <a
+                v-if="appeal.evidence_image_url"
+                :href="normalizeImageUrl(appeal.evidence_image_url)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="mt-3 inline-flex items-center gap-3 rounded-lg border border-emerald-200 bg-white p-2 text-xs font-black text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+              >
+                <img
+                  :src="normalizeImageUrl(appeal.evidence_image_url)"
+                  alt="Ảnh minh chứng"
+                  class="h-14 w-20 rounded-md object-cover"
+                />
+                Xem ảnh minh chứng
+              </a>
+              <p class="mt-2 text-[11px] font-semibold text-slate-400">{{ formatDateTime(appeal.created_at) }}</p>
+            </div>
+            <div class="flex shrink-0 gap-2">
+              <button class="rounded-md bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500" @click="acceptAppeal(appeal)">
+                Chấp nhận
+              </button>
+              <button class="rounded-md bg-rose-600 px-3 py-2 text-xs font-black text-white hover:bg-rose-500" @click="openRejectAppeal(appeal)">
+                Từ chối
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col mb-8">
@@ -333,6 +379,76 @@
       </div>
     </Teleport>
 
+    <!-- Lock Account Modal -->
+    <Teleport to="body">
+      <div v-if="showLockModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showLockModal = false">
+        <div class="mx-auto flex w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+          <header class="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <h2 class="text-lg font-black text-slate-900">Khóa tài khoản</h2>
+            <button class="text-gray-400 hover:text-gray-700" @click="showLockModal = false"><MfIcon name="close" size="22" /></button>
+          </header>
+          <div class="space-y-4 px-6 py-5">
+            <div class="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              {{ selectedLockUser?.display_name }} ({{ selectedLockUser?.email }})
+            </div>
+            <div class="form-group">
+              <span>Lý do khóa tài khoản</span>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  v-for="option in lockReasonOptions"
+                  :key="option.value"
+                  type="button"
+                  class="rounded-lg border px-3 py-2 text-left text-xs font-bold transition"
+                  :class="selectedLockReason === option.value ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50'"
+                  @click="selectedLockReason = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <label v-if="selectedLockReason === 'other'" class="form-group">
+              <span>Lý do khác</span>
+              <textarea v-model="lockReason" rows="4" class="form-input resize-none" placeholder="Nhập lý do khóa tài khoản..." required></textarea>
+            </label>
+            <label class="flex items-center gap-2 text-sm font-bold text-slate-700">
+              <input v-model="allowAppeal" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+              Cho phép người dùng khiếu nại
+            </label>
+          </div>
+          <footer class="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <button type="button" class="btn-secondary" @click="showLockModal = false">Hủy</button>
+            <button type="button" class="btn-primary" :disabled="savingLock" @click="submitLockUser">
+              {{ savingLock ? 'Đang khóa...' : 'Khóa tài khoản' }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Reject Appeal Modal -->
+    <Teleport to="body">
+      <div v-if="showRejectAppealModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="showRejectAppealModal = false">
+        <div class="mx-auto flex w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+          <header class="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <h2 class="text-lg font-black text-slate-900">Từ chối khiếu nại</h2>
+            <button class="text-gray-400 hover:text-gray-700" @click="showRejectAppealModal = false"><MfIcon name="close" size="22" /></button>
+          </header>
+          <div class="space-y-4 px-6 py-5">
+            <label class="form-group">
+              <span>Ghi chú admin</span>
+              <textarea v-model="rejectAdminNote" rows="5" class="form-input resize-none" />
+            </label>
+          </div>
+          <footer class="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <button type="button" class="btn-secondary" @click="showRejectAppealModal = false">Hủy</button>
+            <button type="button" class="btn-primary" :disabled="appealActionLoading" @click="rejectAppeal">
+              {{ appealActionLoading ? 'Đang xử lý...' : 'Từ chối' }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Confirm Dialog -->
     <ConfirmDialog
       :open="confirmState.open"
@@ -348,7 +464,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, onUpdated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { normalizeImageUrl } from '@/utils/imageUrl'
@@ -375,6 +491,109 @@ const searchQuery = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
 const filterPremium = ref('')
+const pendingAppeals = ref([])
+const appealsLoading = ref(false)
+const appealActionLoading = ref(false)
+const showLockModal = ref(false)
+const selectedLockUser = ref(null)
+const selectedLockReason = ref('abnormal_transaction')
+const lockReason = ref('')
+const allowAppeal = ref(true)
+const savingLock = ref(false)
+const showRejectAppealModal = ref(false)
+const selectedAppeal = ref(null)
+const rejectAdminNote = ref('')
+const lockReasonOptions = [
+  { value: 'abnormal_transaction', label: 'Giao dịch bất thường!' },
+  { value: 'policy_violation', label: 'Vi phạm nội quy cộng đồng' },
+  { value: 'spam_abuse', label: 'Spam hoặc lạm dụng hệ thống' },
+  { value: 'fraud_suspected', label: 'Nghi ngờ gian lận tài khoản' },
+  { value: 'verification_required', label: 'Cần xác minh thông tin' },
+  { value: 'other', label: 'Lý do khác' }
+]
+
+const cp1252ByteMap = {
+  0x0102: 0xc3,
+  0x20ac: 0x80,
+  0x201a: 0x82,
+  0x0192: 0x83,
+  0x201e: 0x84,
+  0x2026: 0x85,
+  0x2020: 0x86,
+  0x2021: 0x87,
+  0x02c6: 0x88,
+  0x2030: 0x89,
+  0x0160: 0x8a,
+  0x2039: 0x8b,
+  0x0152: 0x8c,
+  0x017d: 0x8e,
+  0x2018: 0x91,
+  0x2019: 0x92,
+  0x201c: 0x93,
+  0x201d: 0x94,
+  0x2022: 0x95,
+  0x2013: 0x96,
+  0x2014: 0x97,
+  0x02dc: 0x98,
+  0x2122: 0x99,
+  0x0161: 0x9a,
+  0x203a: 0x9b,
+  0x0153: 0x9c,
+  0x017e: 0x9e,
+  0x0178: 0x9f
+}
+
+const mojibakePattern = /[\u0102\u00c2\u00c3\u00c4\u00c5\u00c6\u00e1\u00c1][\u00a0-\u00ff\u0100-\u017f\u2018-\u201d]/
+let repairTextQueued = false
+
+function repairMojibakeText(value) {
+  const original = String(value ?? '')
+  if (!mojibakePattern.test(original)) return original
+
+  try {
+    const bytes = Uint8Array.from([...original].map((char) => {
+      const code = char.charCodeAt(0)
+      if (code <= 0xff) return code
+      return cp1252ByteMap[code] ?? 0x3f
+    }))
+    const fixed = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    return fixed.includes('\ufffd') ? original : fixed
+  } catch (err) {
+    return original
+  }
+}
+
+function repairVisibleVietnameseText() {
+  if (typeof document === 'undefined' || typeof TextDecoder === 'undefined') return
+  const root = document.body
+  if (!root) return
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node = walker.nextNode()
+  while (node) {
+    const fixed = repairMojibakeText(node.nodeValue)
+    if (fixed !== node.nodeValue) node.nodeValue = fixed
+    node = walker.nextNode()
+  }
+
+  root.querySelectorAll('[placeholder],[title],[aria-label]').forEach((el) => {
+    ;['placeholder', 'title', 'aria-label'].forEach((attr) => {
+      const current = el.getAttribute(attr)
+      if (!current) return
+      const fixed = repairMojibakeText(current)
+      if (fixed !== current) el.setAttribute(attr, fixed)
+    })
+  })
+}
+
+function scheduleVisibleTextRepair() {
+  if (repairTextQueued) return
+  repairTextQueued = true
+  nextTick(() => {
+    repairTextQueued = false
+    repairVisibleVietnameseText()
+  })
+}
 
 // Overview data
 const overviewData = ref(null)
@@ -723,6 +942,102 @@ async function toggleRole(user) {
   })
 }
 
+async function fetchAppeals() {
+  appealsLoading.value = true
+  try {
+    const res = await api.get('/admin/account-appeals', { params: { status: 'pending' } })
+    pendingAppeals.value = res.data?.data || []
+  } catch (err) {
+    console.error('Lỗi khi tải khiếu nại:', err)
+  } finally {
+    appealsLoading.value = false
+  }
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleString('vi-VN')
+}
+
+function openLockModal(user) {
+  selectedLockUser.value = user
+  selectedLockReason.value = 'abnormal_transaction'
+  lockReason.value = ''
+  allowAppeal.value = true
+  showLockModal.value = true
+}
+
+function getSelectedLockReasonText() {
+  if (selectedLockReason.value === 'other') return lockReason.value.trim()
+  return lockReasonOptions.find(option => option.value === selectedLockReason.value)?.label || ''
+}
+
+async function submitLockUser() {
+  if (!selectedLockUser.value) return
+  const reasonText = getSelectedLockReasonText()
+  if (!reasonText) {
+    toast.showToast('Vui lòng nhập lý do khóa tài khoản', 'error')
+    return
+  }
+
+  savingLock.value = true
+  try {
+    await api.put(`/admin/users/${selectedLockUser.value.id}/status`, {
+      status: 'locked',
+      locked_reason: reasonText,
+      allow_appeal: allowAppeal.value
+    })
+    selectedLockUser.value.status = 'locked'
+    showLockModal.value = false
+    toast.showToast('Đã khóa tài khoản', 'success')
+  } catch (err) {
+    console.error('Lỗi khi khóa tài khoản:', err)
+    toast.showToast(err.response?.data?.message || 'Không thể khóa tài khoản', 'error')
+  } finally {
+    savingLock.value = false
+  }
+}
+
+async function acceptAppeal(appeal) {
+  appealActionLoading.value = true
+  try {
+    await api.post(`/admin/account-appeals/${appeal.id}/accept`)
+    pendingAppeals.value = pendingAppeals.value.filter(item => item.id !== appeal.id)
+    const user = users.value.find(item => item.id === appeal.user_id)
+    if (user) user.status = 'active'
+    toast.showToast('Đã chấp nhận khiếu nại và mở khóa tài khoản', 'success')
+  } catch (err) {
+    console.error('Lỗi khi chấp nhận khiếu nại:', err)
+    toast.showToast(err.response?.data?.message || 'Không thể xử lý khiếu nại', 'error')
+  } finally {
+    appealActionLoading.value = false
+  }
+}
+
+function openRejectAppeal(appeal) {
+  selectedAppeal.value = appeal
+  rejectAdminNote.value = ''
+  showRejectAppealModal.value = true
+}
+
+async function rejectAppeal() {
+  if (!selectedAppeal.value) return
+  appealActionLoading.value = true
+  try {
+    await api.post(`/admin/account-appeals/${selectedAppeal.value.id}/reject`, {
+      admin_note: rejectAdminNote.value.trim()
+    })
+    pendingAppeals.value = pendingAppeals.value.filter(item => item.id !== selectedAppeal.value.id)
+    showRejectAppealModal.value = false
+    toast.showToast('Đã từ chối khiếu nại', 'success')
+  } catch (err) {
+    console.error('Lỗi khi từ chối khiếu nại:', err)
+    toast.showToast(err.response?.data?.message || 'Không thể xử lý khiếu nại', 'error')
+  } finally {
+    appealActionLoading.value = false
+  }
+}
+
 function toggleStatus(user) {
   if (user.id === authStore.user?.id) {
     toast.showToast('Bạn không thể khóa tài khoản của chính mình', 'error')
@@ -730,6 +1045,11 @@ function toggleStatus(user) {
   }
 
   const isLocked = user.status === 'locked'
+  if (!isLocked) {
+    openLockModal(user)
+    return
+  }
+
   openConfirm({
     title: isLocked ? 'Mở khóa tài khoản?' : 'Khóa tài khoản?',
     message: isLocked
@@ -841,6 +1161,12 @@ async function saveCustomPremiumExpiry() {
 onMounted(() => {
   fetchOverview()
   fetchUsers()
+  fetchAppeals()
+  scheduleVisibleTextRepair()
+})
+
+onUpdated(() => {
+  scheduleVisibleTextRepair()
 })
 
 

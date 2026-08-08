@@ -46,7 +46,198 @@ function sqlSearchExpr(field) {
   return `REPLACE(LOWER(COALESCE(${field}, '')), 'đ', 'd')`;
 }
 
-// Helper: lấy genre key từ query
+// Lyrics search helpers
+function stripLrcMetadata(value = '') {
+  return String(value)
+    .replace(/\[[0-9]{1,2}:[0-9]{2}(?:[.:][0-9]{1,3})?\]/g, ' ')
+    .replace(/\[(?:ar|al|ti|by|offset|length|re|ve):[^\]]*\]/gi, ' ')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
+function getSearchTokens(value = '') {
+  const seen = new Set();
+  return normalizeSearchText(value)
+    .split(' ')
+    .filter(token => token.length >= 2)
+    .filter(token => {
+      if (seen.has(token)) return false;
+      seen.add(token);
+      return true;
+    });
+}
+
+const COMMON_LYRIC_TOKENS = new Set([
+  'anh', 'em', 'ta', 'toi', 'minh', 'nguoi', 'yeu', 'la', 'va', 'voi',
+  'cho', 'de', 'cua', 'nhu', 'trong', 'ngoai', 'mot', 'nhung', 'tung',
+  'nay', 'kia', 'do', 'day', 'roi', 'mai', 'hay', 'khong', 'co', 'con',
+  'chung', 'thi', 'nhau',
+]);
+
+function getOrderedSearchTokens(value = '') {
+  return normalizeSearchText(value)
+    .split(' ')
+    .filter(token => token.length >= 2);
+}
+
+function getLyricSearchTokens(value = '') {
+  const tokens = getSearchTokens(value);
+  if (tokens.length <= 4) return tokens;
+
+  const specificTokens = tokens.filter(token => (
+    token.length >= 3 && !COMMON_LYRIC_TOKENS.has(token)
+  ));
+
+  return specificTokens.length >= 3 ? specificTokens : tokens;
+}
+
+function getLyricProbeTokens(value = '', maxTokens = 5) {
+  return getLyricSearchTokens(value)
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+    .slice(0, maxTokens);
+}
+
+function buildLyricTokenIndex(cleanLyrics = '') {
+  const tokens = [];
+  const matches = String(cleanLyrics).matchAll(/[\p{L}\p{N}]+/gu);
+
+  for (const match of matches) {
+    const normalized = normalizeSearchText(match[0]);
+    if (!normalized) continue;
+    tokens.push({
+      value: normalized,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  return tokens;
+}
+
+function makeSnippet(cleanLyrics, startIndex, endIndex, context = 80) {
+  if (!cleanLyrics || startIndex < 0) return null;
+
+  const start = Math.max(0, startIndex - context);
+  const end = Math.min(cleanLyrics.length, endIndex + context);
+  let snippet = cleanLyrics.slice(start, end).replace(/\s+/g, ' ').trim();
+
+  if (!snippet) return null;
+  if (start > 0) snippet = `... ${snippet}`;
+  if (end < cleanLyrics.length) snippet = `${snippet} ...`;
+  return snippet;
+}
+
+function findExactLyricWindow(lyricTokens, queryTokens) {
+  if (!lyricTokens.length || !queryTokens.length) return null;
+
+  for (let i = 0; i <= lyricTokens.length - queryTokens.length; i += 1) {
+    let matched = true;
+    for (let j = 0; j < queryTokens.length; j += 1) {
+      if (lyricTokens[i + j].value !== queryTokens[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return {
+        start: lyricTokens[i].start,
+        end: lyricTokens[i + queryTokens.length - 1].end,
+      };
+    }
+  }
+
+  return null;
+}
+
+function findBestPartialLyricWindow(lyricTokens, queryTokens) {
+  if (!lyricTokens.length || !queryTokens.length) return null;
+
+  const querySet = new Set(queryTokens);
+  let best = null;
+  const windowSize = Math.min(
+    lyricTokens.length,
+    Math.max(queryTokens.length + 4, Math.ceil(queryTokens.length * 1.5), 8)
+  );
+
+  for (let i = 0; i < lyricTokens.length; i += 1) {
+    const found = new Set();
+    const endExclusive = Math.min(lyricTokens.length, i + windowSize);
+    for (let j = i; j < endExclusive; j += 1) {
+      if (querySet.has(lyricTokens[j].value)) {
+        found.add(lyricTokens[j].value);
+      }
+    }
+
+    const count = found.size;
+    if (!best || count > best.count) {
+      best = {
+        count,
+        start: lyricTokens[i].start,
+        end: lyricTokens[endExclusive - 1].end,
+      };
+    }
+  }
+
+  return best && best.count > 0 ? best : null;
+}
+
+function analyzeLyricsMatch(rawLyrics, normalizedQuery) {
+  const cleanLyrics = stripLrcMetadata(rawLyrics || '');
+  if (!cleanLyrics || !normalizedQuery) {
+    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+  }
+
+  const orderedQueryTokens = getOrderedSearchTokens(normalizedQuery);
+  const queryTokens = getLyricSearchTokens(normalizedQuery);
+  if (orderedQueryTokens.length === 0 || queryTokens.length === 0) {
+    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+  }
+
+  const lyricTokens = buildLyricTokenIndex(cleanLyrics);
+  if (lyricTokens.length === 0) {
+    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+  }
+
+  const exactWindow = findExactLyricWindow(lyricTokens, orderedQueryTokens);
+  if (exactWindow) {
+    return {
+      score: 95 + Math.min(orderedQueryTokens.length, 12) * 3,
+      matchedSnippet: makeSnippet(cleanLyrics, exactWindow.start, exactWindow.end),
+      exact: true,
+      ratio: 1,
+      matchedCount: orderedQueryTokens.length,
+    };
+  }
+
+  const lyricTokenSet = new Set(lyricTokens.map(token => token.value));
+  const matchedCount = queryTokens.filter(token => lyricTokenSet.has(token)).length;
+  const ratio = matchedCount / queryTokens.length;
+  const requiredMatches = queryTokens.length <= 2
+    ? queryTokens.length
+    : Math.max(3, Math.ceil(queryTokens.length * 0.6));
+
+  if (matchedCount < requiredMatches) {
+    return { score: 0, matchedSnippet: null, exact: false, ratio, matchedCount };
+  }
+
+  const partialWindow = findBestPartialLyricWindow(lyricTokens, queryTokens);
+  if (!partialWindow || partialWindow.count < requiredMatches) {
+    return { score: 0, matchedSnippet: null, exact: false, ratio, matchedCount };
+  }
+
+  const windowRatio = partialWindow.count / queryTokens.length;
+  return {
+    score: 58 + windowRatio * 35 + Math.min(partialWindow.count, 10) * 2,
+    matchedSnippet: makeSnippet(cleanLyrics, partialWindow.start, partialWindow.end),
+    exact: false,
+    ratio: windowRatio,
+    matchedCount: partialWindow.count,
+  };
+}
+
+// Helper: lay genre key tu query
 function getGenreKeyFromQuery(q) {
   const normalized = normalizeSearchText(q);
   const compact = compactSearchText(q);
@@ -387,30 +578,33 @@ exports.searchSongs = async (req, res, next) => {
     // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu, không dấu, LOWER case, token matching + genre aliases) ──
     const tokens = q.split(/\s+/).filter(t => t.length > 0);
     const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
+    const lyricProbeTokens = getLyricProbeTokens(normalizedQ, 5);
+    const lyricRequiredTokens = lyricProbeTokens.slice(0, Math.min(3, lyricProbeTokens.length));
+    const rawTokenByNorm = new Map();
+    tokens.forEach((token) => {
+      const normalized = normalizeSearchText(token);
+      if (normalized && !rawTokenByNorm.has(normalized)) rawTokenByNorm.set(normalized, token);
+    });
 
     const lyricSql = `COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, ''), NULLIF(sl.synced_lyrics, ''))`;
+    const lyricSearchExpr = sqlSearchExpr(lyricSql);
     let songWhereConditions = [
       `LOWER(s.title) LIKE LOWER(?)`,
       `LOWER(a.name) LIKE LOWER(?)`,
       `LOWER(al.title) LIKE LOWER(?)`,
       `${sqlSearchExpr('s.title')} LIKE LOWER(?)`,
       `${sqlSearchExpr('a.name')} LIKE LOWER(?)`,
-      `${sqlSearchExpr('al.title')} LIKE LOWER(?)`,
-      `LOWER(${lyricSql}) LIKE LOWER(?)`,
-      `${sqlSearchExpr(lyricSql)} LIKE LOWER(?)`
+      `${sqlSearchExpr('al.title')} LIKE LOWER(?)`
     ];
     let songParams = [
       searchTerm, searchTerm, searchTerm,
-      searchTermNoAccent, searchTermNoAccent, searchTermNoAccent,
-      searchTerm, searchTermNoAccent
+      searchTermNoAccent, searchTermNoAccent, searchTermNoAccent
     ];
 
     tokens.forEach(t => {
       songWhereConditions.push(`LOWER(s.title) LIKE LOWER(?)`);
       songWhereConditions.push(`LOWER(a.name) LIKE LOWER(?)`);
       songWhereConditions.push(`LOWER(al.title) LIKE LOWER(?)`);
-      songWhereConditions.push(`LOWER(${lyricSql}) LIKE LOWER(?)`);
-      songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
@@ -419,12 +613,18 @@ exports.searchSongs = async (req, res, next) => {
       songWhereConditions.push(`${sqlSearchExpr('s.title')} LIKE LOWER(?)`);
       songWhereConditions.push(`${sqlSearchExpr('a.name')} LIKE LOWER(?)`);
       songWhereConditions.push(`${sqlSearchExpr('al.title')} LIKE LOWER(?)`);
-      songWhereConditions.push(`${sqlSearchExpr(lyricSql)} LIKE LOWER(?)`);
-      songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
       songParams.push(`%${t}%`);
     });
+
+    if (lyricRequiredTokens.length > 0) {
+      songWhereConditions.push(`(${lyricRequiredTokens.map(() => `(LOWER(${lyricSql}) LIKE LOWER(?) OR ${lyricSearchExpr} LIKE LOWER(?))`).join(' AND ')})`);
+      lyricRequiredTokens.forEach((token) => {
+        songParams.push(`%${rawTokenByNorm.get(token) || token}%`);
+        songParams.push(`%${token}%`);
+      });
+    }
 
     if (matchedGenreKey) {
       songWhereConditions.push(`g.slug = ?`, `g.slug LIKE ?`, `g.slug LIKE ?`);
@@ -450,19 +650,16 @@ exports.searchSongs = async (req, res, next) => {
           WHEN LOWER(s.title) LIKE LOWER(?) OR ${sqlSearchExpr('s.title')} LIKE LOWER(?) THEN 1
           WHEN LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) THEN 2
           WHEN LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) THEN 3
-          WHEN LOWER(${lyricSql}) LIKE LOWER(?) OR ${sqlSearchExpr(lyricSql)} LIKE LOWER(?) THEN 4
           ELSE 5
         END,
         s.play_count DESC
-      LIMIT 1000
+      LIMIT 350
     `, [
       ...songParams,
       q,
       normalizedQ,
       `${q}%`,
       `${normalizedQ}%`,
-      searchTerm,
-      searchTermNoAccent,
       searchTerm,
       searchTermNoAccent,
       searchTerm,
@@ -479,8 +676,7 @@ exports.searchSongs = async (req, res, next) => {
       const normQuery = normalizedQ;
       const normArtist = normalizeSearchText(row.artist_name);
       const normAlbum = normalizeSearchText(row.album || '');
-      const cleanLyrics = (row.lyrics || '').replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, ' ').replace(/\s+/g, ' ').trim();
-      const normLyrics = normalizeSearchText(cleanLyrics);
+      const lyricsMatch = analyzeLyricsMatch(row.lyrics, normQuery);
 
       if (normTitle === normQuery) {
         score += 120;
@@ -498,30 +694,23 @@ exports.searchSongs = async (req, res, next) => {
         score += 50;
         matchType = 'album';
         matchedField = 'album';
-      } else if (normLyrics.includes(normQuery)) {
-        score += 70;
+      } else if (lyricsMatch.score > 0) {
+        score += lyricsMatch.score;
         matchType = 'lyrics';
         matchedField = 'lyrics';
-        const idx = normLyrics.indexOf(normQuery);
-        const start = Math.max(0, idx - 60);
-        const end = Math.min(cleanLyrics.length, idx + normQuery.length + 60);
-        matchedSnippet = cleanLyrics.substring(start, end).trim();
-        if (start > 0) matchedSnippet = '... ' + matchedSnippet;
-        if (end < cleanLyrics.length) matchedSnippet = matchedSnippet + ' ...';
+        matchedSnippet = lyricsMatch.matchedSnippet;
       } else {
-        const queryTokens = normQuery.split(' ').filter(x => x.length >= 1);
+        const queryTokens = getSearchTokens(normQuery);
         if (queryTokens.length > 0) {
           const titleTokens = new Set(normTitle.split(' '));
           const artistTokens = new Set(normArtist.split(' '));
           const albumTokens = new Set(normAlbum.split(' '));
-          const lyricsTokens = new Set(normLyrics.split(' '));
 
           let matchCount = 0;
           queryTokens.forEach(t => {
             if (titleTokens.has(t) || normTitle.includes(t)) matchCount += 2;
             else if (artistTokens.has(t) || normArtist.includes(t)) matchCount += 1.5;
             else if (albumTokens.has(t) || normAlbum.includes(t)) matchCount += 1;
-            else if (lyricsTokens.has(t) || normLyrics.includes(t)) matchCount += 0.5;
           });
 
           if (matchCount > 0) {
@@ -539,6 +728,8 @@ exports.searchSongs = async (req, res, next) => {
          _score: score,
          matchType,
          matchedSnippet,
+         lyric_snippet: matchedSnippet,
+         lyricsSnippet: matchedSnippet,
          matchedField
       };
     });

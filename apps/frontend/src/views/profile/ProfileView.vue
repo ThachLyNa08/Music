@@ -321,11 +321,21 @@ function formatListeningTime(seconds) {
   return `${m}m`
 }
 
-function isPlaying(song) {
-  return playerStore.currentSong?.id === song.id
+function getSongId(song) {
+  return song?.song_id ?? song?.id ?? song?.track_id ?? null
 }
 
-function playSong(song, queueContext) {
+function isPlaying(song) {
+  const currentId = getSongId(playerStore.currentSong)
+  const songId = getSongId(song)
+  return Boolean(playerStore.isPlaying && currentId !== null && songId !== null && String(currentId) === String(songId))
+}
+
+async function playSong(song, queueContext) {
+  if (isPlaying(song)) {
+    await playerStore.togglePlay()
+    return
+  }
   playerStore.playSong(song, queueContext, 'profile')
 }
 

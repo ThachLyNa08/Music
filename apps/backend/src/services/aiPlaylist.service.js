@@ -2,7 +2,7 @@ const { pool } = require('../config/database');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const { clampTargetCount } = require('../utils/aiPlaylistIntentSchema');
 const { publicSongCondition } = require('../utils/public.utils');
-const { tableExists } = require('../utils/dbIntrospection');
+const { tableExists, columnExists, clearIntrospectionCache } = require('../utils/dbIntrospection');
 const { normalizeAiPlaylistIntent } = require('./aiPlaylistIntent.service');
 const { getAiPlaylistCandidates } = require('./aiPlaylistCandidate.service');
 const { rankAiPlaylistCandidates } = require('./aiPlaylistRanking.service');
@@ -31,11 +31,14 @@ function shapePreviewSong(song, req) {
         aiScore: song.aiScore,
         scoreBreakdown: song.scoreBreakdown,
         reason: song.reason,
-        tempoBucket: song.tempo_bucket || song.tempoBucket || song.tempo_level || null,
+        tempoBucket: song.tempo_level || song.tempo_bucket || song.tempoBucket || null,
         normalizedBpm: song.normalized_bpm || song.normalizedBpm || song.bpm || null,
         energyScore: song.energy_score ?? null,
         danceabilityScore: song.danceability_score ?? song.danceability ?? null,
-        tempoReason: song.tempoReason || null
+        tempoReason: song.tempoReason || null,
+        matchQuality: song.matchQuality || (song.fallbackUsed ? 'partial' : 'strong'),
+        fallbackUsed: Boolean(song.fallbackUsed),
+        fallbackReason: song.fallbackReason || null
     };
 }
 
@@ -44,13 +47,227 @@ function normalizeSongIds(songIds) {
     return [...new Set(songIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
 }
 
-function buildShortageMeta({ songs, candidates, count, candidateMeta, intent }) {
+function safeJsonParse(value, fallback = null) {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function stringifyJson(value) {
+    if (value === undefined || value === null) return null;
+    return JSON.stringify(value);
+}
+
+function getProviderLabel({ useLLM, intent } = {}) {
+    return intent?.raw?.provider || intent?.provider || (useLLM ? 'llm' : 'taxonomy');
+}
+
+function buildPreviewSnapshot({ prompt, targetCount, preview }) {
+    const songs = (preview?.songs || []).map((song, index) => ({
+        ...song,
+        id: Number(song.id || song.song_id),
+        song_id: Number(song.song_id || song.id),
+        title: song.title,
+        artist: song.artist || song.artist_name || null,
+        artist_name: song.artist_name || song.artist || null,
+        cover_url: song.cover_url || song.coverUrl || null,
+        coverUrl: song.coverUrl || song.cover_url || null,
+        audio_url: song.audio_url || song.audioUrl || song.stream_url || null,
+        audioUrl: song.audioUrl || song.audio_url || song.stream_url || null,
+        reason: song.reason || null,
+        order_index: Number(song.order_index || index + 1)
+    }));
+
+    return {
+        title: preview?.playlistTitle || preview?.meta?.playlistTitle || buildPlaylistTitle(preview?.intent, prompt),
+        description: preview?.description || '',
+        prompt,
+        requestedCount: clampTargetCount(targetCount || preview?.meta?.targetCount || 20),
+        actualCount: songs.length,
+        strictMode: !preview?.meta?.relaxedFilters?.length,
+        canExpand: Boolean(preview?.meta?.shortage || preview?.meta?.canExpand),
+        tags: [
+            ...(preview?.intent?.hardConstraints?.genre_family || []),
+            ...(preview?.intent?.softPreferences?.mood || []),
+            preview?.intent?.softPreferences?.activity
+        ].filter(Boolean),
+        songs,
+        warnings: preview?.warnings || [],
+        meta: preview?.meta || {},
+        intent: preview?.intent || {}
+    };
+}
+
+let aiPlaylistHistoryTableReady = false;
+
+async function ensureAiPlaylistHistoryTable() {
+    if (aiPlaylistHistoryTableReady) return true;
+    if (await tableExists('ai_playlist_generation_history')) {
+        aiPlaylistHistoryTableReady = true;
+        return true;
+    }
+
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ai_playlist_generation_history (
+              id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+              user_id INT UNSIGNED NOT NULL,
+              prompt TEXT NOT NULL,
+              target_count INT NOT NULL DEFAULT 20,
+              actual_count INT NOT NULL DEFAULT 0,
+              status ENUM('preview','saved','failed') NOT NULL DEFAULT 'preview',
+              playlist_id INT UNSIGNED NULL,
+              provider VARCHAR(50) NULL,
+              intent_json LONGTEXT NULL,
+              preview_snapshot_json LONGTEXT NULL,
+              error_message TEXT NULL,
+              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              INDEX idx_ai_playlist_history_user_created (user_id, created_at),
+              INDEX idx_ai_playlist_history_playlist (playlist_id),
+              CONSTRAINT fk_ai_playlist_history_user
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                ON DELETE CASCADE,
+              CONSTRAINT fk_ai_playlist_history_playlist
+                FOREIGN KEY (playlist_id) REFERENCES playlists(id)
+                ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        clearIntrospectionCache();
+        aiPlaylistHistoryTableReady = true;
+        return true;
+    } catch (error) {
+        console.warn('Unable to ensure AI playlist history table:', error.message);
+        return false;
+    }
+}
+
+async function createGenerationHistory({
+    userId,
+    prompt,
+    targetCount,
+    actualCount = 0,
+    status = 'preview',
+    playlistId = null,
+    provider = null,
+    intent = null,
+    previewSnapshot = null,
+    errorMessage = null
+}) {
+    if (!userId) return null;
+    if (!(await ensureAiPlaylistHistoryTable())) {
+        console.warn('AI playlist history was not recorded because the history table is unavailable');
+        return null;
+    }
+
+    const [result] = await pool.query(
+        `INSERT INTO ai_playlist_generation_history
+         (user_id, prompt, target_count, actual_count, status, playlist_id, provider, intent_json, preview_snapshot_json, error_message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            userId,
+            String(prompt || '').trim(),
+            clampTargetCount(targetCount),
+            Number(actualCount || 0),
+            status,
+            playlistId,
+            provider,
+            stringifyJson(intent),
+            stringifyJson(previewSnapshot),
+            errorMessage ? String(errorMessage).slice(0, 500) : null
+        ]
+    );
+
+    return result.insertId;
+}
+
+async function markHistorySaved({ conn, historyId, userId, playlistId }) {
+    if (!historyId || !(await ensureAiPlaylistHistoryTable())) return false;
+    const executor = conn || pool;
+    const [result] = await executor.query(
+        `UPDATE ai_playlist_generation_history
+         SET status = 'saved', playlist_id = ?
+         WHERE id = ? AND user_id = ? AND status = 'preview'`,
+        [playlistId, historyId, userId]
+    );
+    return result.affectedRows > 0;
+}
+
+function shapeHistorySummary(row, req) {
+    return {
+        id: row.id,
+        prompt: row.prompt,
+        target_count: row.target_count,
+        actual_count: row.actual_count,
+        status: row.status,
+        playlist_id: row.playlist_id,
+        cover_url: normalizeCoverUrl(row.cover_url, req),
+        created_at: row.created_at,
+        error_message: row.status === 'failed' ? row.error_message : undefined
+    };
+}
+
+function shapeHistoryDetail(row, req) {
+    const preview = safeJsonParse(row.preview_snapshot_json, null);
+    if (preview?.songs) {
+        preview.songs = preview.songs.map((song) => ({
+            ...song,
+            id: Number(song.id || song.song_id),
+            song_id: Number(song.song_id || song.id),
+            cover_url: normalizeCoverUrl(song.cover_url || song.coverUrl, req),
+            coverUrl: normalizeCoverUrl(song.coverUrl || song.cover_url, req),
+            audio_url: normalizeCoverUrl(song.audio_url || song.audioUrl || song.stream_url, req),
+            audioUrl: normalizeCoverUrl(song.audioUrl || song.audio_url || song.stream_url, req),
+            stream_url: normalizeCoverUrl(song.stream_url || song.audio_url || song.audioUrl, req)
+        }));
+    }
+
+    return {
+        id: row.id,
+        prompt: row.prompt,
+        target_count: row.target_count,
+        actual_count: row.actual_count,
+        status: row.status,
+        playlist_id: row.playlist_id,
+        provider: row.provider,
+        created_at: row.created_at,
+        error_message: row.error_message,
+        intent: safeJsonParse(row.intent_json, null),
+        preview
+    };
+}
+
+function buildCalmShortageLabel(intent) {
+    const soft = intent?.softPreferences || {};
+    const moods = new Set((soft.mood || []).map((value) => String(value).toLowerCase()));
+    const contexts = new Set((soft.context || []).map((value) => String(value).toLowerCase()));
+    const activity = Array.isArray(soft.activity) ? soft.activity[0] : soft.activity;
+
+    if (['study', 'coding', 'work'].includes(activity) || moods.has('focus')) {
+        return 'chill/study';
+    }
+    if (moods.has('sad') || moods.has('heartbreak') || contexts.has('night') || contexts.has('late_night') || activity === 'relax') {
+        return 'buồn nhẹ/thư giãn';
+    }
+    return 'nhẹ nhàng';
+}
+
+function buildShortageMeta({ songs, candidates, count, candidateMeta, intent, rankingMeta }) {
     const shortage = songs.length < count;
     let shortageReason = null;
 
     if (shortage) {
         const hardArtists = intent?.hardConstraints?.include_artists || [];
-        if (hardArtists.length > 0) {
+        if (rankingMeta?.strictCalmEnergyGuard) {
+            const blocked = Number(rankingMeta?.debugCounts?.blockedHighEnergyCount || 0);
+            const label = buildCalmShortageLabel(intent);
+            shortageReason = `MusicFlow chỉ tìm được ${songs.length}/${count} bài phù hợp với ${label}. Hệ thống không tự thêm bài High energy để đủ số lượng${blocked ? ` (${blocked} bài High energy đã bị loại).` : '.'}`;
+        } else if (hardArtists.length > 0) {
             shortageReason = `Không đủ bài hợp lệ của ${hardArtists.join(', ')} trong hệ thống (tìm được ${songs.length}/${count} bài).`;
         } else {
             shortageReason = `MusicFlow chỉ tìm được ${songs.length}/${count} bài phù hợp sau khi đã nới bộ lọc.`;
@@ -94,23 +311,34 @@ function buildRetrievalMeta({ ragResult, candidateMeta, songs }) {
     };
 }
 
+function countMarketCandidates(candidates, intent) {
+    const market = intent?.hardConstraints?.market;
+    if (!market || market === 'ANY') return candidates.length;
+    return candidates.filter((song) => String(song.market || '').toUpperCase() === market).length;
+}
+
 async function previewAiPlaylist({
     prompt,
     targetCount,
     userId = null,
     useLLM = false,
+    allowExpandedResults = false,
     req = null,
     previousSongIds = [],
     avoidPreviousSongs = false,
     intentOverride = null
 }) {
-    const count = clampTargetCount(targetCount);
+    let count = clampTargetCount(targetCount);
     const intent = intentOverride || await normalizeAiPlaylistIntent({
         prompt,
         targetCount: count,
         userId,
         useLLM
     });
+    count = clampTargetCount(intent?.playlist?.target_count || count);
+    if (intent?.playlist) {
+        intent.playlist.target_count = count;
+    }
 
     const previousSet = new Set(normalizeSongIds(previousSongIds));
     const candidateLimit = Math.max(count * 8, 120);
@@ -142,14 +370,27 @@ async function previewAiPlaylist({
         candidates: rankingCandidates,
         intent,
         userId,
-        targetCount: count
+        targetCount: count,
+        allowExpandedResults
     });
 
     const songs = ranked.songs.map((song) => shapePreviewSong(song, req));
-    const shortageMeta = buildShortageMeta({ songs, candidates: rankingCandidates, count, candidateMeta, intent });
+    const shortageMeta = buildShortageMeta({
+        songs,
+        candidates: rankingCandidates,
+        count,
+        candidateMeta,
+        intent,
+        rankingMeta: ranked.rankingMeta
+    });
     const playlistTitle = buildPlaylistTitle(intent, prompt);
     const description = 'Playlist được tạo từ hồ sơ ngữ nghĩa bài hát và lọc lại bằng dữ liệu thật trong MusicFlow.';
     const retrieval = buildRetrievalMeta({ ragResult, candidateMeta, songs });
+    const rankingDebug = ranked.rankingMeta.debugCounts || {};
+    const rankingFallbackUsed = Number(ranked.rankingMeta.fallbackSongCount || 0) > 0;
+    if (rankingFallbackUsed) {
+        retrieval.fallbackUsed = true;
+    }
     const warnings = shortageMeta.shortage
         ? [{
             type: 'SHORTAGE',
@@ -180,6 +421,24 @@ async function previewAiPlaylist({
         retrievedCount: retrieval.retrievedCandidates,
         finalCount: songs.length,
         fallbackUsed: retrieval.fallbackUsed
+    });
+
+    console.log('[AI Playlist Pipeline Debug]', {
+        prompt: String(prompt || '').slice(0, 300),
+        intent,
+        retrievedCount: ragResult?.candidates?.length || 0,
+        afterSongIdExtract: [...new Set((ragResult?.candidates || [])
+            .map((item) => Number(item.song_id || item.id || item.songId))
+            .filter((id) => Number.isInteger(id) && id > 0))].length,
+        afterDbValidate: candidates.length,
+        afterMarketFilter: countMarketCandidates(candidates, intent),
+        afterIntentFilter: rankingDebug.afterIntentFilter ?? null,
+        afterEnergyFilter: rankingDebug.afterEnergyFilter ?? null,
+        afterDiversity: rankingDebug.afterDiversity ?? null,
+        finalCount: songs.length,
+        fallbackUsed: retrieval.fallbackUsed,
+        rankingFallbackUsed,
+        rankingDebug
     });
 
     return {
@@ -288,6 +547,7 @@ async function refineAiPlaylist({
     targetCount,
     userId = null,
     useLLM = false,
+    allowExpandedResults = false,
     req = null
 }) {
     const cleanRefine = String(refinePrompt || '').trim();
@@ -318,6 +578,7 @@ async function refineAiPlaylist({
         targetCount: count,
         userId,
         useLLM: false,
+        allowExpandedResults,
         req,
         previousSongIds,
         avoidPreviousSongs: true,
@@ -355,6 +616,8 @@ async function saveAiPlaylist({
     intent,
     songIds,
     visibility = 'private',
+    historyId = null,
+    provider = null,
     req = null
 }) {
     if (!userId) {
@@ -408,10 +671,30 @@ async function saveAiPlaylist({
         const safeDescription = String(description || 'Playlist được tạo từ AI Playlist.').trim();
         const finalDescription = `${safeDescription}\n\n${sourceLine}`.slice(0, 2000);
 
+        const playlistColumns = ['user_id', 'name', 'description', 'cover_url', 'type', 'is_public', 'is_system', 'created_at', 'updated_at'];
+        const playlistValues = [userId, playlistName, finalDescription, firstCover, 'ai', isPublic, 0];
+        const valueSql = ['?', '?', '?', '?', '?', '?', '?', 'NOW()', 'NOW()'];
+
+        if (await columnExists('playlists', 'ai_prompt')) {
+            playlistColumns.push('ai_prompt');
+            playlistValues.push(sourcePrompt || '');
+            valueSql.push('?');
+        }
+        if (await columnExists('playlists', 'ai_intent_json')) {
+            playlistColumns.push('ai_intent_json');
+            playlistValues.push(stringifyJson(intent || {}));
+            valueSql.push('?');
+        }
+        if (await columnExists('playlists', 'ai_provider')) {
+            playlistColumns.push('ai_provider');
+            playlistValues.push(provider || getProviderLabel({ intent }));
+            valueSql.push('?');
+        }
+
         const [playlistResult] = await conn.query(
-            `INSERT INTO playlists (user_id, name, description, cover_url, type, is_public, is_system, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 'ai', ?, 0, NOW(), NOW())`,
-            [userId, playlistName, finalDescription, firstCover, isPublic]
+            `INSERT INTO playlists (${playlistColumns.join(', ')})
+             VALUES (${valueSql.join(', ')})`,
+            playlistValues
         );
         const playlistId = playlistResult.insertId;
 
@@ -427,6 +710,10 @@ async function saveAiPlaylist({
                  VALUES (?, ?, ?, ?, 'completed')`,
                 [userId, sourcePrompt || '', JSON.stringify(intent || {}), playlistId]
             );
+        }
+
+        if (historyId) {
+            await markHistorySaved({ conn, historyId, userId, playlistId });
         }
 
         await conn.commit();
@@ -454,9 +741,262 @@ async function saveAiPlaylist({
     }
 }
 
+async function recordPreviewGeneration({ userId, prompt, targetCount, preview, useLLM }) {
+    const snapshot = buildPreviewSnapshot({ prompt, targetCount, preview });
+    const historyId = await createGenerationHistory({
+        userId,
+        prompt,
+        targetCount,
+        actualCount: snapshot.actualCount,
+        status: 'preview',
+        provider: getProviderLabel({ useLLM, intent: preview?.intent }),
+        intent: preview?.intent || null,
+        previewSnapshot: snapshot
+    });
+
+    return historyId;
+}
+
+async function recordFailedGeneration({ userId, prompt, targetCount, provider = null, errorMessage }) {
+    return createGenerationHistory({
+        userId,
+        prompt,
+        targetCount,
+        actualCount: 0,
+        status: 'failed',
+        provider,
+        errorMessage: errorMessage || 'Khong tim duoc bai hat phu hop voi yeu cau nay.'
+    });
+}
+
+async function listGenerationHistory({ userId, limit = 10, req = null }) {
+    if (!userId) {
+        const err = new Error('Unauthorized');
+        err.statusCode = 401;
+        throw err;
+    }
+    if (!(await ensureAiPlaylistHistoryTable())) {
+        return [];
+    }
+
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 30);
+    const [rows] = await pool.query(
+        `SELECT id, prompt, target_count, actual_count, status, playlist_id,
+                NULL AS cover_url, error_message, created_at
+         FROM ai_playlist_generation_history
+         WHERE user_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+        [userId, safeLimit]
+    );
+
+    return rows.map((row) => shapeHistorySummary(row, req));
+}
+
+async function getGenerationHistoryDetail({ userId, historyId, req = null }) {
+    if (!userId) {
+        const err = new Error('Unauthorized');
+        err.statusCode = 401;
+        throw err;
+    }
+    if (!(await ensureAiPlaylistHistoryTable())) {
+        const err = new Error('Khong tim thay lich su AI Playlist');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const [rows] = await pool.query(
+        `SELECT id, user_id, prompt, target_count, actual_count, status, playlist_id,
+                provider, intent_json, preview_snapshot_json, error_message, created_at
+         FROM ai_playlist_generation_history
+         WHERE id = ? AND user_id = ?
+         LIMIT 1`,
+        [historyId, userId]
+    );
+
+    if (!rows.length) {
+        const err = new Error('Khong tim thay lich su AI Playlist');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    return shapeHistoryDetail(rows[0], req);
+}
+
+async function saveGenerationHistory({ userId, historyId, visibility = 'private', req = null }) {
+    if (!userId) {
+        const err = new Error('Ban can dang nhap de luu playlist');
+        err.statusCode = 401;
+        throw err;
+    }
+    if (!(await ensureAiPlaylistHistoryTable())) {
+        const err = new Error('Khong tim thay lich su AI Playlist');
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        const [historyRows] = await conn.query(
+            `SELECT id, user_id, prompt, target_count, status, playlist_id, provider, intent_json, preview_snapshot_json
+             FROM ai_playlist_generation_history
+             WHERE id = ? AND user_id = ?
+             LIMIT 1
+             FOR UPDATE`,
+            [historyId, userId]
+        );
+
+        if (!historyRows.length) {
+            const err = new Error('Khong tim thay lich su AI Playlist');
+            err.statusCode = 404;
+            throw err;
+        }
+
+        const history = historyRows[0];
+        if (history.status !== 'preview') {
+            const err = new Error(history.status === 'saved' ? 'Preview nay da duoc luu thanh playlist' : 'Preview nay khong the luu');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        const snapshot = safeJsonParse(history.preview_snapshot_json, null);
+        const snapshotSongs = Array.isArray(snapshot?.songs) ? snapshot.songs : [];
+        const seenSongIds = new Set();
+        const songIds = [];
+        for (const song of snapshotSongs) {
+            const id = Number(song.song_id || song.id);
+            if (Number.isInteger(id) && id > 0 && !seenSongIds.has(id)) {
+                seenSongIds.add(id);
+                songIds.push(id);
+            }
+        }
+
+        if (!snapshot || !songIds.length) {
+            const err = new Error('Preview snapshot khong con kha dung');
+            err.statusCode = 400;
+            err.code = 'PREVIEW_SNAPSHOT_EXPIRED';
+            throw err;
+        }
+
+        const placeholders = songIds.map(() => '?').join(',');
+        const [availableSongs] = await conn.query(
+            `SELECT id, COALESCE(NULLIF(cover_url, ''), NULLIF(audio_url, '')) AS cover_url
+             FROM songs s
+             WHERE id IN (${placeholders})
+               AND ${publicSongCondition('s')}
+               AND s.audio_url IS NOT NULL
+               AND TRIM(s.audio_url) <> ''
+             FOR UPDATE`,
+            songIds
+        );
+        const availableSet = new Set(availableSongs.map((song) => Number(song.id)));
+        const missing = songIds.filter((id) => !availableSet.has(id));
+        if (missing.length) {
+            const err = new Error('Mot so bai hat trong preview cu khong con kha dung. Vui long dung lai prompt de tao preview moi.');
+            err.statusCode = 400;
+            err.code = 'PREVIEW_SNAPSHOT_EXPIRED';
+            throw err;
+        }
+
+        const playlistName = buildAiPlaylistName({
+            name: snapshot.title,
+            intent: safeJsonParse(history.intent_json, snapshot.intent || {}),
+            sourcePrompt: history.prompt
+        });
+        const firstCover = availableSongs.find((song) => Number(song.id) === songIds[0])?.cover_url
+            || availableSongs.find((song) => song.cover_url)?.cover_url
+            || null;
+        const isPublic = visibility === 'public' ? 1 : 0;
+        const sourceLine = history.prompt ? `AI prompt: ${String(history.prompt).slice(0, 500)}` : 'AI Playlist';
+        const safeDescription = String(snapshot.description || 'Playlist duoc luu tu preview AI Playlist cu.').trim();
+        const finalDescription = `${safeDescription}\n\n${sourceLine}`.slice(0, 2000);
+        const intent = safeJsonParse(history.intent_json, snapshot.intent || {});
+
+        const playlistColumns = ['user_id', 'name', 'description', 'cover_url', 'type', 'is_public', 'is_system', 'created_at', 'updated_at'];
+        const playlistValues = [userId, playlistName, finalDescription, firstCover, 'ai', isPublic, 0];
+        const valueSql = ['?', '?', '?', '?', '?', '?', '?', 'NOW()', 'NOW()'];
+        if (await columnExists('playlists', 'ai_prompt')) {
+            playlistColumns.push('ai_prompt');
+            playlistValues.push(history.prompt || '');
+            valueSql.push('?');
+        }
+        if (await columnExists('playlists', 'ai_intent_json')) {
+            playlistColumns.push('ai_intent_json');
+            playlistValues.push(stringifyJson(intent || {}));
+            valueSql.push('?');
+        }
+        if (await columnExists('playlists', 'ai_provider')) {
+            playlistColumns.push('ai_provider');
+            playlistValues.push(history.provider || getProviderLabel({ intent }));
+            valueSql.push('?');
+        }
+
+        const [playlistResult] = await conn.query(
+            `INSERT INTO playlists (${playlistColumns.join(', ')})
+             VALUES (${valueSql.join(', ')})`,
+            playlistValues
+        );
+        const playlistId = playlistResult.insertId;
+
+        const playlistSongsData = songIds.map((songId, index) => [playlistId, songId, index]);
+        await conn.query(
+            `INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES ?`,
+            [playlistSongsData]
+        );
+
+        if (await tableExists('ai_playlists')) {
+            await conn.query(
+                `INSERT INTO ai_playlists (user_id, prompt_text, extracted_params, playlist_id, status)
+                 VALUES (?, ?, ?, ?, 'completed')`,
+                [userId, history.prompt || '', JSON.stringify(intent || {}), playlistId]
+            );
+        }
+
+        await conn.query(
+            `UPDATE ai_playlist_generation_history
+             SET status = 'saved', playlist_id = ?
+             WHERE id = ? AND user_id = ?`,
+            [playlistId, historyId, userId]
+        );
+
+        await conn.commit();
+
+        return {
+            success: true,
+            playlist_id: playlistId,
+            playlistId,
+            playlist: {
+                id: playlistId,
+                name: playlistName,
+                type: 'ai',
+                cover_url: normalizeCoverUrl(firstCover, req),
+                song_count: songIds.length
+            },
+            message: 'Da luu playlist tu preview cu.',
+            redirectUrl: `/playlist/${playlistId}`
+        };
+    } catch (error) {
+        try {
+            await conn.rollback();
+        } catch (rollbackErr) {
+            console.warn('Rollback save AI playlist history failed:', rollbackErr);
+        }
+        throw error;
+    } finally {
+        conn.release();
+    }
+}
+
 module.exports = {
     previewAiPlaylist,
     refineAiPlaylist,
     saveAiPlaylist,
+    recordPreviewGeneration,
+    recordFailedGeneration,
+    listGenerationHistory,
+    getGenerationHistoryDetail,
+    saveGenerationHistory,
     shapePreviewSong
 };

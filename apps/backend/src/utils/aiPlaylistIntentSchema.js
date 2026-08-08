@@ -1,7 +1,7 @@
 const { filterValidLabels, isValidLabel } = require('./aiPlaylistLabels');
 
-const MIN_TARGET_COUNT = 5;
-const MAX_TARGET_COUNT = 50;
+const MIN_TARGET_COUNT = 10;
+const MAX_TARGET_COUNT = 30;
 const DEFAULT_TARGET_COUNT = 20;
 
 function clampNumber(value, min, max, fallback) {
@@ -11,7 +11,11 @@ function clampNumber(value, min, max, fallback) {
 }
 
 function clampTargetCount(value) {
-    return clampNumber(value, MIN_TARGET_COUNT, MAX_TARGET_COUNT, DEFAULT_TARGET_COUNT);
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return DEFAULT_TARGET_COUNT;
+    if (parsed <= 10) return 10;
+    if (parsed <= 20) return 20;
+    return 30;
 }
 
 function uniqueStrings(values) {
@@ -21,6 +25,7 @@ function uniqueStrings(values) {
 
 function createDefaultAiPlaylistIntent(prompt = '', targetCount = DEFAULT_TARGET_COUNT) {
     return {
+        mode: 'unknown',
         hardConstraints: {
             market: 'ANY',
             language: 'any',
@@ -38,7 +43,13 @@ function createDefaultAiPlaylistIntent(prompt = '', targetCount = DEFAULT_TARGET
             vocal_preference: 'any',
             familiarity: 'balanced',
             popularity: 'balanced',
-            diversity: 'balanced'
+            diversity: 'balanced',
+            rhythm: {
+                beatStrength: null,
+                bassIntensity: null,
+                rhythmDensity: null,
+                groove: null
+            }
         },
         seed: {
             seed_type: 'none',
@@ -56,7 +67,8 @@ function createDefaultAiPlaylistIntent(prompt = '', targetCount = DEFAULT_TARGET
         playlist: {
             goal: 'create_playlist',
             target_count: clampTargetCount(targetCount),
-            duration_minutes: null
+            include_seed_song: true,
+            allow_expanded_results: false
         },
         confidence: 0.0,
         explanation: '',
@@ -69,6 +81,8 @@ function createDefaultAiPlaylistIntent(prompt = '', targetCount = DEFAULT_TARGET
 
 function sanitizeAiPlaylistIntent(intent) {
     const safe = createDefaultAiPlaylistIntent(intent?.raw?.prompt || '', intent?.playlist?.target_count);
+
+    safe.mode = isValidLabel('mode', intent?.mode) ? intent.mode : safe.mode;
 
     safe.hardConstraints.market = isValidLabel('market', intent?.hardConstraints?.market)
         ? intent.hardConstraints.market
@@ -107,6 +121,13 @@ function sanitizeAiPlaylistIntent(intent) {
     safe.softPreferences.diversity = isValidLabel('diversity', intent?.softPreferences?.diversity)
         ? intent.softPreferences.diversity
         : safe.softPreferences.diversity;
+    const rhythm = intent?.softPreferences?.rhythm || {};
+    safe.softPreferences.rhythm = {
+        beatStrength: isValidLabel('rhythm', rhythm.beatStrength) ? rhythm.beatStrength : null,
+        bassIntensity: isValidLabel('rhythm', rhythm.bassIntensity) ? rhythm.bassIntensity : null,
+        rhythmDensity: isValidLabel('rhythm', rhythm.rhythmDensity) ? rhythm.rhythmDensity : null,
+        groove: isValidLabel('rhythm', rhythm.groove) ? rhythm.groove : null
+    };
 
     safe.seed.seed_type = isValidLabel('seed_type', intent?.seed?.seed_type) ? intent.seed.seed_type : 'none';
     safe.seed.artist = intent?.seed?.artist ? String(intent.seed.artist).trim() : null;
@@ -128,11 +149,8 @@ function sanitizeAiPlaylistIntent(intent) {
 
     safe.playlist.goal = isValidLabel('playlist_goal', intent?.playlist?.goal) ? intent.playlist.goal : 'create_playlist';
     safe.playlist.target_count = clampTargetCount(intent?.playlist?.target_count);
-    safe.playlist.duration_minutes = intent?.playlist?.duration_minutes !== null
-        && intent?.playlist?.duration_minutes !== undefined
-        && Number.isFinite(Number(intent?.playlist?.duration_minutes))
-        ? Number(intent.playlist.duration_minutes)
-        : null;
+    safe.playlist.include_seed_song = intent?.playlist?.include_seed_song !== false;
+    safe.playlist.allow_expanded_results = intent?.playlist?.allow_expanded_results === true;
 
     const confidence = Number(intent?.confidence);
     safe.confidence = Number.isFinite(confidence) ? Math.min(Math.max(confidence, 0), 1) : 0;

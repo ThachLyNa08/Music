@@ -28,13 +28,13 @@ function getTempoBucket(normalizedBpm) {
   const bpm = Number(normalizedBpm);
   if (!Number.isFinite(bpm) || bpm <= 0) return 'unknown';
   if (bpm < 90) return 'slow';
-  if (bpm < 120) return 'medium';
+  if (bpm <= 120) return 'medium';
   return 'fast';
 }
 
 function featureBucket(feature = {}) {
   const f = feature || {};
-  return f.tempo_bucket || f.tempoBucket || f.tempo_level || f.tempoLevel || getTempoBucket(f.normalized_bpm ?? f.normalizedBpm ?? f.bpm);
+  return f.tempo_level || f.tempoLevel || f.tempo_bucket || f.tempoBucket || getTempoBucket(f.normalized_bpm ?? f.normalizedBpm ?? f.bpm);
 }
 
 function featureEnergy(feature = {}) {
@@ -133,6 +133,16 @@ function buildTempoReason(songFeature, target = {}) {
     if (targetActivity === 'focus' || targetBucket === 'medium') {
       return 'Nhịp vừa phải, phù hợp để tập trung.';
     }
+    if (targetActivity === 'focus') {
+      return actualEnergy >= 0.65
+        ? 'Bài có năng lượng cao hơn intent học bài, chỉ nên dùng khi mở rộng kết quả.'
+        : 'Năng lượng vẫn ở mức thấp/vừa; tempo nhanh hơn mong muốn nên được xếp sau các bài khớp hơn.';
+    }
+    if (targetActivity === 'focus') {
+      return actualEnergy >= 0.65
+        ? 'Bài có năng lượng cao hơn intent học bài, chỉ nên dùng khi mở rộng kết quả.'
+        : 'Năng lượng vẫn ở mức thấp/vừa; tempo nhanh hơn mong muốn nên được xếp sau các bài khớp hơn.';
+    }
     if (targetActivity === 'relax' || targetBucket === 'slow') {
       return 'Tiết tấu chậm, êm dịu, rất phù hợp để thư giãn buổi tối.';
     }
@@ -141,6 +151,12 @@ function buildTempoReason(songFeature, target = {}) {
 
   const actualBucket = featureBucket(songFeature);
   const actualEnergy = featureEnergy(songFeature);
+
+  if ((actualBucket === 'fast' || actualEnergy >= 0.75) && targetActivity === 'focus') {
+    return actualEnergy >= 0.65
+      ? 'Bài có năng lượng cao hơn intent học bài, chỉ nên dùng khi mở rộng kết quả.'
+      : 'Năng lượng vẫn ở mức thấp/vừa; tempo nhanh hơn mong muốn nên được xếp sau các bài khớp hơn.';
+  }
 
   if (actualBucket === 'fast' || actualEnergy >= 0.75) {
     if (targetActivity === 'party') return 'Tiết tấu nhanh, năng lượng cao, phù hợp không khí sôi động.';
@@ -192,9 +208,16 @@ function detectTempoIntent(text = '') {
 
   const includesAny = (terms) => terms.some((term) => normalized.includes(normalizeText(term)));
 
-  const fastTerms = ['nhanh', 'soi dong', 'boc', 'chay', 'manh', 'dance', 'party', 'tap gym', 'gym', 'workout', 'chay bo', 'cardio'];
-  const mediumTerms = ['tiet tau vua', 'vua phai', 'hoc bai', 'lam viec', 'tap trung', 'coding', 'doc sach'];
-  const slowTerms = ['cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'ngu', 'acoustic', 'sau lang', 'buon', 'suy', 'diu', 'lofi', 'binh yen'];
+  const fastTerms = [
+    'nhanh', 'soi dong', 'boc', 'chay', 'manh', 'dance', 'party', 'tap gym', 'gym', 'workout', 'chay bo', 'cardio',
+    'beat manh', 'beat cang', 'beat day', 'bass manh', 'bass day', 'nhip manh', 'nhip nhanh', 'nhip don dap',
+    'trong ro', 'dance beat', 'beat de quay', 'beat de gym', 'beat de chay bo', 'quay'
+  ];
+  const mediumTerms = ['tiet tau vua', 'vua phai', 'hoc bai', 'lam viec', 'tap trung', 'coding', 'doc sach', 'study', 'focus', 'work', 'reading'];
+  const slowTerms = [
+    'cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'ngu', 'acoustic', 'sau lang', 'buon', 'suy', 'diu', 'lofi', 'binh yen',
+    'beat cham', 'nhip cham', 'beat chill', 'beat nhe'
+  ];
 
   if (includesAny(fastTerms)) {
     return {
@@ -203,6 +226,28 @@ function detectTempoIntent(text = '') {
       danceabilityTarget: 'high',
       activity: includesAny(['party', 'dance']) ? 'party' : 'workout',
       label: includesAny(['party', 'dance']) ? 'Nhạc nhanh · Năng lượng cao · Party' : 'Nhạc nhanh · Năng lượng cao · Tập luyện',
+    };
+  }
+
+  if (includesAny(slowTerms) && includesAny(mediumTerms)) {
+    return {
+      tempoBucket: 'medium',
+      energyTarget: 'low',
+      danceabilityTarget: 'low',
+      brightnessTarget: 'low',
+      activity: 'focus',
+      label: 'Light tempo - Low/medium energy - Focus',
+    };
+  }
+
+  if (includesAny(slowTerms)) {
+    return {
+      tempoBucket: 'slow',
+      energyTarget: 'low',
+      danceabilityTarget: 'low',
+      brightnessTarget: 'low',
+      activity: 'relax',
+      label: 'Slow tempo - Low energy - Relax',
     };
   }
 

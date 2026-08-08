@@ -242,7 +242,7 @@ function handleImageError() {
   height: 188px;
   padding: 12px;
   justify-content: center;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .artist-card--compact .artist-card__image-wrap {

@@ -90,6 +90,24 @@ function refreshWidgetCache(cacheKey, rangeKey, refreshFn, ttlSeconds = 900) {
 }
 
 async function getWidgetSnapshot({ cacheKey, rangeKey = 'default', ttlSeconds = 900, refreshFn, forceRefresh = false }) {
+  if (forceRefresh && refreshFn) {
+    const payload = await refreshFn();
+    await setWidgetCache(cacheKey, rangeKey, payload, ttlSeconds);
+
+    return {
+      data: payload,
+      meta: {
+        cacheKey,
+        rangeKey,
+        cacheStatus: 'refresh',
+        refreshing: false,
+        refreshedAt: new Date(),
+        expiresAt: null,
+        message: null
+      }
+    };
+  }
+
   const cached = forceRefresh ? null : await getWidgetCache(cacheKey, rangeKey);
   const shouldRefresh = forceRefresh || !cached || !cached.isFresh;
 
@@ -113,46 +131,125 @@ async function getWidgetSnapshot({ cacheKey, rangeKey = 'default', ttlSeconds = 
   };
 }
 
-function buildDateConfig(range, dataset) {
+let dbOffsetCache = {
+  value: 420,
+  expiresAt: 0
+};
+
+async function getDatabaseUtcOffsetMinutes() {
+  if (dbOffsetCache.expiresAt > Date.now()) return dbOffsetCache.value;
+
+  try {
+    const [[row]] = await pool.query(`
+      SELECT TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), NOW()) AS offset_minutes
+    `);
+    const offset = Number(row?.offset_minutes);
+    if (Number.isFinite(offset)) {
+      dbOffsetCache = {
+        value: offset,
+        expiresAt: Date.now() + 10 * 60 * 1000
+      };
+      return offset;
+    }
+  } catch (error) {
+    debugLog('[DashboardWidgetCache] Cannot detect DB timezone offset:', error.message);
+  }
+
+  return dbOffsetCache.value;
+}
+
+function getVietnamDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const partMap = Object.fromEntries(parts.map(part => [part.type, part.value]));
+
+  return {
+    year: Number(partMap.year),
+    month: Number(partMap.month),
+    day: Number(partMap.day)
+  };
+}
+
+function vietnamLocalMidnightUtcMs(parts) {
+  return Date.UTC(parts.year, parts.month - 1, parts.day) - 420 * 60 * 1000;
+}
+
+function formatMysqlDateTimeFromUtcMs(utcMs, dbOffsetMinutes) {
+  const dbDate = new Date(utcMs + dbOffsetMinutes * 60 * 1000);
+  return `${dbDate.getUTCFullYear()}-${pad(dbDate.getUTCMonth() + 1)}-${pad(dbDate.getUTCDate())} ${pad(dbDate.getUTCHours())}:${pad(dbDate.getUTCMinutes())}:${pad(dbDate.getUTCSeconds())}`;
+}
+
+function formatVietnamIsoFromUtcMs(utcMs) {
+  const vnDate = new Date(utcMs + 420 * 60 * 1000);
+  return `${vnDate.getUTCFullYear()}-${pad(vnDate.getUTCMonth() + 1)}-${pad(vnDate.getUTCDate())}T${pad(vnDate.getUTCHours())}:${pad(vnDate.getUTCMinutes())}:${pad(vnDate.getUTCSeconds())}+07:00`;
+}
+
+function vietnamDateKeyFromOffset(dayOffset) {
+  const todayParts = getVietnamDateParts();
+  const utcMs = vietnamLocalMidnightUtcMs(todayParts) + dayOffset * 24 * 60 * 60 * 1000;
+  const date = new Date(utcMs + 420 * 60 * 1000);
+  return {
+    key: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`,
+    label: `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}`
+  };
+}
+
+async function buildDateConfig(range, dataset) {
   const safeRange = ['today', '7d', '30d', 'all'].includes(range) ? range : '7d';
-  const configs = {
-    all: {
+  const dbOffsetMinutes = await getDatabaseUtcOffsetMinutes();
+  const vietnamShiftMinutes = 420 - dbOffsetMinutes;
+  const bucketExpr = vietnamShiftMinutes === 0
+    ? 'lh.listened_at'
+    : `DATE_ADD(lh.listened_at, INTERVAL ${vietnamShiftMinutes} MINUTE)`;
+  const base = {
+    dataset: 'system',
+    range: safeRange,
+    rangeKey: safeRange,
+    dateColumn: 'listened_at',
+    bucketExpr,
+    params: [],
+    start: null,
+    end: null
+  };
+
+  if (safeRange === 'all') {
+    return {
+      ...base,
       whereSql: '1 = 1',
       bucketFormat: '%Y-%m-%d',
       bucketOrder: '%Y-%m-%d',
       bucketCount: 30,
       bucketType: 'day'
-    },
-    today: {
-      whereSql: 'lh.listened_at >= CURDATE()',
-      bucketFormat: '%H:00',
-      bucketOrder: '%H',
-      bucketCount: 24,
-      bucketType: 'hour'
-    },
-    '7d': {
-      whereSql: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
-      bucketFormat: '%Y-%m-%d',
-      bucketOrder: '%Y-%m-%d',
-      bucketCount: 7,
-      bucketType: 'day'
-    },
-    '30d': {
-      whereSql: 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
-      bucketFormat: '%Y-%m-%d',
-      bucketOrder: '%Y-%m-%d',
-      bucketCount: 30,
-      bucketType: 'day'
-    }
+    };
+  }
+
+  const ranges = {
+    today: { startOffset: 0, bucketCount: 24, bucketType: 'hour' },
+    '7d': { startOffset: -6, bucketCount: 7, bucketType: 'day' },
+    '30d': { startOffset: -29, bucketCount: 30, bucketType: 'day' }
   };
+  const rangeConfig = ranges[safeRange];
+  const todayStartUtc = vietnamLocalMidnightUtcMs(getVietnamDateParts());
+  const startUtc = todayStartUtc + rangeConfig.startOffset * 24 * 60 * 60 * 1000;
+  const endUtc = todayStartUtc + 24 * 60 * 60 * 1000;
 
   return {
-    dataset: 'system',
-    range: safeRange,
-    rangeKey: safeRange,
-    dateColumn: 'listened_at',
-    params: [],
-    ...configs[safeRange]
+    ...base,
+    whereSql: 'lh.listened_at >= ? AND lh.listened_at < ?',
+    bucketFormat: rangeConfig.bucketType === 'hour' ? '%H:00' : '%Y-%m-%d',
+    bucketOrder: rangeConfig.bucketType === 'hour' ? '%H' : '%Y-%m-%d',
+    bucketCount: rangeConfig.bucketCount,
+    bucketType: rangeConfig.bucketType,
+    params: [
+      formatMysqlDateTimeFromUtcMs(startUtc, dbOffsetMinutes),
+      formatMysqlDateTimeFromUtcMs(endUtc, dbOffsetMinutes)
+    ],
+    start: formatVietnamIsoFromUtcMs(startUtc),
+    end: formatVietnamIsoFromUtcMs(endUtc)
   };
 }
 
@@ -173,33 +270,28 @@ function buildBuckets(config) {
   }
 
   return Array.from({ length: config.bucketCount }, (_, i) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - (config.bucketCount - 1 - i));
-    return {
-      key: formatLocalDateKey(date),
-      label: `${pad(date.getDate())}/${pad(date.getMonth() + 1)}`
-    };
+    return vietnamDateKeyFromOffset(-(config.bucketCount - 1 - i));
   });
 }
 
 async function buildListeningTrendsPayload(range = '7d', dataset = 'system') {
-  const config = buildDateConfig(range, dataset);
+  const config = await buildDateConfig(range, dataset);
+  const validListenExpr = 'CASE WHEN lh.is_completed = 1 OR lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END';
 
   const [seriesRows] = await pool.query(`
-    SELECT DATE_FORMAT(lh.${config.dateColumn}, ?) AS label,
-           DATE_FORMAT(lh.${config.dateColumn}, ?) AS sort_key,
-           SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS recent_plays,
+    SELECT DATE_FORMAT(${config.bucketExpr}, ?) AS label,
+           DATE_FORMAT(${config.bucketExpr}, ?) AS sort_key,
+           SUM(${validListenExpr}) AS recent_plays,
            COUNT(*) AS raw_listen_events
     FROM listening_history lh
     WHERE ${config.whereSql}
     GROUP BY label, sort_key
     ORDER BY sort_key ASC
-  `, [config.bucketFormat, config.bucketOrder]);
+  `, [config.bucketFormat, config.bucketOrder, ...config.params]);
 
   const [topRows] = await pool.query(`
     SELECT lh.song_id,
-           SUM(CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END) AS recent_plays,
+           SUM(${validListenExpr}) AS recent_plays,
            COUNT(*) AS raw_listen_events
     FROM listening_history lh
     WHERE ${config.whereSql}
@@ -207,7 +299,7 @@ async function buildListeningTrendsPayload(range = '7d', dataset = 'system') {
     HAVING recent_plays > 0
     ORDER BY recent_plays DESC
     LIMIT 10
-  `);
+  `, config.params);
 
   const buckets = buildBuckets(config);
   const seriesMap = new Map(seriesRows.map(row => [String(row.sort_key), row]));
@@ -255,6 +347,8 @@ async function buildListeningTrendsPayload(range = '7d', dataset = 'system') {
   const payload = {
     range: config.range,
     dataset: config.dataset,
+    start: config.start,
+    end: config.end,
     series,
     topSongs,
     emptyReason: hasData ? null : 'Không có lượt nghe trong khoảng thời gian này.'
@@ -269,12 +363,12 @@ async function buildListeningTrendsPayload(range = '7d', dataset = 'system') {
 }
 
 async function buildTotalListensPayload(range = 'all', dataset = 'system') {
-  const config = buildDateConfig(range, dataset);
+  const config = await buildDateConfig(range, dataset);
   const [[row]] = await pool.query(`
     SELECT COUNT(*) AS total_listens
     FROM listening_history lh
     WHERE ${config.whereSql}
-  `);
+  `, config.params);
 
   return {
     range: config.range,
@@ -284,8 +378,8 @@ async function buildTotalListensPayload(range = 'all', dataset = 'system') {
 }
 
 async function buildTopArtistsPayload(range = '7d', dataset = 'system') {
-  const config = buildDateConfig(range, dataset);
-  const validListenExpr = 'CASE WHEN lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END';
+  const config = await buildDateConfig(range, dataset);
+  const validListenExpr = 'CASE WHEN lh.is_completed = 1 OR lh.listen_duration >= 30 OR lh.completion_rate >= 0.5 THEN 1 ELSE 0 END';
 
   const [topArtists] = await pool.query(`
     SELECT ranked.id, ranked.name, ranked.avatar_url, ranked.avatar_url AS image,
@@ -317,7 +411,7 @@ async function buildTopArtistsPayload(range = '7d', dataset = 'system') {
       GROUP BY artist_id
     ) song_counts ON song_counts.artist_id = ranked.id
     ORDER BY ranked.recent_plays DESC
-  `);
+  `, config.params);
 
   const buckets = buildBuckets(config);
   const artistIds = topArtists.map(artist => artist.id);
@@ -329,14 +423,14 @@ async function buildTopArtistsPayload(range = '7d', dataset = 'system') {
       const songToArtist = new Map(artistSongs.map(song => [song.id, song.artist_id]));
       const [rows] = await pool.query(`
         SELECT lh.song_id,
-               DATE_FORMAT(lh.${config.dateColumn}, ?) AS bucket_key,
-               DATE_FORMAT(lh.${config.dateColumn}, ?) AS label,
+               DATE_FORMAT(${config.bucketExpr}, ?) AS bucket_key,
+               DATE_FORMAT(${config.bucketExpr}, ?) AS label,
                SUM(${validListenExpr}) AS recent_plays,
                COUNT(lh.id) AS raw_listen_events
         FROM listening_history lh
         WHERE ${config.whereSql} AND lh.song_id IN (?)
         GROUP BY lh.song_id, bucket_key, label
-      `, [config.bucketOrder, config.bucketFormat, Array.from(songToArtist.keys())]);
+      `, [config.bucketOrder, config.bucketFormat, ...config.params, Array.from(songToArtist.keys())]);
 
       const artistBucketMap = new Map();
       for (const row of rows) {
@@ -397,7 +491,7 @@ async function buildTopArtistsPayload(range = '7d', dataset = 'system') {
 }
 
 async function buildTopGenresPayload(range = 'all', dataset = 'system') {
-  const config = buildDateConfig(range, dataset);
+  const config = await buildDateConfig(range, dataset);
   const [rows] = await pool.query(`
     SELECT g.id,
            g.name,
@@ -410,7 +504,7 @@ async function buildTopGenresPayload(range = 'all', dataset = 'system') {
     GROUP BY g.id, g.name
     ORDER BY listen_count DESC
     LIMIT 5
-  `);
+  `, config.params);
 
   return {
     range: config.range,

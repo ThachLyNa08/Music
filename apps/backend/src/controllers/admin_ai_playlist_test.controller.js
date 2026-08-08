@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const aiPlaylistService = require('../services/aiPlaylist.service');
+const geminiIntentService = require('../services/geminiPlaylist.service');
 
 exports.preview = async (req, res) => {
     try {
@@ -52,7 +53,7 @@ exports.preview = async (req, res) => {
         let useLLMApplied = useLLMRequested;
         let llmUnavailableReason = null;
         
-        if (useLLMRequested && !process.env.GEMINI_API_KEY) {
+        if (useLLMRequested && !geminiIntentService.isConfigured()) {
             useLLMApplied = false;
             llmUnavailableReason = 'LLM API key is not configured';
         }

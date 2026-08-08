@@ -1,40 +1,120 @@
 // src/middleware/auth.middleware.js
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
+const { ensureSystemEmailAppealSchema } = require('../services/systemEmailAppealSchema.service');
 
-// Xác thực JWT từ header Authorization: Bearer <token>
-function authenticate(req, res, next) {
-  const authHeader = req.headers['authorization'];
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+async function getAppealTokenForLockedUser(user) {
+  if (Number(user.lock_appeal_allowed) !== 1) return null;
+
+  const expiresAt = user.lock_appeal_token_expires_at
+    ? new Date(user.lock_appeal_token_expires_at)
+    : null;
+
+  if (user.lock_appeal_token && expiresAt && expiresAt > new Date()) {
+    return user.lock_appeal_token;
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await pool.query(
+    `UPDATE users
+     SET lock_appeal_token = ?,
+         lock_appeal_token_hash = ?,
+         lock_appeal_token_expires_at = ?
+     WHERE id = ?`,
+    [rawToken, hashToken(rawToken), tokenExpiresAt, user.id]
+  );
+  user.lock_appeal_token_expires_at = tokenExpiresAt;
+  return rawToken;
+}
+
+function invalidToken(res) {
+  return res.status(401).json({
+    success: false,
+    message: 'Token không hợp lệ hoặc đã hết hạn',
+  });
+}
+
+async function authenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'Không có token xác thực' });
+    return res.status(401).json({
+      success: false,
+      message: 'Không có token xác thực',
+    });
   }
 
   const token = authHeader.split(' ')[1];
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload; // { id, email, role }
-    next();
+    await ensureSystemEmailAppealSchema();
+
+    const [rows] = await pool.query(
+      `SELECT id, email, role, status, display_name, locked_at, locked_reason,
+              lock_appeal_allowed, lock_appeal_token, lock_appeal_token_expires_at
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [payload.id]
+    );
+
+    if (!rows.length) return invalidToken(res);
+
+    const dbUser = rows[0];
+    req.user = {
+      ...payload,
+      id: dbUser.id,
+      email: dbUser.email || payload.email,
+      role: dbUser.role || payload.role,
+      status: dbUser.status,
+    };
+
+    if (dbUser.status === 'locked') {
+      const appealToken = await getAppealTokenForLockedUser(dbUser);
+      return res.status(423).json({
+        success: false,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa. Vui lòng gửi khiếu nại nếu cần.',
+        data: {
+          user_id: dbUser.id,
+          email: dbUser.email,
+          display_name: dbUser.display_name,
+          locked_at: dbUser.locked_at,
+          locked_reason: dbUser.locked_reason,
+          allow_appeal: Number(dbUser.lock_appeal_allowed) === 1,
+          appeal_token: appealToken,
+          appeal_token_expires_at: dbUser.lock_appeal_token_expires_at,
+        },
+      });
+    }
+
+    return next();
   } catch (err) {
-    return res.status(401).json({ success: false, message: 'Token không hợp lệ hoặc đã hết hạn' });
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return invalidToken(res);
+    }
+    return next(err);
   }
 }
 
-// Xác thực tùy chọn: Nếu có token thì lấy req.user, không có thì bỏ qua (guest)
 function optionalAuthenticate(req, res, next) {
-  const authHeader = req.headers['authorization'];
+  const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = payload;
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
-      // Bỏ qua lỗi token hết hạn/không hợp lệ để cho phép khách truy cập
+      // Guest access is still allowed when the optional token is invalid.
     }
   }
   next();
 }
 
-// Chỉ cho phép admin
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Không có quyền truy cập' });
@@ -42,21 +122,26 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Kiểm tra tài khoản Premium còn hiệu lực
 function requirePremium(req, res, next) {
   const expires = req.user?.premiumExpiresAt;
   if (!expires || new Date(expires) < new Date()) {
-    return res.status(403).json({ success: false, message: 'Tính năng này yêu cầu tài khoản Premium' });
+    return res.status(403).json({
+      success: false,
+      message: 'Tính năng này yêu cầu tài khoản Premium',
+    });
   }
   next();
 }
 
 async function requireArtist(req, res, next) {
   if (!req.user) {
-    return res.status(401).json({ success: false, message: 'Khong co token xac thuc' });
+    return res.status(401).json({ success: false, message: 'Không có token xác thực' });
   }
   if (req.user.role !== 'artist') {
-    return res.status(403).json({ success: false, message: 'Chi tai khoan nghe si moi duoc truy cap Artist Studio' });
+    return res.status(403).json({
+      success: false,
+      message: 'Chỉ tài khoản nghệ sĩ mới được truy cập Artist Studio',
+    });
   }
 
   try {
@@ -69,7 +154,10 @@ async function requireArtist(req, res, next) {
       [req.user.id]
     );
     if (!rows.length) {
-      return res.status(403).json({ success: false, message: 'Tai khoan nghe si chua lien ket ho so hop le' });
+      return res.status(403).json({
+        success: false,
+        message: 'Tài khoản nghệ sĩ chưa liên kết hồ sơ hợp lệ',
+      });
     }
     req.artist = rows[0];
     req.user.artistId = rows[0].id;

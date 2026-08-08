@@ -1,18 +1,89 @@
 const { GoogleGenAI, Type } = require('@google/genai');
 
+const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+const DEFAULT_GEMINI_TIMEOUT_MS = 6000;
+const DEPRECATED_GEMINI_MODELS = new Set([
+    'gemini-2.5-flash-lite',
+    'models/gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+    'models/gemini-2.5-flash'
+]);
+
+function getGeminiApiKey() {
+    const key = String(process.env.GEMINI_API_KEY || '').trim();
+    if (!key || key === 'your_gemini_api_key_here') return null;
+    return key;
+}
+
+function isConfigured() {
+    return Boolean(getGeminiApiKey());
+}
+
+function resolveTimeoutMs(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_GEMINI_TIMEOUT_MS;
+    return Math.min(parsed, 30000);
+}
+
+function resolveGeminiModel() {
+    const configured = String(process.env.GEMINI_MODEL || '').trim();
+    if (!configured || DEPRECATED_GEMINI_MODELS.has(configured)) {
+        if (configured && configured !== DEFAULT_GEMINI_MODEL) {
+            console.warn('[Gemini Intent Parser] deprecated_model_fallback:', {
+                configuredModel: configured,
+                fallbackModel: DEFAULT_GEMINI_MODEL
+            });
+        }
+        return DEFAULT_GEMINI_MODEL;
+    }
+    return configured;
+}
+
+function getSafeGeminiErrorCode(error) {
+    return error?.code || error?.name || 'GEMINI_INTENT_FAILED';
+}
+
+function getSafeGeminiErrorInfo(error) {
+    return {
+        name: error?.name || null,
+        message: error?.message ? String(error.message).slice(0, 240) : null,
+        status: error?.status || error?.statusCode || null,
+        code: error?.code || null
+    };
+}
+
+function shouldRetryWithoutSchema(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    return status === 400 || status === 422;
+}
+
+function withTimeout(promise, timeoutMs = DEFAULT_GEMINI_TIMEOUT_MS) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            const err = new Error(`Gemini request timed out after ${timeoutMs}ms`);
+            err.code = 'GEMINI_TIMEOUT';
+            reject(err);
+        }, timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Phân tích prompt của người dùng để trả về intent JSON
  * @param {string} prompt 
  * @returns {Promise<Object>}
  */
-exports.extractIntent = async (prompt) => {
+async function extractIntent(prompt, options = {}) {
     // Check if API Key is configured
-    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not configured');
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const ai = new GoogleGenAI({ apiKey });
+    const model = resolveGeminiModel();
+    const timeoutMs = resolveTimeoutMs(options.timeoutMs || process.env.GEMINI_TIMEOUT_MS);
 
     const systemInstruction = `
 Bạn là một chuyên gia phân tích âm nhạc cho hệ thống MusicFlow.
@@ -30,6 +101,13 @@ Quy tắc BẮT BUỘC về nghệ sĩ (Artist Rules):
 4. Nếu không có nghệ sĩ nào được nhắc đến:
    - artistConstraintMode = "none"
    - allowSimilarArtists = true
+Quy tac so luong playlist:
+- Chi ho tro tao playlist theo so luong bai: 10, 20, hoac 30.
+- "playlist ngan", "it bai", "vai bai" => targetCount = 10.
+- "playlist vua", "vua du nghe" => targetCount = 20.
+- "playlist dai", "nhieu bai" => targetCount = 30.
+- Neu nguoi dung nhap so khac: <= 10 => 10, 11 den 20 => 20, > 20 => 30.
+- Khong ho tro tao playlist theo thoi luong. Neu prompt co "30 phut", "45 phut", "1 tieng", "1 gio", hay "playlist 45 phut" thi bo qua thong tin do va khong tra field thoi luong.
     `;
 
     const schema = {
@@ -113,7 +191,7 @@ Quy tắc BẮT BUỘC về nghệ sĩ (Artist Rules):
     };
 
     try {
-        const response = await ai.models.generateContent({
+        const request = {
             model: model,
             contents: [
                 { role: 'user', parts: [{ text: prompt }] }
@@ -124,7 +202,23 @@ Quy tắc BẮT BUỘC về nghệ sĩ (Artist Rules):
                 responseSchema: schema,
                 temperature: 0.3
             }
-        });
+        };
+        let response;
+        try {
+            response = await withTimeout(ai.models.generateContent(request), timeoutMs);
+        } catch (schemaError) {
+            if (!shouldRetryWithoutSchema(schemaError)) throw schemaError;
+            console.warn('[Gemini Intent Parser] retry_without_schema:', getSafeGeminiErrorInfo(schemaError));
+            const relaxedRequest = {
+                ...request,
+                config: {
+                    systemInstruction: systemInstruction,
+                    responseMimeType: "application/json",
+                    temperature: 0.2
+                }
+            };
+            response = await withTimeout(ai.models.generateContent(relaxedRequest), timeoutMs);
+        }
 
         const textResponse = response.text;
         if (!textResponse) {
@@ -135,7 +229,55 @@ Quy tắc BẮT BUỘC về nghệ sĩ (Artist Rules):
         const intent = JSON.parse(textResponse);
         return intent;
     } catch (error) {
-        console.error('Error in geminiPlaylist.service extractIntent:', error);
+        console.warn('[Gemini Intent Parser] fallback:', getSafeGeminiErrorInfo(error));
+        if (!error.code) error.code = getSafeGeminiErrorCode(error);
         throw error;
     }
+}
+
+async function parseIntentWithGemini(prompt, options = {}) {
+    if (!isConfigured()) {
+        return { ok: false, provider: 'gemini', reason: 'MISSING_GEMINI_API_KEY' };
+    }
+
+    try {
+        const intent = await extractIntent(prompt, options);
+        const marketByLanguage = { vi: 'VPOP', ko: 'KPOP', en: 'USUK' };
+        const language = Array.isArray(intent?.languages) ? intent.languages[0] : null;
+        const activity = Array.isArray(intent?.activity) ? intent.activity[0] : intent?.activity;
+
+        return {
+            ok: true,
+            provider: 'gemini',
+            intent: {
+                action: options.mode === 'ai_playlist' ? 'create_playlist' : 'search',
+                market: marketByLanguage[String(language || '').toLowerCase()] || null,
+                genres: intent?.genres || [],
+                artists: intent?.artists || [],
+                includeArtists: intent?.artistConstraintMode === 'hard' ? (intent?.artists || []) : [],
+                excludeArtists: [],
+                mood: [...(intent?.mood || []), ...(intent?.vibe || [])],
+                context: intent?.context || [],
+                activity,
+                tempo: intent?.tempo === 'any' ? null : intent?.tempo,
+                energy: intent?.energy === 'any' ? null : intent?.energy,
+                avoidEnergy: null,
+                excludeGenres: [],
+                targetCount: intent?.targetCount || options.targetCount || null,
+                confidence: 0.75
+            }
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            provider: 'gemini',
+            reason: error?.code || error?.name || 'GEMINI_INTENT_FAILED'
+        };
+    }
+}
+
+module.exports = {
+    extractIntent,
+    parseIntentWithGemini,
+    isConfigured
 };

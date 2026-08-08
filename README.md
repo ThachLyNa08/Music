@@ -45,11 +45,20 @@ npm run dev
 
 ## Run AI Service
 
+For demo or stem/karaoke separation, run Uvicorn without `--reload` so the Demucs process is not interrupted by the file watcher:
+
 ```powershell
 cd apps/ai-service
 .\.venv\Scripts\Activate.ps1    
-uvicorn app.main:app --reload
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-level debug
+```
+
+When developing API code and reload is needed, restrict the watcher to the app source folder. Do not watch output/cache/stems/uploads/exports while separating stems:
+
+```powershell
+cd apps/ai-service
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app --log-level debug
 ```
 
 ## Git Notes

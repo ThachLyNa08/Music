@@ -1,17 +1,23 @@
 const { pool } = require('../config/database');
 
-/**
- * Check if an audio file SHA-256 hash already exists in songs table
- * Checks ONLY approved and pending_review statuses.
- * Prioritizes: approved > pending_review
- * @param {string} audioHash - 64-character SHA-256 hex string
- * @param {number|string|null} excludeSongId - Optional song ID to exclude (on resubmit)
- * @returns {Promise<object|null>} Prioritized duplicate song record or null
- */
-async function findDuplicateAudioHash(audioHash, excludeSongId = null) {
+const DEFAULT_REVIEW_STATUSES = ['approved', 'pending_review'];
+
+function normalizeReviewStatuses(reviewStatuses) {
+  const statuses = Array.isArray(reviewStatuses) && reviewStatuses.length
+    ? reviewStatuses
+    : DEFAULT_REVIEW_STATUSES;
+  return statuses
+    .map(status => String(status || '').trim())
+    .filter(Boolean);
+}
+
+async function findDuplicateAudioHash(audioHash, excludeSongId = null, options = {}) {
   if (!audioHash || typeof audioHash !== 'string') {
     return null;
   }
+
+  const reviewStatuses = normalizeReviewStatuses(options.reviewStatuses);
+  if (!reviewStatuses.length) return null;
 
   let query = `
     SELECT
@@ -26,9 +32,9 @@ async function findDuplicateAudioHash(audioHash, excludeSongId = null) {
     FROM songs s
     LEFT JOIN artists a ON s.artist_id = a.id
     WHERE s.audio_hash = ?
-      AND s.review_status IN ('approved', 'pending_review')
+      AND s.review_status IN (?)
   `;
-  const queryParams = [audioHash];
+  const queryParams = [audioHash, reviewStatuses];
 
   if (excludeSongId) {
     query += ' AND s.id <> ?';
@@ -56,6 +62,41 @@ async function findDuplicateAudioHash(audioHash, excludeSongId = null) {
   return null;
 }
 
+function buildDuplicateAudioPayload(duplicate) {
+  if (!duplicate) return null;
+
+  if (duplicate.review_status === 'approved') {
+    return {
+      statusCode: 409,
+      body: {
+        success: false,
+        code: 'DUPLICATE_AUDIO_EXISTING_SONG',
+        message: 'File âm thanh này đã tồn tại trong thư viện MusicFlow.',
+        duplicate: {
+          song_id: duplicate.id,
+          title: duplicate.title,
+          artist_name: duplicate.artist_name || null,
+        },
+      },
+    };
+  }
+
+  return {
+    statusCode: 409,
+    body: {
+      success: false,
+      code: 'DUPLICATE_AUDIO_PENDING_SUBMISSION',
+      message: 'File âm thanh này đã được gửi duyệt trước đó.',
+      duplicate: {
+        submission_id: duplicate.id,
+        title: duplicate.title,
+        status: duplicate.review_status,
+      },
+    },
+  };
+}
+
 module.exports = {
   findDuplicateAudioHash,
+  buildDuplicateAudioPayload,
 };

@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page home-page-bg pb-4">
+  <div class="home-page home-page-bg pb-32 md:pb-36">
     <div class="relative z-10 max-w-[1920px] mx-auto home-shell" :class="{ 'home-shell--entered': isHomeEntered }">
 
       <!-- Error Banner -->
@@ -52,25 +52,25 @@
       <!-- Bắt đầu từ sở thích của bạn (Cold Start) -->
       <section v-if="newUserExperience && starterRecommendations.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader title="Bắt đầu từ sở thích của bạn" subtitle="Dựa trên thể loại và nghệ sĩ bạn vừa chọn" @viewAll="router.push('/search')" />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow>
           <RecentSongCard v-for="song in displayStarterRecommendations" :key="'start-'+(song.id || song.song_id)" :song="song" class="user-horizontal-card user-playlist-card-size" @play="playStarterSong" />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
-      <!-- Mix cá nhân của bạn (Personalized) -->
+      <!-- Section 1: Mix cá nhân của bạn -->
       <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+          <div v-for="j in 5" :key="j" class="w-[136px] sm:w-[146px] md:w-[154px] lg:w-[160px] xl:w-[164px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="!newUserExperience && madeForYouPlaylists.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Mix cá nhân của bạn"
           :subtitle="madeForYouSubtitle"
           @viewAll="router.push('/library')"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow v-if="madeForYouPlaylists.length > 0">
           <PlaylistCard
             v-for="item in displayMadeForYou"
             :key="`mfy-${item.id || item.name}`"
@@ -80,55 +80,84 @@
             @click="goToPlaylist(item)"
             @play="playPlaylist(item)"
           />
+          <button
+            v-for="item in displayMadeForYouFillers"
+            :key="item.key"
+            type="button"
+            class="user-horizontal-card user-playlist-card-size home-mix-filler-card"
+            @click="router.push(item.to)"
+          >
+            <div class="home-mix-filler-card__cover">
+              <img :src="item.cover" :alt="item.title" class="home-mix-filler-card__image" loading="lazy" decoding="async" />
+              <span class="home-mix-filler-card__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </span>
+            </div>
+            <span class="home-mix-filler-card__title">{{ item.title }}</span>
+            <span class="home-mix-filler-card__desc">{{ item.desc }}</span>
+          </button>
+        </HorizontalScrollRow>
+        <!-- Empty State for Mix cá nhân -->
+        <div v-else class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-violet-500/20 text-violet-400 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13M9 9l12-2"/></svg>
+          </div>
+          <div class="text-center sm:text-left">
+            <h4 class="text-sm font-bold text-white">Chưa có mix cá nhân</h4>
+            <p class="text-xs text-white/60 mt-0.5">MusicFlow sẽ tạo mix cá nhân hóa sau khi bạn nghe thêm một vài bài hát.</p>
+          </div>
         </div>
       </section>
 
       <!-- Vibes theo thời điểm (Both: Normal user fetches it from recommendation service, New user gets it injected) -->
       <section v-if="timeBasedVibes.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader title="Vibes theo thời điểm" subtitle="Âm nhạc phù hợp với từng khoảnh khắc trong ngày" />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow>
           <PlaylistCard v-for="item in timeBasedVibes" :key="'vibe-'+item.system_key" :playlist="item" :customBottomLabel="item.isCurrent ? 'Phù hợp lúc này' : getSystemMixBasisLabel(item)" class="user-horizontal-card user-playlist-card-size" @click="goToPlaylist(item)" @play="playPlaylist(item)" />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
-      <!-- Đề xuất nghe (Personalized) -->
+      <!-- Section 2: Gợi ý cá nhân hóa (Đề xuất nghe / Fallback) -->
       <div v-if="loadingRecommendations && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+          <div v-for="j in 5" :key="j" class="w-[136px] sm:w-[146px] md:w-[154px] lg:w-[160px] xl:w-[164px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="!newUserExperience && recommendedSongs.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && effectiveRecommendedSongs.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
-          :title="recommendTitle"
-          :subtitle="recommendSubtitle"
+          :title="effectiveRecommendTitle"
+          :subtitle="effectiveRecommendSubtitle"
           @viewAll="router.push('/recommendations/for-you')"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow>
           <RecentSongCard
-            v-for="song in displayRecommendedSongs"
+            v-for="song in effectiveRecommendedSongs"
             :key="`rec-song-${song.id || song.song_id}`"
             :song="song"
             class="user-horizontal-card user-playlist-card-size"
             @play="playRecommendedSong"
           />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
-      <!-- Nghe gần đây (Personalized) -->
+      <!-- Section 3: Nghe gần đây (Personalized / Empty state) -->
       <div v-if="loadingRecent && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+          <div v-for="j in 5" :key="j" class="w-[136px] sm:w-[146px] md:w-[154px] lg:w-[160px] xl:w-[164px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="!newUserExperience && recentSongs.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Nghe gần đây"
           subtitle="Tiếp tục từ nơi bạn đã dừng lại"
+          :showViewAll="recentSongs.length > 0"
           @viewAll="$router.push('/recently-played')"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow v-if="recentSongs.length > 0">
           <RecentSongCard
             v-for="song in displayRecentSongs"
             :key="song.history_id || song.song_id || song.id"
@@ -136,24 +165,34 @@
             class="user-horizontal-card user-playlist-card-size"
             @play="playRecentSong"
           />
+        </HorizontalScrollRow>
+        <!-- Empty State for Nghe gần đây -->
+        <div v-else class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div class="text-center sm:text-left">
+            <h4 class="text-sm font-bold text-white">Bạn chưa nghe bài nào gần đây</h4>
+            <p class="text-xs text-white/60 mt-0.5">Bắt đầu nghe nhạc để MusicFlow lưu lịch sử cho bạn.</p>
+          </div>
         </div>
       </section>
 
-      <!-- Gợi ý hôm nay (Personalized) -->
+      <!-- Section 4: Gợi ý hôm nay (Contextual / Fallback) -->
       <div v-if="loadingHomeBase && !newUserExperience" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
-          <div v-for="j in 5" :key="j" class="w-[124px] sm:w-[140px] md:w-[160px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
+          <div v-for="j in 5" :key="j" class="w-[136px] sm:w-[146px] md:w-[154px] lg:w-[160px] xl:w-[164px] h-[180px] bg-white/5 rounded-xl animate-pulse flex-shrink-0"></div>
         </div>
       </div>
-      <section v-else-if="!newUserExperience && recommendedToday.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && effectiveRecommendedToday.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
           title="Gợi ý hôm nay"
-          :subtitle="recommendedTodaySubtitle"
+          :subtitle="effectiveRecommendedTodaySubtitle"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow>
           <PlaylistCard
-            v-for="item in displayRecommendedToday"
+            v-for="item in effectiveRecommendedToday"
             :key="`rec-${item.id || item.name}`"
             :playlist="item"
             :customBottomLabel="getSystemMixBasisLabel(item)"
@@ -161,7 +200,7 @@
             @click="goToPlaylist(item)"
             @play="playPlaylist(item)"
           />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
       <!-- Xu hướng (Trending Now) (Both) -->
@@ -192,7 +231,7 @@
           />
         </div>
         <div v-else-if="globalChartError" class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm font-semibold text-slate-400">
-          Khong the tai du lieu xu huong. Vui long thu lai.
+          Không thể tải dữ liệu xu hướng. Vui lòng thử lại.
         </div>
         <div v-else-if="globalChartLoaded" class="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm font-semibold text-slate-400">
           Chưa có dữ liệu xu hướng
@@ -204,7 +243,7 @@
         @open-menu="handleOpenMenu"
       />
 
-      <!-- Nghệ sĩ bạn đã chọn / Nghệ sĩ quan tâm -->
+      <!-- Section 5: Từ nghệ sĩ bạn quan tâm / Nghệ sĩ nổi bật -->
       <div v-if="loadingHomeBase" class="px-3 sm:px-6 py-4 space-y-4 w-full">
         <div class="h-8 w-48 bg-white/5 rounded-md animate-pulse"></div>
         <div class="flex gap-3 md:gap-4 overflow-hidden">
@@ -213,27 +252,27 @@
       </div>
       <section v-else-if="newUserExperience && onboardingArtists.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader :title="hasFollowedArtists ? 'Nghệ sĩ bạn đã chọn' : 'Nghệ sĩ nổi bật'" subtitle="Dựa trên lựa chọn của bạn" />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow class="home-mix-row">
           <ArtistCard v-for="artist in displayOnboardingArtists" :key="'onb-'+artist.id" :artist="artist" size="compact" :show-stats="false" class="user-horizontal-card user-artist-card-size" />
-        </div>
+        </HorizontalScrollRow>
       </section>
-      <section v-else-if="!newUserExperience && displayArtists.length > 0" class="home-panel mb-4 md:mb-5">
+      <section v-else-if="!newUserExperience && effectiveArtists.length > 0" class="home-panel mb-4 md:mb-5">
         <SectionHeader
-          :title="hasFollowedArtists ? 'Từ nghệ sĩ bạn quan tâm' : 'Nghệ sĩ nổi bật'"
-          :subtitle="hasFollowedArtists ? 'Những nghệ sĩ bạn đang theo dõi' : 'Khám phá những nghệ sĩ được yêu thích'"
-          :showViewAll="hasFollowedArtists"
+          :title="artistSectionTitle"
+          :subtitle="artistSectionSubtitle"
+          :showViewAll="hasFollowedArtists && _rawFollowedArtists.length > 0"
           @viewAll="$router.push('/me/followed-artists')"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow>
           <ArtistCard
-            v-for="artist in displayArtists"
+            v-for="artist in effectiveArtists"
             :key="artist.id || artist.artist_id"
             :artist="artist"
             size="compact"
             :show-stats="false"
             class="user-horizontal-card user-artist-card-size"
           />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
       <!-- Danh sách phát của bạn (Personalized) -->
@@ -248,7 +287,7 @@
           title="Danh sách phát của bạn"
           subtitle="Những playlist do bạn tạo"
         />
-        <div class="user-horizontal-row">
+        <HorizontalScrollRow class="home-preserve-empty-row">
           <PlaylistCard
             v-for="item in displayUserPlaylists"
             :key="`up-${item.id || item.name}`"
@@ -257,10 +296,10 @@
             @click="goToPlaylist(item)"
             @play="playPlaylist(item)"
           />
-        </div>
+        </HorizontalScrollRow>
       </section>
 
-      <!-- Empty States -->
+      <!-- Empty States (If nothing at all loaded) -->
       <div v-if="!isAnyLoading && !hasAnyData" class="text-center py-20">
         <div class="w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-500 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-violet-900/20">
           <svg viewBox="0 0 24 24" fill="white" class="w-10 h-10">
@@ -319,7 +358,20 @@ import RecentSongCard from '@/components/common/RecentSongCard.vue'
 import SongRow from '@/components/common/SongRow.vue'
 import WeeklyChartSection from '@/components/home/WeeklyChartSection.vue'
 import SongActionMenu from '@/components/common/SongActionMenu.vue'
+import HorizontalScrollRow from '@/components/common/HorizontalScrollRow.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
+
+function normalizeListResponse(response) {
+  const data = response?.data ?? response
+
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data?.songs)) return data.songs
+  if (Array.isArray(data?.playlists)) return data.playlists
+  if (Array.isArray(data?.data)) return data.data
+
+  return []
+}
 
 function getSystemMixBasisLabel(playlist) {
   const name = String(playlist?.name || '').toLowerCase()
@@ -347,7 +399,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const player = usePlayerStore()
 const library = useLibraryStore()
-const { previewLimit } = useResponsivePreviewLimit()
+const { previewLimit, windowWidth } = useResponsivePreviewLimit()
 
 // Animation flag
 const isHomeEntered = ref(false)
@@ -389,7 +441,7 @@ let _rawTrending = _homeCache.trendingSongs || []
 let _rawRecent = _homeCache.recentSongs || []
 let _rawRecommendedSongs = _homeCache.recommendedSongs || []
 
-// Fast reactive refs for template logic and fast computed slice
+// Fast reactive refs for template logic
 const newUserExperience = ref(false)
 const starterRecommendations = ref([])
 const timeBasedVibes = ref([])
@@ -420,7 +472,7 @@ function playTrendingSongRaw(song) {
   player.play()
 }
 
-// Fast reactive refs for template logic and fast computed slice
+// Reactive refs for template logic
 const quickAccess = ref(_rawQuickAccess)
 const madeForYouPlaylists = ref(_rawMadeForYou)
 const recommendedToday = ref(_rawRecommendedToday)
@@ -460,14 +512,63 @@ function processMadeForYou(items) {
     });
 }
 
-// Computed for Safe Fast Display (only slice, no heavy filters)
-const displayQuickAccess = computed(() => quickAccess.value.slice(0, 3));
-const displayMadeForYou = computed(() => madeForYouPlaylists.value.slice(0, previewLimit.value));
-const displayRecentSongs = computed(() => recentSongs.value.slice(0, previewLimit.value));
-const displayRecommendedToday = computed(() => recommendedToday.value.slice(0, previewLimit.value));
-const displayUserPlaylists = computed(() => userPlaylists.value.slice(0, previewLimit.value));
-const displayRecommendedSongs = computed(() => recommendedSongs.value.slice(0, previewLimit.value));
-const displayArtists = computed(() => displayArtistsRaw.value.slice(0, previewLimit.value));
+// Computed for Displaying Rows in Horizontal Scroll Carousels
+const displayQuickAccess = computed(() => quickAccess.value.slice(0, 6));
+const displayMadeForYou = computed(() => madeForYouPlaylists.value.slice(0, 15));
+const madeForYouTargetSlots = computed(() => {
+  const width = windowWidth.value;
+  if (width >= 900 && width < 1200) return 5;
+  if (width >= 768 && width < 900) return 4;
+  return previewLimit.value;
+});
+
+const displayMadeForYouFillers = computed(() => {
+  const missingSlots = Math.max(0, madeForYouTargetSlots.value - displayMadeForYou.value.length);
+  if (missingSlots <= 0) return [];
+
+  return [
+    {
+      key: 'mfy-more-recommendations',
+      title: 'Khám phá thêm',
+      desc: 'Mở gợi ý cá nhân hóa cho bạn',
+      to: '/recommendations/for-you',
+      cover: '/images/default-cover.svg'
+    },
+    {
+      key: 'mfy-library',
+      title: 'Thư viện của bạn',
+      desc: 'Xem các playlist và mix đã lưu',
+      to: '/library',
+      cover: '/images/default-cover.svg'
+    },
+    {
+      key: 'mfy-search',
+      title: 'Tìm vibe mới',
+      desc: 'Khám phá nhạc hợp tâm trạng',
+      to: '/search',
+      cover: '/images/default-cover.svg'
+    }
+  ].slice(0, Math.min(3, missingSlots));
+});
+
+const effectiveRecommendedSongs = computed(() => {
+  if (recommendedSongs.value.length > 0) return recommendedSongs.value.slice(0, 15);
+  return trendingSongs.value.slice(0, 15);
+});
+
+const displayRecentSongs = computed(() => recentSongs.value.slice(0, 15));
+
+const effectiveRecommendedToday = computed(() => {
+  if (recommendedToday.value.length > 0) return recommendedToday.value.slice(0, 15);
+  return madeForYouPlaylists.value.slice(0, 15);
+});
+
+const displayUserPlaylists = computed(() => userPlaylists.value.slice(0, 15));
+
+const effectiveArtists = computed(() => {
+  if (displayArtistsRaw.value.length > 0) return displayArtistsRaw.value.slice(0, 15);
+  return onboardingArtists.value.slice(0, 15);
+});
 
 const STRATEGY_TITLES = {
   model_personalized: 'Gợi ý cá nhân hóa',
@@ -483,8 +584,8 @@ const STRATEGY_TITLES = {
 
 const STRATEGY_SUBTITLES = {
   model_personalized: 'Dựa trên thói quen nghe nhạc của bạn',
-  content_based_onboarding: 'Người dùng chưa có đủ lịch sử nghe hoặc chưa có trong serving artifact.',
-  most_popular_fallback: 'Không có đủ dữ liệu cá nhân hóa hoặc sở thích ban đầu.',
+  content_based_onboarding: 'Gợi ý ban đầu dựa trên gu nghe ưa thích',
+  most_popular_fallback: 'Các bài hát đang được nghe nhiều nhất',
   bpr_mf: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
   bpr_mf_rerank: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
   content_based_fallback: 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay',
@@ -493,10 +594,23 @@ const STRATEGY_SUBTITLES = {
   most_popular_v4: 'Dành cho bạn để bắt đầu khám phá âm nhạc',
 };
 
-const recommendTitle = computed(() => STRATEGY_TITLES[recommendStrategy.value] || 'Đề xuất nghe');
-const recommendSubtitle = computed(() => STRATEGY_SUBTITLES[recommendStrategy.value] || 'Những bài hát phù hợp để bạn bắt đầu nghe hôm nay');
-
 const isColdStartUser = ref(_homeCache.homeBaseData?.isColdStartUser || false);
+
+const effectiveRecommendTitle = computed(() => {
+  if (recommendedSongs.value.length > 0) {
+    return STRATEGY_TITLES[recommendStrategy.value] || 'Đề xuất nghe';
+  }
+  return 'Gợi ý nổi bật';
+});
+
+const effectiveRecommendSubtitle = computed(() => {
+  if (recommendedSongs.value.length > 0) {
+    return STRATEGY_SUBTITLES[recommendStrategy.value] || 'Dựa trên thói quen nghe nhạc của bạn';
+  }
+  return isColdStartUser.value
+    ? 'Gợi ý khởi đầu dựa trên sở thích của bạn'
+    : 'Dựa trên gu nghe và xu hướng hiện tại';
+});
 
 const madeForYouSubtitle = computed(() => {
   return isColdStartUser.value
@@ -510,6 +624,22 @@ const recommendedTodaySubtitle = computed(() => {
     : 'Playlist phù hợp với thời điểm và thói quen nghe nhạc của bạn';
 });
 
+const effectiveRecommendedTodaySubtitle = computed(() => {
+  if (recommendedToday.value.length > 0) return recommendedTodaySubtitle.value;
+  return 'Một vài bài hát nổi bật để bắt đầu hôm nay';
+});
+
+const artistSectionTitle = computed(() => {
+  return (hasFollowedArtists.value && _rawFollowedArtists.length > 0)
+    ? 'Từ nghệ sĩ bạn quan tâm'
+    : 'Nghệ sĩ nổi bật';
+});
+
+const artistSectionSubtitle = computed(() => {
+  return (hasFollowedArtists.value && _rawFollowedArtists.length > 0)
+    ? 'Những nghệ sĩ bạn đang theo dõi'
+    : 'Khám phá những nghệ sĩ được yêu thích';
+});
 
 // Featured item for hero
 const featuredItem = computed(() => {
@@ -533,159 +663,145 @@ const hasAnyData = computed(() => {
 })
 
 function loadDataParallel() {
-  const fetchHomeBase = async () => {
-    try {
-      const recRes = await recommendApi.getHomeRecommendations()
-      if (recRes.data?.success) {
-        if (recRes.data.newUserExperience) {
-          newUserExperience.value = true
-          const sections = recRes.data.sections || {}
-          starterRecommendations.value = sections.starterRecommendations?.items || []
-          timeBasedVibes.value = sections.timeBasedVibes?.items || []
-          onboardingArtists.value = sections.onboardingArtists?.items || []
-          trendingSongsList.value = sections.trending?.items || []
-          discoveryGenres.value = sections.discoveryGenres?.items || []
-          _homeCache.newUserExperience = true
-          _homeCache.sections = sections
-        } else {
-          newUserExperience.value = false
-          const d = recRes.data.data
-          // Heavy processing once
-        _rawQuickAccess = uniqueByPlaylist(d.quickAccess || [])
-        _rawMadeForYou = processMadeForYou(d.madeForYouPlaylists || [])
-        _rawRecommendedToday = d.recommendedToday || []
-        _rawUserPlaylists = d.userPlaylists || []
-        _rawFollowedArtists = d.followed_artists || []
-        _rawPopularArtists = d.popular_artists || []
+  const fetchAllSections = async () => {
+    const results = await Promise.allSettled([
+      recommendApi.getHomeRecommendations(),
+      chartApi.getGlobal({ limit: 10 }, { timeout: 20000 }),
+      api.get('/users/me/recently-played'),
+      recommendApi.getHomeSongRecommendations(20)
+    ]);
 
-        quickAccess.value = _rawQuickAccess
-        madeForYouPlaylists.value = _rawMadeForYou
-        recommendedToday.value = _rawRecommendedToday
-        userPlaylists.value = _rawUserPlaylists
-        displayArtistsRaw.value = _rawFollowedArtists.length > 0 ? _rawFollowedArtists : _rawPopularArtists
-
-        hasFollowedArtists.value = d.has_followed_artists || false
-        trendingNowPlaylist.value = d.trendingNowPlaylist || null
-        isColdStartUser.value = d.isColdStartUser || false
-
-        _homeCache.homeBaseData = d
-        } // close else block for newUserExperience
+    // 1. Home Base Recommendations
+    if (results[0].status === 'fulfilled' && results[0].value?.data?.success) {
+      const recRes = results[0].value;
+      if (recRes.data.newUserExperience) {
+        newUserExperience.value = true;
+        const sections = recRes.data.sections || {};
+        starterRecommendations.value = normalizeListResponse(sections.starterRecommendations);
+        timeBasedVibes.value = normalizeListResponse(sections.timeBasedVibes);
+        onboardingArtists.value = normalizeListResponse(sections.onboardingArtists);
+        trendingSongsList.value = normalizeListResponse(sections.trending);
+        discoveryGenres.value = normalizeListResponse(sections.discoveryGenres);
+        _homeCache.newUserExperience = true;
+        _homeCache.sections = sections;
       } else {
-        homeError.value = 'Không thể tải đầy đủ gợi ý cá nhân hóa.'
+        newUserExperience.value = false;
+        const d = recRes.data.data || {};
+        _rawQuickAccess = uniqueByPlaylist(normalizeListResponse(d.quickAccess));
+        _rawMadeForYou = processMadeForYou(normalizeListResponse(d.madeForYouPlaylists));
+        _rawRecommendedToday = normalizeListResponse(d.recommendedToday);
+        _rawUserPlaylists = normalizeListResponse(d.userPlaylists);
+        _rawFollowedArtists = normalizeListResponse(d.followed_artists);
+        _rawPopularArtists = normalizeListResponse(d.popular_artists);
+
+        quickAccess.value = _rawQuickAccess;
+        madeForYouPlaylists.value = _rawMadeForYou;
+        recommendedToday.value = _rawRecommendedToday;
+        userPlaylists.value = _rawUserPlaylists;
+        displayArtistsRaw.value = _rawFollowedArtists.length > 0 ? _rawFollowedArtists : _rawPopularArtists;
+
+        hasFollowedArtists.value = d.has_followed_artists || false;
+        trendingNowPlaylist.value = d.trendingNowPlaylist || null;
+        isColdStartUser.value = d.isColdStartUser || false;
+
+        _homeCache.homeBaseData = d;
       }
-    } catch (err) {
-      console.warn('Không thể tải gợi ý:', err)
-      homeError.value = 'Không thể kết nối tải gợi ý.'
-    } finally {
-      loadingHomeBase.value = false
-      performance.mark('home-homebase-ready')
-    }
-  }
-
-  const fetchTrending = async () => {
-    globalChartLoading.value = !globalChartLoaded.value
-    globalChartError.value = null
-
-    try {
-      const chartRes = await chartApi.getGlobal({ limit: 10 }, { timeout: 20000 })
-      if (chartRes.data?.success && chartRes.data.data) {
-        const raw = chartRes.data.data
-        let combined = []
-        if (Array.isArray(raw)) {
-          combined = raw
-        } else if (typeof raw === 'object') {
-          combined = Array.isArray(raw.all) ? raw.all : []
-        }
-        if (combined.length) {
-          combined.sort((a, b) => (Number(b.weekly_plays || b.play_count || 0) - Number(a.weekly_plays || a.play_count || 0)))
-          const seen = new Set()
-          const uniqueSongs = []
-          for (const s of combined) {
-            const id = s.id || s.song_id
-            if (id && !seen.has(id)) {
-              seen.add(id)
-              uniqueSongs.push({
-                ...s,
-                artist_name: s.artist_name || s.artist,
-                duration_sec: s.duration_sec || s.duration || 0
-              })
-            }
-          }
-          _rawTrending = library.applyLikedStateToSongs(uniqueSongs.slice(0, 10))
-        } else {
-          _rawTrending = []
-        }
-      } else {
-        _rawTrending = []
-      }
-      trendingSongs.value = _rawTrending
-      globalChartLoaded.value = true
-      _homeCache.trendingSongs = _rawTrending
-      _homeCache.chartLoaded = true
-    } catch (err) {
-      console.warn('Không thể tải bảng xếp hạng weekly:', err)
-      globalChartError.value = err
-    } finally {
-      globalChartLoading.value = false
-    }
-  }
-
-  const fetchRecent = async () => {
-    try {
-      const profileRes = await api.get('/users/me/recently-played')
-      if (profileRes.data?.success) {
-        const raw = profileRes.data.data || []
-        const seen = new Set()
-        _rawRecent = library.applyLikedStateToSongs(raw.filter(s => {
-          if (seen.has(s.song_id || s.id)) return false
-          seen.add(s.song_id || s.id)
-          return true
-        }).slice(0, 10))
-        recentSongs.value = _rawRecent
-        _homeCache.recentSongs = _rawRecent
-      }
-    } catch (err) {
-      console.warn('Không thể tải lịch sử nghe:', err)
-    } finally {
-      loadingRecent.value = false
-    }
-  }
-
-  const fetchRecommendations = async () => {
-    try {
-      const recSongRes = await recommendApi.getHomeSongRecommendations(20)
-      if (recSongRes.data?.success && Array.isArray(recSongRes.data.items)) {
-        recommendStrategy.value = recSongRes.data.strategy || ''
-        _rawRecommendedSongs = library.applyLikedStateToSongs(recSongRes.data.items)
-        recommendedSongs.value = _rawRecommendedSongs
-        _homeCache.recommendStrategy = recommendStrategy.value
-        _homeCache.recommendedSongs = _rawRecommendedSongs
-      }
-    } catch (err) {
-      console.warn('Không thể tải gợi ý bài hát cá nhân hóa:', err)
-    } finally {
-      loadingRecommendations.value = false
-      performance.mark('home-recommend-ready')
-      performance.measure('fetch-to-recommend-ready', 'home-first-fetch-start', 'home-recommend-ready')
-    }
-  }
-
-  // Execute in parallel (non-blocking)
-  fetchHomeBase()
-  fetchTrending()
-
-  const runIdle = (fn) => {
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(fn, { timeout: 1000 })
     } else {
-      setTimeout(fn, 120)
+      if (results[0].status === 'rejected') {
+        console.warn('[Home Sections] fetchHomeBase failed:', results[0].reason);
+      }
     }
-  }
+    loadingHomeBase.value = false;
 
-  runIdle(() => {
-    fetchRecent()
-    fetchRecommendations()
-  })
+    // 2. Trending Charts
+    globalChartLoading.value = !globalChartLoaded.value;
+    globalChartError.value = null;
+
+    if (results[1].status === 'fulfilled' && results[1].value?.data?.success) {
+      const chartRes = results[1].value;
+      const raw = chartRes.data.data;
+      let combined = [];
+      if (Array.isArray(raw)) {
+        combined = raw;
+      } else if (typeof raw === 'object') {
+        combined = Array.isArray(raw.all) ? raw.all : [];
+      }
+      if (combined.length) {
+        combined.sort((a, b) => (Number(b.weekly_plays || b.play_count || 0) - Number(a.weekly_plays || a.play_count || 0)));
+        const seen = new Set();
+        const uniqueSongs = [];
+        for (const s of combined) {
+          const id = s.id || s.song_id;
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            uniqueSongs.push({
+              ...s,
+              artist_name: s.artist_name || s.artist,
+              duration_sec: s.duration_sec || s.duration || 0
+            });
+          }
+        }
+        _rawTrending = library.applyLikedStateToSongs(uniqueSongs.slice(0, 10));
+      } else {
+        _rawTrending = [];
+      }
+      trendingSongs.value = _rawTrending;
+      globalChartLoaded.value = true;
+      _homeCache.trendingSongs = _rawTrending;
+      _homeCache.chartLoaded = true;
+    } else {
+      if (results[1].status === 'rejected') {
+        globalChartError.value = results[1].reason;
+      }
+    }
+    globalChartLoading.value = false;
+
+    // 3. Recently Played
+    if (results[2].status === 'fulfilled' && results[2].value?.data?.success) {
+      const profileRes = results[2].value;
+      const raw = normalizeListResponse(profileRes.data);
+      const seen = new Set();
+      _rawRecent = library.applyLikedStateToSongs(raw.filter(s => {
+        const id = s.song_id || s.id;
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      }).slice(0, 15));
+      recentSongs.value = _rawRecent;
+      _homeCache.recentSongs = _rawRecent;
+    } else {
+      if (results[2].status === 'rejected') {
+        console.warn('[Home Sections] fetchRecent failed:', results[2].reason);
+      }
+    }
+    loadingRecent.value = false;
+
+    // 4. Personalized Song Recommendations
+    if (results[3].status === 'fulfilled' && results[3].value?.data?.success) {
+      const recSongRes = results[3].value;
+      const items = normalizeListResponse(recSongRes.data);
+      recommendStrategy.value = recSongRes.data.strategy || '';
+      _rawRecommendedSongs = library.applyLikedStateToSongs(items);
+      recommendedSongs.value = _rawRecommendedSongs;
+      _homeCache.recommendStrategy = recommendStrategy.value;
+      _homeCache.recommendedSongs = _rawRecommendedSongs;
+    } else {
+      if (results[3].status === 'rejected') {
+        console.warn('[Home Sections] fetchRecommendations failed:', results[3].reason);
+      }
+    }
+    loadingRecommendations.value = false;
+
+    console.log('[Home Sections]', {
+      personalMixes: madeForYouPlaylists.value.length,
+      personalized: recommendedSongs.value.length,
+      recently: recentSongs.value.length,
+      today: recommendedToday.value.length,
+      artists: displayArtistsRaw.value.length
+    });
+  };
+
+  fetchAllSections();
 }
 
 function afterFirstPaint(callback) {
@@ -762,7 +878,7 @@ function onTrendingViewAll() {
 }
 
 function playRecommendedSong(song) {
-  const queue = recommendedSongs.value.map(s => ({
+  const queue = effectiveRecommendedSongs.value.map(s => ({
     ...s,
     artist_name: s.artist_name || s.artist
   }))
@@ -870,6 +986,89 @@ section {
 .home-panel, .home-panel-soft {
   padding-left: 16px;
   padding-right: 16px;
+}
+
+.home-mix-filler-card {
+  min-width: 0;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  color: #ffffff;
+  text-align: left;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-mix-filler-card:hover {
+  border-color: rgba(30, 215, 96, 0.38);
+  background-color: rgba(255, 255, 255, 0.07);
+  transform: translateY(-2px);
+}
+
+.home-mix-filler-card__cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.home-mix-filler-card__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.56;
+}
+
+.home-mix-filler-card__icon {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #1ED760;
+  color: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+}
+
+.home-mix-filler-card__icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.home-mix-filler-card__title {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-mix-filler-card__desc {
+  margin-top: 6px;
+  color: #b3b3b3;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 @media (min-width: 640px) {

@@ -258,7 +258,6 @@ import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import { stemApi } from '@/api/stem'
-import { songApi } from '@/api/song'
 import KaraokeFullscreenLyrics from '@/components/karaoke/KaraokeFullscreenLyrics.vue'
 import LyricsPanel from '@/components/player/LyricsPanel.vue'
 import MicInputCard from '@/components/user/MicInputCard.vue'
@@ -287,7 +286,7 @@ const canScrollSuggestionsRight = ref(false)
 const isHoveringSuggestions = ref(false)
 const isInteractingGlobally = ref(false)
 let globalInteractionTimeout = null
-const extraSuggestions = ref([])
+const readyKaraokeSongs = ref([])
 const vocalsAudio = new Audio()
 const instrumentalAudio = new Audio()
 let pollTimer = null
@@ -346,24 +345,16 @@ const stemInfoText = computed(() => {
   return 'Tách stem chỉ chạy cho bài hát hiện tại khi bạn yêu cầu.'
 })
 const karaokeSuggestions = computed(() => {
-  const queueSongs = Array.isArray(player.queue) ? player.queue : []
   const seen = new Set()
 
-  const mappedQueue = queueSongs
-    .map((song, index) => ({ song, index, key: `queue-${song?.id ?? song?.song_id ?? song?.track_id ?? index}-${index}` }))
-
-  const mappedExtra = (extraSuggestions.value || [])
-    .map((song, i) => ({ song, index: null, key: `extra-${song?.id ?? song?.song_id ?? song?.track_id ?? i}-${i}` }))
-
-  const combined = [...mappedQueue, ...mappedExtra]
-
-  return combined
+  return (readyKaraokeSongs.value || [])
+    .map((song, i) => ({ song, index: null, key: `ready-${song?.id ?? song?.song_id ?? song?.track_id ?? i}-${i}` }))
     .filter((item) => {
       const id = item.song?.id ?? item.song?.song_id ?? item.song?.track_id ?? item.key
       const key = String(id)
       if (seen.has(key)) return false
       seen.add(key)
-      return Boolean(item.song)
+      return Boolean(item.song?.karaoke_ready && item.song?.stem?.vocals_url && item.song?.stem?.instrumental_url)
     })
     .slice(0, 20)
 })
@@ -461,14 +452,15 @@ async function refreshStemJob(jobId) {
   }
 }
 
-async function fetchExtraSuggestions() {
+async function fetchReadyKaraokeSuggestions() {
   try {
-    const { data } = await songApi.getTrending()
+    const { data } = await stemApi.getReadySongs(24)
     if (data && data.data) {
-      extraSuggestions.value = Array.isArray(data.data) ? data.data : (data.data.songs || [])
+      readyKaraokeSongs.value = Array.isArray(data.data) ? data.data : []
     }
   } catch (err) {
-    console.warn('Cannot fetch extra suggestions', err)
+    console.warn('Cannot fetch ready karaoke suggestions', err)
+    readyKaraokeSongs.value = []
   }
 }
 
@@ -582,7 +574,9 @@ function playSuggestion(item) {
     player.playAtIndex(item.index)
     return
   }
-  if (item.song) player.setSong(item.song, player.queue, 'karaoke')
+  if (item.song) {
+    player.setSong(item.song, karaokeSuggestions.value.map((entry) => entry.song), 'karaoke')
+  }
 }
 
 function updateSuggestionsScrollState() {
@@ -695,7 +689,7 @@ watch(isStemCompleted, (completed) => {
 onMounted(() => {
   attachStemAudioEvents()
   refreshLatestStem()
-  fetchExtraSuggestions()
+  fetchReadyKaraokeSuggestions()
   nextTick(updateSuggestionsScrollState)
   window.addEventListener('resize', updateSuggestionsScrollState)
   window.addEventListener('keydown', handleKaraokeFullscreenKeydown)

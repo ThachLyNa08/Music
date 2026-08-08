@@ -556,6 +556,85 @@ async function normalizeAiPlaylistDailyUsageSchema(conn) {
   `);
 }
 
+async function normalizeAiPlaylistHistorySchema(conn) {
+  console.log('012_ai_playlist_generation_history');
+
+  await addColumnIfMissing(conn, 'playlists', 'ai_prompt', 'TEXT NULL');
+  await addColumnIfMissing(conn, 'playlists', 'ai_intent_json', 'LONGTEXT NULL');
+  await addColumnIfMissing(conn, 'playlists', 'ai_provider', 'VARCHAR(50) NULL');
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS ai_playlist_generation_history (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      prompt TEXT NOT NULL,
+      target_count INT NOT NULL DEFAULT 20,
+      actual_count INT NOT NULL DEFAULT 0,
+      status ENUM('preview','saved','failed') NOT NULL DEFAULT 'preview',
+      playlist_id INT UNSIGNED NULL,
+      provider VARCHAR(50) NULL,
+      intent_json LONGTEXT NULL,
+      preview_snapshot_json LONGTEXT NULL,
+      error_message TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      INDEX idx_ai_playlist_history_user_created (user_id, created_at),
+      INDEX idx_ai_playlist_history_playlist (playlist_id),
+      CONSTRAINT fk_ai_playlist_history_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_ai_playlist_history_playlist
+        FOREIGN KEY (playlist_id) REFERENCES playlists(id)
+        ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+async function normalizeSystemEmailAppealSchema(conn) {
+  console.log('013_system_email_account_appeals');
+
+  await addColumnIfMissing(conn, 'users', 'locked_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'users', 'locked_reason', 'TEXT NULL');
+  await addColumnIfMissing(conn, 'users', 'locked_by', 'BIGINT NULL');
+  await addColumnIfMissing(conn, 'users', 'lock_appeal_allowed', 'TINYINT(1) DEFAULT 1');
+  await addColumnIfMissing(conn, 'users', 'lock_appeal_token_hash', 'CHAR(64) NULL');
+  await addColumnIfMissing(conn, 'users', 'lock_appeal_token_expires_at', 'DATETIME NULL');
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS email_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NULL,
+      recipient_email VARCHAR(255) NOT NULL,
+      email_type VARCHAR(100) NOT NULL,
+      subject VARCHAR(255) NOT NULL,
+      status ENUM('sent','failed','skipped') DEFAULT 'sent',
+      error_message TEXT NULL,
+      metadata_json JSON NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_email_logs_user_created (user_id, created_at),
+      INDEX idx_email_logs_type_created (email_type, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS account_lock_appeals (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      reason TEXT NOT NULL,
+      status ENUM('pending','reviewing','accepted','rejected') DEFAULT 'pending',
+      admin_note TEXT NULL,
+      resolved_by BIGINT NULL,
+      resolved_at DATETIME NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_lock_appeals_user_created (user_id, created_at),
+      INDEX idx_lock_appeals_status_created (status, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
 async function normalizeArtistContentModerationSchema(conn) {
   const moderationCols = [
     { name: 'metadata_score', def: 'INT NOT NULL DEFAULT 0' },
@@ -592,6 +671,34 @@ async function normalizeArtistContentModerationSchema(conn) {
   }
 }
 
+async function normalizeStemSeparationSchema(conn) {
+  console.log('011_stem_separation_recovery_schema');
+
+  if (await tableExists(conn, 'song_stems')) {
+    await conn.query("ALTER TABLE song_stems MODIFY COLUMN status ENUM('pending','processing','completed','failed','stale','cancelled') NOT NULL DEFAULT 'pending'");
+    await addColumnIfMissing(conn, 'song_stems', 'job_id', 'VARCHAR(64) NULL AFTER song_id');
+    await addColumnIfMissing(conn, 'song_stems', 'locked_by', 'VARCHAR(128) NULL AFTER job_id');
+    await addColumnIfMissing(conn, 'song_stems', 'started_at', 'DATETIME NULL AFTER error_message');
+    await addColumnIfMissing(conn, 'song_stems', 'heartbeat_at', 'DATETIME NULL AFTER started_at');
+    await addColumnIfMissing(conn, 'song_stems', 'completed_at', 'DATETIME NULL AFTER heartbeat_at');
+    await addColumnIfMissing(conn, 'song_stems', 'failed_at', 'DATETIME NULL AFTER completed_at');
+    await addColumnIfMissing(conn, 'song_stems', 'retry_count', 'INT NOT NULL DEFAULT 0 AFTER failed_at');
+    await addIndexIfMissing(conn, 'song_stems', 'idx_song_stems_heartbeat', 'INDEX idx_song_stems_heartbeat (status, heartbeat_at, updated_at)');
+  }
+
+  if (await tableExists(conn, 'stem_separation_jobs')) {
+    await conn.query("ALTER TABLE stem_separation_jobs MODIFY COLUMN status ENUM('pending','processing','completed','failed','stale','cancelled') NOT NULL DEFAULT 'pending'");
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'job_id', 'VARCHAR(64) NULL AFTER id');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'locked_by', 'VARCHAR(128) NULL AFTER job_id');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'started_at', 'DATETIME NULL AFTER error_message');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'heartbeat_at', 'DATETIME NULL AFTER started_at');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'completed_at', 'DATETIME NULL AFTER heartbeat_at');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'failed_at', 'DATETIME NULL AFTER completed_at');
+    await addColumnIfMissing(conn, 'stem_separation_jobs', 'retry_count', 'INT NOT NULL DEFAULT 0 AFTER failed_at');
+    await addIndexIfMissing(conn, 'stem_separation_jobs', 'idx_stem_jobs_heartbeat', 'INDEX idx_stem_jobs_heartbeat (status, heartbeat_at, updated_at)');
+  }
+}
+
 async function main() {
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -615,6 +722,9 @@ async function main() {
     await normalizeArtistAlbumReviewSchema(conn);
     await normalizeAiPlaylistDailyUsageSchema(conn);
     await normalizeArtistContentModerationSchema(conn);
+    await normalizeStemSeparationSchema(conn);
+    await normalizeAiPlaylistHistorySchema(conn);
+    await normalizeSystemEmailAppealSchema(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();

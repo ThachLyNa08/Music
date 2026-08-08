@@ -6,7 +6,7 @@ const fs = require('fs');
  * @param {string} filePath
  * @returns {Promise<string>} 64-character hex string
  */
-function calculateFileSha256(filePath) {
+function computeFileSha256(filePath) {
   return new Promise((resolve, reject) => {
     if (!filePath || typeof filePath !== 'string') {
       return reject(new Error('Đường dẫn file không hợp lệ.'));
@@ -25,5 +25,6 @@ function calculateFileSha256(filePath) {
 }
 
 module.exports = {
-  calculateFileSha256,
+  computeFileSha256,
+  calculateFileSha256: computeFileSha256,
 };

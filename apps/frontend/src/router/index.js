@@ -9,6 +9,7 @@ const routes = [
   // Auth
   { path: '/login',    name: 'Login',    component: () => import('@/views/auth/LoginView.vue'),    meta: { guest: true } },
   { path: '/register', name: 'Register', component: () => import('@/views/auth/RegisterView.vue'), meta: { guest: true } },
+  { path: '/account/appeal', name: 'AccountAppeal', component: () => import('@/views/account/AccountAppealView.vue') },
   { path: '/callback', name: 'SpotifyCallback', component: () => import('@/views/SpotifyCallback.vue'), meta: { requiresAuth: true } },
 
   // Admin Panel
@@ -133,6 +134,10 @@ router.beforeEach(async (to) => {
   const hasSeenLanding = localStorage.getItem('musicflow_has_seen_landing') === 'true'
   if (to.path === '/' && !hasSeenLanding) {
     return '/landing'
+  }
+
+  if (to.name === 'AccountAppeal') {
+    return
   }
 
   if (auth.isAuthenticated && !auth.user) {

@@ -25,6 +25,18 @@ export const aiPlaylistApi = {
     return axios.post('/ai-playlists/save', payload)
   },
 
+  getHistory(limit = 10) {
+    return axios.get('/ai-playlists/history', { params: { limit } })
+  },
+
+  getHistoryDetail(id) {
+    return axios.get(`/ai-playlists/history/${id}`)
+  },
+
+  saveHistory(id, payload = {}) {
+    return axios.post(`/ai-playlists/history/${id}/save`, payload)
+  },
+
   getSuggestions() {
     return axios.get('/ai-playlists/suggestions')
   },

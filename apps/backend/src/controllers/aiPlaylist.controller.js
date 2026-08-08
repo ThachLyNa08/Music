@@ -13,12 +13,18 @@ exports.getQuota = async (req, res) => {
 };
 
 function parseUseLLM(value) {
+    if (value === undefined || value === null) return true;
     return value === true || value === 'true';
+}
+
+function parseBoolean(value, defaultValue = false) {
+    if (value === undefined || value === null) return defaultValue;
+    return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 exports.previewIntent = async (req, res) => {
     try {
-        const { prompt, targetCount, useLLM = false } = req.body;
+        const { prompt, targetCount, useLLM = true } = req.body;
 
         if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
             return res.status(400).json({ success: false, message: 'Vui lòng nhập prompt hợp lệ' });
@@ -43,7 +49,9 @@ exports.previewPlaylist = async (req, res) => {
         const {
             prompt,
             targetCount = parseInt(process.env.AI_PLAYLIST_DEFAULT_SONGS || '20', 10),
-            useLLM = false,
+            useLLM = true,
+            allowExpandedResults = false,
+            expandResults = false,
             previousSongIds = []
         } = req.body;
 
@@ -72,22 +80,42 @@ exports.previewPlaylist = async (req, res) => {
             targetCount,
             userId,
             useLLM: parseUseLLM(useLLM),
+            allowExpandedResults: parseBoolean(allowExpandedResults) || parseBoolean(expandResults),
             previousSongIds,
             avoidPreviousSongs: Array.isArray(previousSongIds) && previousSongIds.length > 0,
             req
         });
 
         if (!preview?.songs?.length) {
+            const historyId = await aiPlaylistService.recordFailedGeneration({
+                userId,
+                prompt,
+                targetCount,
+                provider: parseUseLLM(useLLM) ? 'llm' : 'taxonomy',
+                errorMessage: preview?.message || 'Không tìm được bài hát phù hợp với yêu cầu này.'
+            });
+
             return res.json({
                 ...preview,
+                history_id: historyId,
+                historyId,
                 quota: quotaBefore
             });
         }
 
         const quotaAfter = await quotaService.consumeQuota(userId);
+        const historyId = await aiPlaylistService.recordPreviewGeneration({
+            userId,
+            prompt,
+            targetCount,
+            preview,
+            useLLM: parseUseLLM(useLLM)
+        });
 
         return res.json({
             ...preview,
+            history_id: historyId,
+            historyId,
             quota: quotaAfter
         });
     } catch (error) {
@@ -100,6 +128,20 @@ exports.previewPlaylist = async (req, res) => {
                 message: error.message,
                 quota: error.quota
             });
+        }
+
+        if (req.user?.id && req.body?.prompt) {
+            try {
+                await aiPlaylistService.recordFailedGeneration({
+                    userId: req.user.id,
+                    prompt: req.body.prompt,
+                    targetCount: req.body.targetCount || parseInt(process.env.AI_PLAYLIST_DEFAULT_SONGS || '20', 10),
+                    provider: parseUseLLM(req.body.useLLM) ? 'llm' : 'taxonomy',
+                    errorMessage: error.message || 'Không tìm được bài hát phù hợp với yêu cầu này.'
+                });
+            } catch (historyError) {
+                console.warn('Failed to record AI playlist failed history:', historyError.message);
+            }
         }
 
         return res.status(error.statusCode || 500).json({
@@ -117,7 +159,9 @@ exports.refinePlaylist = async (req, res) => {
             previousIntent,
             previousSongIds = [],
             targetCount = parseInt(process.env.AI_PLAYLIST_DEFAULT_SONGS || '20', 10),
-            useLLM = false
+            useLLM = true,
+            allowExpandedResults = false,
+            expandResults = false
         } = req.body;
 
         const result = await aiPlaylistService.refineAiPlaylist({
@@ -128,6 +172,7 @@ exports.refinePlaylist = async (req, res) => {
             targetCount,
             userId: req.user?.id || null,
             useLLM: parseUseLLM(useLLM),
+            allowExpandedResults: parseBoolean(allowExpandedResults) || parseBoolean(expandResults),
             req
         });
 
@@ -151,6 +196,7 @@ exports.savePlaylist = async (req, res) => {
             intent: req.body.intent,
             songIds: req.body.songIds,
             visibility: req.body.visibility || 'private',
+            historyId: req.body.history_id || req.body.historyId || null,
             req
         });
 
@@ -163,6 +209,64 @@ exports.savePlaylist = async (req, res) => {
         return res.status(error.statusCode || 500).json({
             success: false,
             message: error.message || 'Lỗi khi lưu playlist AI'
+        });
+    }
+};
+
+exports.getHistory = async (req, res) => {
+    try {
+        const items = await aiPlaylistService.listGenerationHistory({
+            userId: req.user.id,
+            limit: req.query.limit || 10,
+            req
+        });
+
+        return res.json({ success: true, items });
+    } catch (error) {
+        console.error('getHistory Error:', error);
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || 'Không thể lấy lịch sử AI Playlist'
+        });
+    }
+};
+
+exports.getHistoryDetail = async (req, res) => {
+    try {
+        const item = await aiPlaylistService.getGenerationHistoryDetail({
+            userId: req.user.id,
+            historyId: req.params.id,
+            req
+        });
+
+        return res.json({ success: true, item });
+    } catch (error) {
+        console.error('getHistoryDetail Error:', error);
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || 'Không thể xem lại preview AI Playlist'
+        });
+    }
+};
+
+exports.saveHistory = async (req, res) => {
+    try {
+        const result = await aiPlaylistService.saveGenerationHistory({
+            userId: req.user.id,
+            historyId: req.params.id,
+            visibility: req.body.visibility || 'private',
+            req
+        });
+
+        return res.status(201).json(result);
+    } catch (error) {
+        console.error('saveHistory Error:', error);
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            code: error.code,
+            message: error.code === 'PREVIEW_SNAPSHOT_EXPIRED'
+                ? 'Một số bài hát trong preview cũ không còn khả dụng. Vui lòng dùng lại prompt để tạo preview mới.'
+                : (error.message || 'Không thể lưu playlist từ preview cũ')
         });
     }
 };

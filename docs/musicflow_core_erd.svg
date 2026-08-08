@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 32px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Arial, sans-serif; fill: #64748b; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 14; }
+      .box-core { fill: #eef2ff; stroke: #6366f1; }
+      .box-user { fill: #ecfdf5; stroke: #10b981; }
+      .box-link { fill: #fff7ed; stroke: #f97316; }
+      .box-log { fill: #fef2f2; stroke: #ef4444; }
+      .box-pay { fill: #f0f9ff; stroke: #0284c7; }
+      .head { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .field { font: 13px Consolas, monospace; fill: #334155; }
+      .pk { fill: #4338ca; font-weight: 700; }
+      .fk { fill: #b45309; font-weight: 700; }
+      .note { font: 12px Arial, sans-serif; fill: #64748b; }
+      .rel { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .rel-soft { stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 7 6; fill: none; marker-end: url(#arrow-soft); }
+      .label { font: 12px Arial, sans-serif; fill: #334155; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L11,6 L2,10 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L11,6 L2,10 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="980"/>
+  <text class="title" x="64" y="58">MusicFlow - Core ERD rút gọn</text>
+  <text class="subtitle" x="64" y="86">Chỉ gồm các bảng quan trọng nhất để trình bày luận văn: người dùng, catalog nhạc, playlist, tương tác nghe, lyrics và premium.</text>
+
+  <!-- Users -->
+  <rect class="box box-user" x="70" y="160" width="260" height="245" rx="14"/>
+  <text class="head" x="94" y="194">users</text>
+  <text class="field pk" x="94" y="226">PK id</text>
+  <text class="field" x="94" y="250">email</text>
+  <text class="field" x="94" y="274">password_hash</text>
+  <text class="field" x="94" y="298">display_name</text>
+  <text class="field" x="94" y="322">role, status</text>
+  <text class="field fk" x="94" y="346">FK premium_plan_id</text>
+  <text class="field" x="94" y="370">premium_expires_at</text>
+
+  <!-- Premium -->
+  <rect class="box box-pay" x="70" y="520" width="260" height="160" rx="14"/>
+  <text class="head" x="94" y="554">premium_plans</text>
+  <text class="field pk" x="94" y="586">PK id</text>
+  <text class="field" x="94" y="610">name</text>
+  <text class="field" x="94" y="634">duration_days</text>
+  <text class="field" x="94" y="658">price</text>
+
+  <rect class="box box-pay" x="70" y="740" width="260" height="160" rx="14"/>
+  <text class="head" x="94" y="774">transactions</text>
+  <text class="field pk" x="94" y="806">PK id</text>
+  <text class="field fk" x="94" y="830">FK user_id</text>
+  <text class="field fk" x="94" y="854">FK plan_id</text>
+  <text class="field" x="94" y="878">amount, status</text>
+
+  <!-- Catalog -->
+  <rect class="box box-core" x="455" y="130" width="270" height="190" rx="14"/>
+  <text class="head" x="479" y="164">artists</text>
+  <text class="field pk" x="479" y="196">PK id</text>
+  <text class="field" x="479" y="220">name</text>
+  <text class="field" x="479" y="244">bio, avatar_url</text>
+  <text class="field fk" x="479" y="268">FK user_id</text>
+  <text class="note" x="479" y="296">Artist account liên kết users</text>
+
+  <rect class="box box-core" x="455" y="410" width="270" height="190" rx="14"/>
+  <text class="head" x="479" y="444">albums</text>
+  <text class="field pk" x="479" y="476">PK id</text>
+  <text class="field fk" x="479" y="500">FK artist_id</text>
+  <text class="field fk" x="479" y="524">FK genre_id</text>
+  <text class="field" x="479" y="548">title, cover_url</text>
+  <text class="field" x="479" y="572">release_status</text>
+
+  <rect class="box box-core" x="840" y="330" width="300" height="255" rx="14"/>
+  <text class="head" x="864" y="364">songs</text>
+  <text class="field pk" x="864" y="396">PK id</text>
+  <text class="field fk" x="864" y="420">FK artist_id</text>
+  <text class="field fk" x="864" y="444">FK album_id</text>
+  <text class="field fk" x="864" y="468">FK genre_id</text>
+  <text class="field" x="864" y="492">title, duration_sec</text>
+  <text class="field" x="864" y="516">audio_url, cover_url</text>
+  <text class="field" x="864" y="540">lyrics / synced_lyrics</text>
+  <text class="field" x="864" y="564">play_count, review_status</text>
+
+  <rect class="box box-core" x="840" y="80" width="260" height="205" rx="14"/>
+  <text class="head" x="864" y="114">genres</text>
+  <text class="field pk" x="864" y="146">PK id</text>
+  <text class="field" x="864" y="170">name, slug</text>
+  <text class="field fk" x="864" y="194">FK parent_id</text>
+  <text class="field" x="864" y="218">market, status</text>
+  <text class="field" x="864" y="242">recommendation flags</text>
+
+  <rect class="box" x="1220" y="315" width="270" height="165" rx="14"/>
+  <text class="head" x="1244" y="349">song_lyrics</text>
+  <text class="field pk" x="1244" y="381">PK id</text>
+  <text class="field fk" x="1244" y="405">FK song_id</text>
+  <text class="field" x="1244" y="429">provider, sync_type</text>
+  <text class="field" x="1244" y="453">plain/synced lyrics</text>
+
+  <rect class="box" x="1220" y="535" width="270" height="165" rx="14"/>
+  <text class="head" x="1244" y="569">song_audio_features</text>
+  <text class="field pk" x="1244" y="601">PK id</text>
+  <text class="field fk" x="1244" y="625">FK song_id</text>
+  <text class="field" x="1244" y="649">bpm, energy, mood</text>
+  <text class="field" x="1244" y="673">danceability</text>
+
+  <!-- Playlist / behavior -->
+  <rect class="box box-user" x="455" y="700" width="270" height="180" rx="14"/>
+  <text class="head" x="479" y="734">playlists</text>
+  <text class="field pk" x="479" y="766">PK id</text>
+  <text class="field fk" x="479" y="790">FK user_id</text>
+  <text class="field" x="479" y="814">name, type</text>
+  <text class="field" x="479" y="838">is_public, system_key</text>
+
+  <rect class="box box-link" x="840" y="710" width="300" height="155" rx="14"/>
+  <text class="head" x="864" y="744">playlist_songs</text>
+  <text class="field pk" x="864" y="776">PK playlist_id + song_id</text>
+  <text class="field fk" x="864" y="800">FK playlist_id</text>
+  <text class="field fk" x="864" y="824">FK song_id</text>
+  <text class="field" x="864" y="848">position, added_at</text>
+
+  <rect class="box box-log" x="1220" y="740" width="270" height="160" rx="14"/>
+  <text class="head" x="1244" y="774">listening_history</text>
+  <text class="field pk" x="1244" y="806">PK id</text>
+  <text class="field fk" x="1244" y="830">FK user_id</text>
+  <text class="field fk" x="1244" y="854">FK song_id</text>
+  <text class="field" x="1244" y="878">completion_rate, source</text>
+
+  <rect class="box box-link" x="1220" y="80" width="270" height="155" rx="14"/>
+  <text class="head" x="1244" y="114">song_likes</text>
+  <text class="field pk" x="1244" y="146">PK user_id + song_id</text>
+  <text class="field fk" x="1244" y="170">FK user_id</text>
+  <text class="field fk" x="1244" y="194">FK song_id</text>
+  <text class="field" x="1244" y="218">liked_at</text>
+
+  <!-- Relations -->
+  <path class="rel" d="M330 335 C390 335 395 225 455 225"/>
+  <text class="label" x="350" y="250">artist account</text>
+
+  <path class="rel" d="M725 225 C790 225 785 420 840 420"/>
+  <text class="label" x="748" y="308">1 artist - n songs</text>
+
+  <path class="rel" d="M590 320 L590 410"/>
+  <text class="label" x="604" y="372">1 - n</text>
+
+  <path class="rel" d="M725 505 C785 505 790 444 840 444"/>
+  <text class="label" x="745" y="492">album tracks</text>
+
+  <path class="rel" d="M970 285 L970 330"/>
+  <text class="label" x="985" y="314">genre</text>
+
+  <path class="rel" d="M1100 182 C1160 182 1160 156 1220 156"/>
+  <text class="label" x="1133" y="144">likes by song</text>
+
+  <path class="rel" d="M330 246 C760 246 790 146 1220 146"/>
+  <text class="label" x="580" y="196">users like songs</text>
+
+  <path class="rel" d="M330 280 C390 280 390 790 455 790"/>
+  <text class="label" x="350" y="735">owns</text>
+
+  <path class="rel" d="M725 790 L840 790"/>
+  <text class="label" x="760" y="775">contains</text>
+
+  <path class="rel" d="M990 710 L990 585"/>
+  <text class="label" x="1005" y="650">song</text>
+
+  <path class="rel" d="M1140 405 L1220 405"/>
+  <text class="label" x="1150" y="390">lyrics</text>
+
+  <path class="rel" d="M1140 540 C1180 540 1180 625 1220 625"/>
+  <text class="label" x="1150" y="590">audio AI</text>
+
+  <path class="rel" d="M330 370 C760 370 790 830 1220 830"/>
+  <text class="label" x="575" y="885">users listen songs</text>
+
+  <path class="rel" d="M1140 555 C1185 555 1185 854 1220 854"/>
+  <text class="label" x="1148" y="720">played song</text>
+
+  <path class="rel" d="M330 600 L70 600"/>
+  <path class="rel" d="M200 680 L200 740"/>
+  <text class="label" x="218" y="715">payments</text>
+
+  <path class="rel" d="M200 520 L200 405"/>
+  <text class="label" x="215" y="470">current plan</text>
+
+  <!-- Legend -->
+  <rect class="box" x="70" y="925" width="1460" height="36" rx="10"/>
+  <text class="note" x="94" y="948">Legend: PK = khóa chính, FK = khóa ngoại vật lý trong MySQL. Hình này đã lược bỏ chat, admin logs, recommendation cache và các bảng phụ để ERD dễ nhìn trên một trang.</text>
+</svg>

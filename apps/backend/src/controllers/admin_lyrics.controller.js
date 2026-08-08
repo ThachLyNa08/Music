@@ -3,6 +3,11 @@ const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 
 const APPROVED_CATALOG_WHERE = `COALESCE(s.review_status, 'approved') = 'approved' AND (s.is_active = 1 OR s.is_active IS NULL)`;
+const HAS_LEGACY_LYRICS_SQL = `NULLIF(TRIM(COALESCE(s.lyrics, '')), '') IS NOT NULL`;
+const HAS_PLAIN_LYRICS_SQL = `(NULLIF(TRIM(COALESCE(sl.plain_lyrics, '')), '') IS NOT NULL OR ${HAS_LEGACY_LYRICS_SQL})`;
+const HAS_SYNCED_LYRICS_SQL = `NULLIF(TRIM(COALESCE(sl.synced_lyrics, '')), '') IS NOT NULL`;
+const HAS_ANY_LYRICS_SQL = `(${HAS_PLAIN_LYRICS_SQL} OR ${HAS_SYNCED_LYRICS_SQL})`;
+const EFFECTIVE_PROVIDER_SQL = `COALESCE(NULLIF(sl.provider, ''), CASE WHEN ${HAS_LEGACY_LYRICS_SQL} THEN 'MANUAL' ELSE NULL END)`;
 
 function hasValidSyncedLyrics(text) {
   if (!text || !text.trim()) return false;
@@ -15,13 +20,13 @@ exports.getSummary = async (req, res, next) => {
 
     const [[lyricsStats]] = await pool.query(`
       SELECT
-        COUNT(sl.song_id) as songsWithLyrics,
-        SUM(CASE WHEN sl.sync_type = 'LINE_SYNCED' THEN 1 ELSE 0 END) as syncedLyricsCount,
-        SUM(CASE WHEN sl.sync_type = 'PLAIN_TEXT' THEN 1 ELSE 0 END) as plainLyricsCount,
-        SUM(CASE WHEN sl.provider = 'lrclib' OR sl.provider = 'LRCLIB' THEN 1 ELSE 0 END) as lrclibCount,
-        SUM(CASE WHEN sl.provider = 'MANUAL' THEN 1 ELSE 0 END) as manualCount
+        SUM(CASE WHEN ${HAS_ANY_LYRICS_SQL} THEN 1 ELSE 0 END) as songsWithLyrics,
+        SUM(CASE WHEN ${HAS_SYNCED_LYRICS_SQL} THEN 1 ELSE 0 END) as syncedLyricsCount,
+        SUM(CASE WHEN ${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL} THEN 1 ELSE 0 END) as plainLyricsCount,
+        SUM(CASE WHEN UPPER(${EFFECTIVE_PROVIDER_SQL}) = 'LRCLIB' THEN 1 ELSE 0 END) as lrclibCount,
+        SUM(CASE WHEN UPPER(${EFFECTIVE_PROVIDER_SQL}) = 'MANUAL' THEN 1 ELSE 0 END) as manualCount
       FROM songs s
-      JOIN song_lyrics sl ON s.id = sl.song_id
+      LEFT JOIN song_lyrics sl ON s.id = sl.song_id
       WHERE ${APPROVED_CATALOG_WHERE}
     `);
 
@@ -63,18 +68,18 @@ exports.getList = async (req, res, next) => {
 
     if (status) {
       if (status === 'missing') {
-        whereConditions.push(`(sl.song_id IS NULL OR sl.sync_type = 'NONE' OR (TRIM(sl.plain_lyrics) = '' AND TRIM(sl.synced_lyrics) = ''))`);
+        whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
       } else if (status === 'has_lyrics') {
-        whereConditions.push(`sl.song_id IS NOT NULL`);
+        whereConditions.push(HAS_ANY_LYRICS_SQL);
       } else if (status === 'synced') {
-        whereConditions.push(`sl.sync_type = 'LINE_SYNCED'`);
+        whereConditions.push(HAS_SYNCED_LYRICS_SQL);
       } else if (status === 'plain') {
-        whereConditions.push(`sl.sync_type = 'PLAIN_TEXT'`);
+        whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
       }
     }
 
     if (provider && provider !== 'all') {
-      whereConditions.push(`UPPER(sl.provider) = UPPER(?)`);
+      whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
       queryParams.push(provider);
     }
 
@@ -93,11 +98,13 @@ exports.getList = async (req, res, next) => {
       SELECT
         s.id as song_id, s.title, a.name as artist_name, al.title as album_name,
         COALESCE(NULLIF(s.cover_url, ''), al.cover_url) AS cover_url,
-        sl.sync_type, sl.provider, sl.provider_lyric_id,
-        sl.updated_at, sl.plain_lyrics, sl.synced_lyrics,
-        IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
-        IF(sl.synced_lyrics IS NOT NULL AND TRIM(sl.synced_lyrics) != '', 1, 0) as has_synced_lyrics,
-        LENGTH(sl.plain_lyrics) as plain_length,
+        sl.sync_type, ${EFFECTIVE_PROVIDER_SQL} AS provider, sl.provider_lyric_id,
+        sl.updated_at,
+        COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, '')) AS plain_lyrics,
+        sl.synced_lyrics,
+        IF(${HAS_PLAIN_LYRICS_SQL}, 1, 0) as has_plain_lyrics,
+        IF(${HAS_SYNCED_LYRICS_SQL}, 1, 0) as has_synced_lyrics,
+        LENGTH(COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, ''))) as plain_length,
         LENGTH(sl.synced_lyrics) as synced_length
       FROM songs s
       LEFT JOIN artists a ON s.artist_id = a.id
@@ -154,7 +161,8 @@ exports.getDetail = async (req, res, next) => {
     const [[song]] = await pool.query(`
       SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name,
              COALESCE(NULLIF(s.cover_url, ''), al.cover_url) AS cover_url,
-             s.duration_sec as duration
+             s.duration_sec as duration, s.lyrics AS legacy_lyrics,
+             s.lyrics_provider, s.lyrics_provider_id, s.lyrics_sync_type, s.lyrics_updated_at
       FROM songs s
       LEFT JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
@@ -183,9 +191,30 @@ exports.getDetail = async (req, res, next) => {
         lyrics.effective_sync_type = 'NONE';
         lyrics.lyrics_status = 'missing';
       }
+    } else if (song.legacy_lyrics && song.legacy_lyrics.trim() !== '') {
+      const legacyLooksSynced = hasValidSyncedLyrics(song.legacy_lyrics);
+      song.lyrics = {
+        plain_lyrics: legacyLooksSynced ? null : song.legacy_lyrics,
+        synced_lyrics: legacyLooksSynced ? song.legacy_lyrics : null,
+        provider: song.lyrics_provider || 'MANUAL',
+        provider_lyric_id: song.lyrics_provider_id || null,
+        sync_type: legacyLooksSynced ? 'LINE_SYNCED' : (song.lyrics_sync_type || 'PLAIN_TEXT'),
+        source_url: null,
+        confidence_score: null,
+        fetched_at: null,
+        updated_at: song.lyrics_updated_at || null,
+        effective_sync_type: legacyLooksSynced ? 'LINE_SYNCED' : 'PLAIN_TEXT',
+        lyrics_status: legacyLooksSynced ? 'synced' : 'plain'
+      };
     }
 
-    song.lyrics = lyrics || null;
+    if (lyrics) song.lyrics = lyrics;
+    if (!song.lyrics) song.lyrics = null;
+    delete song.legacy_lyrics;
+    delete song.lyrics_provider;
+    delete song.lyrics_provider_id;
+    delete song.lyrics_sync_type;
+    delete song.lyrics_updated_at;
     song.cover_url = normalizeCoverUrl(song.cover_url);
 
     res.json({ success: true, data: song });
@@ -283,18 +312,18 @@ exports.exportLyrics = async (req, res, next) => {
 
     if (status) {
       if (status === 'missing') {
-        whereConditions.push(`(sl.song_id IS NULL OR sl.sync_type = 'NONE' OR (TRIM(sl.plain_lyrics) = '' AND TRIM(sl.synced_lyrics) = ''))`);
+        whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
       } else if (status === 'has_lyrics') {
-        whereConditions.push(`sl.song_id IS NOT NULL`);
+        whereConditions.push(HAS_ANY_LYRICS_SQL);
       } else if (status === 'synced') {
-        whereConditions.push(`sl.sync_type = 'LINE_SYNCED'`);
+        whereConditions.push(HAS_SYNCED_LYRICS_SQL);
       } else if (status === 'plain') {
-        whereConditions.push(`sl.sync_type = 'PLAIN_TEXT'`);
+        whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
       }
     }
 
     if (provider && provider !== 'all') {
-      whereConditions.push(`UPPER(sl.provider) = UPPER(?)`);
+      whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
       queryParams.push(provider);
     }
 
@@ -303,10 +332,10 @@ exports.exportLyrics = async (req, res, next) => {
     const dataQuery = `
       SELECT
         s.id as song_id, s.title, a.name as artist_name,
-        sl.provider, sl.sync_type, sl.updated_at,
-        IF(sl.plain_lyrics IS NOT NULL AND TRIM(sl.plain_lyrics) != '', 1, 0) as has_plain_lyrics,
-        IF(sl.synced_lyrics IS NOT NULL AND TRIM(sl.synced_lyrics) != '', 1, 0) as has_synced_lyrics,
-        LENGTH(sl.plain_lyrics) as plain_lyrics_length,
+        ${EFFECTIVE_PROVIDER_SQL} AS provider, sl.sync_type, sl.updated_at,
+        IF(${HAS_PLAIN_LYRICS_SQL}, 1, 0) as has_plain_lyrics,
+        IF(${HAS_SYNCED_LYRICS_SQL}, 1, 0) as has_synced_lyrics,
+        LENGTH(COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, ''))) as plain_lyrics_length,
         LENGTH(sl.synced_lyrics) as synced_lyrics_length
       FROM songs s
       LEFT JOIN artists a ON s.artist_id = a.id

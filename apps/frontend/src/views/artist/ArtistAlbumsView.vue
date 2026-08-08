@@ -4,18 +4,34 @@
     <div v-else-if="errorMsg" class="artist-panel error">{{ errorMsg }}</div>
 
     <div v-else class="artist-page-content">
-      <!-- Header -->
-      <div class="page-header">
-        <p class="eyebrow">ALBUM</p>
-        <div class="header-main">
-          <h1>Quản lý album</h1>
-          <span class="badge-total">{{ albums.length }} album</span>
+      <!-- Hero -->
+      <section class="artist-library-hero">
+        <img :src="heroImage" alt="" class="hero-bg-image" @error="event => event.target.style.display = 'none'" />
+        <div class="hero-overlay hero-overlay-main"></div>
+        <div class="hero-inner">
+          <div class="hero-cover-wrap">
+            <img :src="heroImage" alt="Album Studio" class="hero-cover" @error="onImageError" />
+          </div>
+
+          <div class="hero-copy">
+            <span class="hero-badge">ALBUM</span>
+            <div class="hero-title-row">
+              <h1>Quản lý album</h1>
+            </div>
+            <p>Theo dõi, tạo và quản lý các album âm nhạc của bạn trước khi gửi kiểm duyệt.</p>
+            <div class="hero-stats">
+              <span>{{ albums.length }} Album</span>
+              <span v-if="approvedAlbumCount">Đã duyệt: {{ approvedAlbumCount }}</span>
+              <span v-if="pendingAlbumCount">Chờ duyệt: {{ pendingAlbumCount }}</span>
+              <span v-if="rejectedAlbumCount">Từ chối: {{ rejectedAlbumCount }}</span>
+            </div>
+          </div>
         </div>
-        <p class="subtitle">Theo dõi và quản lý các album âm nhạc của bạn.</p>
-      </div>
+      </section>
 
       <!-- Toolbar -->
-      <div class="toolbar" style="align-items: center;">
+      <section class="toolbar-section">
+      <div class="toolbar">
         <div class="search-box">
           <input
             v-model="searchQuery"
@@ -35,12 +51,11 @@
           </select>
         </div>
 
-        <div class="filters">
-          <button @click="openUploadModal" class="btn-primary">
-            Tạo album mới
-          </button>
-        </div>
+        <button @click="openUploadModal" class="btn-primary toolbar-action">
+          Tạo album mới
+        </button>
       </div>
+      </section>
 
       <!-- Album List -->
       <div class="songs-container">
@@ -421,6 +436,7 @@ const formatFlagText = (flag) => {
 
 const toast = useToastStore()
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
+const heroImage = normalizeImageUrl('/uploads/artist/albums.png')
 
 const albums = ref([])
 const initialLoading = ref(true)
@@ -429,6 +445,10 @@ const errorMsg = ref('')
 
 const searchQuery = ref('')
 const statusFilter = ref('')
+
+const approvedAlbumCount = computed(() => albums.value.filter(a => a.reviewStatus === 'approved').length)
+const pendingAlbumCount = computed(() => albums.value.filter(a => a.reviewStatus === 'pending_review').length)
+const rejectedAlbumCount = computed(() => albums.value.filter(a => a.reviewStatus === 'rejected').length)
 
 // Pagination
 const currentPage = ref(1)
@@ -770,6 +790,157 @@ const closeDetailModal = () => {
   padding: 0;
 }
 
+.artist-library-hero {
+  position: sticky;
+  top: calc(var(--main-py) * -1);
+  z-index: 40;
+  overflow: hidden;
+  margin: calc(var(--main-py) * -1) calc(var(--main-px) * -1) 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #070811;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
+
+.hero-bg-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.35;
+  filter: blur(30px);
+  transform: scale(1.15);
+  pointer-events: none;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hero-overlay-main {
+  background: linear-gradient(to top, #090b14, rgba(9, 11, 20, 0.8), rgba(124, 58, 237, 0.2));
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  width: 100%;
+  padding: calc(var(--main-py) + 16px) calc(var(--main-px) + 34px) 30px;
+}
+
+.hero-cover-wrap {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.44);
+}
+
+.hero-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 14px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.hero-title-row h1 {
+  min-width: 0;
+  margin: 0;
+  color: #fff;
+  font-size: 50px;
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.hero-copy p {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hero-stats span:not(:last-child)::after {
+  content: "•";
+  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.toolbar-section {
+  padding: 0 32px 18px;
+}
+
+.toolbar-section .toolbar {
+  align-items: center;
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.toolbar-action {
+  min-width: 142px;
+  justify-content: center;
+  height: 44px;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(30, 215, 96, 0.18);
+}
+
+.songs-container {
+  padding: 0 32px 32px;
+}
+
 .page-header {
   margin-bottom: 32px;
 }
@@ -886,6 +1057,84 @@ const closeDetailModal = () => {
   height: 36px;
   display: inline-flex;
   align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .hero-inner {
+    align-items: center;
+    padding: 30px 28px 28px;
+  }
+
+  .hero-cover-wrap {
+    width: 124px;
+    height: 124px;
+  }
+
+  .hero-title-row h1 {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 24px 20px 26px;
+  }
+
+  .hero-cover-wrap {
+    width: 112px;
+    height: 112px;
+    border-radius: 20px;
+  }
+
+  .hero-title-row {
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .hero-title-row h1 {
+    font-size: 36px;
+    line-height: 1.05;
+  }
+
+  .hero-copy p {
+    font-size: 13px;
+  }
+
+  .toolbar-section,
+  .songs-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .toolbar-section .toolbar {
+    gap: 10px;
+  }
+
+  .search-box,
+  .status-filters,
+  .status-filters .select-dark {
+    width: 100%;
+    max-width: none;
+  }
+
+  .toolbar-action {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .hero-title-row h1 {
+    font-size: 31px;
+  }
+
+  .hero-cover-wrap {
+    width: 104px;
+    height: 104px;
+  }
 }
 
 .song-table-wrapper {

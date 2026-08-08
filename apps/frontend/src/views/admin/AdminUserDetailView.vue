@@ -27,9 +27,6 @@
         </div>
 
         <div class="quick-actions">
-          <button class="btn-action bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl" @click="exportReport" title="Xuất báo cáo">
-            Xuất báo cáo
-          </button>
           <button class="btn-action" @click="toggleRole" :title="user.role === 'admin' ? 'Hạ cấp' : 'Thăng cấp'">
             {{ user.role === 'admin' ? 'Hạ cấp' : 'Thăng cấp' }}
           </button>

@@ -76,6 +76,12 @@ async function getSchemaInfo(db) {
             'acoustic_score',
             'brightness_score',
             'brightness',
+            'loudness',
+            'dynamic_complexity',
+            'study_suitability_score',
+            'calm_fit_score',
+            'analysis_version',
+            'analysis_updated_at',
             'mood',
             'vibe',
             'status'
@@ -201,6 +207,12 @@ function buildSelectSql(schema) {
             selectColumn(schema.audioFeatureColumns, 'saf', 'acoustic_score'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'brightness_score'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'brightness'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'loudness'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'dynamic_complexity'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'study_suitability_score'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'calm_fit_score'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'analysis_version'),
+            selectColumn(schema.audioFeatureColumns, 'saf', 'analysis_updated_at'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'mood'),
             selectColumn(schema.audioFeatureColumns, 'saf', 'vibe')
         );
@@ -221,6 +233,12 @@ function buildSelectSql(schema) {
             sqlNull('acoustic_score'),
             sqlNull('brightness_score'),
             sqlNull('brightness'),
+            sqlNull('loudness'),
+            sqlNull('dynamic_complexity'),
+            sqlNull('study_suitability_score'),
+            sqlNull('calm_fit_score'),
+            sqlNull('analysis_version'),
+            sqlNull('analysis_updated_at'),
             sqlNull('mood'),
             sqlNull('vibe')
         );
@@ -319,7 +337,7 @@ async function runCandidateQuery({ intent, db, limit, schema, includeGenre, incl
 
 async function runSemanticRagCandidateQuery({ intent, db, limit, schema, ragCandidates = [], includeGenre, includeArtists, keepMarket }) {
     const ids = [...new Set((ragCandidates || [])
-        .map((item) => Number(item.song_id))
+        .map((item) => Number(item.song_id || item.id || item.songId))
         .filter((id) => Number.isInteger(id) && id > 0))];
 
     if (!ids.length) {
@@ -334,7 +352,7 @@ async function runSemanticRagCandidateQuery({ intent, db, limit, schema, ragCand
     const ragScoreById = new Map();
     const ragRankById = new Map();
     ragCandidates.forEach((item, index) => {
-        const id = Number(item.song_id);
+        const id = Number(item.song_id || item.id || item.songId);
         if (!Number.isInteger(id) || id <= 0) return;
         ragScoreById.set(id, Number(item.rag_score || 0));
         if (!ragRankById.has(id)) ragRankById.set(id, index);
@@ -476,6 +494,12 @@ function shapeCandidate(row) {
         acoustic_score: numberOrNull(row.acoustic_score),
         brightness_score: numberOrNull(row.brightness_score ?? row.brightness),
         brightness: numberOrNull(row.brightness_score ?? row.brightness),
+        loudness: numberOrNull(row.loudness),
+        dynamic_complexity: numberOrNull(row.dynamic_complexity),
+        study_suitability_score: numberOrNull(row.study_suitability_score),
+        calm_fit_score: numberOrNull(row.calm_fit_score),
+        analysis_version: row.analysis_version || null,
+        analysis_updated_at: row.analysis_updated_at || null,
         mood: row.mood || null,
         vibe: row.vibe || null,
         release_status: row.release_status || null,

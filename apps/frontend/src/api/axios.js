@@ -18,6 +18,15 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config
+    if (err.response?.data?.code === 'ACCOUNT_LOCKED') {
+      const authStore = useAuthStore()
+      authStore.handleAccountLocked(err.response.data.data || {})
+      window.dispatchEvent(new CustomEvent('musicflow:account-locked', {
+        detail: err.response.data.data || {},
+      }))
+      return Promise.reject(err)
+    }
+
     if (
       err.response?.status === 401 &&
       !original._retry &&

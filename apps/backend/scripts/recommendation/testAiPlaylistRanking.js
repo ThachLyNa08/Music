@@ -85,6 +85,21 @@ function assertNegativeNoise(result, prompt) {
     assert(highEnergyCount < result.songs.length, `${prompt}: all songs look high-energy/noisy`);
 }
 
+function assertStrictCalmGuard(result, prompt) {
+    if (!result.meta?.rankingMeta?.strictCalmEnergyGuard) return;
+
+    let seenHighEnergy = false;
+    for (const song of result.songs) {
+        const energy = Number(song.energyScore);
+        const highEnergy = Number.isFinite(energy) && energy >= 0.65;
+        if (highEnergy) {
+            seenHighEnergy = true;
+        } else {
+            assert(!seenHighEnergy, `${prompt}: non-high-energy song appeared after high-energy fallback`);
+        }
+    }
+}
+
 async function main() {
     const outputs = [];
 
@@ -113,11 +128,15 @@ async function main() {
         if (result.meta.candidateMeta.totalCandidates > 0) {
             assert(result.songs.length > 0, `${prompt}: candidates exist but no songs returned`);
         }
+        if (result.meta.candidateMeta.totalCandidates >= result.meta.targetCount) {
+            assert.strictEqual(result.songs.length, result.meta.targetCount, `${prompt}: did not return requested target count`);
+        }
 
         assertNoDuplicates(result.songs, prompt);
         assertAvailable(result.songs, prompt);
         assertMarketHonored(result, prompt);
         assertNegativeNoise(result, prompt);
+        assertStrictCalmGuard(result, prompt);
         assertArtistHonored(result, prompt);
 
         outputs.push({

@@ -231,10 +231,16 @@ function formatNumber(num) {
 }
 
 function isPlaying(song) {
-  return playerStore.currentSong?.id === getSongId(song)
+  const currentId = getSongId(playerStore.currentSong)
+  const songId = getSongId(song)
+  return Boolean(playerStore.isPlaying && currentId && songId && String(currentId) === String(songId))
 }
 
 function playSong(song) {
+  if (isPlaying(song)) {
+    playerStore.togglePlay()
+    return
+  }
   const queue = tracks.value.map(normalizeSong)
   const targetId = getSongId(song)
   const target = queue.find(item => item.id === targetId) || normalizeSong(song)

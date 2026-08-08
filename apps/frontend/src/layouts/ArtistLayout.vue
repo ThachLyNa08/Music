@@ -334,9 +334,12 @@ const performLogout = () => {
   flex-direction: column;
 }
 
-.artist-hero {
-  position: relative;
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, #1a1a3e 100%);
+.artist-shell .artist-hero {
+  position: sticky;
+  top: calc(var(--main-py) * -1);
+  z-index: 40;
+  isolation: isolate;
+  background: #090b14;
   border-bottom: 1px solid var(--border);
   margin: calc(var(--main-py) * -1) calc(var(--main-px) * -1) 24px calc(var(--main-px) * -1);
   padding: calc(var(--main-py) + 10px) calc(var(--main-px) + 10px);
@@ -347,16 +350,18 @@ const performLogout = () => {
   min-height: auto;
 }
 
-.artist-hero::before {
+.artist-shell .artist-hero::before {
   content: '';
   position: absolute;
-  top: -50%; right: -10%;
-  width: 300px; height: 300px;
-  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(15, 11, 36, 0.82) 0%, rgba(12, 13, 24, 0.76) 46%, rgba(9, 11, 20, 0.95) 100%),
+    linear-gradient(180deg, rgba(124, 58, 237, 0.2) 0%, rgba(9, 11, 20, 0.88) 100%);
   pointer-events: none;
 }
 
-.artist-hero.compact {
+.artist-shell .artist-hero.compact {
   padding: calc(var(--main-py) + 4px) calc(var(--main-px) + 10px);
   min-height: auto;
 }

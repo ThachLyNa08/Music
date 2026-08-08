@@ -31,19 +31,26 @@
             Tạo playlist thông minh từ mô tả, tâm trạng và gu nghe của bạn.
           </p>
           <div class="flex items-center gap-2 text-[10px] md:text-xs text-[#b3b3b3] font-medium mt-1 mb-3">
-            <span>Cá nhân hóa bằng BPR-MF</span>
+            <span>Cá nhân hóa bằng LightGCN</span>
             <span>•</span>
             <span>Audio features</span>
             <span>•</span>
             <span>Intent AI</span>
           </div>
 
-          <div class="flex items-center gap-4 mt-2">
+          <div class="flex flex-wrap items-center gap-3 mt-2">
             <button 
               class="rounded-full bg-[#1ed760] px-5 py-2 text-[13px] font-bold text-black transition hover:scale-105 hover:bg-[#1fdf64] shadow-[0_0_20px_rgba(30,215,96,0.3)] shrink-0" 
               @click="scrollToPrompt"
             >
               Tạo playlist
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 text-[13px] font-bold text-white/80 transition hover:bg-white/[0.1] hover:text-white shrink-0"
+              @click="openHistoryModal"
+            >
+              Lịch sử tạo
             </button>
             <button
               v-if="savedPlaylist"
@@ -99,6 +106,7 @@
           <AiPlaylistPreview
             :songs="previewData.songs"
             :meta="previewData.meta"
+            :warnings="previewData.warnings"
             :debug="showDebug"
             :title="generatedTitle"
             :covers="previewCovers"
@@ -126,7 +134,16 @@
               </button>
               
               <button
-                v-if="!savedPlaylist"
+                v-if="isUnsavedHistoryPreview"
+                type="button"
+                :disabled="saving || !previewData.songs.length"
+                class="rounded-full border border-white/20 bg-transparent px-6 py-2.5 text-sm font-bold text-white transition hover:border-white/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="handleSaveHistory"
+              >
+                {{ saving ? 'Đang lưu...' : 'Lưu playlist' }}
+              </button>
+              <button
+                v-else-if="!savedPlaylist"
                 type="button"
                 :disabled="saving || !previewData.songs.length"
                 class="rounded-full border border-white/20 bg-transparent px-6 py-2.5 text-sm font-bold text-white transition hover:border-white/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
@@ -157,8 +174,190 @@
             Nhập một prompt hoặc chọn gợi ý để MusicFlow tạo danh sách bài hát thông minh.
           </p>
         </div>
+
       </section>
     </div>
+
+    <!-- Fixed Modal Overlay cho Lịch sử tạo AI Playlist -->
+    <Teleport to="body">
+      <div
+        v-if="isHistoryOpen"
+        class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md transition-all sm:p-4 md:p-6"
+        @click.self="closeHistoryModal"
+      >
+        <section class="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#14151d]/95 text-white shadow-[0_25px_70px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transform transition-all">
+          <!-- Header -->
+          <header class="flex flex-col gap-4 border-b border-white/10 bg-white/[0.025] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div class="flex items-center gap-3.5 min-w-0">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/20 via-indigo-500/20 to-emerald-500/20 border border-white/10 text-purple-300 shadow-inner">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <h2 class="text-lg font-black tracking-tight text-white flex items-center gap-2">
+                  Lịch sử tạo AI Playlist
+                </h2>
+                <p class="text-xs text-white/50 truncate">Xem lại các preview AI Playlist đã tạo</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                :disabled="historyLoading"
+                class="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                @click="loadHistory"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  :class="{ 'animate-spin': historyLoading }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21.5 2v6h-6M2.5 22v-6h6"/>
+                  <path d="M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8M2.5 16l1 1A10 10 0 0 0 22 12.5"/>
+                </svg>
+                <span>Làm mới</span>
+              </button>
+
+              <button
+                type="button"
+                class="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-white/15 hover:text-white"
+                @click="closeHistoryModal"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M19.3 4.71a.75.75 0 0 0-1.06 0L12 10.94 5.76 4.7a.75.75 0 0 0-1.06 1.06l6.24 6.24-6.24 6.24a.75.75 0 1 0 1.06 1.06l6.24-6.24 6.24 6.24a.75.75 0 0 0 1.06-1.06L13.06 12l6.24-6.24a.75.75 0 0 0 0-1.06z"/>
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <!-- Content Body -->
+          <div class="custom-scrollbar flex-1 space-y-3.5 overflow-y-auto p-5 sm:p-6">
+            <!-- Loading state -->
+            <div v-if="historyLoading && !historyItems.length" class="flex flex-col items-center justify-center py-14 px-6 rounded-2xl border border-white/5 bg-white/[0.02] text-center">
+              <div class="mb-4 h-9 w-9 animate-spin rounded-full border-3 border-white/10 border-t-[#1ed760]"></div>
+              <p class="text-sm font-medium text-white/60">Đang tải lịch sử tạo...</p>
+            </div>
+
+            <!-- Error state -->
+            <div v-else-if="historyError" class="flex flex-col items-center justify-center py-10 px-6 rounded-2xl border border-rose-500/20 bg-rose-500/[0.05] text-center">
+              <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <h3 class="text-sm font-bold text-rose-200">Không thể tải lịch sử tạo</h3>
+              <p class="mt-1 text-xs text-rose-300/70 max-w-sm">{{ historyError }}</p>
+              <button
+                type="button"
+                class="mt-4 rounded-full bg-rose-500/20 border border-rose-500/30 px-4 py-1.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/30"
+                @click="loadHistory"
+              >
+                Thử lại
+              </button>
+            </div>
+
+            <!-- Empty state -->
+            <div v-else-if="!historyItems.length" class="flex flex-col items-center justify-center py-14 px-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] text-center">
+              <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/15 via-emerald-500/10 to-transparent border border-white/10 text-purple-300/70 shadow-inner">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <h3 class="text-base font-bold text-white">Chưa có lịch sử tạo</h3>
+              <p class="mt-1 text-xs text-white/50 max-w-sm leading-relaxed">
+                Các preview AI Playlist bạn tạo sẽ xuất hiện tại đây.
+              </p>
+            </div>
+
+            <!-- History Items list -->
+            <template v-else>
+              <article
+                v-for="item in historyItems"
+                :key="item.id"
+                class="group relative rounded-2xl border border-white/10 bg-white/[0.025] p-4 transition-all duration-200 hover:bg-white/[0.06] hover:border-white/20 shadow-sm hover:shadow-md"
+              >
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div class="flex items-start gap-3.5 min-w-0 flex-1">
+                    <img
+                      :src="item.cover_url || aiPlaylistCoverUrl"
+                      alt=""
+                      class="h-14 w-14 shrink-0 rounded-xl border border-white/10 object-cover shadow-md group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-bold text-white group-hover:text-[#1ed760] transition-colors" :title="item.prompt">
+                        {{ item.prompt }}
+                      </div>
+                      
+                      <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span class="inline-flex items-center gap-1 rounded-md bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/70 border border-white/5">
+                          {{ item.target_count }} bài • {{ item.actual_count }} bài phù hợp
+                        </span>
+                        <span :class="historyStatusClass(item.status)">
+                          {{ historyStatusLabel(item.status) }}
+                        </span>
+                        <span class="text-white/30">•</span>
+                        <span class="text-white/45 text-[11px]">{{ formatHistoryDate(item.created_at) }}</span>
+                      </div>
+
+                      <p v-if="item.status === 'failed' && item.error_message" class="mt-2 line-clamp-2 text-xs text-rose-300/80 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                        {{ item.error_message }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="flex flex-wrap items-center gap-2 shrink-0 sm:self-center">
+                    <button
+                      v-if="item.status === 'preview'"
+                      type="button"
+                      :disabled="saving"
+                      class="rounded-full bg-[#1ed760] px-4 py-1.5 text-xs font-bold text-black transition hover:scale-105 hover:bg-[#1fdf64] shadow-[0_0_15px_rgba(30,215,96,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
+                      @click="saveHistoryItem(item)"
+                    >
+                      Lưu playlist
+                    </button>
+
+                    <button
+                      v-if="item.status === 'saved' && item.playlist_id"
+                      type="button"
+                      class="rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition hover:bg-white/20 hover:scale-105"
+                      @click="openHistoryPlaylist(item)"
+                    >
+                      Mở playlist
+                    </button>
+
+                    <button
+                      type="button"
+                      class="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-bold text-white/90 transition hover:border-white/30 hover:bg-white/10"
+                      @click="viewHistory(item)"
+                    >
+                      {{ item.status === 'failed' ? 'Xem lỗi' : 'Xem lại' }}
+                    </button>
+
+                    <button
+                      type="button"
+                      class="rounded-full border border-white/10 px-3.5 py-1.5 text-xs font-semibold text-white/60 transition hover:border-white/25 hover:bg-white/5 hover:text-white"
+                      @click="reusePrompt(item)"
+                    >
+                      Dùng lại prompt
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </template>
+          </div>
+        </section>
+      </div>
+    </Teleport>
     <!-- Fixed Modal Overlay cho form Lưu Playlist -->
     <Teleport to="body">
       <div v-if="showSavePanel" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 md:p-6">
@@ -242,11 +441,10 @@ const playerStore = usePlayerStore()
 
 const prompt = ref('')
 const targetCount = ref(20)
-const useLLM = ref(false)
+const useLLM = ref(true)
 const previewData = ref(null)
 const errorMessage = ref('')
 const loading = ref(false)
-const regenerating = ref(false)
 const refining = ref(false)
 const saving = ref(false)
 const refinePrompt = ref('')
@@ -256,6 +454,14 @@ const saveDescription = ref('Playlist được tạo từ AI Playlist.')
 const visibility = ref('private')
 const savedPlaylist = ref(null)
 const quota = ref(null)
+const isHistoryOpen = ref(false)
+const historyItems = ref([])
+const historyLoading = ref(false)
+const historyError = ref('')
+const currentPreviewHistoryId = ref(null)
+const currentPreviewStatus = ref(null)
+const currentPreviewPrompt = ref('')
+const currentPreviewFromHistory = ref(false)
 
 onMounted(async () => {
   try {
@@ -269,7 +475,11 @@ onMounted(async () => {
 })
 
 const aiPlaylistCoverUrl = computed(() => formatImageUrl('/uploads/playlist_cover/ai_playlist.png'))
-const generatedTitle = computed(() => previewData.value ? suggestPlaylistName(previewData.value.intent, prompt.value, previewData.value.meta) : 'AI Playlist')
+const generatedTitle = computed(() => {
+  if (!previewData.value) return 'AI Playlist'
+  return previewData.value.title || previewData.value.playlistTitle || suggestPlaylistName(previewData.value.intent, currentPreviewPrompt.value || prompt.value, previewData.value.meta)
+})
+const isUnsavedHistoryPreview = computed(() => currentPreviewFromHistory.value && currentPreviewHistoryId.value && currentPreviewStatus.value === 'preview' && !savedPlaylist.value)
 
 const previewCovers = computed(() => {
   if (!previewData.value?.songs?.length) return []
@@ -327,8 +537,7 @@ const suggestions = [
 
 watch(previewData, (value) => {
   if (!value) return
-  saveName.value = suggestPlaylistName(value.intent, prompt.value, value.meta)
-  savedPlaylist.value = null
+  saveName.value = value.title || value.playlistTitle || suggestPlaylistName(value.intent, currentPreviewPrompt.value || prompt.value, value.meta)
 })
 
 function selectSuggestion(text) {
@@ -339,8 +548,12 @@ function normalizeResponse(data) {
   const songs = Array.isArray(data?.songs) ? data.songs : []
   return {
     ...data,
+    title: data?.title || data?.playlistTitle || data?.meta?.playlistTitle,
     songs: songs.map((song) => ({
       ...song,
+      id: song.id || song.song_id,
+      song_id: song.song_id || song.id,
+      artist: song.artist || song.artist_name,
       coverUrl: song.coverUrl || song.cover_url,
       audioUrl: song.audioUrl || song.audio_url
     })),
@@ -427,9 +640,15 @@ async function handlePreview(extra = {}) {
       ...extra
     })
     previewData.value = normalizeResponse(data)
+    currentPreviewHistoryId.value = data.history_id || data.historyId || null
+    currentPreviewStatus.value = 'preview'
+    currentPreviewPrompt.value = prompt.value
+    currentPreviewFromHistory.value = false
+    savedPlaylist.value = null
     if (data.quota) {
       quota.value = data.quota
     }
+    if (isHistoryOpen.value) await loadHistory()
     toast.showToast('Đã tạo preview playlist', 'success')
   } catch (error) {
     errorMessage.value = error.response?.data?.message || 'Không thể tạo playlist preview'
@@ -439,18 +658,6 @@ async function handlePreview(extra = {}) {
     toast.showToast(errorMessage.value, 'error')
   } finally {
     loading.value = false
-  }
-}
-
-async function handleRegenerate() {
-  if (!previewData.value) return
-  regenerating.value = true
-  try {
-    await handlePreview({
-      previousSongIds: previewData.value.songs.map((song) => song.id)
-    })
-  } finally {
-    regenerating.value = false
   }
 }
 
@@ -470,6 +677,11 @@ async function handleRefine() {
       useLLM: useLLM.value
     })
     previewData.value = normalizeResponse(data)
+    currentPreviewHistoryId.value = data.history_id || data.historyId || null
+    currentPreviewStatus.value = 'preview'
+    currentPreviewPrompt.value = prompt.value
+    currentPreviewFromHistory.value = false
+    savedPlaylist.value = null
     prompt.value = `${prompt.value}. ${refinePrompt.value}`
     refinePrompt.value = ''
     toast.showToast('Đã tinh chỉnh playlist', 'success')
@@ -493,9 +705,12 @@ async function handleSave() {
       sourcePrompt: prompt.value,
       intent: previewData.value.intent,
       songIds: previewData.value.songs.map((song) => song.id || song.song_id),
-      visibility: visibility.value
+      visibility: visibility.value,
+      history_id: currentPreviewHistoryId.value
     })
     savedPlaylist.value = data.playlist
+    currentPreviewStatus.value = 'saved'
+    if (isHistoryOpen.value) await loadHistory()
     toast.showToast('Đã lưu playlist vào thư viện', 'success')
     showSavePanel.value = false
   } catch (error) {
@@ -509,6 +724,151 @@ async function handleSave() {
 function openSavedPlaylist() {
   const id = savedPlaylist.value?.id
   if (id) router.push(`/playlist/${id}`)
+}
+
+async function openHistoryModal() {
+  isHistoryOpen.value = true
+  await loadHistory()
+}
+
+function closeHistoryModal() {
+  isHistoryOpen.value = false
+}
+
+async function loadHistory() {
+  historyLoading.value = true
+  historyError.value = ''
+  try {
+    const { data } = await aiPlaylistApi.getHistory(10)
+    historyItems.value = Array.isArray(data?.items) ? data.items : []
+  } catch (error) {
+    console.error('Failed to load AI playlist history', error)
+    historyError.value = error.response?.data?.message || 'Không thể tải lịch sử tạo. Vui lòng thử lại.'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function viewHistory(item) {
+  errorMessage.value = ''
+  showSavePanel.value = false
+  try {
+    const { data } = await aiPlaylistApi.getHistoryDetail(item.id)
+    const detail = data?.item
+    currentPreviewHistoryId.value = detail?.id || item.id
+    currentPreviewStatus.value = detail?.status || item.status
+    currentPreviewPrompt.value = detail?.prompt || item.prompt
+    currentPreviewFromHistory.value = true
+    targetCount.value = Number(detail?.target_count || item.target_count || targetCount.value)
+
+    if (detail?.status === 'failed') {
+      previewData.value = null
+      savedPlaylist.value = null
+      errorMessage.value = detail.error_message || 'Preview này đã lỗi khi tạo.'
+      closeHistoryModal()
+      return
+    }
+
+    previewData.value = normalizeResponse({
+      ...(detail?.preview || {}),
+      intent: detail?.intent || detail?.preview?.intent || {},
+      meta: detail?.preview?.meta || {},
+      warnings: detail?.preview?.warnings || []
+    })
+    savedPlaylist.value = detail?.status === 'saved' && detail?.playlist_id
+      ? { id: detail.playlist_id }
+      : null
+    closeHistoryModal()
+    toast.showToast('Đã mở lại preview cũ', 'success')
+  } catch (error) {
+    errorMessage.value = error.response?.data?.message || 'Không thể xem lại preview cũ'
+    toast.showToast(errorMessage.value, 'error')
+  }
+}
+
+function reusePrompt(item) {
+  prompt.value = item.prompt || ''
+  targetCount.value = Number(item.target_count || 20)
+  closeHistoryModal()
+  scrollToPrompt()
+}
+
+async function handleSaveHistory() {
+  if (!currentPreviewHistoryId.value) return
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    const { data } = await aiPlaylistApi.saveHistory(currentPreviewHistoryId.value, { visibility: visibility.value })
+    savedPlaylist.value = data.playlist || { id: data.playlist_id || data.playlistId }
+    currentPreviewStatus.value = 'saved'
+    if (isHistoryOpen.value) await loadHistory()
+    toast.showToast(data.message || 'Đã lưu playlist từ preview cũ', 'success')
+  } catch (error) {
+    errorMessage.value = error.response?.data?.message || 'Không thể lưu playlist từ preview cũ'
+    toast.showToast(errorMessage.value, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveHistoryItem(item) {
+  if (!item?.id) return
+  saving.value = true
+  historyError.value = ''
+  try {
+    const { data } = await aiPlaylistApi.saveHistory(item.id, { visibility: visibility.value })
+    const playlistId = data.playlist_id || data.playlistId || data.playlist?.id
+    item.status = 'saved'
+    item.playlist_id = playlistId
+    historyItems.value = historyItems.value.map((historyItem) => (
+      historyItem.id === item.id
+        ? { ...historyItem, status: 'saved', playlist_id: playlistId }
+        : historyItem
+    ))
+    if (currentPreviewHistoryId.value === item.id) {
+      savedPlaylist.value = data.playlist || { id: playlistId }
+      currentPreviewStatus.value = 'saved'
+    }
+    toast.showToast(data.message || 'Đã lưu playlist từ preview cũ', 'success')
+  } catch (error) {
+    historyError.value = error.response?.data?.message || 'Không thể lưu playlist từ preview cũ'
+    toast.showToast(historyError.value, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+function openHistoryPlaylist(item) {
+  const id = item?.playlist_id
+  if (id) {
+    closeHistoryModal()
+    router.push(`/playlist/${id}`)
+  }
+}
+
+function historyStatusLabel(status) {
+  if (status === 'saved') return 'Đã lưu'
+  if (status === 'failed') return 'Lỗi'
+  return 'Chưa lưu'
+}
+
+function historyStatusClass(status) {
+  if (status === 'saved') return 'inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-[#1ed760] border border-emerald-500/20'
+  if (status === 'failed') return 'inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-300 border border-rose-500/20'
+  return 'inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/20'
+}
+
+function formatHistoryDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
 }
 
 function handlePlaySong({ song, index }) {
@@ -551,5 +911,18 @@ function handlePlaySong({ song, index }) {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 9999px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
 }
 </style>

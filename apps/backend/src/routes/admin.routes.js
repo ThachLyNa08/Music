@@ -61,6 +61,8 @@ router.get('/system-playlists/summary', adminController.getSystemPlaylistsSummar
 router.get('/system-playlists/operation-summary', adminController.getSystemPlaylistsOperationSummary);
 router.get('/system-playlists/activity-log', adminController.getSystemPlaylistsActivityLog);
 router.get('/system-playlists/quality-report', adminController.getSystemPlaylistsQualityReport);
+router.get('/system-playlists/generation-runs/:id', adminController.getSystemPlaylistGenerationRun);
+router.post('/system-playlists/generation-runs/:id/cancel', adminController.cancelSystemPlaylistGenerationRun);
 router.post('/system-playlists/regenerate-all', adminController.regenerateAllSystemPlaylists);
 router.post('/system-playlists/regenerate-scope', adminController.regenerateSystemPlaylistsScope);
 router.get('/system-playlists/system-keys', adminController.getSystemKeys);
@@ -83,11 +85,15 @@ router.get('/stem-jobs/summary', adminStemJobsController.getSummary);
 router.get('/stem-jobs/export', adminStemJobsController.exportReport);
 router.get('/stem-jobs', adminStemJobsController.getJobs);
 router.post('/stem-jobs/:id/retry', adminStemJobsController.retryJob);
+router.post('/stem-jobs/:id/reset', adminStemJobsController.resetJob);
 
 // Quản lý người dùng
 const adminUsersController = require('../controllers/admin.users.controller');
 router.get('/users/export', adminController.exportUsers);
 router.get('/users/overview', requireAdmin, adminUsersController.getUsersOverview);
+router.get('/account-appeals', adminController.getAccountAppeals);
+router.post('/account-appeals/:id/accept', adminController.acceptAccountAppeal);
+router.post('/account-appeals/:id/reject', adminController.rejectAccountAppeal);
 router.get('/users', adminController.getAllUsers);
 router.post('/users', adminController.createUser);
 router.get('/users/:id/playlists', adminController.getUserPlaylists);

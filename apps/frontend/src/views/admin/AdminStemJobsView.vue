@@ -137,6 +137,8 @@
             <option value="processing">Processing</option>
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
+            <option value="stale">Stale</option>
+            <option value="cancelled">Cancelled</option>
           </select>
 
           <button
@@ -315,7 +317,8 @@ const confirmState = reactive({
   loading: false,
   title: 'Xác nhận Retry Job',
   message: '',
-  jobId: null
+  jobId: null,
+  action: 'retry'
 })
 
 const exportLoading = ref(false)
@@ -499,6 +502,8 @@ function getStatusBadgeClass(status) {
     case 'processing': return 'bg-blue-50 text-blue-600 border-blue-200'
     case 'completed': return 'bg-emerald-50 text-emerald-600 border-emerald-200'
     case 'failed': return 'bg-rose-50 text-rose-600 border-rose-200'
+    case 'stale': return 'bg-orange-50 text-orange-700 border-orange-200'
+    case 'cancelled': return 'bg-slate-100 text-slate-500 border-slate-300'
     default: return 'bg-slate-50 text-slate-600 border-slate-200'
   }
 }
@@ -554,19 +559,22 @@ function getJobActions(item) {
     })
   }
 
-  if (item.status === 'failed') {
+  const canRetry = ['failed', 'stale'].includes(item.status) || item.is_stale_candidate || (item.status === 'pending' && isPendingLong(item.updated_at))
+  if (canRetry) {
     actions.push({
-      label: 'Retry Job',
+      label: 'Chạy lại',
       icon: 'refresh',
-      danger: true,
+      danger: item.status === 'failed' || item.status === 'stale',
       onClick: () => requestRetry(item)
     })
-  } else if (item.status === 'pending' && isPendingLong(item.updated_at)) {
+  }
+
+  if (['failed', 'stale', 'cancelled'].includes(item.status) || item.is_stale_candidate) {
     actions.push({
-      label: 'Retry Job',
-      icon: 'refresh',
+      label: 'Đặt lại trạng thái',
+      icon: 'restart_alt',
       danger: false,
-      onClick: () => requestRetry(item)
+      onClick: () => requestReset(item)
     })
   }
 
@@ -575,7 +583,17 @@ function getJobActions(item) {
 
 function requestRetry(job) {
   confirmState.jobId = job.stem_id
+  confirmState.action = 'retry'
+  confirmState.title = 'Xác nhận chạy lại'
   confirmState.message = `Bạn có chắc chắn muốn chạy lại quá trình tách nhạc cho bài "${job.title}" không?`
+  confirmState.open = true
+}
+
+function requestReset(job) {
+  confirmState.jobId = job.stem_id
+  confirmState.action = 'reset'
+  confirmState.title = 'Xác nhận đặt lại'
+  confirmState.message = `Đặt lại trạng thái stem của bài "${job.title}" về pending?`
   confirmState.open = true
 }
 
@@ -584,7 +602,8 @@ async function executeRetry() {
 
   confirmState.loading = true
   try {
-    const res = await api.post(`/admin/stem-jobs/${confirmState.jobId}/retry`)
+    const endpoint = confirmState.action === 'reset' ? 'reset' : 'retry'
+    const res = await api.post(`/admin/stem-jobs/${confirmState.jobId}/${endpoint}`)
     if (res.data?.success) {
       toast.showToast(res.data.message || 'Retry thành công', 'success')
       confirmState.open = false

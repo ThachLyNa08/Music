@@ -18,8 +18,12 @@ router.post('/profile/avatar', upload.single('avatar'), artistStudioController.u
 router.get('/upload-options', artistStudioController.getUploadOptions);
 router.get('/album-song-options', artistStudioController.getAlbumSongOptions);
 router.get('/songs', artistStudioController.getSongs);
+router.post('/songs/drafts', upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), artistStudioController.createSongDraft);
 router.post('/songs', upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), artistStudioController.uploadSong);
+router.put('/songs/:id', upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), artistStudioController.updateSong);
 router.get('/songs/:id', artistStudioController.getSongDetail);
+router.post('/songs/:id/submit', artistStudioController.submitSong);
+router.delete('/songs/:id', artistStudioController.deleteSongDraft);
 
 router.get('/albums', artistStudioController.getAlbums);
 router.post('/albums', upload.single('cover'), artistStudioController.createAlbum);

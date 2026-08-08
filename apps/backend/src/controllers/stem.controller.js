@@ -40,6 +40,24 @@ exports.getLatestForSong = async (req, res) => {
   }
 };
 
+exports.getReadySongs = async (req, res) => {
+  try {
+    const songs = await stemService.getReadyKaraokeSongs({
+      limit: req.query.limit
+    });
+    return res.json({
+      success: true,
+      data: songs,
+      meta: {
+        total: songs.length,
+        source: 'song_stems_completed'
+      }
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+};
+
 exports.downloadInstrumental = async (req, res) => {
   try {
     const filePath = await stemService.getInstrumentalDownload(Number(req.params.jobId), req.user);
@@ -63,6 +81,8 @@ exports.updateJobFromAiService = async (req, res) => {
       vocals_url: req.body.vocals_url,
       instrumental_url: req.body.instrumental_url,
       error_message: req.body.error_message,
+      heartbeat_at: req.body.heartbeat_at,
+      locked_by: req.body.locked_by,
     });
 
     return res.json({ success: true, data: job });

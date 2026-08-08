@@ -27,6 +27,7 @@
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
+          @click.prevent="goToNav(item.to)"
           class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm no-underline transition-all duration-200 group"
           :class="isActive(item.to) ? 'border border-white/10 bg-white/[0.10] font-bold text-white shadow-lg shadow-black/10' : 'border border-transparent font-semibold text-slate-400 hover:bg-white/[0.06] hover:text-white'"
         >
@@ -319,7 +320,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
@@ -335,6 +336,7 @@ const player = usePlayerStore()
 const library = useLibraryStore()
 const messagesStore = useMessagesStore()
 const router = useRouter()
+const route = useRoute()
 
 const pct = computed(() => player.duration ? (player.currentTime / player.duration) * 100 : 0)
 const progressBarRef = ref(null)
@@ -364,6 +366,17 @@ onUnmounted(() => {
   window.removeEventListener('mf:toggle-queue', onToggleQueueEvent)
   window.removeEventListener('mf:toggle-sidebar', onToggleSidebarEvent)
 })
+
+function goToNav(path) {
+  isLeftSidebarOpen.value = false
+
+  if (route.path === path) {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+
+  router.push(path)
+}
 
 const upcomingSongs = computed(() => {
   return player.upcomingQueue || []

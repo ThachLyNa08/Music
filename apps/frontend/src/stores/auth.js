@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('accessToken') || null)
   const refreshToken = ref(localStorage.getItem('refreshToken') || null)
   const loading = ref(false)
+  const lockedAccount = ref(null)
 
   const isLoggedIn = computed(() => !!accessToken.value)
   const isAuthenticated = computed(() => !!accessToken.value)
@@ -30,6 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearAuth() {
     user.value = null
+    lockedAccount.value = null
     accessToken.value = null
     refreshToken.value = null
     localStorage.removeItem('accessToken')
@@ -55,7 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (loginContext === 'admin') {
         if (fetchedUser?.role !== 'admin') {
           clearAuth()
-          return { success: false, message: 'Tai khoan khong co quyen quan tri.' }
+          return { success: false, message: 'Tài khoản không có quyền quản trị.' }
         }
         user.value = fetchedUser
         await router.push('/admin/dashboard')
@@ -66,8 +68,8 @@ export const useAuthStore = defineStore('auth', () => {
         if (fetchedUser?.role !== 'artist') {
           clearAuth()
           const message = fetchedUser?.role === 'admin'
-            ? 'Vui long dang nhap tai trang quan tri.'
-            : 'Day khong phai tai khoan nghe si.'
+            ? 'Vui lòng đăng nhập tại trang quản trị.'
+            : 'Đây không phải là tài khoản nghệ sĩ.'
           return { success: false, message, redirectTo: fetchedUser?.role === 'admin' ? '/admin/login' : '/login' }
         }
         user.value = fetchedUser
@@ -79,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
         clearAuth()
         return {
           success: false,
-          message: 'Day la tai khoan quan tri. Vui long dang nhap tai trang Admin.',
+          message: 'Đây là tài khoản quản trị. Vui lòng đăng nhập tại trang Admin.',
           redirectTo: '/admin/login',
         }
       }
@@ -87,7 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
         clearAuth()
         return {
           success: false,
-          message: 'Day la tai khoan nghe si. Vui long dang nhap tai Artist Studio.',
+          message: 'Đây là tài khoản Nghệ sĩ. Vui lòng đăng nhập vào Artist Studio.',
           redirectTo: '/artist/login',
         }
       }
@@ -102,7 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
       return {
         success: false,
         code: err.response?.data?.code,
-        message: err.response?.data?.message || 'Dang nhap that bai',
+        message: err.response?.data?.message || 'Đăng nhập không thành công.',
         redirectTo: err.response?.data?.redirectTo,
       }
     } finally {
@@ -122,9 +124,9 @@ export const useAuthStore = defineStore('auth', () => {
       await fetchMe()
       return { success: true }
     } catch (err) {
-      return { 
-        success: false, 
-        message: err.response?.data?.message || 'Dang ky that bai',
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Đăng ký không thành công.',
         code: err.response?.data?.code
       }
     } finally {
@@ -136,7 +138,11 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await authApi.getMe()
       user.value = data.data
-    } catch {
+    } catch (err) {
+      if (err.response?.data?.code === 'ACCOUNT_LOCKED') {
+        handleAccountLocked(err.response.data.data || {})
+        return
+      }
       logout()
     }
   }
@@ -146,7 +152,7 @@ export const useAuthStore = defineStore('auth', () => {
     const wasAdminPath = currentRoute.startsWith('/admin')
     const wasArtistPath = currentRoute.startsWith('/artist')
 
-    try { await authApi.logout() } catch {}
+    try { await authApi.logout() } catch { }
     clearAuth()
 
     const player = usePlayerStore()
@@ -172,8 +178,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function handleAccountLocked(payload = {}) {
+    lockedAccount.value = {
+      message: 'Tài khoản của bạn đã bị khóa.',
+      ...payload,
+    }
+    if (user.value) {
+      user.value.status = 'locked'
+      user.value.locked_reason = payload.locked_reason || user.value.locked_reason
+    }
+    const player = usePlayerStore()
+    player.stopPlayback()
+    player.clearRuntimePlayer()
+  }
+
   return {
     user,
+    lockedAccount,
     accessToken,
     refreshToken,
     isLoggedIn,
@@ -188,6 +209,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     logoutSilently,
     fetchMe,
+    handleAccountLocked,
     upgradeToPremium,
     markArtistPasswordChanged,
   }

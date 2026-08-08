@@ -691,6 +691,17 @@ const toast = {
   error: (msg) => toastStore.showToast(msg, 'error')
 }
 
+const getAdminDuplicateAudioMessage = (errorData = {}) => {
+  if (errorData.code !== 'DUPLICATE_AUDIO_ON_APPROVAL') return null
+
+  const duplicate = errorData.duplicate || {}
+  const suffix = duplicate.title
+    ? ` Trùng với: ${duplicate.title}${duplicate.artist_name ? ` - ${duplicate.artist_name}` : ''}.`
+    : ''
+
+  return `Không thể duyệt bài này vì file âm thanh đã tồn tại trong thư viện.${suffix}`
+}
+
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
 const emptyStats = {
   pendingCount: 0,
@@ -1206,7 +1217,14 @@ const submitApprove = async () => {
     }
   } catch (err) {
     console.error(err)
-    toast.error(err.response?.data?.message || 'Lỗi khi duyệt.')
+    const duplicateMessage = getAdminDuplicateAudioMessage(err.response?.data)
+    toast.error(duplicateMessage || err.response?.data?.message || 'Loi khi duyet.')
+    if (duplicateMessage) {
+      closeDetailModal()
+      fetchReviews(activePagination.value.page)
+      fetchSummary()
+      notifStore.fetchSummary()
+    }
   } finally {
     submitting.value = false
     showConfirmApprove.value = false

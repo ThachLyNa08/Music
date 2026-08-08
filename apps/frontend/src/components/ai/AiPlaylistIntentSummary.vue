@@ -67,6 +67,13 @@ function nice(value) {
   return labelMap[value] || String(value || '').replaceAll('_', ' ')
 }
 
+function tempoLabel(value) {
+  if (value === 'slow') return 'tempo chậm'
+  if (value === 'medium') return 'tempo vừa'
+  if (value === 'fast') return 'tempo nhanh'
+  return nice(value)
+}
+
 const confidenceText = computed(() => {
   const value = Number(props.intent?.confidence || 0)
   if (!value) return 'đang cân bằng'
@@ -92,7 +99,7 @@ const chips = computed(() => {
   if (soft.activity) result.push({ key: `activity-${soft.activity}`, label: nice(soft.activity) })
   ;(soft.context || []).forEach((value) => result.push({ key: `context-${value}`, label: nice(value) }))
   if (soft.energy) result.push({ key: `energy-${soft.energy}`, label: nice(soft.energy) })
-  if (soft.tempo) result.push({ key: `tempo-${soft.tempo}`, label: nice(soft.tempo) })
+  if (soft.tempo) result.push({ key: `tempo-${soft.tempo}`, label: tempoLabel(soft.tempo) })
   ;(negative.mood || []).forEach((value) => result.push({ key: `neg-mood-${value}`, label: `tránh ${nice(value)}`, negative: true }))
   ;(negative.genre_family || []).forEach((value) => result.push({ key: `neg-genre-${value}`, label: `tránh ${nice(value)}`, negative: true }))
   ;(negative.energy || []).forEach((value) => result.push({ key: `neg-energy-${value}`, label: `tránh ${nice(value)}`, negative: true }))

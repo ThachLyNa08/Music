@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1050" viewBox="0 0 1800 1050">
+  <defs>
+    <style>
+      .page { fill: #ffffff; }
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .caption { font: 400 14px Arial, sans-serif; fill: #475569; }
+      .table { fill: #bfe6ff; stroke: #0784b5; stroke-width: 1.5; }
+      .table-core { fill: #b9e7ff; }
+      .table-link { fill: #d5f0ff; }
+      .table-log { fill: #c8e9ff; }
+      .thead { fill: #9ed8f5; stroke: #0784b5; stroke-width: 1.5; }
+      .tname { font: 700 15px Arial, sans-serif; fill: #062f4f; }
+      .field { font: 12px Consolas, monospace; fill: #083344; }
+      .pk { font-weight: 700; fill: #5b21b6; }
+      .fk { font-weight: 700; fill: #9a3412; }
+      .rel { fill: none; stroke: #0077a3; stroke-width: 1.6; }
+      .rel-soft { fill: none; stroke: #47a3c3; stroke-width: 1.35; stroke-dasharray: 6 5; }
+      .label { font: 12px Arial, sans-serif; fill: #111827; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
+      .legend { font: 13px Arial, sans-serif; fill: #334155; }
+      .dot { fill: #ffffff; stroke: #0077a3; stroke-width: 1.4; }
+      .bar { stroke: #0077a3; stroke-width: 1.6; }
+    </style>
+  </defs>
+
+  <rect class="page" width="1800" height="1050"/>
+  <text class="title" x="50" y="48">MusicFlow Core ERD - Landscape</text>
+  <text class="caption" x="50" y="74">So do rut gon phuc vu luan van: nguoi dung, catalog nhac, playlist, tuong tac nghe, lyrics va premium. Duong noi di theo gutter de khong de len bang.</text>
+
+  <!-- users -->
+  <rect class="table table-core" x="60" y="280" width="260" height="226"/>
+  <rect class="thead" x="60" y="280" width="260" height="30"/>
+  <text class="tname" x="76" y="301">users</text>
+  <text class="field pk" x="76" y="330">id</text>
+  <text class="field" x="76" y="350">email</text>
+  <text class="field" x="76" y="370">password_hash</text>
+  <text class="field" x="76" y="390">display_name</text>
+  <text class="field" x="76" y="410">role</text>
+  <text class="field" x="76" y="430">status</text>
+  <text class="field fk" x="76" y="450">premium_plan_id</text>
+  <text class="field" x="76" y="470">premium_expires_at</text>
+  <text class="field" x="76" y="490">created_at</text>
+
+  <!-- premium_plans -->
+  <rect class="table" x="60" y="100" width="240" height="146"/>
+  <rect class="thead" x="60" y="100" width="240" height="30"/>
+  <text class="tname" x="76" y="121">premium_plans</text>
+  <text class="field pk" x="76" y="150">id</text>
+  <text class="field" x="76" y="170">name</text>
+  <text class="field" x="76" y="190">duration_days</text>
+  <text class="field" x="76" y="210">price</text>
+  <text class="field" x="76" y="230">is_active</text>
+
+  <!-- transactions -->
+  <rect class="table" x="60" y="650" width="260" height="166"/>
+  <rect class="thead" x="60" y="650" width="260" height="30"/>
+  <text class="tname" x="76" y="671">transactions</text>
+  <text class="field pk" x="76" y="700">id</text>
+  <text class="field fk" x="76" y="720">user_id</text>
+  <text class="field fk" x="76" y="740">plan_id</text>
+  <text class="field" x="76" y="760">order_code</text>
+  <text class="field" x="76" y="780">amount</text>
+  <text class="field" x="76" y="800">status</text>
+
+  <!-- genres -->
+  <rect class="table" x="430" y="100" width="250" height="186"/>
+  <rect class="thead" x="430" y="100" width="250" height="30"/>
+  <text class="tname" x="446" y="121">genres</text>
+  <text class="field pk" x="446" y="150">id</text>
+  <text class="field" x="446" y="170">name</text>
+  <text class="field" x="446" y="190">slug</text>
+  <text class="field" x="446" y="210">market</text>
+  <text class="field fk" x="446" y="230">parent_id</text>
+  <text class="field" x="446" y="250">status</text>
+  <text class="field" x="446" y="270">recommendation flags</text>
+
+  <!-- artists -->
+  <rect class="table table-core" x="430" y="350" width="250" height="166"/>
+  <rect class="thead" x="430" y="350" width="250" height="30"/>
+  <text class="tname" x="446" y="371">artists</text>
+  <text class="field pk" x="446" y="400">id</text>
+  <text class="field" x="446" y="420">name</text>
+  <text class="field" x="446" y="440">bio</text>
+  <text class="field" x="446" y="460">avatar_url</text>
+  <text class="field fk" x="446" y="480">user_id</text>
+  <text class="field" x="446" y="500">metadata_source</text>
+
+  <!-- albums -->
+  <rect class="table table-core" x="780" y="350" width="250" height="166"/>
+  <rect class="thead" x="780" y="350" width="250" height="30"/>
+  <text class="tname" x="796" y="371">albums</text>
+  <text class="field pk" x="796" y="400">id</text>
+  <text class="field fk" x="796" y="420">artist_id</text>
+  <text class="field fk" x="796" y="440">genre_id</text>
+  <text class="field" x="796" y="460">title</text>
+  <text class="field" x="796" y="480">cover_url</text>
+  <text class="field" x="796" y="500">release_status</text>
+
+  <!-- songs -->
+  <rect class="table table-core" x="1130" y="310" width="286" height="246"/>
+  <rect class="thead" x="1130" y="310" width="286" height="30"/>
+  <text class="tname" x="1146" y="331">songs</text>
+  <text class="field pk" x="1146" y="360">id</text>
+  <text class="field fk" x="1146" y="380">album_id</text>
+  <text class="field fk" x="1146" y="400">artist_id</text>
+  <text class="field fk" x="1146" y="420">genre_id</text>
+  <text class="field" x="1146" y="440">title</text>
+  <text class="field" x="1146" y="460">duration_sec</text>
+  <text class="field" x="1146" y="480">audio_url</text>
+  <text class="field" x="1146" y="500">cover_url</text>
+  <text class="field" x="1146" y="520">lyrics / synced_lyrics</text>
+  <text class="field" x="1146" y="540">play_count, review_status</text>
+
+  <!-- song_lyrics -->
+  <rect class="table" x="1500" y="150" width="250" height="146"/>
+  <rect class="thead" x="1500" y="150" width="250" height="30"/>
+  <text class="tname" x="1516" y="171">song_lyrics</text>
+  <text class="field pk" x="1516" y="200">id</text>
+  <text class="field fk" x="1516" y="220">song_id</text>
+  <text class="field" x="1516" y="240">provider</text>
+  <text class="field" x="1516" y="260">sync_type</text>
+  <text class="field" x="1516" y="280">plain/synced lyrics</text>
+
+  <!-- song_audio_features -->
+  <rect class="table" x="1500" y="380" width="250" height="146"/>
+  <rect class="thead" x="1500" y="380" width="250" height="30"/>
+  <text class="tname" x="1516" y="401">song_audio_features</text>
+  <text class="field pk" x="1516" y="430">id</text>
+  <text class="field fk" x="1516" y="450">song_id</text>
+  <text class="field" x="1516" y="470">bpm, energy</text>
+  <text class="field" x="1516" y="490">mood, vibe</text>
+  <text class="field" x="1516" y="510">danceability</text>
+
+  <!-- playlists -->
+  <rect class="table table-core" x="430" y="700" width="250" height="166"/>
+  <rect class="thead" x="430" y="700" width="250" height="30"/>
+  <text class="tname" x="446" y="721">playlists</text>
+  <text class="field pk" x="446" y="750">id</text>
+  <text class="field fk" x="446" y="770">user_id</text>
+  <text class="field" x="446" y="790">name</text>
+  <text class="field" x="446" y="810">type</text>
+  <text class="field" x="446" y="830">is_public</text>
+  <text class="field" x="446" y="850">system_key</text>
+
+  <!-- playlist_songs -->
+  <rect class="table table-link" x="780" y="720" width="250" height="146"/>
+  <rect class="thead" x="780" y="720" width="250" height="30"/>
+  <text class="tname" x="796" y="741">playlist_songs</text>
+  <text class="field pk" x="796" y="770">playlist_id</text>
+  <text class="field pk" x="796" y="790">song_id</text>
+  <text class="field" x="796" y="810">position</text>
+  <text class="field" x="796" y="830">added_at</text>
+
+  <!-- listening_history -->
+  <rect class="table table-log" x="1130" y="700" width="286" height="166"/>
+  <rect class="thead" x="1130" y="700" width="286" height="30"/>
+  <text class="tname" x="1146" y="721">listening_history</text>
+  <text class="field pk" x="1146" y="750">id</text>
+  <text class="field fk" x="1146" y="770">user_id</text>
+  <text class="field fk" x="1146" y="790">song_id</text>
+  <text class="field" x="1146" y="810">completion_rate</text>
+  <text class="field" x="1146" y="830">source</text>
+  <text class="field" x="1146" y="850">listened_at</text>
+
+  <!-- song_likes -->
+  <rect class="table table-link" x="1500" y="700" width="250" height="126"/>
+  <rect class="thead" x="1500" y="700" width="250" height="30"/>
+  <text class="tname" x="1516" y="721">song_likes</text>
+  <text class="field pk" x="1516" y="750">user_id</text>
+  <text class="field pk" x="1516" y="770">song_id</text>
+  <text class="field" x="1516" y="790">liked_at</text>
+
+  <!-- Relationship lines, routed through gutters -->
+  <!-- users to premium_plans -->
+  <path class="rel" d="M190 280 L190 246"/>
+  <circle class="dot" cx="190" cy="246" r="4"/>
+  <text class="label" x="204" y="264">dang ky goi</text>
+
+  <!-- transactions to users and plans -->
+  <path class="rel" d="M320 720 L360 720 L360 395 L320 395"/>
+  <circle class="dot" cx="320" cy="395" r="4"/>
+  <text class="label" x="340" y="558">thanh toan cua user</text>
+  <path class="rel" d="M110 650 L110 246"/>
+  <circle class="dot" cx="110" cy="246" r="4"/>
+  <text class="label" x="118" y="594">mua goi</text>
+
+  <!-- users to artists -->
+  <path class="rel" d="M320 480 L430 480"/>
+  <circle class="dot" cx="430" cy="480" r="4"/>
+  <text class="label" x="342" y="466">tai khoan nghe si</text>
+
+  <!-- users to playlists -->
+  <path class="rel" d="M300 506 L300 770 L430 770"/>
+  <circle class="dot" cx="430" cy="770" r="4"/>
+  <text class="label" x="316" y="750">tao playlist</text>
+
+  <!-- artists to albums / songs -->
+  <path class="rel" d="M680 420 L780 420"/>
+  <circle class="dot" cx="780" cy="420" r="4"/>
+  <text class="label" x="704" y="406">phat hanh</text>
+  <path class="rel" d="M680 500 L720 500 L720 610 L1080 610 L1080 400 L1130 400"/>
+  <circle class="dot" cx="1130" cy="400" r="4"/>
+  <text class="label" x="784" y="628">the hien bai hat</text>
+
+  <!-- genres to albums / songs -->
+  <path class="rel" d="M680 250 L720 250 L720 440 L780 440"/>
+  <circle class="dot" cx="780" cy="440" r="4"/>
+  <text class="label" x="698" y="340">phan loai album</text>
+  <path class="rel" d="M680 170 L1100 170 L1100 420 L1130 420"/>
+  <circle class="dot" cx="1130" cy="420" r="4"/>
+  <text class="label" x="904" y="160">phan loai bai hat</text>
+
+  <!-- albums to songs -->
+  <path class="rel" d="M1030 420 L1130 380"/>
+  <circle class="dot" cx="1130" cy="380" r="4"/>
+  <text class="label" x="1056" y="392">gom track</text>
+
+  <!-- songs to lyrics / features -->
+  <path class="rel" d="M1416 360 L1460 360 L1460 220 L1500 220"/>
+  <circle class="dot" cx="1500" cy="220" r="4"/>
+  <text class="label" x="1426" y="278">co lyrics</text>
+  <path class="rel" d="M1416 450 L1500 450"/>
+  <circle class="dot" cx="1500" cy="450" r="4"/>
+  <text class="label" x="1438" y="438">audio feature</text>
+
+  <!-- playlists to playlist_songs to songs -->
+  <path class="rel" d="M680 770 L780 770"/>
+  <circle class="dot" cx="780" cy="770" r="4"/>
+  <text class="label" x="704" y="756">chua bai</text>
+  <path class="rel" d="M1030 790 L1080 790 L1080 556 L1130 520"/>
+  <circle class="dot" cx="1130" cy="520" r="4"/>
+  <text class="label" x="1042" y="694">bai trong playlist</text>
+
+  <!-- users/songs to listening_history -->
+  <path class="rel" d="M320 395 L390 395 L390 930 L1273 930 L1273 866"/>
+  <circle class="dot" cx="1273" cy="866" r="4"/>
+  <text class="label" x="706" y="946">lich su nghe cua user</text>
+  <path class="rel" d="M1273 556 L1273 700"/>
+  <circle class="dot" cx="1273" cy="700" r="4"/>
+  <text class="label" x="1288" y="630">bai da nghe</text>
+
+  <!-- users/songs to song_likes -->
+  <path class="rel" d="M320 430 L370 430 L370 955 L1625 955 L1625 826"/>
+  <circle class="dot" cx="1625" cy="826" r="4"/>
+  <text class="label" x="1330" y="972">user thich bai hat</text>
+  <path class="rel" d="M1416 520 L1450 520 L1450 770 L1500 770"/>
+  <circle class="dot" cx="1500" cy="770" r="4"/>
+  <text class="label" x="1456" y="650">bai duoc thich</text>
+
+  <!-- Legend -->
+  <rect class="table-link" x="50" y="990" width="1700" height="38" stroke="#0784b5" stroke-width="1.2"/>
+  <text class="legend" x="70" y="1014">PK mau tim, FK mau nau. Cac bang backup, chat, admin log va AI phu tro da luoc bo de so do vua mot trang ngang va de nhin.</text>
+</svg>

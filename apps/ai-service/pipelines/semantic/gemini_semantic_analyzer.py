@@ -18,8 +18,22 @@ Không nhắc rằng bạn là AI.
 Trả về JSON hợp lệ theo schema, không thêm markdown.
 """
 
+def _get_gemini_api_key():
+    api_key = os.environ.get('GEMINI_API_KEY', '').strip()
+    if not api_key or api_key in {'your_api_key_here', 'your_gemini_api_key_here'}:
+        return None
+    return api_key
+
+
+def _safe_error_message(error, api_key=None):
+    message = str(error)
+    if api_key:
+        message = message.replace(api_key, '[REDACTED_GEMINI_API_KEY]')
+    return message[:150]
+
+
 def analyze_gemini(song_data, llm_delay=3, llm_max_retries=3):
-    api_key = os.environ.get('GEMINI_API_KEY')
+    api_key = _get_gemini_api_key()
     model_name = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
     
     rule_based_fallback = analyze_rule_based(song_data)
@@ -133,7 +147,7 @@ def analyze_gemini(song_data, llm_delay=3, llm_max_retries=3):
                 
                 return validated_profile
             except Exception as inner_e:
-                error_str = str(inner_e)
+                error_str = _safe_error_message(inner_e, api_key)
                 # Check for temporary errors
                 if any(err in error_str for err in ["429", "500", "502", "503", "504", "UNAVAILABLE", "quota", "overloaded"]):
                     if attempt < llm_max_retries - 1:
@@ -146,7 +160,7 @@ def analyze_gemini(song_data, llm_delay=3, llm_max_retries=3):
                 print(f"[WARN] Gemini failed after retries for song_id={song_data.get('song_id')}. Falling back to rule-based.")
                 rule_based_fallback['llm_status'] = 'unavailable' if any(err in error_str for err in ["429", "500", "502", "503", "504", "UNAVAILABLE"]) else 'fallback'
                 rule_based_fallback['llm_error_type'] = 'api_error'
-                rule_based_fallback['llm_error_message'] = error_str[:150]
+                rule_based_fallback['llm_error_message'] = error_str
                 rule_based_fallback['needs_llm_retry'] = True
                 return rule_based_fallback
                 
@@ -154,6 +168,6 @@ def analyze_gemini(song_data, llm_delay=3, llm_max_retries=3):
         print(f"[WARN] Gemini client error for song_id={song_data.get('song_id')}. Falling back to rule-based.")
         rule_based_fallback['llm_status'] = 'fallback'
         rule_based_fallback['llm_error_type'] = 'client_error'
-        rule_based_fallback['llm_error_message'] = str(e)[:150]
+        rule_based_fallback['llm_error_message'] = _safe_error_message(e, api_key)
         rule_based_fallback['needs_llm_retry'] = True
         return rule_based_fallback

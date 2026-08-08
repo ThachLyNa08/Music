@@ -4,18 +4,34 @@
     <div v-else-if="errorMsg" class="artist-panel error">{{ errorMsg }}</div>
 
     <div v-else class="artist-page-content">
-      <!-- Header -->
-      <div class="page-header">
-        <p class="eyebrow">BÀI HÁT</p>
-        <div class="header-main">
-          <h1>Quản lý bài hát</h1>
-          <span class="badge-total">{{ summary.totalSongs }} bài hát</span>
+      <!-- Hero -->
+      <section class="artist-library-hero">
+        <img :src="heroImage" alt="" class="hero-bg-image" @error="event => event.target.style.display = 'none'" />
+        <div class="hero-overlay hero-overlay-main"></div>
+        <div class="hero-inner">
+          <div class="hero-cover-wrap">
+            <img :src="heroImage" alt="Song Studio" class="hero-cover" @error="onImageError" />
+          </div>
+
+          <div class="hero-copy">
+            <span class="hero-badge">BÀI HÁT</span>
+            <div class="hero-title-row">
+              <h1>Quản lý bài hát</h1>
+            </div>
+            <p>Tải lên, theo dõi và gửi các bài hát của bạn đến quản trị viên để kiểm duyệt.</p>
+            <div class="hero-stats">
+              <span>{{ summary.totalSongs || 0 }} Bài hát</span>
+              <span v-if="summary.pendingCount">Chờ duyệt: {{ summary.pendingCount }}</span>
+              <span v-if="summary.approvedCount">Đã public: {{ summary.approvedCount }}</span>
+              <span v-if="summary.rejectedCount">Từ chối: {{ summary.rejectedCount }}</span>
+            </div>
+          </div>
         </div>
-        <p class="subtitle">Theo dõi và quản lý các bài hát thuộc hồ sơ nghệ sĩ của bạn.</p>
-      </div>
+      </section>
 
       <!-- Toolbar -->
-      <div class="toolbar" style="align-items: center;">
+      <section class="toolbar-section">
+      <div class="toolbar">
         <div class="search-box">
           <input
             v-model="searchQuery"
@@ -45,9 +61,11 @@
         <div class="status-filters">
           <select v-model="statusFilter" @change="filterByStatus(statusFilter)" class="select-dark" style="width: auto; min-width: 160px;">
             <option value="">Tất cả ({{ summary.totalSongs || 0 }})</option>
+            <option value="draft">Bản nháp ({{ summary.draftCount || 0 }})</option>
             <option value="approved">Đã duyệt ({{ summary.approvedCount || 0 }})</option>
-            <option value="pending">Chờ duyệt ({{ summary.pendingCount || 0 }})</option>
+            <option value="pending_review">Chờ duyệt ({{ summary.pendingCount || 0 }})</option>
             <option value="rejected">Từ chối ({{ summary.rejectedCount || 0 }})</option>
+            <option value="changes_required">Cần chỉnh sửa ({{ summary.changesRequiredCount || 0 }})</option>
           </select>
         </div>
 
@@ -61,33 +79,30 @@
           </select>
         </div>
 
-        <div class="filters">
-          <button @click="openUploadModal" class="btn-primary">
-            Upload bài hát mới
-          </button>
-        </div>
+        <button @click="openUploadModal" class="btn-primary toolbar-action">
+          Gửi bài hát mới
+        </button>
       </div>
+      </section>
 
       <!-- Song List -->
       <div class="songs-container">
         <div class="song-table-wrapper" :class="{ 'is-loading': loading }">
-          <table class="song-table" style="table-layout: fixed; min-width: 1000px;">
+          <table class="song-table" style="table-layout: fixed; min-width: 1040px;">
             <colgroup>
-              <col style="width: 25%;">
-              <col style="width: 15%;">
-              <col style="width: 12%;">
+              <col style="width: 22%;">
+              <col style="width: 14%;">
+              <col style="width: 11%;">
+              <col style="width: 8%;">
               <col style="width: 9%;">
-              <col style="width: 9%;">
-              <col style="width: 9%;">
-              <col style="width: 9%;">
-              <col style="width: 12%;">
+              <col style="width: 10%;">
+              <col style="width: 26%;">
             </colgroup>
             <thead>
               <tr>
                 <th>BÀI HÁT</th>
                 <th>ALBUM</th>
                 <th>THỂ LOẠI</th>
-                <th class="text-right">THỜI LƯỢNG</th>
                 <th class="text-right">LƯỢT NGHE</th>
                 <th class="text-center">METADATA</th>
                 <th class="text-center">TRẠNG THÁI</th>
@@ -96,7 +111,7 @@
             </thead>
             <tbody>
               <tr v-if="songs.length === 0 && !loading">
-                <td colspan="8">
+                <td colspan="7">
                   <div class="empty-state" style="border: none; background: transparent; padding: 100px 20px;">
                     <span class="empty-icon">🎵</span>
                     <p>Không tìm thấy bài hát nào.</p>
@@ -112,7 +127,6 @@
                 </td>
                 <td><span class="muted">{{ song.album?.title || '-' }}</span></td>
                 <td><span class="muted">{{ song.genre?.name || '-' }}</span></td>
-                <td class="text-right"><span class="muted">{{ formatDuration(song.duration) }}</span></td>
                 <td class="text-right">{{ formatNumber(song.playCount) }}</td>
                 <td class="text-center">
                   <span class="status-badge" :class="song.metadataStatus">
@@ -125,7 +139,10 @@
                   </span>
                 </td>
                 <td class="text-right actions-cell">
-                  <button @click="openDetailModal(song.id)" class="btn-icon">Chi tiết</button>
+                  <button v-if="song.reviewStatus !== 'draft'" @click="openDetailModal(song.id)" class="btn-icon">Chi tiết</button>
+                  <button v-if="song.reviewStatus === 'draft'" @click="openDraftEditor(song.id)" class="btn-icon">Chỉnh sửa</button>
+                  <button v-if="song.reviewStatus === 'draft'" @click="submitDraft(song)" class="btn-icon btn-submit-small">Gửi duyệt</button>
+                  <button v-if="song.reviewStatus === 'draft'" @click="deleteDraft(song)" class="btn-icon danger">Xóa nháp</button>
                   <button v-if="song.reviewStatus === 'rejected' && song.canResubmit && song.resubmissionCount < 3" @click="openResubmitModal(song)" class="btn-icon">Sửa lại</button>
                 </td>
               </tr>
@@ -280,7 +297,7 @@
     <div v-if="showUploadModal" class="modal-overlay" @click.self="closeUploadModal">
       <div class="modal-content dark-modal">
         <div class="modal-header">
-          <h2>Upload bài hát mới</h2>
+                <h2>{{ uploadForm.id ? 'Chỉnh sửa bản nháp' : 'Upload bài hát mới' }}</h2>
           <button @click="closeUploadModal" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
@@ -290,7 +307,7 @@
               <div class="form-grid">
                 <div class="form-group">
                   <label>T&ecirc;n b&agrave;i h&aacute;t <span class="text-danger">*</span></label>
-                  <input type="text" v-model.trim="uploadForm.title" class="input-dark" placeholder="Nhập tên bài hát" required />
+                  <input type="text" v-model.trim="uploadForm.title" class="input-dark" placeholder="Nhập tên bài hát hoặc tên tạm" />
                 </div>
                 <div class="form-group">
                   <label>Th&#7875; lo&#7841;i <span class="text-danger">*</span></label>
@@ -321,13 +338,15 @@
               <div class="form-grid">
                 <div class="form-group">
                   <label>File Audio <span class="text-danger">*</span> <span class="muted">(mp3, wav, m4a)</span></label>
-                  <input type="file" @change="onAudioFileChange" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4,audio/x-m4a" class="input-dark" required />
+                  <input type="file" @change="onAudioFileChange" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4,audio/x-m4a" class="input-dark" />
                   <div v-if="uploadForm.audioFile" class="file-info text-success">{{ uploadForm.audioFile.name }} - {{ formatFileSize(uploadForm.audioFile.size) }}</div>
+                  <div v-else-if="uploadForm.existingAudioUrl" class="helper-text">Đã có file audio trong bản nháp</div>
                 </div>
                 <div class="form-group">
                   <label>&#7842;nh b&igrave;a <span class="muted">(jpg, jpeg, png, webp)</span></label>
                   <input type="file" @change="onCoverFileChange" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="input-dark" />
                   <div v-if="uploadForm.coverFile" class="file-info text-success">{{ uploadForm.coverFile.name }} - {{ formatFileSize(uploadForm.coverFile.size) }}</div>
+                  <div v-else-if="uploadForm.existingCoverUrl" class="helper-text">Đã có ảnh bìa trong bản nháp</div>
                 </div>
               </div>
             </div>
@@ -348,6 +367,9 @@
         </div>
         <div class="modal-footer">
           <button @click="closeUploadModal" class="btn-secondary" :disabled="uploading">Hủy</button>
+          <button @click="handleSaveDraft" class="btn-secondary" :disabled="uploading">
+            {{ uploading ? 'Đang lưu...' : 'Lưu nháp' }}
+          </button>
           <button @click="handleUpload" class="btn-primary" :disabled="uploading || !canSubmitUpload">
             {{ uploading ? 'Đang tải lên...' : 'Gửi duyệt' }}
           </button>
@@ -448,13 +470,14 @@ const formatFlagText = (flag) => {
 }
 
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
+const heroImage = normalizeImageUrl('/uploads/artist/songs.png')
 const initialLoading = ref(true)
 const loading = ref(false)
 const errorMsg = ref('')
 const toast = useToastStore()
 
 const songs = ref([])
-const summary = ref({ totalSongs: 0, totalPlays: 0, completeMetadata: 0, missingAudio: 0, missingCover: 0 })
+const summary = ref({ totalSongs: 0, totalPlays: 0, completeMetadata: 0, missingAudio: 0, missingCover: 0, draftCount: 0, changesRequiredCount: 0 })
 const pagination = ref({ page: 1, limit: 20, total: 0, totalPages: 0 })
 
 const searchQuery = ref('')
@@ -646,18 +669,22 @@ const formatMetadataStatus = (status) => {
 
 const getReviewStatusClass = (status) => {
   switch (status) {
+    case 'draft': return 'draft'
     case 'approved': return 'approved'
     case 'pending_review': return 'pending'
     case 'rejected': return 'rejected'
+    case 'changes_required': return 'changes_required'
     default: return ''
   }
 }
 
 const formatReviewStatus = (status) => {
   switch (status) {
+    case 'draft': return 'Bản nháp'
     case 'approved': return 'Đã duyệt'
     case 'pending_review': return 'Chờ duyệt'
     case 'rejected': return 'Từ chối'
+    case 'changes_required': return 'Cần chỉnh sửa'
     default: return status
   }
 }
@@ -673,16 +700,19 @@ const uploadError = ref('')
 const uploadOptionsLoading = ref(false)
 const uploadOptions = ref({ artist: null, albums: [] })
 const uploadForm = ref({
+  id: null,
   title: '',
   albumId: '',
   lyrics: '',
   submissionNote: '',
   audioFile: null,
-  coverFile: null
+  coverFile: null,
+  existingAudioUrl: '',
+  existingCoverUrl: ''
 })
 
 const canSubmitUpload = computed(() => {
-  return !!uploadForm.value.title.trim() && !!uploadArtistGenreId.value && !!uploadForm.value.audioFile
+  return !!uploadForm.value.title.trim() && !!uploadArtistGenreId.value && (!!uploadForm.value.audioFile || !!uploadForm.value.existingAudioUrl)
 })
 
 const uploadArtistGenreId = computed(() => uploadOptions.value.artist?.genreId || null)
@@ -708,12 +738,15 @@ const fetchUploadOptions = async () => {
 
 const resetUploadForm = () => {
   uploadForm.value = {
+    id: null,
     title: '',
     albumId: '',
     lyrics: '',
     submissionNote: '',
     audioFile: null,
-    coverFile: null
+    coverFile: null,
+    existingAudioUrl: '',
+    existingCoverUrl: ''
   }
 }
 
@@ -783,6 +816,76 @@ const onCoverFileChange = (e) => {
   uploadForm.value.coverFile = file
 }
 
+const getDuplicateAudioMessage = (errorData = {}) => {
+  if (!['DUPLICATE_AUDIO_EXISTING_SONG', 'DUPLICATE_AUDIO_PENDING_SUBMISSION'].includes(errorData.code)) {
+    return null
+  }
+
+  const duplicate = errorData.duplicate || {}
+  const suffix = duplicate.title
+    ? ` Trùng với: ${duplicate.title}${duplicate.artist_name ? ` - ${duplicate.artist_name}` : ''}.`
+    : ''
+
+  return `File âm thanh này đã tồn tại trong thư viện MusicFlow hoặc đã được gửi duyệt trước đó. Vui lòng chọn file khác.${suffix}`
+}
+
+const buildUploadFormData = () => {
+  const formData = new FormData()
+  if (uploadForm.value.title.trim()) formData.append('title', uploadForm.value.title.trim())
+  if (uploadForm.value.id || uploadForm.value.albumId) formData.append('albumId', uploadForm.value.albumId)
+  if (uploadForm.value.lyrics.trim()) formData.append('lyrics', uploadForm.value.lyrics.trim())
+  if (uploadForm.value.submissionNote.trim()) formData.append('submissionNote', uploadForm.value.submissionNote.trim())
+  if (uploadForm.value.audioFile) formData.append('audio', uploadForm.value.audioFile)
+  if (uploadForm.value.coverFile) formData.append('cover', uploadForm.value.coverFile)
+  return formData
+}
+
+const applyUploadError = (err, fallback) => {
+  const errCode = err.response?.data?.code
+  const errMsg = err.response?.data?.message
+  const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
+
+  if (duplicateMessage) {
+    uploadError.value = duplicateMessage
+    toast.showToast(duplicateMessage, 'error')
+  } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
+    const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
+    uploadError.value = msg
+    toast.showToast(msg, 'error')
+  } else if (errCode === 'DUPLICATE_AUDIO_PENDING') {
+    const msg = 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
+    uploadError.value = msg
+    toast.showToast(msg, 'error')
+  } else {
+    uploadError.value = errMsg || fallback
+  }
+}
+
+const handleSaveDraft = async () => {
+  uploadError.value = ''
+  uploading.value = true
+
+  try {
+    const formData = buildUploadFormData()
+    const res = uploadForm.value.id
+      ? await artistStudioApi.updateSong(uploadForm.value.id, formData)
+      : await artistStudioApi.createSongDraft(formData)
+
+    if (res.data.success) {
+      toast.showToast('Đã lưu bản nháp bài hát.', 'success')
+      closeUploadModal()
+      fetchSongs(1)
+    } else {
+      uploadError.value = res.data.message || 'Lỗi khi lưu nháp'
+    }
+  } catch (err) {
+    console.error(err)
+    applyUploadError(err, 'Có lỗi xảy ra khi lưu nháp. Vui lòng thử lại.')
+  } finally {
+    uploading.value = false
+  }
+}
+
 const handleUpload = async () => {
   if (!uploadForm.value.title.trim()) {
     uploadError.value = 'Vui lòng nhập tên bài hát.'
@@ -792,7 +895,7 @@ const handleUpload = async () => {
     uploadError.value = 'Nghệ sĩ chưa được gán thể loại. Vui lòng liên hệ Admin.'
     return
   }
-  if (!uploadForm.value.audioFile) {
+  if (!uploadForm.value.audioFile && !uploadForm.value.existingAudioUrl) {
     uploadError.value = 'Vui lòng chọn file audio.'
     return
   }
@@ -801,15 +904,19 @@ const handleUpload = async () => {
   uploading.value = true
 
   try {
-    const formData = new FormData()
-    formData.append('title', uploadForm.value.title.trim())
-    if (uploadForm.value.albumId) formData.append('albumId', uploadForm.value.albumId)
-    if (uploadForm.value.lyrics.trim()) formData.append('lyrics', uploadForm.value.lyrics.trim())
-    if (uploadForm.value.submissionNote.trim()) formData.append('submissionNote', uploadForm.value.submissionNote.trim())
-    formData.append('audio', uploadForm.value.audioFile)
-    if (uploadForm.value.coverFile) formData.append('cover', uploadForm.value.coverFile)
-
-    const res = await artistStudioApi.uploadArtistSong(formData)
+    let res
+    if (uploadForm.value.id) {
+      const formData = buildUploadFormData()
+      const updateRes = await artistStudioApi.updateSong(uploadForm.value.id, formData)
+      if (!updateRes.data.success) {
+        uploadError.value = updateRes.data.message || 'Lỗi khi lưu bản nháp'
+        return
+      }
+      res = await artistStudioApi.submitSong(uploadForm.value.id)
+    } else {
+      const formData = buildUploadFormData()
+      res = await artistStudioApi.uploadArtistSong(formData)
+    }
     if (res.data.success) {
       toast.showToast('Bài hát đã được gửi Admin duyệt.', 'success')
       closeUploadModal()
@@ -821,8 +928,12 @@ const handleUpload = async () => {
     console.error(err)
     const errCode = err.response?.data?.code
     const errMsg = err.response?.data?.message
+    const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
 
-    if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
+    if (duplicateMessage) {
+      uploadError.value = duplicateMessage
+      toast.showToast(duplicateMessage, 'error')
+    } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
       const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
       uploadError.value = msg
       toast.showToast(msg, 'error')
@@ -833,6 +944,69 @@ const handleUpload = async () => {
     } else {
       uploadError.value = errMsg || 'Có lỗi xảy ra khi tải lên. Vui lòng thử lại.'
     }
+  } finally {
+    uploading.value = false
+  }
+}
+
+const openDraftEditor = async (songId) => {
+  uploadError.value = ''
+  showUploadModal.value = true
+  await fetchUploadOptions()
+  try {
+    const res = await artistStudioApi.getSongDetail(songId)
+    if (res.data.success) {
+      const song = res.data.song
+      uploadForm.value = {
+        id: song.id,
+        title: song.title || '',
+        albumId: song.album?.id ? String(song.album.id) : '',
+        lyrics: song.lyrics || '',
+        submissionNote: song.submissionNote || '',
+        audioFile: null,
+        coverFile: null,
+        existingAudioUrl: song.audioUrl || '',
+        existingCoverUrl: song.coverUrl || ''
+      }
+    }
+  } catch (err) {
+    console.error(err)
+    uploadError.value = 'Không thể tải bản nháp. Vui lòng thử lại.'
+  }
+}
+
+const submitDraft = async (song) => {
+  if (!song?.id) return
+  uploading.value = true
+  try {
+    const res = await artistStudioApi.submitSong(song.id)
+    if (res.data.success) {
+      toast.showToast('Bài hát đã được gửi Admin duyệt.', 'success')
+      fetchSongs(pagination.value.page)
+    }
+  } catch (err) {
+    const msg = err.response?.data?.message || 'Không thể gửi duyệt bản nháp.'
+    toast.showToast(msg, 'error')
+  } finally {
+    uploading.value = false
+  }
+}
+
+const deleteDraft = async (song) => {
+  if (!song?.id) return
+  const title = song.title || 'bản nháp này'
+  if (!window.confirm(`Xóa bản nháp "${title}"? Thao tác này không thể khôi phục.`)) return
+
+  uploading.value = true
+  try {
+    const res = await artistStudioApi.deleteSongDraft(song.id)
+    if (res.data.success) {
+      toast.showToast('Đã xóa bản nháp bài hát.', 'success')
+      fetchSongs(pagination.value.page)
+    }
+  } catch (err) {
+    const msg = err.response?.data?.message || 'Không thể xóa bản nháp.'
+    toast.showToast(msg, 'error')
   } finally {
     uploading.value = false
   }
@@ -910,8 +1084,12 @@ const handleResubmit = async () => {
     console.error(err)
     const errCode = err.response?.data?.code
     const errMsg = err.response?.data?.message
+    const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
 
-    if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
+    if (duplicateMessage) {
+      resubmitError.value = duplicateMessage
+      toast.showToast(duplicateMessage, 'error')
+    } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
       const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
       resubmitError.value = msg
       toast.showToast(msg, 'error')
@@ -932,6 +1110,157 @@ const handleResubmit = async () => {
 <style scoped>
 .artist-page {
   padding: 0;
+}
+
+.artist-library-hero {
+  position: sticky;
+  top: calc(var(--main-py) * -1);
+  z-index: 40;
+  overflow: hidden;
+  margin: calc(var(--main-py) * -1) calc(var(--main-px) * -1) 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #070811;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
+
+.hero-bg-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.35;
+  filter: blur(30px);
+  transform: scale(1.15);
+  pointer-events: none;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hero-overlay-main {
+  background: linear-gradient(to top, #090b14, rgba(9, 11, 20, 0.8), rgba(124, 58, 237, 0.2));
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  width: 100%;
+  padding: calc(var(--main-py) + 16px) calc(var(--main-px) + 34px) 30px;
+}
+
+.hero-cover-wrap {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.44);
+}
+
+.hero-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 14px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.hero-title-row h1 {
+  min-width: 0;
+  margin: 0;
+  color: #fff;
+  font-size: 50px;
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.hero-copy p {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hero-stats span:not(:last-child)::after {
+  content: "•";
+  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.toolbar-section {
+  padding: 0 32px 18px;
+}
+
+.toolbar-section .toolbar {
+  align-items: center;
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.toolbar-action {
+  min-width: 142px;
+  justify-content: center;
+  height: 44px;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(30, 215, 96, 0.18);
+}
+
+.songs-container {
+  padding: 0 32px 32px;
 }
 
 .page-header {
@@ -1173,6 +1502,7 @@ const handleResubmit = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .song-cover-sm {
@@ -1185,6 +1515,10 @@ const handleResubmit = async () => {
 .song-title-sm {
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .muted {
@@ -1219,13 +1553,18 @@ const handleResubmit = async () => {
   border: 1px solid rgba(46, 213, 115, 0.25);
   box-shadow: 0 0 12px rgba(46, 213, 115, 0.1);
 }
+.status-badge.draft {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
 .status-badge.pending, .status-badge.missing_audio, .status-badge.missing_cover, .status-badge.missing_genre, .status-badge.incomplete {
   background: rgba(255, 165, 2, 0.12);
   color: #ffa502;
   border: 1px solid rgba(255, 165, 2, 0.25);
   box-shadow: 0 0 12px rgba(255, 165, 2, 0.1);
 }
-.status-badge.rejected, .status-badge.danger {
+.status-badge.rejected, .status-badge.changes_required, .status-badge.danger {
   background: rgba(255, 71, 87, 0.15);
   color: #ff4757;
   border: 1px solid rgba(255, 71, 87, 0.3);
@@ -1235,22 +1574,42 @@ const handleResubmit = async () => {
 .actions-cell {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .btn-icon {
   background: rgba(255,255,255,0.05);
   border: none;
   color: var(--text-primary);
-  padding: 6px 12px;
+  padding: 7px 9px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 30px;
+  white-space: nowrap;
   transition: all 0.2s;
 }
 
 .btn-icon:hover:not(.disabled) {
   background: rgba(255,255,255,0.1);
+}
+
+.btn-submit-small {
+  background: rgba(0, 212, 170, 0.14);
+  color: var(--accent);
+}
+
+.btn-icon.danger {
+  background: rgba(255, 71, 87, 0.12);
+  color: #ff6b7a;
+}
+
+.btn-icon.danger:hover:not(.disabled) {
+  background: rgba(255, 71, 87, 0.2);
 }
 
 .btn-primary {
@@ -1273,6 +1632,86 @@ const handleResubmit = async () => {
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
+}
+
+@media (max-width: 1024px) {
+  .hero-inner {
+    align-items: center;
+    padding: 30px 28px 28px;
+  }
+
+  .hero-cover-wrap {
+    width: 124px;
+    height: 124px;
+  }
+
+  .hero-title-row h1 {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 24px 20px 26px;
+  }
+
+  .hero-cover-wrap {
+    width: 112px;
+    height: 112px;
+    border-radius: 20px;
+  }
+
+  .hero-title-row {
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .hero-title-row h1 {
+    font-size: 36px;
+    line-height: 1.05;
+  }
+
+  .hero-copy p {
+    font-size: 13px;
+  }
+
+  .toolbar-section,
+  .songs-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .toolbar-section .toolbar {
+    gap: 10px;
+  }
+
+  .search-box,
+  .status-filters,
+  .sort-filters,
+  .status-filters .select-dark,
+  .sort-filters .select-dark {
+    width: 100%;
+    max-width: none;
+  }
+
+  .toolbar-action {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .hero-title-row h1 {
+    font-size: 31px;
+  }
+
+  .hero-cover-wrap {
+    width: 104px;
+    height: 104px;
+  }
 }
 
 .disabled {

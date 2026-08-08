@@ -9,6 +9,14 @@ export const artistStudioApi = {
   uploadArtistSong: (formData) => api.post('/artist/songs', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
+  createSongDraft: (formData) => api.post('/artist/songs/drafts', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  updateSong: (id, formData) => api.put(`/artist/songs/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  submitSong: (id) => api.post(`/artist/songs/${id}/submit`),
+  deleteSongDraft: (id) => api.delete(`/artist/songs/${id}`),
   getAlbums: () => api.get('/artist/albums', { params: { _t: Date.now() } }),
   getAlbumDetail: (albumId) => api.get(`/artist/albums/${albumId}`),
   createAlbum: (formData) => api.post('/artist/albums', formData, {

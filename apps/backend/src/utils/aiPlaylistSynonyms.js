@@ -42,7 +42,7 @@ const SYNONYM_RULES = [
     },
     {
         id: 'focus',
-        phrases: ['hoc bai', 'lam viec', 'coding', 'lap trinh', 'deadline', 'chay deadline', 'tap trung', 'khong bi phan tam'],
+        phrases: ['hoc bai', 'lam viec', 'coding', 'lap trinh', 'deadline', 'chay deadline', 'tap trung', 'khong bi phan tam', 'study', 'focus', 'work', 'reading'],
         apply: {
             mood: ['focus'],
             energy: 'medium',
@@ -118,9 +118,9 @@ const GENRE_RULES = [
 ];
 
 const ACTIVITY_RULES = [
-    { activity: 'study', phrases: ['hoc bai', 'hoc tap', 'on thi'] },
+    { activity: 'study', phrases: ['hoc bai', 'hoc tap', 'on thi', 'study'] },
     { activity: 'coding', phrases: ['coding', 'code', 'lap trinh'] },
-    { activity: 'work', phrases: ['lam viec', 'deadline', 'chay deadline', 'tap trung'] },
+    { activity: 'work', phrases: ['lam viec', 'deadline', 'chay deadline', 'tap trung', 'focus', 'work', 'reading'] },
     { activity: 'gym', phrases: ['tap gym', 'gym', 'workout', 'the duc', 'van dong', 'dance'] },
     { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax', 'buoi toi', 'toi', 'chill'] },
     { activity: 'sleep', phrases: ['ngu', 'de ngu', 'ru ngu'] },
@@ -187,6 +187,11 @@ const NEGATIVE_RULES = [
         id: 'avoid_rap',
         phrases: ['khong rap', 'dung rap', 'tranh rap'],
         apply: { genre_family: ['rap_hiphop'], keywords: ['rap'] }
+    },
+    {
+        id: 'avoid_ballad',
+        phrases: ['khong ballad', 'khong lay ballad', 'dung ballad', 'dung co ballad', 'loai tru ballad', 'tru ballad', 'tranh ballad'],
+        apply: { genre_family: ['ballad'], keywords: ['ballad'] }
     },
     {
         id: 'less_vocal',

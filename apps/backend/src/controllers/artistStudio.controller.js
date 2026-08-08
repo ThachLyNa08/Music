@@ -4,7 +4,7 @@ const { getArtistStats } = require('../services/artistStats.service');
 const notificationService = require('../services/notification.service');
 const { evaluateSongSubmission, evaluateAlbumSubmission } = require('../services/artistContentModeration.service');
 const { calculateFileSha256 } = require('../utils/fileHash.util');
-const { findDuplicateAudioHash } = require('../services/audioDuplicate.service');
+const { findDuplicateAudioHash, buildDuplicateAudioPayload } = require('../services/audioDuplicate.service');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
@@ -79,13 +79,44 @@ async function ensureModerationSchema() {
   }
 }
 
+let songDraftSchemaEnsured = false;
+async function ensureSongDraftSchema() {
+  if (songDraftSchemaEnsured) return;
+  try {
+    await pool.query("ALTER TABLE songs MODIFY review_status ENUM('draft','approved','pending_review','rejected','changes_required') NOT NULL DEFAULT 'approved'").catch(() => {});
+    await pool.query('ALTER TABLE songs MODIFY audio_url VARCHAR(500) NULL').catch(() => {});
+    await pool.query('ALTER TABLE songs ADD COLUMN last_saved_at DATETIME NULL').catch(() => {});
+    await pool.query('CREATE INDEX idx_song_last_saved_at ON songs(last_saved_at)').catch(() => {});
+
+    cachedSongColumns = null;
+    songDraftSchemaEnsured = true;
+  } catch (err) {
+    console.warn('Song draft schema ensure failed:', err.message);
+  }
+}
+
 let cachedSongColumns = null;
 async function getSongColumns() {
   await ensureModerationSchema();
+  await ensureSongDraftSchema();
   if (cachedSongColumns) return cachedSongColumns;
   const [rows] = await pool.query('SHOW COLUMNS FROM songs');
   cachedSongColumns = new Set(rows.map(row => row.Field));
   return cachedSongColumns;
+}
+
+const optionalTableColumnsCache = new Map();
+async function getOptionalTableColumns(tableName) {
+  if (optionalTableColumnsCache.has(tableName)) return optionalTableColumnsCache.get(tableName);
+  try {
+    const [rows] = await pool.query(`SHOW COLUMNS FROM \`${tableName}\``);
+    const columns = new Set(rows.map(row => row.Field));
+    optionalTableColumnsCache.set(tableName, columns);
+    return columns;
+  } catch (error) {
+    optionalTableColumnsCache.set(tableName, null);
+    return null;
+  }
 }
 
 let cachedGenreColumns = null;
@@ -102,6 +133,75 @@ async function getArtistColumns() {
   const [rows] = await pool.query('SHOW COLUMNS FROM artists');
   cachedArtistColumns = new Set(rows.map(row => row.Field));
   return cachedArtistColumns;
+}
+
+let artistProfileSchemaEnsured = false;
+async function ensureArtistProfileSchema() {
+  if (artistProfileSchemaEnsured) return;
+
+  const profileColumns = [
+    { name: 'tagline', def: 'VARCHAR(150) NULL' },
+    { name: 'primary_genre_id', def: 'INT UNSIGNED NULL' },
+    { name: 'debut_year', def: 'INT NULL' },
+    { name: 'contact_email', def: 'VARCHAR(255) NULL' },
+    { name: 'website_url', def: 'VARCHAR(500) NULL' },
+    { name: 'facebook_url', def: 'VARCHAR(500) NULL' },
+    { name: 'instagram_url', def: 'VARCHAR(500) NULL' },
+    { name: 'youtube_url', def: 'VARCHAR(500) NULL' },
+    { name: 'tiktok_url', def: 'VARCHAR(500) NULL' }
+  ];
+
+  for (const col of profileColumns) {
+    try {
+      await pool.query(`ALTER TABLE artists ADD COLUMN ${col.name} ${col.def}`);
+    } catch (_err) {}
+  }
+  try { await pool.query('CREATE INDEX idx_artists_primary_genre_id ON artists(primary_genre_id)'); } catch (_err) {}
+
+  cachedArtistColumns = null;
+  artistProfileSchemaEnsured = true;
+}
+
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+
+const cleanNullableString = (value, maxLength) => {
+  if (value === null || value === undefined) return null;
+  const next = String(value).trim();
+  if (!next) return null;
+  return maxLength ? next.substring(0, maxLength) : next;
+};
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+const isValidHttpUrl = (value) => {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch (_err) {
+    return false;
+  }
+};
+
+function buildProfilePayload(row, req) {
+  const market = row.region || row.country || row.market || null;
+  return {
+    id: row.artist_id,
+    name: row.artist_name,
+    bio: row.bio || row.short_bio || '',
+    tagline: row.tagline || '',
+    avatarUrl: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.avatar_url }, req),
+    coverUrl: null,
+    market,
+    primaryGenreId: row.primary_genre_id || null,
+    primaryGenreName: row.primary_genre_name || null,
+    debutYear: row.debut_year || null,
+    contactEmail: row.contact_email || '',
+    websiteUrl: row.website_url || '',
+    facebookUrl: row.facebook_url || '',
+    instagramUrl: row.instagram_url || '',
+    youtubeUrl: row.youtube_url || '',
+    tiktokUrl: row.tiktok_url || ''
+  };
 }
 
 let cachedAlbumColumns = null;
@@ -221,6 +321,124 @@ const cleanupUploadedFiles = (files = []) => {
     fs.unlink(file.path, () => {});
   });
 };
+
+function sendDuplicateAudioResponse(res, duplicate) {
+  const payload = buildDuplicateAudioPayload(duplicate);
+  if (!payload) {
+    return res.status(409).json({
+      success: false,
+      code: 'DUPLICATE_AUDIO',
+      message: 'File âm thanh này đã tồn tại trong hệ thống.',
+    });
+  }
+  return res.status(payload.statusCode).json(payload.body);
+}
+
+const editableArtistSongStatuses = new Set(['draft', 'rejected', 'changes_required']);
+
+async function validateArtistSongAlbum(albumId, artistId) {
+  const album = albumId ? parseInt(albumId, 10) : null;
+  if (albumId && !album) {
+    const err = new Error('Album khong hop le.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!album) return null;
+
+  const [albumRows] = await pool.query(
+    'SELECT id FROM albums WHERE id = ? AND artist_id = ? LIMIT 1',
+    [album, artistId]
+  );
+  if (!albumRows.length) {
+    const err = new Error('Album khong thuoc nghe si hien tai.');
+    err.statusCode = 400;
+    throw err;
+  }
+  return album;
+}
+
+async function prepareArtistSongFiles(req, uploadedFiles, excludeSongId = null) {
+  let audioUrl = null;
+  let coverUrl = null;
+  let audioHash = null;
+  let audioFileSize = null;
+  let audioMimeType = null;
+
+  if (!req.files) return { audioUrl, coverUrl, audioHash, audioFileSize, audioMimeType };
+
+  if (req.files.audio && req.files.audio.length > 0) {
+    const audioFile = req.files.audio[0];
+    if (!isAllowedUpload(audioFile, ['.mp3', '.wav', '.m4a'], ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a'])) {
+      cleanupUploadedFiles(uploadedFiles);
+      const err = new Error('File audio chi ho tro mp3, wav, m4a.');
+      err.statusCode = 400;
+      throw err;
+    }
+    audioUrl = '/uploads/audio/' + audioFile.filename;
+    audioFileSize = audioFile.size || null;
+    audioMimeType = audioFile.mimetype || null;
+
+    try {
+      audioHash = await calculateFileSha256(audioFile.path);
+    } catch (err) {
+      console.error('Error calculating file SHA-256 hash:', err);
+    }
+
+    if (audioHash) {
+      const duplicate = await findDuplicateAudioHash(audioHash, excludeSongId);
+      if (duplicate) {
+        cleanupUploadedFiles(uploadedFiles);
+        const payload = buildDuplicateAudioPayload(duplicate);
+        const error = new Error(payload?.body?.message || 'File audio bi trung.');
+        error.statusCode = payload?.statusCode || 409;
+        error.payload = payload?.body;
+        throw error;
+      }
+    }
+  }
+
+  if (req.files.cover && req.files.cover.length > 0) {
+    const coverFile = req.files.cover[0];
+    if (!isAllowedUpload(coverFile, ['.jpg', '.jpeg', '.png', '.webp'], ['image/jpeg', 'image/png', 'image/webp'])) {
+      cleanupUploadedFiles(uploadedFiles);
+      const err = new Error('Anh bia chi ho tro jpg, jpeg, png, webp.');
+      err.statusCode = 400;
+      throw err;
+    }
+    coverUrl = '/uploads/images/' + coverFile.filename;
+  }
+
+  return { audioUrl, coverUrl, audioHash, audioFileSize, audioMimeType };
+}
+
+function sendUploadError(res, error) {
+  if (error.payload) {
+    return res.status(error.statusCode || 409).json(error.payload);
+  }
+  return res.status(error.statusCode || 500).json({
+    success: false,
+    message: error.message || 'Co loi xay ra.'
+  });
+}
+
+function validateSongReadyForSubmission(song) {
+  const missing = [];
+  if (!song.title || !String(song.title).trim()) missing.push('title');
+  if (!song.audio_url) missing.push('audio');
+  if (!song.genre_id) missing.push('genre');
+
+  if (missing.length) {
+    const err = new Error('Vui lòng nhập đầy đủ thông tin và tải file âm thanh trước khi gửi duyệt.');
+    err.statusCode = 400;
+    err.payload = {
+      success: false,
+      code: 'SUBMISSION_INCOMPLETE',
+      message: 'Vui lòng nhập đầy đủ thông tin và tải file âm thanh trước khi gửi duyệt.',
+      missing
+    };
+    throw err;
+  }
+}
 
 exports.getMe = async (req, res, next) => {
   try {
@@ -531,15 +749,50 @@ exports.changePassword = async (req, res, next) => {
 
 exports.getProfile = async (req, res, next) => {
   try {
+    await ensureArtistProfileSchema();
     const userColumns = await getUserColumns();
+    const artistColumns = await getArtistColumns();
     const mustChangeExpr = userColumns.has('must_change_password') ? 'u.must_change_password' : '0 AS must_change_password';
+
+    const artistSelect = [
+      'a.id AS artist_id',
+      'a.name AS artist_name',
+      'a.bio',
+      'a.avatar_url'
+    ];
+    const optionalArtistColumns = [
+      ['short_bio', 'a.short_bio'],
+      ['country', 'a.country'],
+      ['region', 'a.region'],
+      ['tagline', 'a.tagline'],
+      ['primary_genre_id', 'a.primary_genre_id'],
+      ['debut_year', 'a.debut_year'],
+      ['contact_email', 'a.contact_email'],
+      ['website_url', 'a.website_url'],
+      ['facebook_url', 'a.facebook_url'],
+      ['instagram_url', 'a.instagram_url'],
+      ['youtube_url', 'a.youtube_url'],
+      ['tiktok_url', 'a.tiktok_url']
+    ];
+    optionalArtistColumns.forEach(([column, selectExpr]) => {
+      if (artistColumns.has(column)) artistSelect.push(selectExpr);
+    });
+
+    const genreJoin = artistColumns.has('primary_genre_id')
+      ? 'LEFT JOIN genres g ON g.id = a.primary_genre_id'
+      : '';
+    const genreSelect = artistColumns.has('primary_genre_id')
+      ? ', g.name AS primary_genre_name'
+      : ', NULL AS primary_genre_name';
+
     const [rows] = await pool.query(
       `SELECT u.email, u.status AS user_status,
               ${mustChangeExpr},
-              a.id AS artist_id, a.name AS artist_name, a.bio, a.avatar_url,
-              a.short_bio, a.country, a.region
+              ${artistSelect.join(', ')}
+              ${genreSelect}
        FROM users u
        JOIN artists a ON a.user_id = u.id
+       ${genreJoin}
        WHERE u.id = ? AND u.role = 'artist'
        LIMIT 1`,
       [req.user.id]
@@ -553,19 +806,7 @@ exports.getProfile = async (req, res, next) => {
 
     return res.json({
       success: true,
-      profile: {
-        id: row.artist_id,
-        name: row.artist_name,
-        bio: row.bio || row.short_bio,
-        avatarUrl: resolveArtistAvatar({ id: row.artist_id, name: row.artist_name, avatar_url: row.avatar_url }, req),
-        coverUrl: null, // Chua co cover_url trong DB
-        market: row.region || row.country,
-        generation: null, // Chua co trong DB
-        contactEmail: null,
-        managementCompany: null,
-        representativeName: null,
-        contactNote: null
-      },
+      profile: buildProfilePayload(row, req),
       account: {
         email: row.email,
         status: row.user_status,
@@ -579,7 +820,10 @@ exports.getProfile = async (req, res, next) => {
 
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { bio } = req.body;
+    await ensureArtistProfileSchema();
+    const artistColumns = await getArtistColumns();
+    const currentYear = new Date().getFullYear();
+    const allowedMarkets = new Set(['VPOP', 'KPOP', 'USUK']);
 
     // Check ownership
     const [rows] = await pool.query(
@@ -591,10 +835,91 @@ exports.updateProfile = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Khong tim thay ho so nghe si' });
     }
 
-    // Chi cho phep update bio
+    const updateFields = [];
+    const values = [];
+
+    if (hasOwn(req.body, 'name')) {
+      const name = cleanNullableString(req.body.name, 100);
+      if (!name || name.length < 2) {
+        return res.status(400).json({ success: false, message: 'Ten nghe si phai tu 2 den 100 ky tu.' });
+      }
+      updateFields.push('name = ?');
+      values.push(name);
+    }
+
+    if (hasOwn(req.body, 'market')) {
+      const market = cleanNullableString(req.body.market, 20);
+      if (market && !allowedMarkets.has(market)) {
+        return res.status(400).json({ success: false, message: 'Khu vuc / thi truong khong hop le.' });
+      }
+      const marketColumn = artistColumns.has('region') ? 'region' : (artistColumns.has('country') ? 'country' : null);
+      if (marketColumn) {
+        updateFields.push(`${marketColumn} = ?`);
+        values.push(market);
+      }
+    }
+
+    if (hasOwn(req.body, 'primary_genre_id') && artistColumns.has('primary_genre_id')) {
+      const rawGenreId = req.body.primary_genre_id;
+      const genreId = rawGenreId === '' || rawGenreId === null || rawGenreId === undefined ? null : Number(rawGenreId);
+      if (genreId !== null) {
+        if (!Number.isInteger(genreId) || genreId <= 0) {
+          return res.status(400).json({ success: false, message: 'The loai chinh khong hop le.' });
+        }
+        const [genreRows] = await pool.query('SELECT id FROM genres WHERE id = ? LIMIT 1', [genreId]);
+        if (!genreRows.length) {
+          return res.status(400).json({ success: false, message: 'The loai chinh khong ton tai.' });
+        }
+      }
+      updateFields.push('primary_genre_id = ?');
+      values.push(genreId);
+    }
+
+    if (hasOwn(req.body, 'debut_year') && artistColumns.has('debut_year')) {
+      const rawYear = req.body.debut_year;
+      const debutYear = rawYear === '' || rawYear === null || rawYear === undefined ? null : Number(rawYear);
+      if (debutYear !== null && (!Number.isInteger(debutYear) || debutYear < 1900 || debutYear > currentYear)) {
+        return res.status(400).json({ success: false, message: `Nam ra mat phai nam trong khoang 1900 den ${currentYear}.` });
+      }
+      updateFields.push('debut_year = ?');
+      values.push(debutYear);
+    }
+
+    const stringFields = [
+      ['tagline', 'tagline', 150],
+      ['bio', 'bio', 1500],
+      ['contact_email', 'contact_email', 255],
+      ['website_url', 'website_url', 500],
+      ['facebook_url', 'facebook_url', 500],
+      ['instagram_url', 'instagram_url', 500],
+      ['youtube_url', 'youtube_url', 500],
+      ['tiktok_url', 'tiktok_url', 500]
+    ];
+
+    for (const [bodyKey, column, maxLength] of stringFields) {
+      if (!hasOwn(req.body, bodyKey) || !artistColumns.has(column)) continue;
+      const value = cleanNullableString(req.body[bodyKey], maxLength);
+
+      if (column === 'contact_email' && value && !isValidEmail(value)) {
+        return res.status(400).json({ success: false, message: 'Email lien he khong hop le.' });
+      }
+
+      if (column.endsWith('_url') && value && !isValidHttpUrl(value)) {
+        return res.status(400).json({ success: false, message: 'Lien ket phai la URL hop le, bat dau bang http:// hoac https://.' });
+      }
+
+      updateFields.push(`${column} = ?`);
+      values.push(value);
+    }
+
+    if (!updateFields.length) {
+      return exports.getProfile(req, res, next);
+    }
+
+    values.push(req.user.id);
     await pool.query(
-      `UPDATE artists SET bio = ? WHERE user_id = ?`,
-      [bio ? bio.substring(0, 2000) : null, req.user.id]
+      `UPDATE artists SET ${updateFields.join(', ')} WHERE user_id = ?`,
+      values
     );
 
     // Get updated profile
@@ -608,6 +933,18 @@ exports.uploadAvatar = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'Vui long chon file anh' });
+    }
+
+    const allowedAvatarMimes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const allowedAvatarExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+    const ext = path.extname(req.file.originalname || '').toLowerCase();
+    if (!allowedAvatarMimes.has(req.file.mimetype) || !allowedAvatarExts.has(ext)) {
+      cleanupUploadedFiles([req.file]);
+      return res.status(400).json({ success: false, message: 'Anh dai dien chi ho tro JPG, PNG hoac WebP.' });
+    }
+    if (Number(req.file.size || 0) > 5 * 1024 * 1024) {
+      cleanupUploadedFiles([req.file]);
+      return res.status(400).json({ success: false, message: 'Anh dai dien toi da 5MB.' });
     }
 
     const avatarPath = `/uploads/images/${req.file.filename}`;
@@ -760,7 +1097,7 @@ exports.getSongs = async (req, res, next) => {
     });
 
     let completeMetadata = 0, missingAudio = 0, missingCover = 0, totalPlays = 0;
-    let approvedCount = 0, pendingCount = 0, rejectedCount = 0;
+    let approvedCount = 0, pendingCount = 0, rejectedCount = 0, draftCount = 0, changesRequiredCount = 0;
 
     // Always fetch global stats for the artist's songs regardless of search/filter
     const [statsRows] = await pool.query(
@@ -772,6 +1109,8 @@ exports.getSongs = async (req, res, next) => {
         SUM(CASE WHEN review_status = 'approved' THEN 1 ELSE 0 END) as approved_count,
         SUM(CASE WHEN review_status = 'pending_review' THEN 1 ELSE 0 END) as pending_count,
         SUM(CASE WHEN review_status = 'rejected' THEN 1 ELSE 0 END) as rejected_count,
+        SUM(CASE WHEN review_status = 'draft' THEN 1 ELSE 0 END) as draft_count,
+        SUM(CASE WHEN review_status = 'changes_required' THEN 1 ELSE 0 END) as changes_required_count,
         COUNT(*) as absolute_total
        FROM songs WHERE artist_id = ?`,
       [artistId]
@@ -785,6 +1124,8 @@ exports.getSongs = async (req, res, next) => {
       approvedCount = Number(statsRows[0].approved_count || 0);
       pendingCount = Number(statsRows[0].pending_count || 0);
       rejectedCount = Number(statsRows[0].rejected_count || 0);
+      draftCount = Number(statsRows[0].draft_count || 0);
+      changesRequiredCount = Number(statsRows[0].changes_required_count || 0);
     }
 
     res.json({
@@ -798,7 +1139,9 @@ exports.getSongs = async (req, res, next) => {
         totalPlays,
         approvedCount,
         pendingCount,
-        rejectedCount
+        rejectedCount,
+        draftCount,
+        changesRequiredCount
       },
       pagination: {
         page: Number(page),
@@ -943,18 +1286,7 @@ exports.uploadSong = async (req, res, next) => {
       dupSong = await findDuplicateAudioHash(audioHash);
       if (dupSong) {
         cleanupUploadedFiles(uploadedFiles);
-        if (dupSong.review_status === 'approved') {
-          return res.status(409).json({
-            success: false,
-            code: 'DUPLICATE_AUDIO_APPROVED',
-            message: 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
-          });
-        }
-        return res.status(409).json({
-          success: false,
-          code: 'DUPLICATE_AUDIO_PENDING',
-          message: 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
-        });
+        return sendDuplicateAudioResponse(res, dupSong);
       }
     }
 
@@ -1092,7 +1424,352 @@ exports.uploadSong = async (req, res, next) => {
       console.warn('Notification service error:', err);
     }
   } catch (error) {
+    cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
     next(error);
+  }
+};
+
+exports.createSongDraft = async (req, res, next) => {
+  try {
+    const artistId = req.artist.id;
+    const userId = req.user.id;
+    const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
+    const uploadedFiles = [
+      ...(req.files?.audio || []),
+      ...(req.files?.cover || [])
+    ];
+
+    const finalTitle = title && title.trim() ? title.trim() : 'Bản nháp chưa đặt tên';
+    const fileData = await prepareArtistSongFiles(req, uploadedFiles);
+    const artistGenre = await resolveArtistUploadGenre(artistId);
+    const genre = artistGenre?.genre?.id || null;
+    const album = await validateArtistSongAlbum(albumId, artistId);
+    const songColumns = await getSongColumns();
+
+    const fields = [
+      'title',
+      'artist_id',
+      'genre_id',
+      'album_id',
+      'audio_url',
+      'cover_url',
+      'lyrics',
+      'review_status',
+      'submitted_by_artist_id',
+      'submitted_by_user_id',
+      'submitted_at',
+      'rejection_reason',
+      'play_count'
+    ];
+    const placeholders = ['?', '?', '?', '?', '?', '?', '?', "'draft'", '?', '?', 'NULL', 'NULL', '0'];
+    const values = [
+      finalTitle,
+      artistId,
+      genre,
+      album || null,
+      fileData.audioUrl,
+      fileData.coverUrl,
+      lyrics || null,
+      artistId,
+      userId
+    ];
+
+    if (songColumns.has('submission_note')) {
+      const reviewIndex = fields.indexOf('review_status');
+      fields.splice(reviewIndex, 0, 'submission_note');
+      placeholders.splice(reviewIndex, 0, '?');
+      values.splice(7, 0, submissionNote || reviewNote || null);
+    }
+    if (songColumns.has('last_saved_at')) {
+      fields.push('last_saved_at');
+      placeholders.push('NOW()');
+    }
+    if (songColumns.has('audio_hash') && fileData.audioHash) {
+      fields.push('audio_hash');
+      placeholders.push('?');
+      values.push(fileData.audioHash);
+    }
+    if (songColumns.has('audio_file_size') && fileData.audioFileSize) {
+      fields.push('audio_file_size');
+      placeholders.push('?');
+      values.push(fileData.audioFileSize);
+    }
+    if (songColumns.has('audio_mime_type') && fileData.audioMimeType) {
+      fields.push('audio_mime_type');
+      placeholders.push('?');
+      values.push(fileData.audioMimeType);
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO songs (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      values
+    );
+
+    return res.json({
+      success: true,
+      message: 'Đã lưu bản nháp bài hát.',
+      songId: result.insertId
+    });
+  } catch (error) {
+    cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
+    if (error.statusCode) return sendUploadError(res, error);
+    next(error);
+  }
+};
+
+exports.updateSong = async (req, res, next) => {
+  try {
+    const artistId = req.artist.id;
+    const songId = parseInt(req.params.id, 10);
+    const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
+    const uploadedFiles = [
+      ...(req.files?.audio || []),
+      ...(req.files?.cover || [])
+    ];
+
+    const [rows] = await pool.query('SELECT * FROM songs WHERE id = ? AND artist_id = ? LIMIT 1', [songId, artistId]);
+    if (!rows.length) {
+      cleanupUploadedFiles(uploadedFiles);
+      return res.status(404).json({ success: false, message: 'Khong tim thay bai hat hoac bai hat khong thuoc quyen so huu cua ban' });
+    }
+    const song = rows[0];
+    if (!editableArtistSongStatuses.has(song.review_status)) {
+      cleanupUploadedFiles(uploadedFiles);
+      return res.status(403).json({ success: false, message: 'Chi co the chinh sua ban nhap hoac bai hat can sua.' });
+    }
+
+    const fileData = await prepareArtistSongFiles(req, uploadedFiles, songId);
+    const album = await validateArtistSongAlbum(albumId, artistId);
+    const songColumns = await getSongColumns();
+    const updateFields = [];
+    const values = [];
+
+    if (title !== undefined) {
+      updateFields.push('title = ?');
+      values.push(title && title.trim() ? title.trim() : 'Bản nháp chưa đặt tên');
+    }
+    if (albumId !== undefined) {
+      updateFields.push('album_id = ?');
+      values.push(album);
+    }
+    if (lyrics !== undefined) {
+      updateFields.push('lyrics = ?');
+      values.push(lyrics ? lyrics.trim() : null);
+    }
+    if (songColumns.has('submission_note') && (submissionNote !== undefined || reviewNote !== undefined)) {
+      updateFields.push('submission_note = ?');
+      values.push(submissionNote || reviewNote || null);
+    }
+    if (fileData.audioUrl) {
+      updateFields.push('audio_url = ?');
+      values.push(fileData.audioUrl);
+      if (songColumns.has('audio_hash')) {
+        updateFields.push('audio_hash = ?');
+        values.push(fileData.audioHash);
+      }
+      if (songColumns.has('audio_file_size')) {
+        updateFields.push('audio_file_size = ?');
+        values.push(fileData.audioFileSize);
+      }
+      if (songColumns.has('audio_mime_type')) {
+        updateFields.push('audio_mime_type = ?');
+        values.push(fileData.audioMimeType);
+      }
+    }
+    if (fileData.coverUrl) {
+      updateFields.push('cover_url = ?');
+      values.push(fileData.coverUrl);
+    }
+    if (songColumns.has('last_saved_at')) {
+      updateFields.push('last_saved_at = NOW()');
+    }
+
+    if (!updateFields.length) {
+      return res.json({ success: true, message: 'Không có thay đổi mới.', songId });
+    }
+
+    values.push(songId, artistId);
+    await pool.query(`UPDATE songs SET ${updateFields.join(', ')} WHERE id = ? AND artist_id = ?`, values);
+
+    return res.json({ success: true, message: 'Đã lưu thay đổi bản nháp.', songId });
+  } catch (error) {
+    cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
+    if (error.statusCode) return sendUploadError(res, error);
+    next(error);
+  }
+};
+
+exports.submitSong = async (req, res, next) => {
+  try {
+    const artistId = req.artist.id;
+    const userId = req.user.id;
+    const songId = parseInt(req.params.id, 10);
+
+    const [rows] = await pool.query('SELECT * FROM songs WHERE id = ? AND artist_id = ? LIMIT 1', [songId, artistId]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Khong tim thay bai hat hoac bai hat khong thuoc quyen so huu cua ban' });
+    }
+    const song = rows[0];
+    if (!editableArtistSongStatuses.has(song.review_status)) {
+      return res.status(403).json({ success: false, message: 'Bai hat khong o trang thai co the gui duyet.' });
+    }
+
+    validateSongReadyForSubmission(song);
+
+    if (song.audio_hash) {
+      const duplicate = await findDuplicateAudioHash(song.audio_hash, songId);
+      if (duplicate) return sendDuplicateAudioResponse(res, duplicate);
+    }
+
+    const [approvedSongRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",
+      [artistId]
+    );
+    const [dupRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND id != ? AND LOWER(title) = LOWER(?)",
+      [artistId, songId, String(song.title || '').trim()]
+    );
+
+    const songEvalResult = evaluateSongSubmission({
+      title: song.title,
+      coverUrl: song.cover_url,
+      audioUrl: song.audio_url,
+      lyrics: song.lyrics,
+      genreId: song.genre_id,
+      submissionNote: song.submission_note,
+      duration: song.duration_sec || null,
+      resubmissionCount: song.review_status === 'draft' ? 0 : Number(song.resubmission_count || 0) + 1,
+    }, {
+      approvedSongCount: approvedSongRows[0]?.count || 0,
+      duplicateTitleCount: dupRows[0]?.count || 0,
+    });
+
+    const songColumns = await getSongColumns();
+    const updateFields = [
+      "review_status = 'pending_review'",
+      'submitted_by_artist_id = ?',
+      'submitted_by_user_id = ?',
+      'submitted_at = NOW()',
+      'reviewed_at = NULL',
+      'reviewed_by_admin_id = NULL',
+      'rejection_reason = NULL',
+      'can_resubmit = 1',
+      'resubmit_locked_reason = NULL'
+    ];
+    const values = [artistId, userId];
+
+    if (song.review_status !== 'draft') {
+      updateFields.push('resubmission_count = resubmission_count + 1');
+    }
+    if (songColumns.has('metadata_score')) {
+      updateFields.push('metadata_score = ?', 'risk_score = ?', 'moderation_level = ?', 'moderation_flags = ?');
+      values.push(
+        songEvalResult.metadataScore,
+        songEvalResult.riskScore,
+        songEvalResult.moderationLevel,
+        JSON.stringify(songEvalResult.moderationFlags)
+      );
+    }
+    if (songColumns.has('last_saved_at')) {
+      updateFields.push('last_saved_at = NOW()');
+    }
+
+    values.push(songId, artistId);
+    await pool.query(`UPDATE songs SET ${updateFields.join(', ')} WHERE id = ? AND artist_id = ?`, values);
+
+    pool.query(
+      `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, action, score_snapshot)
+       VALUES ('song', ?, ?, 'submitted', ?)`,
+      [songId, artistId, JSON.stringify(songEvalResult)]
+    ).catch(err => console.warn('Failed to log song submission:', err));
+
+    try {
+      await notificationService.notifyAdminsNewArtistSubmission({
+        contentType: 'song', contentId: songId, title: song.title, artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+      });
+      await notificationService.notifyArtistSubmissionReceived({
+        userId, contentType: 'song', contentId: songId, title: song.title
+      });
+    } catch (err) {
+      console.warn('Notification service error:', err);
+    }
+
+    return res.json({ success: true, message: 'Bài hát đã được gửi Admin duyệt.', songId });
+  } catch (error) {
+    if (error.statusCode) return sendUploadError(res, error);
+    next(error);
+  }
+};
+
+exports.deleteSongDraft = async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    const artistId = req.artist.id;
+    const songId = parseInt(req.params.id, 10);
+    if (!songId) {
+      return res.status(400).json({ success: false, message: 'Bai hat khong hop le.' });
+    }
+
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query(
+      'SELECT id, audio_url, cover_url, review_status FROM songs WHERE id = ? AND artist_id = ? LIMIT 1',
+      [songId, artistId]
+    );
+    if (!rows.length) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Khong tim thay ban nhap hoac ban khong co quyen xoa.' });
+    }
+
+    const song = rows[0];
+    if (song.review_status !== 'draft') {
+      await connection.rollback();
+      return res.status(403).json({ success: false, message: 'Chi co the xoa bai hat dang o trang thai ban nhap.' });
+    }
+
+    const relationTables = [
+      'playlist_songs',
+      'song_likes',
+      'listening_history',
+      'stem_jobs',
+      'stem_separation_jobs',
+      'recommendations',
+      'song_audio_features',
+      'song_genres',
+      'song_lyrics',
+      'song_semantic_profiles',
+      'song_stems',
+    ];
+
+    for (const tableName of relationTables) {
+      const columns = await getOptionalTableColumns(tableName);
+      if (columns?.has('song_id')) {
+        await connection.query(`DELETE FROM \`${tableName}\` WHERE song_id = ?`, [songId]);
+      }
+    }
+
+    await connection.query(
+      "DELETE FROM artist_content_review_logs WHERE content_type = 'song' AND content_id = ?",
+      [songId]
+    ).catch(() => {});
+    await connection.query('DELETE FROM songs WHERE id = ? AND artist_id = ?', [songId, artistId]);
+
+    await connection.commit();
+
+    [song.audio_url, song.cover_url].filter(Boolean).forEach((url) => {
+      const relativePath = String(url).replace(/^\/+/, '');
+      const filePath = path.join(__dirname, '..', '..', relativePath);
+      if (filePath.includes(path.join('uploads', ''))) {
+        fs.unlink(filePath, () => {});
+      }
+    });
+
+    return res.json({ success: true, message: 'Da xoa ban nhap bai hat.', deletedId: songId });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
   }
 };
 
@@ -1479,18 +2156,7 @@ exports.resubmitSong = async (req, res, next) => {
           const dupSong = await findDuplicateAudioHash(newHash, songId);
           if (dupSong) {
             cleanupUploadedFiles(uploadedFiles);
-            if (dupSong.review_status === 'approved') {
-              return res.status(409).json({
-                success: false,
-                code: 'DUPLICATE_AUDIO_APPROVED',
-                message: 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
-              });
-            }
-            return res.status(409).json({
-              success: false,
-              code: 'DUPLICATE_AUDIO_PENDING',
-              message: 'File audio này đang trùng với một bài hát khác đang chờ duyệt. Vui lòng kiểm tra lại trước khi gửi.'
-            });
+            return sendDuplicateAudioResponse(res, dupSong);
           }
           audioHash = newHash;
         }

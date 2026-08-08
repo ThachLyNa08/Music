@@ -6,7 +6,7 @@
     <div v-else class="artist-page-content">
       <!-- Hero Section -->
       <div class="artist-hero compact">
-        <div class="hero-bg" :style="{ backgroundImage: artist.coverUrl ? `url(${artist.coverUrl})` : '' }"></div>
+        <div class="hero-bg" :style="{ backgroundImage: `url(${artist.coverUrl || artist.cover_url || fallbackCover})` }"></div>
         <div class="hero-content">
           <img :src="artist.avatarUrl || artist.avatar_url || fallbackAvatar" @error="onImageError" class="artist-avatar compact" alt="">
           <div class="hero-info">
@@ -238,6 +238,7 @@ ChartJS.register(
 
 import MfIcon from '@/components/common/MfIcon.vue'
 const fallbackAvatar = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&q=80'
+const fallbackCover = 'https://images.unsplash.com/photo-1493225457124-a1a2a5f5f401?w=800&q=80'
 const loading = ref(true)
 const errorMsg = ref('')
 const user = ref({})
@@ -532,10 +533,14 @@ onMounted(loadMe)
 <style scoped>
 .hero-bg {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  inset: 0;
   background-size: cover;
   background-position: center;
-  opacity: 0.4;
+  filter: blur(30px);
+  opacity: 0.36;
+  pointer-events: none;
+  transform: scale(1.15);
+  z-index: 0;
 }
 
 .hero-content {
@@ -543,7 +548,7 @@ onMounted(loadMe)
   display: flex;
   align-items: center;
   gap: 24px;
-  z-index: 1;
+  z-index: 2;
 }
 
 .artist-avatar {

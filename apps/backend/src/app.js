@@ -1,10 +1,10 @@
 // src/app.js
-require('dotenv').config();
+const path       = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const morgan     = require('morgan');
-const path       = require('path');
 
 const app = express();
 
@@ -25,6 +25,7 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ── Routes ───────────────────────────────────────
 app.use('/api/auth',     require('./routes/auth.routes'));
+app.use('/api/account',  require('./routes/account.routes'));
 app.use('/api/users',    require('./routes/user.routes'));
 app.use('/api/me',       require('./routes/user.routes')); // alias for /api/users/me/*
 app.use('/api/songs',    require('./routes/song.routes'));

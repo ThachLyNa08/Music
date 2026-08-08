@@ -7,6 +7,8 @@ const { setCache, deleteCache } = require('../config/redis');
 const { resolvePlaylistCoverUrl } = require('../utils/playlistCover');
 const { PERSONALIZED_SYSTEM_PLAYLISTS } = require('../services/systemPlaylist.service');
 const artistInvitationService = require('../services/artistAccountInvitation.service');
+const { sendSystemEmail } = require('../services/email.service');
+const { welcomeEmail } = require('../services/systemEmailTemplates.service');
 // Legacy invitation flow is currently unused by direct Artist Account mode.
 
 let cachedUserColumns = null;
@@ -130,6 +132,19 @@ exports.register = async (req, res, next) => {
       // 8. Lưu refresh token vào Redis (TTL 30 ngày)
       await setCache(`refresh:${userId}`, refreshToken, 30 * 24 * 3600);
 
+      if (user.email) {
+        const email = welcomeEmail({ name: user.display_name || user.email });
+        await sendSystemEmail({
+          to: user.email,
+          subject: email.subject,
+          type: 'welcome',
+          userId: user.id,
+          metadata: { user_id: user.id, source: 'register' },
+          text: email.text,
+          html: email.html,
+        });
+      }
+
       return res.status(201).json({
         success: true,
         message: 'Đăng ký thành công',
@@ -174,7 +189,11 @@ exports.login = async (req, res, next) => {
 
     // 2. Kiểm tra tài khoản bị khoá
     if (user.status === 'locked') {
-      return res.status(403).json({ success: false, message: 'Tài khoản đã bị khoá' });
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa. Vui lòng kiểm tra email để gửi khiếu nại nếu cần.',
+      });
     }
 
     // 3. Kiểm tra mật khẩu
@@ -188,7 +207,6 @@ exports.login = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         code: 'ARTIST_LOGIN_REQUIRED',
-        message: 'T\u00e0i kho\u1ea3n ngh\u1ec7 s\u0129 vui l\u00f2ng \u0111\u0103ng nh\u1eadp t\u1ea1i Artist Studio.',
         redirectTo: '/artist/login',
       });
     }
@@ -260,7 +278,11 @@ exports.artistLogin = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Day khong phai tai khoan nghe si.' });
     }
     if (user.status === 'locked') {
-      return res.status(403).json({ success: false, message: 'Tai khoan da bi khoa' });
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa. Vui lòng kiểm tra email để gửi khiếu nại nếu cần.',
+      });
     }
     if (!user.artist_id) {
       return res.status(403).json({ success: false, message: 'Tai khoan nghe si chua lien ket ho so nghe si.' });
@@ -378,7 +400,6 @@ exports.refreshToken = async (req, res, next) => {
       [payload.id]
     );
     if (!rows.length || rows[0].status === 'locked') {
-      return res.status(401).json({ success: false, message: 'Tài khoản không hợp lệ' });
     }
 
     const user = rows[0];

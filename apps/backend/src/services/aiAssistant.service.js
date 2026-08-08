@@ -10,6 +10,7 @@ const {
   buildTempoReason,
 } = require('../utils/tempoFeature.util');
 const recommendationService = require('./recommendation.service');
+const { parseStructuredIntent } = require('./llmIntent.service');
 
 function normalizeText(value = '') {
   return String(value)
@@ -71,14 +72,93 @@ function extractSongTitleQuery(prompt = '') {
     .trim();
 }
 
+function cleanSeedSongTitle(value = '') {
+  return String(value || '')
+    .replace(/\b(?:nhé|nhe|nha|cho mình|cho minh|cho tôi|cho toi)\b/gi, ' ')
+    .replace(/[,.!?;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractSeedSongQuery(prompt = '') {
+  const raw = String(prompt || '').trim();
+  const normalized = normalizeText(prompt);
+  const normalizedMatch = normalized.match(
+    /\b(?:(?:beat|nhip|bass|groove)\s+(?:giong|kieu|tuong tu)|giong|kieu|cung vibe|tuong tu|vibe cua|vibe)\s+(?:bai|ca khuc|track)?\s+(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/
+  );
+  if (!normalizedMatch) return null;
+
+  const candidateWords = normalizeText(normalizedMatch[1]).split(/\s+/).filter(Boolean);
+  if (candidateWords.length < 2 || candidateWords.length > 10) return null;
+
+  const rawWords = raw.split(/\s+/);
+  const normalizedWords = rawWords.map((word) => normalizeText(word));
+  for (let i = 0; i <= normalizedWords.length - candidateWords.length; i += 1) {
+    if (normalizedWords.slice(i, i + candidateWords.length).join(' ') === candidateWords.join(' ')) {
+      return cleanSeedSongTitle(rawWords.slice(i, i + candidateWords.length).join(' '));
+    }
+  }
+
+  return cleanSeedSongTitle(normalizedMatch[1]);
+}
+
+function detectBeatSearchIntent(prompt = '') {
+  const normalized = normalizeText(prompt);
+  if (!normalized) return null;
+
+  if (/\bbeat\s+(?:karaoke|khong loi)\b/.test(normalized) || /\b(?:nhac nen khong loi|instrumental|karaoke|tach vocal|lay beat|ban beat cua bai)\b/.test(normalized)) {
+    return {
+      mode: 'karaoke_instrumental',
+      keywords: ['instrumental', 'karaoke', 'khong loi']
+    };
+  }
+
+  if (/\b(?:beat|nhip|bass|groove)\s+(?:giong|tuong tu|kieu)\b/.test(normalized) || /\bnhac co beat kieu\b/.test(normalized)) {
+    return {
+      mode: 'similar_to_song',
+      rhythm: {
+        beatStrength: 'similar',
+        bassIntensity: 'similar',
+        rhythmDensity: 'similar',
+        groove: 'similar'
+      },
+      keywords: ['beat', 'nhip', 'groove']
+    };
+  }
+
+  if (!(/\bbeat\s+(?:manh|cang|day|nhanh|cham|chill|nhe|don dap|bat tai)\b/.test(normalized)
+    || /\b(?:bass|nhip|trong)\s+(?:manh|day|ro|nhanh|cham|don dap|bat tai)\b/.test(normalized)
+    || /\b(?:groove|dance beat|nhip bat tai)\b/.test(normalized))) {
+    return null;
+  }
+
+  const isLow = /\b(?:beat|nhip)\s+(?:cham|chill|nhe)\b/.test(normalized);
+  const isGroove = /\b(?:groove|bat tai)\b/.test(normalized);
+  return {
+    mode: 'beat_rhythm',
+    energy: isLow ? 'low' : 'high',
+    rhythm: {
+      beatStrength: isLow ? 'low_or_medium' : (isGroove ? 'medium_or_high' : 'high'),
+      bassIntensity: isLow ? 'low_or_medium' : 'high',
+      rhythmDensity: isLow ? 'low_or_medium' : 'high',
+      groove: isGroove ? 'high' : (isLow ? 'medium' : 'medium_or_high')
+    },
+    keywords: isLow
+      ? ['chill', 'slow or medium', 'avoid high energy', 'beat']
+      : ['energetic', 'workout', 'dance', 'beat', 'bass']
+  };
+}
+
 function extractArtistQuery(prompt = '') {
   const norm = normalizeText(prompt);
+  if (extractSeedSongQuery(prompt)) return null;
   const match = norm.match(/(?:bai|nhac|bai hat)?\s*(?:cua)\s+(.+)$/);
   if (match) return match[1].trim();
 
   const match2 = norm.match(/^(?:phat|nghe|bat|mo|tim)\s+(?:nhac)\s+(.+)$/);
   if (match2) {
     const val = match2[1].trim();
+    if (/^(?:co\s+)?(?:vibe|giong|kieu|tuong tu)\b/.test(val)) return null;
     const isMarket = MARKET_RULES.some(r => r.terms.some(t => val.includes(t)));
     const isEnergy = ENERGY_RULES.some(r => r.terms.some(t => val.includes(t)));
     const isKeyword = KEYWORD_RULES.some(r => r.terms.some(t => val.includes(t)));
@@ -94,6 +174,12 @@ function parseIntent(prompt = '') {
 
   let artistQuery = extractArtistQuery(prompt);
   let songTitleQuery = extractSongTitleQuery(prompt);
+  const seedSongQuery = extractSeedSongQuery(prompt);
+  const beatIntent = detectBeatSearchIntent(prompt);
+
+  if (seedSongQuery) {
+    songTitleQuery = null;
+  }
 
   if (artistQuery && songTitleQuery && normalizeText(songTitleQuery).includes(artistQuery)) {
     songTitleQuery = null;
@@ -127,24 +213,98 @@ function parseIntent(prompt = '') {
     }
   }
 
+  if (beatIntent) {
+    if (beatIntent.energy) energy = beatIntent.energy;
+    matchedKeywords.push(...beatIntent.keywords);
+  }
+
   const filler = new Set([
     'mo', 'phat', 'nghe', 'bat', 'play', 'tim', 'goi', 'y', 'de', 'xuat',
     'danh', 'sach', 'nhac', 'bai', 'hat', 'cho', 'minh', 'toi', 'mot', 'vai',
-    'di', 'nhe', 'nha', 'playlist', 'cua'
+    'di', 'nhe', 'nha', 'playlist', 'cua', 'co', 'vibe', 'giong', 'kieu',
+    'tuong', 'tu', 'ca', 'khuc', 'track'
   ]);
+  const seedWords = new Set(normalizeText(seedSongQuery || '').split(/\s+/).filter(Boolean));
   const promptTerms = normalized
     .split(' ')
-    .filter((term) => term.length >= 2 && !filler.has(term));
+    .filter((term) => term.length >= 2 && !filler.has(term) && !seedWords.has(term));
 
   return {
     rawPrompt: prompt,
     normalizedPrompt: normalized,
     action,
     songTitleQuery,
+    seedSongQuery,
     artistQuery,
+    mode: beatIntent?.mode,
     market: market.length > 0 ? market : undefined,
     energy,
+    rhythm: beatIntent?.rhythm,
     keywords: [...new Set([...matchedKeywords, ...promptTerms])].slice(0, 12),
+  };
+}
+
+function mapGeminiToAssistantIntent(baseIntent, geminiIntent = {}) {
+  const next = { ...baseIntent };
+  const keywords = new Set(next.keywords || []);
+  const marketByLanguage = { vi: 'VPOP', ko: 'KPOP', en: 'USUK' };
+
+  if (Array.isArray(geminiIntent.languages)) {
+    for (const language of geminiIntent.languages) {
+      const market = marketByLanguage[normalizeText(language)];
+      if (market) next.market = [market];
+    }
+  }
+
+  if (Array.isArray(geminiIntent.genres)) {
+    geminiIntent.genres.forEach((value) => keywords.add(normalizeText(value)));
+  }
+  if (Array.isArray(geminiIntent.mood)) {
+    geminiIntent.mood.forEach((value) => keywords.add(normalizeText(value)));
+  }
+  if (Array.isArray(geminiIntent.context)) {
+    geminiIntent.context.forEach((value) => keywords.add(normalizeText(value)));
+  }
+  if (Array.isArray(geminiIntent.vibe)) {
+    geminiIntent.vibe.forEach((value) => keywords.add(normalizeText(value)));
+  }
+  if (Array.isArray(geminiIntent.keywords)) {
+    geminiIntent.keywords.forEach((value) => keywords.add(normalizeText(value)));
+  }
+
+  if (['low', 'medium', 'high'].includes(geminiIntent.energy)) {
+    next.energy = geminiIntent.energy;
+  }
+
+  if (!next.artistQuery && Array.isArray(geminiIntent.artists) && geminiIntent.artists.length > 0) {
+    next.artistQuery = String(geminiIntent.artists[0] || '').trim() || null;
+  }
+
+  next.keywords = [...keywords].filter(Boolean).slice(0, 12);
+  next.llmIntentApplied = true;
+  return next;
+}
+
+async function parseIntentWithLlmFallback(prompt = '') {
+  const taxonomyIntent = parseIntent(prompt);
+  const intentResult = await parseStructuredIntent(prompt, {
+    mode: 'ai_search',
+    taxonomyIntent
+  });
+
+  console.log('[AI Search Intent]', {
+    provider: intentResult.provider,
+    fallbackUsed: intentResult.fallbackUsed,
+    fallbackReason: intentResult.fallbackReason,
+    parsedIntent: intentResult.parsedIntent,
+    intent: intentResult.intent
+  });
+
+  return {
+    ...intentResult.intent,
+    llmProvider: intentResult.provider,
+    llmFallbackUsed: intentResult.fallbackUsed,
+    llmFallbackReason: intentResult.fallbackReason
   };
 }
 
@@ -233,6 +393,67 @@ function isLowEnergyIntent(intent) {
   if (intent.energy === 'low') return true;
   const kws = (intent.keywords || []).map(k => normalizeText(k));
   return kws.some(k => ['chill', 'acoustic', 'ballad', 'indie', 'lofi', 'buoi toi', 'toi', 'cham', 'thu gian', 'nhe nhang', 'buon', 'suy', 'diu', 'binh yen', 'ngu'].includes(k));
+}
+
+function normalize01(value, fallback = 0.5) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const scaled = n > 1 ? n / 100 : n;
+  return Math.max(0, Math.min(1, scaled));
+}
+
+function featureBpm01(feature = {}) {
+  const bpm = Number(feature.normalized_bpm ?? feature.normalizedBpm ?? feature.raw_bpm ?? feature.bpm);
+  if (!Number.isFinite(bpm) || bpm <= 0) return 0.5;
+  if (bpm < 90) return 0.25;
+  if (bpm <= 120) return 0.55;
+  return 0.85;
+}
+
+function scoreRhythmFeature(feature, intent = {}) {
+  if (!feature) return 0.5;
+  const rhythm = intent.rhythm || {};
+  const energy = normalize01(feature.energy_score);
+  const danceability = normalize01(feature.danceability_score ?? feature.danceability);
+  const loudness = normalize01(feature.loudness);
+  const dynamicComplexity = normalize01(feature.dynamic_complexity);
+  const brightness = normalize01(feature.brightness_score ?? feature.brightness);
+  const tempo = featureBpm01(feature);
+  const calmFit = normalize01(feature.calm_fit_score);
+  const studyFit = normalize01(feature.study_suitability_score);
+
+  if (rhythm.beatStrength === 'low_or_medium' || intent.energy === 'low') {
+    return Math.max(0, Math.min(1,
+      (1 - energy) * 0.28
+      + (1 - Math.max(0, tempo - 0.55)) * 0.18
+      + calmFit * 0.22
+      + studyFit * 0.18
+      + (1 - brightness) * 0.08
+      + (1 - danceability) * 0.06
+    ));
+  }
+
+  return Math.max(0, Math.min(1,
+    energy * 0.28
+    + danceability * 0.22
+    + loudness * 0.16
+    + dynamicComplexity * 0.16
+    + tempo * 0.10
+    + brightness * 0.08
+  ));
+}
+
+function scoreFeatureSimilarity(feature, seedFeature) {
+  if (!feature || !seedFeature) return 0.5;
+  const fields = [
+    [featureBpm01(feature), featureBpm01(seedFeature), 0.22],
+    [normalize01(feature.energy_score), normalize01(seedFeature.energy_score), 0.22],
+    [normalize01(feature.danceability_score ?? feature.danceability), normalize01(seedFeature.danceability_score ?? seedFeature.danceability), 0.18],
+    [normalize01(feature.loudness), normalize01(seedFeature.loudness), 0.14],
+    [normalize01(feature.dynamic_complexity), normalize01(seedFeature.dynamic_complexity), 0.14],
+    [normalize01(feature.brightness_score ?? feature.brightness), normalize01(seedFeature.brightness_score ?? seedFeature.brightness), 0.10]
+  ];
+  return fields.reduce((sum, [value, target, weight]) => sum + Math.max(0, 1 - Math.abs(value - target)) * weight, 0);
 }
 
 function scoreSemanticCandidate(row, intent) {
@@ -373,12 +594,22 @@ async function applyTempoSearchRerank(rows, tempoIntent, intent = null) {
     const energyMatchScore = computeEnergyMatchScore(feature, tempoIntent);
     const danceabilityMatchScore = computeDanceabilityMatchScore(feature, tempoIntent);
     const brightnessMatchScore = computeBrightnessMatchScore(feature, tempoIntent);
+    const rhythmScore = intent?.mode === 'beat_rhythm' ? scoreRhythmFeature(feature, intent) : 0.5;
     let finalSearchScore = textSearchScore * 0.50
       + semanticScore * 0.15
       + tempoMatchScore * 0.15
       + energyMatchScore * 0.12
       + brightnessMatchScore * 0.05
       + danceabilityMatchScore * 0.03;
+
+    if (intent?.mode === 'beat_rhythm') {
+      finalSearchScore = textSearchScore * 0.30
+        + semanticScore * 0.10
+        + rhythmScore * 0.36
+        + tempoMatchScore * 0.10
+        + energyMatchScore * 0.10
+        + danceabilityMatchScore * 0.04;
+    }
 
     if (isLowIntent) {
       const genreSlug = String(row.genre_slug || '').toLowerCase();
@@ -423,6 +654,45 @@ async function applyTempoSearchRerank(rows, tempoIntent, intent = null) {
       total: rows.length,
       ratio: rows.length ? Number((featureMap.size / rows.length).toFixed(4)) : 0,
     },
+  };
+}
+
+async function applySeedAudioSimilarityRerank(rows, seedRows) {
+  if (!Array.isArray(rows) || rows.length === 0 || !Array.isArray(seedRows) || seedRows.length === 0) {
+    return { rows, coverage: { covered: 0, total: rows?.length || 0, ratio: 0 } };
+  }
+
+  const seedId = Number(seedRows[0].id);
+  const featureMap = await recommendationService.fetchAudioFeaturesForSongs([seedId, ...rows.map((row) => row.id)]);
+  const seedFeature = featureMap.get(seedId);
+  if (!seedFeature) {
+    return { rows, coverage: { covered: featureMap.size, total: rows.length, ratio: rows.length ? Number((featureMap.size / rows.length).toFixed(4)) : 0 } };
+  }
+
+  const textScores = rows.map((row) => Number(row._score || 0));
+  const min = Math.min(...textScores);
+  const max = Math.max(...textScores);
+  const range = max - min || 1;
+
+  const reranked = rows.map((row) => {
+    const feature = featureMap.get(Number(row.id));
+    const textSearchScore = (Number(row._score || 0) - min) / range;
+    const beatSimilarity = scoreFeatureSimilarity(feature, seedFeature);
+    return {
+      ...row,
+      _score: beatSimilarity * 0.62 + textSearchScore * 0.28 + Math.min(Number(row.play_count || 0), 1000000) / 1000000 * 0.10,
+      audioFeature: feature,
+      beatSimilarityScore: beatSimilarity
+    };
+  }).sort((a, b) => b._score - a._score || Number(a.id) - Number(b.id));
+
+  return {
+    rows: reranked,
+    coverage: {
+      covered: featureMap.size,
+      total: rows.length,
+      ratio: rows.length ? Number((featureMap.size / rows.length).toFixed(4)) : 0
+    }
   };
 }
 
@@ -521,13 +791,41 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
     .slice(0, returnLimit);
 }
 
+function deriveSeedKeywords(seedRows = []) {
+  if (!seedRows.length) return [];
+  const seed = seedRows[0];
+  const source = `${seed.genre_name || ''} ${seed.genre_slug || ''}`;
+  const filler = new Set(['v', 'pop', 'k', 'pop', 'us', 'uk', 'nhac', 'music']);
+  return [...new Set(
+    normalizeText(source)
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !filler.has(token))
+  )].slice(0, 4);
+}
+
 async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId = null, userId = null }) {
-  const intent = parseIntent(prompt);
+  const intent = await parseIntentWithLlmFallback(prompt);
   const tempoIntent = detectTempoIntent(prompt);
   const limit = intent.action === 'play' ? 12 : 15;
   let rows = [];
   let strategy = intent.keywords.length > 0 ? 'rule_based_keyword_match' : 'popular_fallback';
   let titleMatchAttempted = false;
+  let seedRows = [];
+
+  if (intent.seedSongQuery) {
+    seedRows = await fetchTitleMatches({
+      titleQuery: intent.seedSongQuery,
+      currentSongId,
+      userId,
+      limit: 3,
+    });
+    const seedKeywords = deriveSeedKeywords(seedRows);
+    if (seedKeywords.length > 0) {
+      intent.keywords = [...new Set([...(intent.keywords || []), ...seedKeywords])].slice(0, 12);
+      strategy = 'song_seed_vibe_keyword_match';
+    }
+  }
 
   if (intent.songTitleQuery) {
     titleMatchAttempted = true;
@@ -559,8 +857,26 @@ async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId
     }
   }
 
+  if (seedRows.length > 0) {
+    const seedIds = new Set(seedRows.map((row) => Number(row.id)));
+    rows = rows.filter((row) => !seedIds.has(Number(row.id)));
+  }
+
   let tempoCoverage = { covered: 0, total: rows.length, ratio: 0 };
-  const shouldRerankTempo = (tempoIntent || isLowEnergyIntent(intent)) && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery;
+  const isBeatSimilarSearch = intent.mode === 'similar_to_song' && seedRows.length > 0;
+  const shouldRerankBySeedAudio = isBeatSimilarSearch && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery;
+  if (shouldRerankBySeedAudio) {
+    const rerank = await applySeedAudioSimilarityRerank(rows, seedRows);
+    rows = rerank.rows.slice(0, limit);
+    tempoCoverage = rerank.coverage;
+    strategy = `${strategy}_beat_similarity`;
+  }
+
+  const shouldRerankTempo = !shouldRerankBySeedAudio
+    && (tempoIntent || intent.mode === 'beat_rhythm' || isLowEnergyIntent(intent))
+    && rows.length > 0
+    && !intent.artistQuery
+    && !intent.songTitleQuery;
   if (shouldRerankTempo) {
     const effectiveTempoIntent = tempoIntent || {
       tempoBucket: 'slow',
@@ -617,8 +933,10 @@ async function getMusicAssistantResult({ prompt, autoPlay = false, currentSongId
   return {
     intent,
     aiSearchMode: true,
-    tempoAware: Boolean(tempoIntent && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery),
+    tempoAware: Boolean((tempoIntent || intent.mode === 'beat_rhythm') && rows.length > 0 && !intent.artistQuery && !intent.songTitleQuery),
+    beatAware: Boolean(intent.mode === 'beat_rhythm' || shouldRerankBySeedAudio),
     detectedIntent: tempoIntent,
+    seedSong: seedRows[0] ? formatSong(seedRows[0]) : null,
     explanation: tempoIntent ? buildTempoReason(null, tempoIntent) : null,
     audioFeatureCoverage: tempoCoverage,
     action,

@@ -209,6 +209,19 @@ function applyNegativeRules(intent, normalizedPrompt) {
         intent.hardConstraints.genre_family,
         intent.negativeConstraints.genre_family
     );
+
+    if (
+        intent.seed.seed_type === 'genre_seed' &&
+        intent.seed.genre &&
+        intent.negativeConstraints.genre_family.includes(intent.seed.genre)
+    ) {
+        intent.seed = {
+            seed_type: 'none',
+            artist: null,
+            song: null,
+            genre: null
+        };
+    }
 }
 
 function cleanSeedText(value) {
@@ -245,6 +258,26 @@ function looksLikeSeedText(value) {
     return known.some((artist) => normalized.includes(artist));
 }
 
+function looksLikeSongSeedText(value) {
+    const cleaned = cleanSeedText(value);
+    const normalized = normalizeText(cleaned);
+    const words = normalized.split(/\s+/).filter(Boolean);
+    if (words.length < 2 || words.length > 10) return false;
+
+    const genericStarts = [
+        'nhac',
+        'playlist',
+        'danh sach',
+        'vibe',
+        'kieu',
+        'giong',
+        'tuong tu'
+    ];
+    if (genericStarts.some((phrase) => normalized.startsWith(phrase))) return false;
+
+    return true;
+}
+
 function restoreOriginalSlice(originalPrompt, normalizedCandidate) {
     const candidate = cleanSeedText(normalizedCandidate);
     if (!candidate) return null;
@@ -266,10 +299,24 @@ function restoreOriginalSlice(originalPrompt, normalizedCandidate) {
 function detectSeedAndArtists(intent, prompt, normalizedPrompt) {
     let textForHardMatch = normalizedPrompt;
 
-    const seedMatch = textForHardMatch.match(
-        /\b(?:giong|kieu|vibe cua|vibe|cung vibe|tuong tu)\s+(.+?)(?:\s+(?:nhung|ma|de|cho|voi)\b|$)/
+    const songSeedMatch = textForHardMatch.match(
+        /\b(?:giong|kieu|cung vibe|tuong tu|vibe cua|vibe)\s+(?:bai|ca khuc|track)\s+(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/
     );
-    if (seedMatch) {
+    if (songSeedMatch) {
+        const seedText = restoreOriginalSlice(prompt, songSeedMatch[1]);
+        if (seedText && looksLikeSongSeedText(seedText)) {
+            intent.seed.seed_type = 'song_seed';
+            intent.seed.song = seedText;
+            intent.seed.artist = null;
+            addMatchedKeywords(intent, 'seed:song', [seedText]);
+            textForHardMatch = textForHardMatch.replace(songSeedMatch[0], ' ');
+        }
+    }
+
+    const seedMatch = textForHardMatch.match(
+        /\b(?:giong|kieu|vibe cua|vibe|cung vibe|tuong tu)\s+(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/
+    );
+    if (intent.seed.seed_type === 'none' && seedMatch) {
         const seedText = restoreOriginalSlice(prompt, seedMatch[1]);
         if (seedText && looksLikeSeedText(seedText)) {
             intent.seed.seed_type = 'artist_seed';
@@ -340,8 +387,165 @@ function inferPlaylistGoal(intent, normalizedPrompt) {
     }
 }
 
+function applyCalmFocusEnergyGuard(intent, normalizedPrompt) {
+    const hasCalmSignal =
+        ['nhe', 'nhe nhang', 'chill', 'thu gian', 'diu', 'binh yen', 'lofi', 'cham']
+            .some((phrase) => hasPhrase(normalizedPrompt, phrase)) ||
+        (intent.softPreferences.mood || []).some((mood) => ['chill', 'calm'].includes(mood));
+    const hasFocusSignal =
+        ['hoc bai', 'hoc tap', 'on thi', 'tap trung', 'lam viec', 'coding', 'doc sach', 'study', 'focus', 'work', 'reading']
+            .some((phrase) => hasPhrase(normalizedPrompt, phrase)) ||
+        ['study', 'work', 'coding'].includes(intent.softPreferences.activity) ||
+        (intent.softPreferences.mood || []).includes('focus');
+
+    if (!hasCalmSignal || !hasFocusSignal) return;
+
+    intent.softPreferences.energy = 'low';
+    if (intent.softPreferences.tempo === 'fast') {
+        intent.softPreferences.tempo = 'medium';
+    }
+    intent.softPreferences.activity = intent.softPreferences.activity || 'study';
+    addUnique(intent.softPreferences.mood, 'chill');
+    addUnique(intent.softPreferences.mood, 'calm');
+    addUnique(intent.softPreferences.mood, 'focus');
+    addUnique(intent.negativeConstraints.energy, 'high');
+    addMatchedKeywords(intent, 'guard:calm_focus_low_or_medium', ['low_or_medium_energy', 'avoid_high_energy']);
+}
+
+const COUNT_PATTERNS = [
+    /(\d+)\s*(?:bai|songs?|tracks?)/i
+];
+
+const BEAT_INSTRUMENTAL_PATTERNS = [
+    /\bbeat\s+(?:karaoke|khong loi)\b/i,
+    /\b(?:nhac nen khong loi|instrumental|karaoke|tach vocal|lay beat|ban beat cua bai)\b/i
+];
+
+const BEAT_SIMILAR_SONG_PATTERNS = [
+    /\b(?:beat|nhip|bass|groove)\s+(?:giong|tuong tu|kieu)\s+(?:bai\s+)?(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/i,
+    /\bnhac\s+co\s+beat\s+kieu\s+(?:bai\s+)?(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/i
+];
+
+const BEAT_RHYTHM_PATTERNS = [
+    /\bbeat\s+(?:manh|cang|day|nhanh|cham|chill|nhe|don dap|bat tai)\b/i,
+    /\b(?:bass|nhip|trong)\s+(?:manh|day|ro|nhanh|cham|don dap|bat tai)\b/i,
+    /\b(?:groove|dance beat|nhip bat tai)\b/i
+];
+
+function parseCountIntent(prompt, fallback = 20) {
+    const text = normalizeText(prompt);
+
+    for (const pattern of COUNT_PATTERNS) {
+        const match = text.match(pattern);
+        if (match?.[1]) return clampTargetCount(match[1]);
+    }
+
+    if (/(?:playlist ngan|it bai|vai bai)/i.test(text)) return 10;
+    if (/(?:playlist vua|vua du nghe)/i.test(text)) return 20;
+    if (/(?:playlist dai|nhieu bai)/i.test(text)) return 30;
+
+    return clampTargetCount(fallback);
+}
+
+function normalizeRhythmValue(value) {
+    return isValidLabel('rhythm', value) ? value : null;
+}
+
+function setRhythm(intent, rhythm = {}) {
+    intent.softPreferences.rhythm = {
+        beatStrength: normalizeRhythmValue(rhythm.beatStrength),
+        bassIntensity: normalizeRhythmValue(rhythm.bassIntensity),
+        rhythmDensity: normalizeRhythmValue(rhythm.rhythmDensity),
+        groove: normalizeRhythmValue(rhythm.groove)
+    };
+}
+
+function extractBeatSimilarSeed(prompt, normalizedMatchValue) {
+    const restored = restoreOriginalSlice(prompt, normalizedMatchValue);
+    return restored && looksLikeSongSeedText(restored) ? restored : cleanSeedText(normalizedMatchValue);
+}
+
+function applyBeatRules(intent, prompt, normalizedPrompt) {
+    if (BEAT_INSTRUMENTAL_PATTERNS.some((pattern) => pattern.test(normalizedPrompt))) {
+        intent.mode = 'karaoke_instrumental';
+        intent.softPreferences.vocal_preference = 'instrumental_like';
+        const titleMatch = normalizedPrompt.match(/\b(?:cua|bai)\s+(.+?)$/i);
+        if (titleMatch?.[1]) {
+            const songTitle = extractBeatSimilarSeed(prompt, titleMatch[1]);
+            if (songTitle) {
+                intent.seed.seed_type = 'song_seed';
+                intent.seed.song = songTitle;
+            }
+        }
+        addMatchedKeywords(intent, 'mode:karaoke_instrumental', ['beat_instrumental']);
+        return;
+    }
+
+    for (const pattern of BEAT_SIMILAR_SONG_PATTERNS) {
+        const match = normalizedPrompt.match(pattern);
+        if (!match?.[1]) continue;
+        const songTitle = extractBeatSimilarSeed(prompt, match[1]);
+        if (!songTitle) continue;
+        intent.mode = 'similar_to_song';
+        intent.seed.seed_type = 'song_seed';
+        intent.seed.song = songTitle;
+        setRhythm(intent, {
+            beatStrength: 'similar',
+            bassIntensity: 'similar',
+            rhythmDensity: 'similar',
+            groove: 'similar'
+        });
+        addMatchedKeywords(intent, 'mode:beat_similar_song', [songTitle]);
+        return;
+    }
+
+    if (!BEAT_RHYTHM_PATTERNS.some((pattern) => pattern.test(normalizedPrompt))) return;
+
+    intent.mode = 'beat_rhythm';
+    addMatchedKeywords(intent, 'mode:beat_rhythm', ['beat_rhythm']);
+
+    if (hasPhrase(normalizedPrompt, 'beat cham') || hasPhrase(normalizedPrompt, 'nhip cham') || hasPhrase(normalizedPrompt, 'beat chill') || hasPhrase(normalizedPrompt, 'beat nhe')) {
+        intent.softPreferences.tempo = 'slow';
+        intent.softPreferences.energy = 'low';
+        addUnique(intent.negativeConstraints.energy, 'high');
+        addUnique(intent.softPreferences.mood, 'chill');
+        addUnique(intent.softPreferences.mood, 'calm');
+        setRhythm(intent, {
+            beatStrength: 'low_or_medium',
+            bassIntensity: 'low_or_medium',
+            rhythmDensity: 'low_or_medium',
+            groove: 'medium'
+        });
+        return;
+    }
+
+    if (hasPhrase(normalizedPrompt, 'beat bat tai') || hasPhrase(normalizedPrompt, 'nhip bat tai') || hasPhrase(normalizedPrompt, 'groove') || hasPhrase(normalizedPrompt, 'groove ro')) {
+        intent.softPreferences.energy = intent.softPreferences.energy === 'low' ? 'medium' : intent.softPreferences.energy;
+        setRhythm(intent, {
+            beatStrength: 'medium_or_high',
+            bassIntensity: 'medium_or_high',
+            rhythmDensity: 'medium_or_high',
+            groove: 'high'
+        });
+        return;
+    }
+
+    intent.softPreferences.energy = 'high';
+    intent.softPreferences.tempo = 'fast';
+    if (!intent.softPreferences.activity && (hasPhrase(normalizedPrompt, 'gym') || hasPhrase(normalizedPrompt, 'tap gym') || hasPhrase(normalizedPrompt, 'chay bo'))) {
+        intent.softPreferences.activity = 'gym';
+    }
+    addUnique(intent.softPreferences.mood, 'energetic');
+    setRhythm(intent, {
+        beatStrength: 'high',
+        bassIntensity: 'high',
+        rhythmDensity: 'high',
+        groove: 'medium_or_high'
+    });
+}
+
 function applyRuleBasedIntent(prompt, targetCount) {
-    const intent = createDefaultAiPlaylistIntent(prompt, targetCount);
+    const intent = createDefaultAiPlaylistIntent(prompt, parseCountIntent(prompt, targetCount));
     const normalizedPrompt = normalizeText(prompt);
 
     if (!normalizedPrompt) {
@@ -360,6 +564,7 @@ function applyRuleBasedIntent(prompt, targetCount) {
     applyContextRules(intent, normalizedPrompt);
     applySimplePreferenceRules(intent, normalizedPrompt);
     applyNegativeRules(intent, normalizedPrompt);
+    applyBeatRules(intent, prompt, normalizedPrompt);
     detectSeedAndArtists(intent, prompt, normalizedPrompt);
     inferPlaylistGoal(intent, normalizedPrompt);
 
@@ -367,7 +572,13 @@ function applyRuleBasedIntent(prompt, targetCount) {
     if (tempoIntent) {
         intent.softPreferences.tempo = tempoIntent.tempoBucket;
         intent.softPreferences.energy = tempoIntent.energyTarget;
-        intent.softPreferences.activity = tempoIntent.activity === 'workout' ? 'gym' : tempoIntent.activity;
+        if (tempoIntent.activity === 'workout') {
+            intent.softPreferences.activity = 'gym';
+        } else if (tempoIntent.activity === 'focus') {
+            intent.softPreferences.activity = intent.softPreferences.activity || 'study';
+        } else {
+            intent.softPreferences.activity = tempoIntent.activity;
+        }
         intent.tempoIntent = tempoIntent;
         addMatchedKeywords(intent, `tempo_intent:${tempoIntent.tempoBucket}`, [tempoIntent.label]);
         if (tempoIntent.activity === 'focus') addUnique(intent.softPreferences.mood, 'focus');
@@ -375,6 +586,8 @@ function applyRuleBasedIntent(prompt, targetCount) {
         if (tempoIntent.activity === 'party') addUnique(intent.softPreferences.mood, 'party');
         if (tempoIntent.activity === 'workout') addUnique(intent.softPreferences.mood, 'energetic');
     }
+
+    applyCalmFocusEnergyGuard(intent, normalizedPrompt);
 
     if (hasPhrase(normalizedPrompt, 'nhe hon')) {
         intent.softPreferences.energy = intent.softPreferences.energy === 'high' ? 'medium' : 'low';
@@ -471,6 +684,25 @@ function mapLegacyLlmIntent(llmIntent) {
     mergeArray(mapped.softPreferences.context, llmIntent?.context || [], 'context');
     mergeArray(mapped.negativeConstraints.keywords, llmIntent?.explicitExclusions || []);
 
+    if (isValidLabel('mode', llmIntent?.mode)) {
+        mapped.mode = llmIntent.mode;
+    }
+
+    const rhythm = llmIntent?.softPreferences?.rhythm || llmIntent?.rhythm || {};
+    setRhythm(mapped, {
+        beatStrength: rhythm.beatStrength,
+        bassIntensity: rhythm.bassIntensity,
+        rhythmDensity: rhythm.rhythmDensity,
+        groove: rhythm.groove
+    });
+
+    const seedTitle = llmIntent?.seed?.song_title || llmIntent?.seed?.song || llmIntent?.songTitle || llmIntent?.song_title;
+    if (seedTitle && ['similar_to_song', 'karaoke_instrumental'].includes(mapped.mode)) {
+        mapped.seed.seed_type = 'song_seed';
+        mapped.seed.song = String(seedTitle).trim();
+        mapped.seed.artist = null;
+    }
+
     if (Array.isArray(llmIntent?.artists) && llmIntent.artists.length > 0) {
         const firstArtist = String(llmIntent.artists[0]).trim();
         if (llmIntent.artistConstraintMode === 'hard') {
@@ -503,6 +735,17 @@ function mergeLlmIntent(ruleIntent, llmIntent) {
 
     if (next.seed.seed_type === 'none' && mapped.seed.seed_type !== 'none') {
         next.seed = mapped.seed;
+    }
+    if (next.mode === 'unknown' && mapped.mode !== 'unknown') {
+        next.mode = mapped.mode;
+    }
+    if (Object.values(mapped.softPreferences.rhythm || {}).some(Boolean)) {
+        next.softPreferences.rhythm = {
+            beatStrength: mapped.softPreferences.rhythm.beatStrength || next.softPreferences.rhythm?.beatStrength || null,
+            bassIntensity: mapped.softPreferences.rhythm.bassIntensity || next.softPreferences.rhythm?.bassIntensity || null,
+            rhythmDensity: mapped.softPreferences.rhythm.rhythmDensity || next.softPreferences.rhythm?.rhythmDensity || null,
+            groove: mapped.softPreferences.rhythm.groove || next.softPreferences.rhythm?.groove || null
+        };
     }
     if (next.softPreferences.activity === null && mapped.softPreferences.activity) {
         next.softPreferences.activity = mapped.softPreferences.activity;
@@ -575,27 +818,41 @@ function calculateConfidence(intent, usedLlm) {
 async function normalizeAiPlaylistIntent(input = {}, options = {}) {
     const prompt = String(input.prompt || '').trim();
     const targetCount = clampTargetCount(input.targetCount);
+    const promptTargetCount = parseCountIntent(prompt, targetCount);
     const useLLM = Boolean(input.useLLM ?? options.useLLM);
 
     if (!prompt) {
         return sanitizeAiPlaylistIntent(createDefaultAiPlaylistIntent('', targetCount));
     }
 
-    let intent = applyRuleBasedIntent(prompt, targetCount);
+    let intent = applyRuleBasedIntent(prompt, promptTargetCount);
     let usedLlm = false;
 
     if (useLLM) {
-        try {
-            const geminiService = require('./geminiPlaylist.service');
-            const llmIntent = await geminiService.extractIntent(prompt);
-            intent = mergeLlmIntent(intent, llmIntent);
-            usedLlm = true;
-        } catch (error) {
-            addUnique(intent.raw.matchedKeywords, `llm_error:${error.message}`);
+        const { parseStructuredIntent } = require('./llmIntent.service');
+        const intentResult = await parseStructuredIntent(prompt, {
+            mode: 'ai_playlist',
+            targetCount: promptTargetCount,
+            taxonomyIntent: intent
+        });
+
+        intent = intentResult.intent;
+        usedLlm = intentResult.provider !== 'taxonomy';
+
+        console.log('[AI Playlist Intent]', {
+            provider: intentResult.provider,
+            fallbackUsed: intentResult.fallbackUsed,
+            fallbackReason: intentResult.fallbackReason,
+            parsedIntent: intentResult.parsedIntent,
+            intent
+        });
+
+        if (intentResult.fallbackReason) {
+            addUnique(intent.raw.matchedKeywords, `llm_fallback:${intentResult.fallbackReason}`);
         }
     }
 
-    intent.playlist.target_count = targetCount;
+    intent.playlist.target_count = promptTargetCount;
     intent.confidence = calculateConfidence(intent, usedLlm);
     intent.explanation = buildExplanation(intent);
 

@@ -1,5 +1,7 @@
 const { pool } = require('../config/database');
 const { notifyUser } = require('./socket.service');
+const { hasSystemEmailLog, sendSystemEmail } = require('./email.service');
+const { premiumSuccessEmail } = require('./systemEmailTemplates.service');
 const axios = require('axios');
 
 function addDays(date, days) {
@@ -178,10 +180,11 @@ async function confirmPayment(txId, gatewayData, io, options = { allowRecoverClo
         console.log(`[PAYMENT_RECOVER] Recovered paid gateway transaction from local ${tx.status} status for paymentCode=${tx.payment_code}. Reason: ${options.recoverReason}`);
       }
 
-      const [plans] = await conn.query('SELECT duration_days FROM premium_plans WHERE id = ?', [tx.plan_id]);
+      const [plans] = await conn.query('SELECT name, duration_days FROM premium_plans WHERE id = ?', [tx.plan_id]);
       const durationDays = plans.length ? Number(plans[0].duration_days) : 0;
+      const planName = plans[0]?.name || 'Premium';
 
-      const [[user]] = await conn.query('SELECT premium_expires_at FROM users WHERE id = ? FOR UPDATE', [tx.user_id]);
+      const [[user]] = await conn.query('SELECT email, display_name, premium_expires_at FROM users WHERE id = ? FOR UPDATE', [tx.user_id]);
 
       const baseDate = user?.premium_expires_at && new Date(user.premium_expires_at) > new Date()
           ? new Date(user.premium_expires_at)
@@ -220,6 +223,36 @@ async function confirmPayment(txId, gatewayData, io, options = { allowRecoverClo
       }
       
       await conn.commit();
+
+      const alreadyEmailed =
+        await hasSystemEmailLog({ type: 'premium_success', metadataKey: 'payment_id', metadataValue: tx.id, status: 'sent' }) ||
+        await hasSystemEmailLog({ type: 'premium_success', metadataKey: 'payment_id', metadataValue: tx.id, status: 'skipped' });
+
+      if (!alreadyEmailed && user?.email) {
+        const email = premiumSuccessEmail({
+          name: user.display_name || user.email,
+          planName,
+          amount: `${Number(tx.amount).toLocaleString('vi-VN')} VND`,
+          orderCode: tx.payment_code,
+          premiumExpiresAt,
+        });
+        await sendSystemEmail({
+          to: user.email,
+          subject: email.subject,
+          type: 'premium_success',
+          userId: tx.user_id,
+          metadata: {
+            payment_id: tx.id,
+            order_code: tx.payment_code,
+            plan_id: tx.plan_id,
+            amount: tx.amount,
+            premium_expires_at: premiumExpiresAt,
+          },
+          text: email.text,
+          html: email.html,
+        });
+      }
+
       return { success: true, tx, action: isRecovered ? 'recovered' : 'paid' };
     } else {
       await conn.rollback();

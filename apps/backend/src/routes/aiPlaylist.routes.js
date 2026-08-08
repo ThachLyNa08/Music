@@ -17,6 +17,21 @@ router.get('/suggestions', aiPlaylistController.getSuggestions);
 
 router.get('/quota', authenticate, aiPlaylistController.getQuota);
 
+router.get('/history',
+    authenticate,
+    aiPlaylistController.getHistory
+);
+
+router.get('/history/:id',
+    authenticate,
+    aiPlaylistController.getHistoryDetail
+);
+
+router.post('/history/:id/save',
+    authenticate,
+    aiPlaylistController.saveHistory
+);
+
 router.post('/intent/preview',
     authenticate,
     body('prompt').isString().trim().isLength({ min: 1, max: 1000 }).withMessage('Prompt không hợp lệ'),

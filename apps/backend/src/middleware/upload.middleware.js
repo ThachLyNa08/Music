@@ -16,7 +16,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (file.fieldname === 'audio') {
       cb(null, audioDir);
-    } else if (file.fieldname === 'cover' || file.fieldname === 'avatar') {
+    } else if (file.fieldname === 'cover' || file.fieldname === 'avatar' || file.fieldname === 'evidence' || file.fieldname === 'appeal_evidence') {
       cb(null, imageDir);
     } else if (file.fieldname === 'genre_cover') {
       cb(null, genreDir);
@@ -52,7 +52,7 @@ const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'audio') {
     if (file.mimetype.startsWith('audio/')) cb(null, true);
     else cb(new Error('Chỉ chấp nhận file âm thanh (MP3, WAV, v.v.)'), false);
-  } else if (file.fieldname === 'cover' || file.fieldname === 'avatar' || file.fieldname === 'genre_cover') {
+  } else if (file.fieldname === 'cover' || file.fieldname === 'avatar' || file.fieldname === 'genre_cover' || file.fieldname === 'evidence' || file.fieldname === 'appeal_evidence') {
       if (file.mimetype.startsWith('image/')) cb(null, true);
       else cb(new Error('Chỉ chấp nhận file hình ảnh (JPG, PNG, v.v.)'), false);
   } else {

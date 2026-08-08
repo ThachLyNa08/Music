@@ -1,5 +1,6 @@
 // src/server.js
-require('dotenv').config();
+const path   = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const http   = require('http');
 const { Server } = require('socket.io');
 
@@ -40,8 +41,21 @@ async function bootstrap() {
 
   await connectRedis();
 
-  const { ensureLogTableExists } = require('./services/systemPlaylistRunLog.service');
+  const { ensureLogTableExists, ensureGenerationRunsTableExists, recoverStaleSystemPlaylistRuns } = require('./services/systemPlaylistRunLog.service');
   await ensureLogTableExists();
+  await ensureGenerationRunsTableExists();
+  const recoveredPlaylistRuns = await recoverStaleSystemPlaylistRuns();
+  console.log(`[SystemPlaylistRecovery] startup check complete. Recovered ${recoveredPlaylistRuns} stale regenerate run(s).`);
+
+  try {
+    const stemService = require('./services/stem.service');
+    await stemService.ensureStemSchema();
+    const recovered = await stemService.recoverStaleStemJobs();
+    console.log(`[StemRecovery] startup check complete. Recovered ${recovered.length} stale stem job(s).`);
+  } catch (err) {
+    console.error('[StemRecovery] startup check failed:', err.message);
+  }
+
   // 2. Tạo HTTP server
   const server = http.createServer(app);
 

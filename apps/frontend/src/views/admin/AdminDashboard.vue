@@ -1323,7 +1323,8 @@ function fetchDashboardWidgets(forceRefresh = false) {
 
 async function fetchListeningTrend(forceRefresh = false) {
   const cacheKey = `listening_${trendRange.value}`
-  if (!forceRefresh && trendCache.has(cacheKey)) {
+  const canUseClientCache = !forceRefresh && trendRange.value !== 'today'
+  if (canUseClientCache && trendCache.has(cacheKey)) {
     const cached = trendCache.get(cacheKey)
     if (Date.now() - cached.time < 300000) { // 300s TTL
       listeningTrend.value = cached.data
@@ -1341,6 +1342,15 @@ async function fetchListeningTrend(forceRefresh = false) {
     const data = res.data?.data || { series: [], topSongs: [] }
     listeningTrendMeta.value = res.data?.meta || null
     listeningTrend.value = data
+    if (import.meta.env.DEV) {
+      console.log('[AdminDashboard][ListeningTrend]', {
+        range: trendRange.value,
+        topSongs: data?.topSongs?.length || 0,
+        series: data?.series?.length || 0,
+        trend: data?.trend?.length || 0,
+        raw: data
+      })
+    }
     if (!listeningTrendMeta.value?.refreshing) {
       trendCache.set(cacheKey, { data, meta: listeningTrendMeta.value, time: Date.now() })
     }

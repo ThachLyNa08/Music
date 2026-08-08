@@ -19,13 +19,9 @@
           Semantic RAG
         </div>
 
-        <p v-if="meta?.shortage" class="mt-1 text-[13px] text-amber-400">
-          MusicFlow chỉ tìm được {{ songs.length }} bài.
-          <span v-if="meta.relaxedFilters?.length" class="text-amber-500/80">
-            (Đã nới lỏng bộ lọc)
-          </span>
+        <p v-if="shortageMessage" class="mt-1 max-w-2xl text-[13px] leading-relaxed text-amber-400">
+          {{ shortageMessage }}
         </p>
-
         <div class="mt-5 flex flex-wrap items-center gap-4">
           <slot name="actions" />
         </div>
@@ -72,8 +68,9 @@
         <div class="flex flex-col justify-center min-w-0 pr-4">
           <div class="truncate text-[15px] font-semibold text-white" :class="{'text-[#1ed760]': playerStore.currentSong?.id === song.id}">{{ song.title }}</div>
           <div class="truncate text-[13px] text-[#b3b3b3] hover:text-white hover:underline transition-colors">{{ song.artist || song.artist_name || 'Unknown Artist' }}</div>
-          <div v-if="song.tempoBucket || isHighEnergy(song)" class="mt-1 flex flex-wrap items-center gap-1.5">
+          <div v-if="song.tempoBucket || isHighEnergy(song) || isFallback(song)" class="mt-1 flex flex-wrap items-center gap-1.5">
             <span v-if="song.tempoBucket" class="tempo-pill">{{ formatTempoBucket(song.tempoBucket) }}</span>
+            <span v-if="isFallback(song)" class="tempo-pill partial">Partial match</span>
             <span v-if="isHighEnergy(song)" class="tempo-pill energy">High energy</span>
           </div>
           <AiPlaylistSongReason class="mt-0.5 text-xs text-[#a7a7a7] line-clamp-1 md:line-clamp-2" :reason="song.reason" />
@@ -94,6 +91,7 @@ import AiPlaylistSongReason from './AiPlaylistSongReason.vue'
 const props = defineProps({
   songs: { type: Array, default: () => [] },
   meta: { type: Object, default: null },
+  warnings: { type: Array, default: () => [] },
   debug: { type: Boolean, default: false },
   title: { type: String, default: 'AI Playlist' },
   covers: { type: Array, default: () => [] },
@@ -104,6 +102,10 @@ defineEmits(['play-song'])
 
 const playerStore = usePlayerStore()
 const isSemanticRag = computed(() => props.meta?.retrieval?.strategy === 'semantic_rag_v1')
+const shortageMessage = computed(() => {
+  const warning = props.warnings.find(item => item?.type === 'SHORTAGE')
+  return warning?.message || props.meta?.shortageReason || (props.meta?.shortage ? `MusicFlow chỉ tìm được ${props.songs.length} bài.` : '')
+})
 
 function formatDuration(value) {
   const seconds = Number(value || 0)
@@ -122,6 +124,10 @@ function formatTempoBucket(bucket) {
 
 function isHighEnergy(song) {
   return Number(song.energyScore) >= 0.65
+}
+
+function isFallback(song) {
+  return Boolean(song.fallbackUsed) || song.matchQuality === 'partial'
 }
 </script>
 
@@ -154,5 +160,10 @@ function isHighEnergy(song) {
 
 .tempo-pill.energy {
   color: #fbbf24;
+}
+
+.tempo-pill.partial {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
 }
 </style>

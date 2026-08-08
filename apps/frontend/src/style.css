@@ -175,40 +175,27 @@
   }
 
   .user-horizontal-row {
-    @apply flex overflow-x-auto gap-3 md:gap-4 pb-4 md:pb-0 scrollbar-hide -mx-3 px-3 md:-mx-4 md:px-4 lg:mx-0 lg:px-0;
-  }
-
-  @media (min-width: 768px) {
-    .user-horizontal-row {
-      @apply grid overflow-hidden;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      grid-template-rows: 1fr;
-      grid-auto-rows: 0;
-      row-gap: 0 !important;
-    }
-    .user-horizontal-row > * {
-      overflow: hidden;
-    }
+    @apply flex justify-start items-stretch overflow-x-auto gap-3 sm:gap-3.5 md:gap-4 pb-2 scrollbar-hide scroll-smooth w-full min-w-0;
   }
 
   .user-horizontal-card {
-    @apply min-w-[124px] w-[124px] sm:min-w-[140px] sm:w-[140px] md:min-w-0 md:w-auto md:h-full flex-shrink-0 md:flex-shrink;
+    @apply shrink-0 w-[136px] sm:w-[146px] md:w-[154px] lg:w-[160px] xl:w-[164px] max-w-[166px];
   }
 
   .user-playlist-card-size {
-    /* Controlled by grid now */
+    /* Responsive carousel width applied via .user-horizontal-card */
   }
 
   .user-mix-card-size {
-    /* Controlled by grid now */
+    /* Responsive carousel width applied via .user-horizontal-card */
   }
 
   .user-artist-card-size {
-    /* Controlled by grid now */
+    /* Responsive carousel width applied via .user-horizontal-card */
   }
 
   .user-album-card-size {
-    /* Controlled by grid now */
+    /* Responsive carousel width applied via .user-horizontal-card */
   }
 
   .user-card-cover {

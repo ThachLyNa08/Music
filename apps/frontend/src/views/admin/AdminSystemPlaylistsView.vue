@@ -165,10 +165,16 @@
                   {{ formatDateTime(log.startedAt) }} - bởi {{ log.triggeredBy || 'Admin' }}
                 </div>
                 <div class="text-[11px] text-slate-400 mt-0.5">
-                  {{ log.successCount }}/{{ log.totalPlaylists }} thành công
-                  <span v-if="log.failedCount">, {{ log.failedCount }} lỗi</span>
+                  {{ formatRunProgress(log) }}
                   <span v-if="log.durationMs">, {{ formatDurationMs(log.durationMs) }}</span>
                 </div>
+                <button
+                  v-if="canResetGenerationRun(log)"
+                  class="mt-2 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                  @click="resetGenerationRun(log)"
+                >
+                  Đặt lại trạng thái
+                </button>
               </div>
             </div>
           </div>
@@ -814,8 +820,15 @@ const operationSummary = ref(null)
 const activityLogs = ref([])
 const loadingOperation = ref(false)
 const loadingActivity = ref(false)
+const activeRunId = ref(null)
 
 const runningJobs = computed(() => Number(operationSummary.value?.runningJobs || 0))
+const terminalRunStatuses = ['success', 'partial_success', 'failed', 'stale', 'skipped', 'cancelled']
+let runPollTimer = null
+let requestWatchdogTimer = null
+let requestMonitorTimer = null
+let lastProgressSignature = null
+let lastProgressAt = 0
 const operationFailureRateText = computed(() => {
   if (operationSummary.value?.failureRate === null || operationSummary.value?.failureRate === undefined) return null
   return `${(Number(operationSummary.value.failureRate) * 100).toFixed(1).replace(/\.0$/, '')}%`
@@ -849,6 +862,11 @@ async function fetchOperationSummary() {
   try {
     const res = await api.get('/admin/system-playlists/operation-summary')
     operationSummary.value = res.data?.data || null
+    if (Number(operationSummary.value?.runningJobs || 0) === 0) {
+      activeRunId.value = null
+      isRegeneratingAll.value = false
+      stopRunPolling()
+    }
   } catch (err) {
     console.error('Lỗi lấy operation summary:', err)
   } finally {
@@ -866,6 +884,94 @@ async function fetchActivityLogs() {
   } finally {
     loadingActivity.value = false
   }
+}
+
+function stopRunPolling() {
+  if (runPollTimer) clearInterval(runPollTimer)
+  runPollTimer = null
+}
+
+function stopRequestMonitor() {
+  if (requestWatchdogTimer) clearTimeout(requestWatchdogTimer)
+  if (requestMonitorTimer) clearInterval(requestMonitorTimer)
+  requestWatchdogTimer = null
+  requestMonitorTimer = null
+}
+
+async function refreshOperationState() {
+  await Promise.all([
+    fetchOperationSummary(),
+    fetchActivityLogs()
+  ])
+}
+
+function updateProgressWatch(run) {
+  const signature = [
+    run?.status,
+    run?.successCount,
+    run?.failedCount,
+    run?.skippedCount,
+    run?.totalPlaylists,
+    run?.heartbeatAt
+  ].join(':')
+  if (signature !== lastProgressSignature) {
+    lastProgressSignature = signature
+    lastProgressAt = Date.now()
+  }
+}
+
+async function pollGenerationRun(runId) {
+  if (!runId) return
+  try {
+    const res = await api.get(`/admin/system-playlists/generation-runs/${runId}`)
+    const run = res.data?.data
+    updateProgressWatch(run)
+    await refreshOperationState()
+
+    if (terminalRunStatuses.includes(run?.status)) {
+      stopRunPolling()
+      isRegeneratingAll.value = false
+      activeRunId.value = null
+      if (run.status === 'success') toast.showToast('Da tao lai playlist he thong thanh cong', 'success')
+      else if (run.status === 'partial_success') toast.showToast('Da tao lai mot phan, co playlist bi loi', 'warning')
+      else if (run.status === 'stale') toast.showToast('Tac vu tao lai da qua han hoac bi gian doan', 'warning')
+      else if (run.status === 'skipped') toast.showToast('Khong co playlist he thong nao can tao lai', 'info')
+      else if (run.status === 'failed') toast.showToast(run.errorMessage || 'Tao lai playlist he thong that bai', 'error')
+    } else if (Date.now() - lastProgressAt > 120000) {
+      isRegeneratingAll.value = false
+      toast.showToast('Tac vu dang chay lau hon du kien. Da tai lai trang thai tu backend.', 'warning')
+      lastProgressAt = Date.now()
+    }
+  } catch (err) {
+    stopRunPolling()
+    isRegeneratingAll.value = false
+    activeRunId.value = null
+    await refreshOperationState()
+    toast.showToast(err.response?.data?.message || 'Khong doc duoc trang thai tac vu tao lai', 'error')
+  }
+}
+
+function startRunPolling(runId) {
+  stopRunPolling()
+  activeRunId.value = runId
+  lastProgressSignature = null
+  lastProgressAt = Date.now()
+  pollGenerationRun(runId)
+  runPollTimer = setInterval(() => pollGenerationRun(runId), 5000)
+}
+
+function startRequestMonitor() {
+  stopRequestMonitor()
+  requestMonitorTimer = setInterval(() => {
+    refreshOperationState()
+  }, 10000)
+  requestWatchdogTimer = setTimeout(async () => {
+    if (requestMonitorTimer) clearInterval(requestMonitorTimer)
+    requestMonitorTimer = null
+    isRegeneratingAll.value = false
+    await refreshOperationState()
+    toast.showToast('Tac vu tao lai chua phan hoi sau 2 phut. Da tai lai trang thai tu backend.', 'warning')
+  }, 120000)
 }
 
 async function fetchQualityReport() {
@@ -1127,10 +1233,15 @@ function confirmRegenerateAll() {
 async function executeRegenerateAll() {
   showConfirmModal.value = false
   isRegeneratingAll.value = true
+  startRequestMonitor()
   toast.showToast('Bắt đầu tiến trình tạo lại hàng loạt...', 'info')
   try {
     const res = await api.post('/admin/system-playlists/regenerate-all')
+    stopRequestMonitor()
     regenerateResult.value = res.data?.data || { success: 0, failed: 0, total: 0 }
+    if (res.data?.data?.runId) {
+      startRunPolling(res.data.data.runId)
+    }
     await Promise.all([
       fetchSummary(),
       fetchOperationSummary(),
@@ -1140,18 +1251,43 @@ async function executeRegenerateAll() {
       fetchPlaylists(1)
     ])
   } catch (err) {
+    stopRequestMonitor()
+    stopRunPolling()
+    activeRunId.value = null
     toast.showToast(err.response?.data?.message || 'Lỗi tiến trình tạo lại hàng loạt', 'error')
     await Promise.all([
       fetchOperationSummary(),
       fetchActivityLogs()
     ])
   } finally {
-    isRegeneratingAll.value = false
+    if (!activeRunId.value) {
+      isRegeneratingAll.value = false
+    }
   }
 }
 
 function closeResultModal() {
   regenerateResult.value = null
+}
+
+function canResetGenerationRun(log) {
+  return ['queued', 'running', 'failed', 'stale'].includes(log?.status)
+}
+
+async function resetGenerationRun(log) {
+  if (!log?.id) return
+  try {
+    await api.post(`/admin/system-playlists/generation-runs/${log.id}/cancel`)
+    if (activeRunId.value === log.id) {
+      activeRunId.value = null
+      isRegeneratingAll.value = false
+      stopRunPolling()
+    }
+    await refreshOperationState()
+    toast.showToast('Da dat lai trang thai tac vu tao lai playlist he thong', 'success')
+  } catch (err) {
+    toast.showToast(err.response?.data?.message || 'Khong dat lai duoc tac vu tao lai', 'error')
+  }
 }
 
 // Utils
@@ -1179,11 +1315,34 @@ function formatDurationMs(value) {
   return `${minutes}m ${rest}s`
 }
 
+function formatRunProgress(log) {
+  const total = Number(log?.totalPlaylists || 0)
+  const success = Number(log?.successCount || 0)
+  const failed = Number(log?.failedCount || 0)
+  const skipped = Number(log?.skippedCount || 0)
+  const processed = success + failed + skipped
+  if (log?.status === 'running' || log?.status === 'queued') {
+    return total > 0 ? `Dang chay ${processed}/${total}` : 'Dang khoi tao'
+  }
+  if (log?.status === 'success') return `Thanh cong ${success}/${total}`
+  if (log?.status === 'partial_success') return `Hoan tat mot phan ${success}/${total}, loi ${failed}`
+  if (log?.status === 'failed') return failed > 0 ? `That bai ${failed}/${total}` : 'That bai'
+  if (log?.status === 'stale') return 'Bi gian doan / qua han'
+  if (log?.status === 'skipped') return 'Khong co du lieu can xu ly'
+  if (log?.status === 'cancelled') return 'Da huy'
+  return total > 0 ? `${success}/${total} thanh cong` : 'Khong co tien do'
+}
+
 function formatRunStatus(status) {
   const map = {
     success: 'Thành công',
+    partial_success: 'Hoàn tất một phần',
     failed: 'Thất bại',
     partial: 'Một phần',
+    stale: 'Bị gián đoạn',
+    skipped: 'Bỏ qua',
+    cancelled: 'Đã hủy',
+    queued: 'Đang chờ',
     running: 'Đang chạy'
   }
   return map[status] || 'Chưa có dữ liệu'
@@ -1198,9 +1357,10 @@ function formatOperationType(value) {
 
 function runStatusDotClass(status) {
   if (status === 'success') return 'bg-emerald-500'
-  if (status === 'partial') return 'bg-amber-500'
-  if (status === 'failed') return 'bg-rose-500'
-  if (status === 'running') return 'bg-orange-500'
+  if (status === 'partial' || status === 'partial_success') return 'bg-amber-500'
+  if (status === 'failed' || status === 'stale') return 'bg-rose-500'
+  if (status === 'running' || status === 'queued') return 'bg-orange-500'
+  if (status === 'skipped' || status === 'cancelled') return 'bg-slate-400'
   return 'bg-slate-300'
 }
 
@@ -1236,6 +1396,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopRunPolling()
+  stopRequestMonitor()
   document.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
 })

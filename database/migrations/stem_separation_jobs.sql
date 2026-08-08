@@ -4,7 +4,10 @@ CREATE TABLE IF NOT EXISTS stem_separation_jobs (
   user_id INT UNSIGNED NOT NULL,
   song_id INT UNSIGNED NOT NULL,
 
-  status ENUM('pending', 'processing', 'completed', 'failed')
+  job_id VARCHAR(64) NULL,
+  locked_by VARCHAR(128) NULL,
+
+  status ENUM('pending', 'processing', 'completed', 'failed', 'stale', 'cancelled')
     NOT NULL DEFAULT 'pending',
 
   progress INT UNSIGNED NOT NULL DEFAULT 0,
@@ -14,6 +17,11 @@ CREATE TABLE IF NOT EXISTS stem_separation_jobs (
   instrumental_url VARCHAR(500) NULL,
 
   error_message TEXT NULL,
+  started_at DATETIME NULL,
+  heartbeat_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  failed_at DATETIME NULL,
+  retry_count INT NOT NULL DEFAULT 0,
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

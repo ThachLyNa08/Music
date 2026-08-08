@@ -2,6 +2,15 @@
 .env
 .env.*
 !.env.example
+apps/backend/.env
+apps/frontend/.env
+apps/ai-service/.env
+apps/backend/.env.local
+apps/frontend/.env.local
+apps/ai-service/.env.local
+apps/backend/.env.*.local
+apps/frontend/.env.*.local
+apps/ai-service/.env.*.local
 spotify_tokens.json
 backend/spotify_tokens.json
 apps/backend/spotify_tokens.json
@@ -145,3 +154,9 @@ apps/backend/scripts/run_*_migration.js
 
 # Local thesis/doc backups
 docs/thesis/backup/
+
+*.bak-mojibake
+database/exports/
+*.sql.bak-*
+*.bak
+*.tmp

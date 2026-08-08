@@ -1,4 +1,30 @@
+const crypto = require('crypto');
 const { pool } = require('../config/database');
+const { sendSystemEmail } = require('../services/email.service');
+const { ensureSystemEmailAppealSchema } = require('../services/systemEmailAppealSchema.service');
+const {
+  accountLockedEmail,
+  appealAcceptedEmail,
+  appealRejectedEmail,
+  adminPromotedEmail,
+} = require('../services/systemEmailTemplates.service');
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getFrontendUrl() {
+  return String(process.env.APP_FRONTEND_URL || process.env.FRONTEND_URL || 'http://127.0.0.1:5173').replace(/\/+$/, '');
+}
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
@@ -428,12 +454,12 @@ exports.getListeningTrends = async (req, res, next) => {
   try {
     const range = ['today', '7d', '30d', 'all'].includes(req.query.range) ? req.query.range : '7d';
     const dataset = 'system';
-    const forceRefresh = req.query.forceRefresh === 'true';
+    const forceRefresh = req.query.forceRefresh === 'true' || range === 'today';
     const rangeKey = range;
     const snapshot = await getWidgetSnapshot({
       cacheKey: 'dashboard_listening_trends_cache',
       rangeKey,
-      ttlSeconds: 900,
+      ttlSeconds: range === 'today' ? 60 : 900,
       forceRefresh,
       refreshFn: () => buildListeningTrendsPayload(range, dataset)
     });
@@ -1856,7 +1882,36 @@ exports.updateUserRole = async (req, res, next) => {
     if (!['user', 'admin'].includes(role)) {
       return res.status(400).json({ success: false, message: 'Vai trò không hợp lệ' });
     }
+    const [users] = await pool.query(
+      'SELECT id, email, display_name, role FROM users WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+    }
+
+    const targetUser = users[0];
     await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+
+    if (targetUser.role !== 'admin' && role === 'admin' && targetUser.email) {
+      const email = adminPromotedEmail({
+        name: targetUser.display_name || targetUser.email,
+      });
+      await sendSystemEmail({
+        to: targetUser.email,
+        subject: email.subject,
+        type: 'admin_promoted',
+        userId: targetUser.id,
+        metadata: {
+          user_id: targetUser.id,
+          previous_role: targetUser.role,
+          new_role: role,
+          promoted_by: req.user?.id || null,
+        },
+        text: email.text,
+        html: email.html,
+      });
+    }
     res.json({ success: true, message: 'Cập nhật vai trò thành công' });
   } catch (error) {
     console.error('updateUserRole Error:', error);
@@ -1866,13 +1921,106 @@ exports.updateUserRole = async (req, res, next) => {
 
 exports.updateUserStatus = async (req, res, next) => {
   try {
+    await ensureSystemEmailAppealSchema();
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, locked_reason, lock_reason, allow_appeal = true } = req.body;
     if (!['active', 'locked'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ' });
     }
-    await pool.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
-    res.json({ success: true, message: 'Cập nhật trạng thái thành công' });
+
+    const userId = Number(id);
+    if (status === 'locked' && req.user && Number(req.user.id) === userId) {
+      return res.status(403).json({
+        success: false,
+        code: 'CANNOT_LOCK_SELF',
+        message: 'Bạn không thể khóa tài khoản của chính mình.',
+      });
+    }
+
+    const [users] = await pool.query(
+      'SELECT id, email, display_name, status FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    );
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+    }
+
+    const targetUser = users[0];
+
+    if (status === 'locked') {
+      const reason = String(locked_reason || lock_reason || '').trim();
+      if (!reason) {
+        return res.status(400).json({
+          success: false,
+          code: 'LOCK_REASON_REQUIRED',
+          message: 'Vui lòng nhập lý do khóa tài khoản.',
+        });
+      }
+
+      const appealAllowed = allow_appeal !== false;
+      const rawToken = appealAllowed ? crypto.randomBytes(32).toString('hex') : null;
+      const tokenHash = rawToken ? hashToken(rawToken) : null;
+      const tokenExpiresAt = rawToken ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null;
+
+      await pool.query(
+        `UPDATE users
+         SET status = 'locked',
+             locked_at = NOW(),
+             locked_reason = ?,
+             locked_by = ?,
+             lock_appeal_allowed = ?,
+             lock_appeal_token = ?,
+             lock_appeal_token_hash = ?,
+             lock_appeal_token_expires_at = ?
+         WHERE id = ?`,
+        [reason, req.user?.id || null, appealAllowed ? 1 : 0, rawToken, tokenHash, tokenExpiresAt, userId]
+      );
+
+      const appealLink = rawToken ? `${getFrontendUrl()}/account/appeal?token=${encodeURIComponent(rawToken)}` : null;
+      if (targetUser.email) {
+        const email = accountLockedEmail({
+          name: targetUser.display_name || targetUser.email,
+          reason,
+          appealLink,
+        });
+        await sendSystemEmail({
+          to: targetUser.email,
+          subject: email.subject,
+          type: 'account_locked',
+          userId,
+          metadata: {
+            user_id: userId,
+            locked_by: req.user?.id || null,
+            allow_appeal: appealAllowed,
+            appeal_token_expires_at: tokenExpiresAt,
+          },
+          text: email.text,
+          html: email.html,
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Đã khóa tài khoản thành công',
+        data: { appeal_allowed: appealAllowed },
+      });
+    }
+
+    await pool.query(
+      `UPDATE users
+       SET status = 'active',
+           locked_at = NULL,
+           locked_reason = NULL,
+           locked_by = NULL,
+           lock_appeal_allowed = 1,
+           lock_appeal_token = NULL,
+           lock_appeal_token_hash = NULL,
+           lock_appeal_token_expires_at = NULL
+       WHERE id = ?`,
+      [userId]
+    );
+
+    res.json({ success: true, message: 'Đã mở khóa tài khoản thành công' });
   } catch (error) {
     console.error('updateUserStatus Error:', error);
     next(error);
@@ -1901,6 +2049,171 @@ exports.updateUserPremium = async (req, res, next) => {
   } catch (error) {
     console.error('updateUserPremium Error:', error);
     next(error);
+  }
+};
+
+exports.getAccountAppeals = async (req, res, next) => {
+  try {
+    await ensureSystemEmailAppealSchema();
+    const status = String(req.query.status || 'pending').trim();
+    const allowedStatuses = ['pending', 'reviewing', 'accepted', 'rejected', 'all'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Trạng thái khiếu nại không hợp lệ' });
+    }
+
+    const params = [];
+    let where = '';
+    if (status !== 'all') {
+      where = 'WHERE a.status = ?';
+      params.push(status);
+    }
+
+    const [appeals] = await pool.query(
+      `SELECT
+         a.id, a.user_id, a.email, a.reason, a.evidence_image_url, a.status, a.admin_note,
+         a.resolved_by, a.resolved_at, a.created_at, a.updated_at,
+         u.display_name, u.status AS user_status, u.locked_reason
+       FROM account_lock_appeals a
+       JOIN users u ON u.id = a.user_id
+       ${where}
+       ORDER BY a.created_at DESC
+       LIMIT 100`,
+      params
+    );
+
+    res.json({ success: true, data: appeals });
+  } catch (error) {
+    console.error('getAccountAppeals Error:', error);
+    next(error);
+  }
+};
+
+exports.acceptAccountAppeal = async (req, res, next) => {
+  const conn = await pool.getConnection();
+  try {
+    await ensureSystemEmailAppealSchema();
+    const appealId = Number(req.params.id);
+    await conn.beginTransaction();
+
+    const [appeals] = await conn.query(
+      `SELECT a.*, u.email AS user_email, u.display_name
+       FROM account_lock_appeals a
+       JOIN users u ON u.id = a.user_id
+       WHERE a.id = ?
+       FOR UPDATE`,
+      [appealId]
+    );
+    if (!appeals.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: 'Không tìm thấy khiếu nại' });
+    }
+
+    const appeal = appeals[0];
+    if (!['pending', 'reviewing'].includes(appeal.status)) {
+      await conn.rollback();
+      return res.status(409).json({ success: false, message: 'Khiếu nại đã được xử lý' });
+    }
+
+    await conn.query(
+      `UPDATE users
+       SET status = 'active',
+           locked_at = NULL,
+           locked_reason = NULL,
+           locked_by = NULL,
+           lock_appeal_allowed = 1,
+           lock_appeal_token = NULL,
+           lock_appeal_token_hash = NULL,
+           lock_appeal_token_expires_at = NULL
+       WHERE id = ?`,
+      [appeal.user_id]
+    );
+    await conn.query(
+      `UPDATE account_lock_appeals
+       SET status = 'accepted', admin_note = ?, resolved_by = ?, resolved_at = NOW()
+       WHERE id = ?`,
+      [req.body?.admin_note || null, req.user?.id || null, appealId]
+    );
+
+    await conn.commit();
+
+    if (appeal.user_email) {
+      const email = appealAcceptedEmail({ name: appeal.display_name || appeal.user_email });
+      await sendSystemEmail({
+        to: appeal.user_email,
+        subject: email.subject,
+        type: 'appeal_resolved',
+        userId: appeal.user_id,
+        metadata: { appeal_id: appealId, result: 'accepted', resolved_by: req.user?.id || null },
+        text: email.text,
+        html: email.html,
+      });
+    }
+
+    res.json({ success: true, message: 'Đã chấp nhận khiếu nại và mở khóa tài khoản' });
+  } catch (error) {
+    try { await conn.rollback(); } catch {}
+    console.error('acceptAccountAppeal Error:', error);
+    next(error);
+  } finally {
+    conn.release();
+  }
+};
+
+exports.rejectAccountAppeal = async (req, res, next) => {
+  const conn = await pool.getConnection();
+  try {
+    await ensureSystemEmailAppealSchema();
+    const appealId = Number(req.params.id);
+    const adminNote = String(req.body?.admin_note || '').trim();
+    await conn.beginTransaction();
+
+    const [appeals] = await conn.query(
+      `SELECT a.*, u.email AS user_email, u.display_name
+       FROM account_lock_appeals a
+       JOIN users u ON u.id = a.user_id
+       WHERE a.id = ?
+       FOR UPDATE`,
+      [appealId]
+    );
+    if (!appeals.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: 'Không tìm thấy khiếu nại' });
+    }
+
+    const appeal = appeals[0];
+    if (!['pending', 'reviewing'].includes(appeal.status)) {
+      await conn.rollback();
+      return res.status(409).json({ success: false, message: 'Khiếu nại đã được xử lý' });
+    }
+
+    await conn.query(
+      `UPDATE account_lock_appeals
+       SET status = 'rejected', admin_note = ?, resolved_by = ?, resolved_at = NOW()
+       WHERE id = ?`,
+      [adminNote || null, req.user?.id || null, appealId]
+    );
+    await conn.commit();
+
+    if (appeal.user_email) {
+      const email = appealRejectedEmail({ name: appeal.display_name || appeal.user_email, adminNote });
+      await sendSystemEmail({
+        to: appeal.user_email,
+        subject: email.subject,
+        type: 'appeal_resolved',
+        userId: appeal.user_id,
+        metadata: { appeal_id: appealId, result: 'rejected', resolved_by: req.user?.id || null },
+        text: email.text,
+        html: email.html,
+      });
+    }
+
+    res.json({ success: true, message: 'Đã từ chối khiếu nại' });
+  } catch (error) {
+    try { await conn.rollback(); } catch {}
+    console.error('rejectAccountAppeal Error:', error);
+    next(error);
+  } finally {
+    conn.release();
   }
 };
 
@@ -2444,16 +2757,62 @@ exports.bulkUpdateSongsMarket = async (req, res, next) => {
 
 exports.getMetadataIssues = async (req, res, next) => {
   try {
+    const { group, search, genreId, artistId, status, releaseStatus } = req.query;
+    let whereClause = `
+      WHERE s.review_status = 'approved'
+        AND (
+          s.cover_url IS NULL OR TRIM(s.cover_url) = ''
+          OR s.audio_url IS NULL OR TRIM(s.audio_url) = ''
+          OR s.artist_id IS NULL
+          OR s.genre_id IS NULL
+        )
+    `;
+    const params = [];
+
+    if (group && group !== 'ALL') {
+      if (group === 'KPOP') {
+        whereClause += ` AND UPPER(g.name) LIKE 'KPOP%'`;
+      } else if (group === 'VPOP') {
+        whereClause += ` AND UPPER(g.name) LIKE 'VPOP%'`;
+      } else if (group === 'USUK') {
+        whereClause += ` AND (UPPER(g.name) LIKE 'USUK%' OR UPPER(g.name) LIKE 'US-UK%')`;
+      }
+    }
+    if (search) {
+      whereClause += ` AND (s.title LIKE ? OR a.name LIKE ? OR al.title LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (genreId) {
+      whereClause += ` AND s.genre_id = ?`;
+      params.push(genreId);
+    }
+    if (artistId) {
+      whereClause += ` AND s.artist_id = ?`;
+      params.push(artistId);
+    }
+    if (status) {
+      whereClause += ` AND s.is_active = ?`;
+      params.push(status === 'active' ? 1 : 0);
+    }
+    if (releaseStatus) {
+      whereClause += ` AND s.release_status = ?`;
+      params.push(releaseStatus);
+    }
+
     const [issues] = await pool.query(`
       SELECT s.id, s.title,
-        CASE WHEN s.cover_url IS NULL THEN 1 ELSE 0 END as missingCover,
-        CASE WHEN s.audio_url IS NULL THEN 1 ELSE 0 END as missingAudio,
+        CASE WHEN s.cover_url IS NULL OR TRIM(s.cover_url) = '' THEN 1 ELSE 0 END as missingCover,
+        CASE WHEN s.audio_url IS NULL OR TRIM(s.audio_url) = '' THEN 1 ELSE 0 END as missingAudio,
         CASE WHEN s.artist_id IS NULL THEN 1 ELSE 0 END as missingArtist,
         CASE WHEN s.genre_id IS NULL THEN 1 ELSE 0 END as missingGenre
       FROM songs s
-      WHERE s.cover_url IS NULL OR s.audio_url IS NULL OR s.artist_id IS NULL OR s.genre_id IS NULL
+      LEFT JOIN artists a ON s.artist_id = a.id
+      LEFT JOIN albums al ON s.album_id = al.id
+      LEFT JOIN genres g ON s.genre_id = g.id
+      ${whereClause}
+      ORDER BY s.created_at DESC, s.id DESC
       LIMIT 100
-    `);
+    `, params);
     res.json({ success: true, data: issues });
   } catch (error) {
     console.error('getMetadataIssues Error:', error);
@@ -3530,9 +3889,38 @@ function mergeGenerationStats(target, stats) {
 }
 
 function summarizeGenerationRun(aggregate) {
-  if (aggregate.failedCount > 0 && aggregate.successCount > 0) return 'partial';
+  if (aggregate.failedCount > 0 && aggregate.successCount > 0) return 'partial_success';
   if (aggregate.failedCount > 0 && aggregate.successCount === 0) return 'failed';
   return 'success';
+}
+
+async function getRegenerateAllSystemPlaylistTargets(activeUsers = null) {
+  const [[userStats]] = await pool.query(
+    `SELECT
+       COUNT(*) AS totalUsers,
+       SUM(CASE WHEN status = 'active' AND role = 'user' THEN 1 ELSE 0 END) AS activeUsers
+     FROM users`
+  );
+  const totalUsers = Number(userStats?.totalUsers || 0);
+  const activeUserCount = activeUsers !== null ? Number(activeUsers || 0) : Number(userStats?.activeUsers || 0);
+  const targets = [];
+
+  if (totalUsers > 0) {
+    targets.push({ stage: 'trending', systemKey: 'trending_now', count: 1 });
+  }
+  if (activeUserCount > 0) {
+    targets.push({ stage: 'daily', systemKey: 'dailymix_*', count: activeUserCount * 6 });
+    targets.push({ stage: 'weekly', systemKey: 'weekly_mix', count: activeUserCount });
+    targets.push({ stage: 'mood', systemKey: 'moodmix', count: activeUserCount });
+    targets.push({ stage: 'contextual', systemKey: 'time_vibes', count: activeUserCount * 4 });
+  }
+
+  return {
+    totalUsers,
+    activeUsers: activeUserCount,
+    targets,
+    totalPlaylists: targets.reduce((sum, target) => sum + Number(target.count || 0), 0)
+  };
 }
 
 const TIME_BASED_SYSTEM_KEYS = ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes'];
@@ -3580,9 +3968,19 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
       totalPlaylists: playlists.length
     };
 
+    if (!playlists.length) {
+      return res.status(400).json({
+        success: false,
+        code: 'NO_SYSTEM_PLAYLIST_TARGETS',
+        message: 'Khong co playlist he thong nao can tao lai.'
+      });
+    }
+
     runId = await runLogService.startGenerationRun({
       operationType: 'regenerate_scope',
       triggeredByUserId: req.user?.id || null,
+      totalUsers: uniqueUsers.size,
+      totalPlaylists: playlists.length,
       metadata: baseMetadata
     });
 
@@ -3612,23 +4010,6 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
       skippedCount: 0,
       metadata: { ...baseMetadata, progress }
     });
-
-    if (!playlists.length) {
-      await runLogService.finishGenerationRun(runId, {
-        status: 'success',
-        totalUsers: 0,
-        totalPlaylists: 0,
-        successCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
-        metadata: { ...baseMetadata, message: 'No playlists matched scope' }
-      });
-      return res.json({
-        success: true,
-        message: 'No playlists matched scope',
-        data: { runId, ...progress }
-      });
-    }
 
     for (const playlist of playlists) {
       try {
@@ -3704,7 +4085,7 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
     }
 
     const status = progress.failedCount > 0
-      ? (progress.successCount > 0 ? 'partial' : 'failed')
+      ? (progress.successCount > 0 ? 'partial_success' : 'failed')
       : 'success';
     await runLogService.finishGenerationRun(runId, {
       status,
@@ -3755,88 +4136,291 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
 exports.regenerateAllSystemPlaylists = async (req, res, next) => {
   const runLogService = require('../services/systemPlaylistRunLog.service');
   let runId = null;
+  let aggregate = {
+    totalUsers: 0,
+    totalPlaylists: 0,
+    successCount: 0,
+    failedCount: 0,
+    skippedCount: 0
+  };
+  let results = {};
+  let heartbeatTimer = null;
+  let latestRunErrorMessage = null;
+  let cancelCheckCounter = 0;
+
+  async function updateRunProgress(errorMessage = null) {
+    if (!runId) return;
+    if (errorMessage !== null) latestRunErrorMessage = errorMessage;
+    await runLogService.updateGenerationRunProgress(runId, {
+      totalUsers: aggregate.totalUsers,
+      totalPlaylists: aggregate.totalPlaylists,
+      successCount: aggregate.successCount,
+      failedCount: aggregate.failedCount,
+      skippedCount: aggregate.skippedCount,
+      errorMessage: latestRunErrorMessage,
+      metadata: { results, aggregate }
+    });
+  }
+
+  function startRunHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      updateRunProgress().catch((err) => {
+        console.warn('Failed to update system playlist regenerate heartbeat:', err.message);
+      });
+    }, 30000);
+    if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
+  }
+
+  function stopRunHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  async function assertRunStillActive(force = false) {
+    cancelCheckCounter += 1;
+    if (!force && cancelCheckCounter % 10 !== 0) return;
+    const latestRun = await runLogService.getGenerationRun(runId);
+    if (!latestRun || !['queued', 'running'].includes(latestRun.status)) {
+      const err = new Error(`System playlist regenerate run ${runId} is no longer active.`);
+      err.code = 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED';
+      throw err;
+    }
+  }
+
   try {
     const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
+    const targetInfo = await getRegenerateAllSystemPlaylistTargets();
+
+    if (targetInfo.totalPlaylists <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'NO_SYSTEM_PLAYLIST_TARGETS',
+        message: 'Khong co playlist he thong nao can tao lai.'
+      });
+    }
+
     runId = await runLogService.startGenerationRun({
       operationType: 'regenerate_all',
       triggeredByUserId: req.user?.id || null,
-      metadata: { source: 'admin_system_playlists_page' }
+      totalUsers: targetInfo.activeUsers,
+      totalPlaylists: targetInfo.totalPlaylists,
+      metadata: { source: 'admin_system_playlists_page', targets: targetInfo.targets }
     });
 
-    const [[userStats]] = await pool.query(
-      `SELECT COUNT(*) AS totalUsers FROM users WHERE status = 'active' AND role = 'user'`
+    const activeUsers = targetInfo.activeUsers;
+    const [activeUserRows] = await pool.query(
+      `SELECT id FROM users WHERE status = 'active' AND role = 'user' ORDER BY id`
     );
-    const activeUsers = Number(userStats?.totalUsers || 0);
-    const results = {
+    const activeUserIds = activeUserRows.map((row) => Number(row.id)).filter(Number.isInteger);
+    results = {
       trending: 'pending',
       daily: 'pending',
       weekly: 'pending',
       mood: 'pending',
       contextual: 'pending'
     };
-    const aggregate = {
+    aggregate = {
       totalUsers: activeUsers,
-      totalPlaylists: 0,
+      totalPlaylists: targetInfo.totalPlaylists,
       successCount: 0,
       failedCount: 0,
       skippedCount: 0
     };
+    await updateRunProgress();
+    startRunHeartbeat();
+
+    res.status(202).json({
+      success: true,
+      message: 'Da bat dau tac vu tao lai playlist he thong. Vui long theo doi tien do.',
+      data: {
+        runId,
+        status: 'running',
+        total: aggregate.totalPlaylists,
+        success: 0,
+        failed: 0,
+        skipped: 0
+      }
+    });
 
     try {
       const trendingService = require('../services/trendingPlaylist.service');
       const summary = await trendingService.generateTrendingPlaylist();
       await logSystemPlaylistRun({ system_key: 'trending_now', run_type: 'admin_all' });
-      mergeGenerationStats(aggregate, normalizeGenerationStats({
-        totalUsers: activeUsers,
-        totalPlaylists: 1,
-        successCount: summary?.status === 'failed' ? 0 : 1,
-        failedCount: summary?.status === 'failed' ? 1 : 0,
-        skippedCount: summary?.status === 'skipped' ? 1 : 0
-      }, 1));
+      if (summary?.status === 'failed') aggregate.failedCount += 1;
+      else if (summary?.status === 'skipped') aggregate.skippedCount += 1;
+      else aggregate.successCount += 1;
       results.trending = 'success';
     } catch (e) {
       results.trending = e.message;
-      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: 1, successCount: 0, failedCount: 1, skippedCount: 0 });
+      aggregate.failedCount += 1;
     }
+    await updateRunProgress(results.trending !== 'success' ? `trending: ${results.trending}` : null);
 
     try {
       const dailyMixService = require('../services/dailyMix.service');
-      const summary = await dailyMixService.generateDailyMixesForAllUsers();
+      const summary = {
+        usersProcessed: 0,
+        playlistsCreated: 0,
+        playlistsUpdated: 0,
+        songsInserted: 0,
+        skipped: 0,
+        errors: 0
+      };
+      for (const userId of activeUserIds) {
+        await assertRunStillActive();
+        try {
+          const userSummary = await dailyMixService.generateDailyMixesForUser(userId);
+          summary.usersProcessed += 1;
+          for (const mix of userSummary?.mixes || []) {
+            if (mix.created) summary.playlistsCreated += 1;
+            else summary.playlistsUpdated += 1;
+            summary.songsInserted += Number(mix.insertedSongs || 0);
+          }
+          aggregate.successCount += 6;
+        } catch (e) {
+          summary.errors += 1;
+          summary.skipped += 1;
+          aggregate.failedCount += 6;
+          results.daily = e.message;
+        }
+        await updateRunProgress(results.daily !== 'pending' && results.daily !== 'success' ? `daily: ${results.daily}` : null);
+      }
       for (let i = 1; i <= 6; i++) {
         await logSystemPlaylistRun({ system_key: `dailymix_0${i}`, run_type: 'admin_all' });
       }
-      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers * 6));
-      results.daily = 'success';
+      if (results.daily === 'pending') results.daily = 'success';
     } catch (e) {
       results.daily = e.message;
-      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers * 6, successCount: 0, failedCount: activeUsers * 6, skippedCount: 0 });
+      if (e.code === 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') throw e;
+      if (e.code !== 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') {
+        aggregate.failedCount += Math.max(0, activeUsers * 6 - aggregate.successCount - aggregate.failedCount);
+      }
     }
+    await updateRunProgress(results.daily !== 'success' ? `daily: ${results.daily}` : null);
 
     try {
       const weeklyMixService = require('../services/weeklyMix.service');
-      const summary = await weeklyMixService.generateWeeklyMixForAllUsers();
+      const summary = {
+        usersProcessed: 0,
+        playlistsCreated: 0,
+        playlistsUpdated: 0,
+        songsInserted: 0,
+        skipped: 0,
+        errors: 0
+      };
+      for (const userId of activeUserIds) {
+        await assertRunStillActive();
+        try {
+          const userSummary = await weeklyMixService.generateWeeklyMixForUser(userId);
+          summary.usersProcessed += 1;
+          if (userSummary.created) summary.playlistsCreated += 1;
+          else summary.playlistsUpdated += 1;
+          summary.songsInserted += Number(userSummary.insertedSongs || 0);
+          aggregate.successCount += 1;
+        } catch (e) {
+          summary.errors += 1;
+          summary.skipped += 1;
+          aggregate.failedCount += 1;
+          results.weekly = e.message;
+        }
+        await updateRunProgress(results.weekly !== 'pending' && results.weekly !== 'success' ? `weekly: ${results.weekly}` : null);
+      }
       await logSystemPlaylistRun({ system_key: 'weekly_mix', run_type: 'admin_all' });
-      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers));
-      results.weekly = 'success';
+      if (results.weekly === 'pending') results.weekly = 'success';
     } catch (e) {
       results.weekly = e.message;
-      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers, successCount: 0, failedCount: activeUsers, skippedCount: 0 });
+      if (e.code === 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') throw e;
+      if (e.code !== 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') {
+        aggregate.failedCount += Math.max(0, activeUsers - aggregate.failedCount);
+      }
     }
+    await updateRunProgress(results.weekly !== 'success' ? `weekly: ${results.weekly}` : null);
 
     try {
       const moodMixService = require('../services/moodMix.service');
-      const summary = await moodMixService.generateMoodMixForAllUsers();
+      const summary = {
+        usersProcessed: 0,
+        playlistsCreated: 0,
+        playlistsUpdated: 0,
+        songsInserted: 0,
+        skipped: 0,
+        errors: 0
+      };
+      for (const userId of activeUserIds) {
+        await assertRunStillActive();
+        try {
+          const userSummary = await moodMixService.generateMoodMixForUser(userId);
+          summary.usersProcessed += 1;
+          if (userSummary.canApply === false) {
+            summary.skipped += 1;
+            aggregate.skippedCount += 1;
+          } else {
+            if (userSummary.created) summary.playlistsCreated += 1;
+            else summary.playlistsUpdated += 1;
+            summary.songsInserted += Number(userSummary.insertedSongs || 0);
+            aggregate.successCount += 1;
+          }
+        } catch (e) {
+          summary.errors += 1;
+          aggregate.failedCount += 1;
+          results.mood = e.message;
+        }
+        await updateRunProgress(results.mood !== 'pending' && results.mood !== 'success' ? `mood: ${results.mood}` : null);
+      }
       await logSystemPlaylistRun({ system_key: 'moodmix', run_type: 'admin_all' });
-      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers));
-      results.mood = 'success';
+      if (results.mood === 'pending') results.mood = 'success';
     } catch (e) {
       results.mood = e.message;
-      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers, successCount: 0, failedCount: activeUsers, skippedCount: 0 });
+      if (e.code === 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') throw e;
+      if (e.code !== 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') {
+        aggregate.failedCount += Math.max(0, activeUsers - aggregate.failedCount);
+      }
     }
+    await updateRunProgress(results.mood !== 'success' ? `mood: ${results.mood}` : null);
 
     try {
       const contextualService = require('../services/contextualMoodPlaylist.service');
-      const summary = await contextualService.generateContextualMoodPlaylistsForAllUsers();
+      const summary = {
+        perSlotStats: {
+          morning_vibes: { processed: 0, succeeded: 0, failed: 0, skipped: 0 },
+          afternoon_vibes: { processed: 0, succeeded: 0, failed: 0, skipped: 0 },
+          evening_vibes: { processed: 0, succeeded: 0, failed: 0, skipped: 0 },
+          night_vibes: { processed: 0, succeeded: 0, failed: 0, skipped: 0 }
+        },
+        playlistsSucceeded: 0,
+        playlistsFailed: 0,
+        playlistsSkipped: 0
+      };
+      for (const userId of activeUserIds) {
+        await assertRunStillActive();
+        try {
+          const userSummary = await contextualService.generateContextualMoodPlaylistsForUser(userId);
+          for (const slotResult of userSummary?.results || []) {
+            const key = slotResult.systemKey;
+            if (summary.perSlotStats[key]) {
+              summary.perSlotStats[key].processed += 1;
+              if (slotResult.status === 'failed') summary.perSlotStats[key].failed += 1;
+              else if (slotResult.status === 'skipped') summary.perSlotStats[key].skipped += 1;
+              else summary.perSlotStats[key].succeeded += 1;
+            }
+          }
+          const succeeded = Number(userSummary?.playlistsSucceeded || 0);
+          const failed = Number(userSummary?.playlistsFailed || 0);
+          const skipped = Number(userSummary?.playlistsSkipped || 0);
+          summary.playlistsSucceeded += succeeded;
+          summary.playlistsFailed += failed;
+          summary.playlistsSkipped += skipped;
+          aggregate.successCount += succeeded;
+          aggregate.failedCount += failed;
+          aggregate.skippedCount += skipped;
+        } catch (e) {
+          summary.playlistsFailed += 4;
+          aggregate.failedCount += 4;
+          results.contextual = e.message;
+        }
+        await updateRunProgress(results.contextual !== 'pending' && results.contextual !== 'success' ? `contextual: ${results.contextual}` : null);
+      }
       for (const key of ['morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes']) {
         const slotStats = summary?.perSlotStats?.[key] || null;
         await logSystemPlaylistRun({
@@ -3854,12 +4438,15 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
           })
         });
       }
-      mergeGenerationStats(aggregate, normalizeGenerationStats(summary, activeUsers * 4));
-      results.contextual = 'success';
+      if (results.contextual === 'pending') results.contextual = 'success';
     } catch (e) {
       results.contextual = e.message;
-      mergeGenerationStats(aggregate, { totalUsers: activeUsers, totalPlaylists: activeUsers * 4, successCount: 0, failedCount: activeUsers * 4, skippedCount: 0 });
+      if (e.code === 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') throw e;
+      if (e.code !== 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED') {
+        aggregate.failedCount += Math.max(0, activeUsers * 4 - aggregate.failedCount);
+      }
     }
+    await updateRunProgress(results.contextual !== 'success' ? `contextual: ${results.contextual}` : null);
 
     const finalStatus = summarizeGenerationRun(aggregate);
     const failedStages = Object.entries(results)
@@ -3876,41 +4463,54 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       errorMessage: failedStages.length ? failedStages.join('; ').slice(0, 2000) : null,
       metadata: { results, aggregate }
     });
+    stopRunHeartbeat();
 
-    res.json({
-      success: true,
-      message: 'Hoàn tất quá trình tạo lại',
-      data: {
-        ...results,
-        runId,
-        status: finalStatus,
-        total: aggregate.totalPlaylists,
-        success: aggregate.successCount,
-        failed: aggregate.failedCount,
-        skipped: aggregate.skippedCount
-      }
-    });
+    if (!res.headersSent) {
+      res.json({
+        success: true,
+        message: 'Hoàn tất quá trình tạo lại',
+        data: {
+          ...results,
+          runId,
+          status: finalStatus,
+          total: aggregate.totalPlaylists,
+          success: aggregate.successCount,
+          failed: aggregate.failedCount,
+          skipped: aggregate.skippedCount
+        }
+      });
+    }
   } catch (error) {
     console.error('regenerateAllSystemPlaylists Error:', error);
+    stopRunHeartbeat();
     if (runId) {
       try {
         await runLogService.finishGenerationRun(runId, {
           status: 'failed',
+          totalUsers: aggregate.totalUsers,
+          totalPlaylists: aggregate.totalPlaylists,
+          successCount: aggregate.successCount,
+          failedCount: Math.max(aggregate.failedCount, aggregate.totalPlaylists - aggregate.successCount - aggregate.skippedCount),
+          skippedCount: aggregate.skippedCount,
           errorMessage: error.message,
-          metadata: { error: error.message }
+          metadata: { results, aggregate, error: error.message }
         });
       } catch (logErr) {
         console.warn('Failed to close system playlist generation run:', logErr.message);
       }
     }
-    res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || 'Lỗi hệ thống khi tạo lại toàn bộ',
-      data: error.runningRun ? {
-        runningRunId: error.runningRun.id,
-        startedAt: error.runningRun.started_at
-      } : undefined
-    });
+    if (!res.headersSent) {
+      res.status(error.statusCode || 500).json({
+        success: false,
+        code: error.code || 'SYSTEM_PLAYLIST_REGENERATE_FAILED',
+        message: error.message || 'Lỗi hệ thống khi tạo lại toàn bộ',
+        data: error.runningRun ? {
+          runningRunId: error.runningRun.id,
+          startedAt: error.runningRun.started_at,
+          heartbeatAt: error.runningRun.heartbeat_at
+        } : undefined
+      });
+    }
   }
 };
 
@@ -4956,6 +5556,53 @@ exports.getSystemPlaylistsOperationSummary = async (req, res, next) => {
     res.json({
       success: true,
       data: summary
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getSystemPlaylistGenerationRun = async (req, res, next) => {
+  try {
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const run = await runLogService.getGenerationRun(req.params.id);
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        code: 'SYSTEM_PLAYLIST_RUN_NOT_FOUND',
+        message: 'Khong tim thay tac vu tao lai playlist he thong.'
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: run
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.cancelSystemPlaylistGenerationRun = async (req, res, next) => {
+  try {
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const affected = await runLogService.cancelGenerationRun(
+      req.params.id,
+      `System playlist regenerate job was reset by admin ${req.user?.id || 'unknown'}.`
+    );
+    const run = await runLogService.getGenerationRun(req.params.id);
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        code: 'SYSTEM_PLAYLIST_RUN_NOT_FOUND',
+        message: 'Khong tim thay tac vu tao lai playlist he thong.'
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      message: affected > 0 ? 'Da dat lai trang thai tac vu tao lai playlist he thong.' : 'Tac vu da ket thuc hoac khong the dat lai.',
+      data: run
     });
   } catch (error) {
     next(error);

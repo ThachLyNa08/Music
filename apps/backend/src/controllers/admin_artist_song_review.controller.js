@@ -1,6 +1,11 @@
 const { pool } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const { getIo, notifyUser } = require('../services/socket.service');
+const { findDuplicateAudioHash } = require('../services/audioDuplicate.service');
+const { computeFileSha256 } = require('../utils/fileHash.util');
+const { resolveUploadUrl } = require('../utils/uploadPathResolver');
+
+const DUPLICATE_APPROVE_REJECTION_REASON = 'File âm thanh đã tồn tại trong thư viện.';
 
 let cachedSongColumns = null;
 async function getSongColumns() {
@@ -23,6 +28,64 @@ const getMetadataStatus = ({ title, audioUrl, coverUrl, genreId }) => {
   return 'incomplete';
 };
 
+async function ensureSongAudioHash(song) {
+  if (song.audio_hash) return song.audio_hash;
+  if (!song.audio_url) return null;
+
+  const resolved = resolveUploadUrl(song.audio_url);
+  if (!resolved.ok) return null;
+
+  try {
+    const audioHash = await computeFileSha256(resolved.absolutePath);
+    await pool.query('UPDATE songs SET audio_hash = ? WHERE id = ?', [audioHash, song.id]);
+    return audioHash;
+  } catch (error) {
+    console.warn('[ArtistSongReview] Failed to compute audio hash before approve:', error.message);
+    return null;
+  }
+}
+
+async function rejectSongForDuplicateApproval(song, adminId, duplicate) {
+  await pool.query(
+    `UPDATE songs
+     SET review_status = 'rejected',
+         reviewed_by_admin_id = ?,
+         reviewed_at = NOW(),
+         rejection_reason = ?,
+         can_resubmit = 1,
+         resubmit_locked_reason = NULL
+     WHERE id = ?`,
+    [adminId, DUPLICATE_APPROVE_REJECTION_REASON, song.id]
+  );
+
+  pool.query(
+    `INSERT INTO artist_content_review_logs (content_type, content_id, artist_id, admin_id, action, reason, score_snapshot)
+     VALUES ('song', ?, ?, ?, 'rejected', ?, ?)`,
+    [
+      song.id,
+      song.artist_id || null,
+      adminId,
+      DUPLICATE_APPROVE_REJECTION_REASON,
+      JSON.stringify({
+        duplicateAudio: true,
+        duplicateSongId: duplicate.id,
+        duplicateReviewStatus: duplicate.review_status,
+      }),
+    ]
+  ).catch(err => console.warn('Failed to log duplicate song rejection action:', err));
+}
+
+async function checkDuplicateBeforeApprove(song, adminId) {
+  const audioHash = await ensureSongAudioHash(song);
+  if (!audioHash) return null;
+
+  const duplicate = await findDuplicateAudioHash(audioHash, song.id, { reviewStatuses: ['approved'] });
+  if (!duplicate) return null;
+
+  await rejectSongForDuplicateApproval(song, adminId, duplicate);
+  return duplicate;
+}
+
 exports.getArtistSongReviews = async (req, res, next) => {
   try {
     const { status = 'pending_review', q, level, flag, artistId, page = 1, limit = 20, sort = 'newest' } = req.query;
@@ -32,7 +95,7 @@ exports.getArtistSongReviews = async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(limit);
     const limitNum = Number(limit);
 
-    let whereClause = 'WHERE s.submitted_by_artist_id IS NOT NULL';
+    let whereClause = "WHERE s.submitted_by_artist_id IS NOT NULL AND s.review_status <> 'draft'";
     const queryParams = [];
 
     if (status !== 'all') {
@@ -204,7 +267,7 @@ exports.getArtistSongReviewDetail = async (req, res, next) => {
        LEFT JOIN artists a ON s.artist_id = a.id
        LEFT JOIN albums al ON al.id = s.album_id
        LEFT JOIN genres g ON g.id = s.genre_id
-       WHERE s.id = ? AND s.submitted_by_artist_id IS NOT NULL
+       WHERE s.id = ? AND s.submitted_by_artist_id IS NOT NULL AND s.review_status <> 'draft'
        LIMIT 1`,
       [songId]
     );
@@ -253,6 +316,35 @@ exports.approveArtistSong = async (req, res, next) => {
   try {
     const songId = req.params.songId;
     const adminId = req.user.id;
+
+    const [pendingRows] = await pool.query(
+      `SELECT id, title, artist_id, audio_url, audio_hash, review_status
+       FROM songs
+       WHERE id = ? AND submitted_by_artist_id IS NOT NULL
+       LIMIT 1`,
+      [songId]
+    );
+
+    if (!pendingRows.length) {
+      return res.status(404).json({ success: false, message: 'Khong tim thay bai hat' });
+    }
+    if (pendingRows[0].review_status !== 'pending_review') {
+      return res.status(400).json({ success: false, message: 'Bai hat khong o trang thai cho duyet.' });
+    }
+
+    const duplicate = await checkDuplicateBeforeApprove(pendingRows[0], adminId);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_AUDIO_ON_APPROVAL',
+        message: 'Không thể duyệt vì file âm thanh đã tồn tại trong thư viện.',
+        duplicate: {
+          song_id: duplicate.id,
+          title: duplicate.title,
+          artist_name: duplicate.artist_name || null,
+        },
+      });
+    }
 
     const [result] = await pool.query(
       `UPDATE songs
@@ -515,7 +607,7 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
     }
 
     const [songs] = await pool.query(
-      `SELECT s.id, s.title, s.cover_url, s.artist_id, s.review_status, s.moderation_level, s.risk_score, s.metadata_score, s.moderation_flags, a.user_id as artist_user_id, a.name as artist_name
+      `SELECT s.id, s.title, s.cover_url, s.audio_url, s.audio_hash, s.artist_id, s.review_status, s.moderation_level, s.risk_score, s.metadata_score, s.moderation_flags, a.user_id as artist_user_id, a.name as artist_name
        FROM songs s
        LEFT JOIN artists a ON s.artist_id = a.id
        WHERE s.id IN (?) AND s.submitted_by_artist_id IS NOT NULL`,
@@ -554,6 +646,12 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
 
       if (parsedFlags.includes('invalid_audio_duration') || parsedFlags.includes('duplicate_audio_pending') || parsedFlags.includes('duplicate_audio_approved')) {
         skipped.push({ id, reason: 'Có cờ cảnh báo không đủ điều kiện duyệt hàng loạt.' });
+        continue;
+      }
+
+      const duplicate = await checkDuplicateBeforeApprove(song, adminId);
+      if (duplicate) {
+        skipped.push({ id, reason: DUPLICATE_APPROVE_REJECTION_REASON, duplicateSongId: duplicate.id });
         continue;
       }
 

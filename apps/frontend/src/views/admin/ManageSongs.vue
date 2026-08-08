@@ -8,11 +8,6 @@
       </div>
       <div class="flex gap-2 mt-4 md:mt-0">
         <AdminExportButton :loading="exportLoading" @click="handleExport" />
-        <!-- Optional Bulk Upload Button -->
-        <button class="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 text-[13px] font-medium bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border hover:bg-gray-50 dark:hover:bg-bg-surface text-gray-700 dark:text-gray-200 rounded-xl transition-all shadow-sm">
-          <MfIcon name="upload" size="18" />
-          Upload hàng loạt
-        </button>
         <AdminAddButton title="Thêm bài hát" @click="openAddModal" />
       </div>
     </header>
@@ -260,7 +255,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useAdminSongStore } from '@/store/adminSongStore';
 import { useRouter, useRoute } from 'vue-router';
 import api from '@/api/axios';
@@ -503,9 +498,22 @@ function previewSong(song) {
 const metadataIssues = ref([]);
 async function fetchMetadataIssues() {
   try {
-    const res = await api.get('/admin/songs/metadata-issues');
+    const { search, genreId, status, releaseStatus, sortBy, sortOrder } = store.filters;
+    const res = await api.get('/admin/songs/metadata-issues', {
+      params: {
+        group: store.selectedGroup,
+        search,
+        genreId,
+        status,
+        releaseStatus,
+        sortBy,
+        sortOrder,
+        _t: Date.now()
+      }
+    });
     metadataIssues.value = res.data.data;
   } catch (e) {
+    metadataIssues.value = [];
     console.error('Lỗi tải metadata issues:', e);
   }
 }
@@ -579,6 +587,7 @@ async function submitForm(submitData) {
     // Refresh danh sách & thống kê ngầm không làm trễ việc đóng modal
     store.fetchGroupsSummary();
     store.fetchSongs();
+    fetchMetadataIssues();
 
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.';
@@ -595,6 +604,7 @@ async function toggleStatus(song) {
     await api.put(`/admin/songs/${song.id}`, { is_active: newStatus ? 1 : 0 });
     store.fetchSongs();
     store.fetchGroupsSummary();
+    fetchMetadataIssues();
     toast.showToast('Đã cập nhật trạng thái', 'success');
   } catch (err) {
     console.error('Lỗi khi cập nhật trạng thái:', err);
@@ -614,6 +624,7 @@ function confirmDelete(song) {
         await store.fetchSongs();
         await store.fetchGroupsSummary();
         await store.fetchStatistics();
+        await fetchMetadataIssues();
         toast.showToast('Xóa bài hát thành công!', 'success');
       } catch (err) {
         console.error('Lỗi khi xóa bài hát:', err);
@@ -629,6 +640,21 @@ function formatDuration(sec) {
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
+
+watch(
+  () => [
+    store.selectedGroup,
+    store.filters.search,
+    store.filters.genreId,
+    store.filters.status,
+    store.filters.releaseStatus,
+    store.filters.sortBy,
+    store.filters.sortOrder
+  ],
+  () => {
+    fetchMetadataIssues();
+  }
+);
 
 onMounted(() => {
   if (route.query.search) {

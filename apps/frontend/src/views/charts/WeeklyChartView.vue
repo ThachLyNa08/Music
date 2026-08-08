@@ -48,8 +48,8 @@
     </section>
 
     <div class="mx-auto max-w-[1400px] px-6">
-      <div class="user-panel overflow-hidden p-3">
-        <div v-if="loading" class="space-y-2">
+      <div class="user-panel overflow-hidden" style="padding: 0 !important;">
+        <div v-if="loading" class="space-y-2 p-3">
           <div v-for="item in 10" :key="item" class="h-16 animate-pulse rounded-xl bg-white/[0.06]"></div>
         </div>
 

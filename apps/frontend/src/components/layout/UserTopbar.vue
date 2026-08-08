@@ -158,7 +158,7 @@
               </button>
               <div class="h-px bg-white/10 my-1"></div>
               <button
-                class="w-full flex items-center justify-between px-3 py-3 text-sm font-medium text-white/90 hover:bg-white/10 transition-colors rounded-sm text-left"
+                class="w-full flex items-center justify-between px-3 py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors rounded-sm text-left"
                 @click="confirmLogout"
               >
                 Đăng xuất

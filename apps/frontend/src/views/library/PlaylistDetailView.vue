@@ -165,7 +165,7 @@
                 :showDateAdded="true"
                 :date-column-mode="isSystemPlaylist ? 'album' : 'date'"
                 :compact="false"
-                :isPlaying="player.currentSong?.id === song.id"
+                :isPlaying="isSongCurrentlyPlaying(song)"
                 @play="playSong"
                 @open-menu="handleOpenMenu"
                 @toggle-like="toggleLike"
@@ -192,7 +192,7 @@
             :showDateAdded="true"
             :date-column-mode="isSystemPlaylist ? 'album' : 'date'"
             :compact="false"
-            :isPlaying="player.currentSong?.id === song.id"
+            :isPlaying="isSongCurrentlyPlaying(song)"
             @play="playSong"
             @open-menu="handleOpenMenu"
             @toggle-like="toggleLike"
@@ -619,18 +619,31 @@ function formatDuration(sec) {
   return `${m}:${s}`;
 }
 
+function isCurrentSong(song) {
+  const currentId = getSongId(player.currentSong)
+  const songId = getSongId(song)
+  return currentId != null && songId != null && String(currentId) === String(songId)
+}
+
+function isSongCurrentlyPlaying(song) {
+  return isCurrentSong(song) && player.isPlaying
+}
+
 function playSong(song) {
+  if (isCurrentSong(song)) {
+    player.togglePlay()
+    return
+  }
+
   if (player.setSong) {
-    player.playbackSource = 'playlist'
-    player.setSong(song, songs.value)
+    player.setSong(song, songs.value, 'playlist', { playlistId: playlist.value?.id })
     if (!player.isPlaying) player.togglePlay()
   }
 }
 
 function playPlaylist() {
   if (playlist.value && songs.value.length > 0) {
-    player.playbackSource = 'playlist';
-    player.setSong(songs.value[0], songs.value);
+    player.setSong(songs.value[0], songs.value, 'playlist', { playlistId: playlist.value.id });
     if (!player.isPlaying) player.togglePlay();
   }
 }
