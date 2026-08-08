@@ -844,12 +844,12 @@ async function retryStem(stemId, user) {
   const [freshRows] = await pool.query('SELECT * FROM song_stems WHERE id = ? LIMIT 1', [stemId]);
   const fresh = freshRows[0] || stem;
   if (ACTIVE_STEM_STATUSES.includes(fresh.status) && !isStemJobTimedOut(fresh)) {
-    const err = new Error('Stem job dang xu ly, vui long doi hoac dat lai sau khi qua han');
+    const err = new Error('Stem job dang xu ly, vui long doi hoac dat lai sau khi bi gian doan');
     err.statusCode = 409;
     throw err;
   }
   if (!RETRYABLE_STEM_STATUSES.has(fresh.status) && fresh.status !== STEM_STATUSES.QUEUED && !isStemJobTimedOut(fresh)) {
-    const err = new Error('Chi co the retry job failed, stale hoac processing qua han');
+    const err = new Error('Chi co the retry job failed, stale hoac processing bi gian doan');
     err.statusCode = 400;
     throw err;
   }

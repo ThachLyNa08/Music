@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS system_playlist_generation_runs (
   finished_at DATETIME NULL,
   duration_ms BIGINT NULL,
   total_users INT DEFAULT 0,
-  total_playlists INT DEFAULT 0,
+  total_count INT DEFAULT 0,
   success_count INT DEFAULT 0,
   failed_count INT DEFAULT 0,
   skipped_count INT DEFAULT 0,

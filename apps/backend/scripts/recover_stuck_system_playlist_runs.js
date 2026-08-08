@@ -28,7 +28,7 @@ function minutesSince(value) {
 }
 
 function recommendedAction(row, timeoutMinutes) {
-  const total = Number(row.total_playlists || 0);
+  const total = Number(row.total_count || 0);
   const heartbeatBase = row.heartbeat_at || row.started_at || row.created_at;
   const ageMinutes = minutesSince(heartbeatBase);
   if (['queued', 'running'].includes(row.status) && total <= 0) return 'mark_stale';
@@ -61,7 +61,8 @@ async function main() {
     `SELECT id,
             operation_type,
             status,
-            total_playlists,
+            total_count,
+            processed_count,
             success_count,
             failed_count,
             started_at,
@@ -80,7 +81,8 @@ async function main() {
       run_id: Number(row.id),
       type: row.operation_type,
       status: row.status,
-      total_count: Number(row.total_playlists || 0),
+      total_count: Number(row.total_count || 0),
+      processed_count: Number(row.processed_count || 0),
       success_count: Number(row.success_count || 0),
       failed_count: Number(row.failed_count || 0),
       started_at: row.started_at,

@@ -1,15 +1,29 @@
-<template>
+﻿<template>
   <div class="flex-1 flex flex-col relative full-bleed min-h-0 pb-10 bg-slate-50">
     <header class="sticky -top-6 py-6 bg-white/95 backdrop-blur border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-6 shrink-0 z-40 shadow-sm mb-6">
       <div>
-        <h1 class="text-2xl !font-heading font-bold tracking-tight leading-[1.15] text-gray-900">Giám sát Playlist Hệ thống</h1>
-        <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi trạng thái và bảo trì dữ liệu các playlist hệ thống / tự động</p>
+        <h1 class="text-2xl !font-heading font-bold tracking-tight leading-[1.15] text-gray-900">Giám sát playlist hệ thống</h1>
+        <p class="text-gray-500 mt-1 text-sm font-medium">Theo dõi trạng thái, lịch trình và bảo trì các playlist được hệ thống tự động tạo</p>
       </div>
-      <div class="flex gap-2 mt-4 md:mt-0">
-        <button class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60" @click="confirmRegenerateAll" :disabled="isRegeneratingAll || runningJobs > 0">
-          <MfIcon v-if="isRegeneratingAll" name="sync" class="spinning" size="18" />
-          <MfIcon v-else name="auto_fix_high" size="18" />
-          {{ (isRegeneratingAll || runningJobs > 0) ? 'Đang xử lý...' : 'Tạo lại tất cả' }}
+      <div class="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
+        <button class="flex h-9 items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white px-3 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-60" title="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist khi dữ liệu bị trống, lỗi hoặc cần bảo trì. Playlist không được quản trị viên tạo thủ công." @click="executeQuickFix" :disabled="isRegeneratingAll || runningJobs > 0">
+          <MfIcon v-if="isRegeneratingAll" name="sync" class="spinning" size="16" />
+          <MfIcon v-else name="auto_fix_high" size="16" />
+          {{ (isRegeneratingAll || runningJobs > 0) ? 'Đang xử lý...' : 'Làm mới nhanh' }}
+        </button>
+        <select v-model="selectedRegenerateKey" class="h-9 max-w-[230px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm">
+          <option value="">{{ refreshSystemKeysOptions.length ? 'Theo loại cần làm mới' : 'Không có loại cần làm mới' }}</option>
+          <option v-for="item in refreshSystemKeysOptions" :key="item.key" :value="item.key">
+            {{ item.label || item.key }} ({{ formatNumber(item.needsRefreshCount) }})
+          </option>
+        </select>
+        <button class="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60" title="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist khi dữ liệu bị trống, lỗi hoặc cần bảo trì. Playlist không được quản trị viên tạo thủ công." @click="executeRegenerateScope" :disabled="isRegeneratingAll || runningJobs > 0 || !selectedRegenerateKey">
+          <MfIcon name="filter_alt" size="16" />
+          Làm mới theo loại
+        </button>
+        <button class="flex h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:opacity-60" title="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist khi dữ liệu bị trống, lỗi hoặc cần bảo trì. Playlist không được quản trị viên tạo thủ công." @click="confirmRegenerateAll" :disabled="isRegeneratingAll || runningJobs > 0">
+          <MfIcon name="schedule" size="16" />
+          Chạy bảo trì nền
         </button>
       </div>
     </header>
@@ -53,7 +67,7 @@
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-slate-500 line-clamp-1">Thời Gian Tạo TB</p>
             <p class="mt-1 leading-tight font-black tracking-tight text-violet-600 text-2xl">
-              {{ averageGenerationTimeText || '—' }}
+              {{ averageGenerationTimeText || 'â€”' }}
             </p>
             <p class="mt-1 text-[11px] font-medium line-clamp-1" :class="averageGenerationTimeText ? 'text-emerald-500' : 'text-slate-400'">
               {{ averageGenerationTimeText ? 'Theo run thành công gần nhất' : 'Chưa có dữ liệu vận hành' }}
@@ -78,7 +92,7 @@
               </div>
             </div>
             <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-1">
-              {{ runningJobs > 0 ? 'Đang có tiến trình tạo lại playlist' : 'Không có job đang chạy' }}
+              {{ runningJobs > 0 ? 'Đang chạy pipeline làm mới playlist' : 'Không có job đang chạy' }}
             </p>
           </div>
           <div class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 mt-0.5">QUEUE</div>
@@ -90,14 +104,14 @@
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-400 to-slate-300"></div>
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Tạo Lại Gần Nhất</p>
+            <p class="text-xs font-semibold text-slate-500 line-clamp-1">Làm Mới Gần Nhất</p>
             <p class="mt-1 leading-tight font-black tracking-tight text-slate-800" :class="lastRegeneratedText ? 'text-lg' : 'text-xl'">
               {{ lastRegeneratedText || 'Chưa ghi nhận' }}
             </p>
             <p class="mt-1 text-[11px] font-medium text-slate-400 line-clamp-2 leading-relaxed">
               <template v-if="lastRegeneratedText">
                 <span class="text-slate-500">Trạng thái:</span> <span class="text-violet-600 font-medium">{{ formatRunStatus(operationSummary?.lastRunStatus) }}</span><br>
-                Dữ liệu từ run regenerate gần nhất
+                Dữ liệu từ lần chạy pipeline gần nhất
               </template>
               <template v-else>
                 Chưa có dữ liệu vận hành
@@ -108,6 +122,59 @@
         </div>
       </div>
     </div>
+
+    <!-- Automatic Schedule -->
+    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h3 class="text-base text-slate-800 !font-heading font-bold">Lịch trình tự động</h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">Pipeline chạy nền độc lập; quản trị viên chỉ giám sát và kích hoạt bảo trì khi cần.</p>
+        </div>
+        <button class="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="fetchSchedule" :disabled="loadingSchedule">
+          Làm mới
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[900px] text-left text-xs">
+          <thead class="border-b border-slate-200 bg-slate-50 text-[10px] uppercase text-slate-500">
+            <tr>
+              <th class="px-3 py-2">Nhóm playlist</th>
+              <th class="px-3 py-2">Lịch chạy</th>
+              <th class="px-3 py-2">Lần chạy gần nhất</th>
+              <th class="px-3 py-2">Trạng thái</th>
+              <th class="px-3 py-2">Nguồn kích hoạt</th>
+              <th class="px-3 py-2">Kết quả</th>
+              <th class="px-3 py-2 text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="loadingSchedule">
+              <td colspan="7" class="px-3 py-4 text-center text-slate-500">Đang tải lịch trình...</td>
+            </tr>
+            <tr v-else-if="!scheduleRows.length">
+              <td colspan="7" class="px-3 py-4 text-center text-slate-500">Chưa có dữ liệu lịch trình.</td>
+            </tr>
+            <tr v-for="row in scheduleRows" v-else :key="row.schedulerName" class="hover:bg-slate-50">
+              <td class="px-3 py-2 font-semibold text-slate-800">{{ row.groupLabel }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ formatScheduleLabel(row.scheduleLabel) }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ formatDateTime(row.lastRunAt) || 'Chưa ghi nhận' }}</td>
+              <td class="px-3 py-2">
+                <span class="rounded-md px-2 py-1 text-[11px] font-semibold" :class="scheduleStatusClass(row.statusCode)">
+                  {{ formatScheduleStatus(row.statusCode, row.statusLabel) }}
+                </span>
+              </td>
+              <td class="px-3 py-2 text-slate-600">{{ formatTriggerSource(row.triggerSource) }}</td>
+              <td class="px-3 py-2 text-slate-500">{{ formatScheduleResult(row.result) }}</td>
+              <td class="px-3 py-2 text-right">
+                <button class="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50" @click="selectScheduleForMaintenance(row)">
+                  Chạy
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- Distribution & Activity -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
@@ -152,7 +219,7 @@
           <div v-if="loadingActivity" class="text-[13px] text-slate-500 py-4 text-center">Đang tải...</div>
           <div v-else-if="!activityLogs || activityLogs.length === 0" class="text-[13px] text-slate-500 py-8 text-center flex flex-col items-center justify-center h-full">
             <MfIcon name="history" size="32" class="text-slate-300 mb-2" />
-            <span>Chưa có lịch sử hoạt động.<br>Các lần tạo lại playlist sẽ xuất hiện tại đây sau khi hệ thống ghi log.</span>
+            <span>Chưa có lịch sử hoạt động.<br>Các lần làm mới playlist sẽ xuất hiện tại đây sau khi hệ thống ghi log.</span>
           </div>
           <div v-else class="space-y-4 pr-2">
             <div v-for="log in activityLogs" :key="log.id" class="flex gap-3 text-[13px]">
@@ -164,6 +231,9 @@
                 <div class="text-[11px] text-slate-500 mt-0.5">
                   {{ formatDateTime(log.startedAt) }} - bởi {{ log.triggeredBy || 'Admin' }}
                 </div>
+                <div class="text-[11px] text-slate-500 mt-0.5">
+                  Nguồn: {{ formatTriggerSource(log.triggerSource) }}
+                </div>
                 <div class="text-[11px] text-slate-400 mt-0.5">
                   {{ formatRunProgress(log) }}
                   <span v-if="log.durationMs">, {{ formatDurationMs(log.durationMs) }}</span>
@@ -173,7 +243,7 @@
                   class="mt-2 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
                   @click="resetGenerationRun(log)"
                 >
-                  Đặt lại trạng thái
+                  Hủy tác vụ
                 </button>
               </div>
             </div>
@@ -378,7 +448,7 @@
         <span class="text-sm font-semibold text-indigo-900">playlist đã chọn</span>
       </div>
       <div class="flex gap-2">
-        <button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Tạo lại</button>
+        <button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed shadow-sm" title="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist khi dữ liệu bị trống, lỗi hoặc cần bảo trì. Playlist không được quản trị viên tạo thủ công.">Làm mới</button>
         <button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Cập nhật ảnh bìa</button>
         <button class="px-3 py-1.5 bg-white border border-rose-100 rounded-lg text-sm font-medium text-rose-300 cursor-not-allowed shadow-sm" title="Chức năng này sẽ được bổ sung sau.">Xóa</button>
       </div>
@@ -470,9 +540,9 @@
     <!-- Modals & Drawers -->
     <ConfirmDialog
       :open="showConfirmModal"
-      title="Xác nhận tạo lại TẤT CẢ System Playlists"
-      message="Bạn sắp chạy tiến trình tạo lại hàng loạt cho toàn bộ playlist hệ thống của tất cả người dùng. Quá trình này rất nặng, có thể ảnh hưởng hiệu năng database."
-      confirmText="Xác nhận Tạo Lại"
+      title="Xác nhận chạy bảo trì nền"
+      message="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist. Hệ thống hiện có rất nhiều playlist nên tác vụ có thể mất nhiều phút, sẽ chạy trong nền và không nên dùng khi demo trực tiếp."
+      confirmText="Chạy bảo trì nền"
       type="danger"
       @confirm="executeRegenerateAll"
       @cancel="showConfirmModal = false"
@@ -480,12 +550,12 @@
 
     </div> <!-- End px-6 wrapper -->
 
-    <!-- Regenerate Result Modal -->
+    <!-- Pipeline Result Modal -->
     <Teleport to="body">
       <div v-if="regenerateResult" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-6" @click.self="closeResultModal">
         <div class="mx-auto flex w-full max-w-xl max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
           <header class="shrink-0 flex items-center px-6 py-5 border-b border-slate-100 bg-white">
-            <h3 class="text-xl font-bold">Kết quả Tạo Lại</h3>
+            <h3 class="text-xl font-bold">Kết quả làm mới</h3>
           </header>
           <div class="flex-1 overflow-y-auto px-6 py-5">
             <div class="flex gap-4 mb-4">
@@ -569,10 +639,10 @@
           </div>
 
           <footer class="shrink-0 border-t border-slate-100 bg-slate-50 px-6 py-4">
-            <button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
+            <button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Tác vụ này chỉ khởi chạy lại pipeline tự động tạo/cập nhật playlist khi dữ liệu bị trống, lỗi hoặc cần bảo trì. Playlist không được quản trị viên tạo thủ công." @click="regenerateSingle(drawerItem)" :disabled="isRegeneratingSingle">
               <MfIcon v-if="isRegeneratingSingle" name="sync" class="animate-spin" size="18" />
               <MfIcon v-else name="sync" size="18" />
-              {{ isRegeneratingSingle ? 'Đang xử lý...' : 'Tạo lại Playlist này' }}
+              {{ isRegeneratingSingle ? 'Đang xử lý...' : 'Làm mới playlist này' }}
             </button>
           </footer>
         </div>
@@ -745,7 +815,8 @@ const excludedDistributionKeys = [
   'fav',
   'recent',
   'recently_played',
-  'top_tracks'
+  'top_tracks',
+  'weeklymix'
 ]
 
 const distributionLabelMap = {
@@ -804,9 +875,17 @@ const distributionChartItems = computed(() => {
   }))
 })
 
+const refreshSystemKeysOptions = computed(() => (
+  systemKeysOptions.value
+    .filter((item) => item?.isRegeneratable)
+    .filter((item) => String(item?.key || '').toLowerCase() !== 'weeklymix')
+    .filter((item) => Number(item?.needsRefreshCount || 0) > 0)
+))
+
 const isRegeneratingAll = ref(false)
 const showConfirmModal = ref(false)
 const regenerateResult = ref(null)
+const selectedRegenerateKey = ref('')
 
 const openActionMenuId = ref(null)
 const drawerItem = ref(null)
@@ -820,6 +899,8 @@ const operationSummary = ref(null)
 const activityLogs = ref([])
 const loadingOperation = ref(false)
 const loadingActivity = ref(false)
+const scheduleRows = ref([])
+const loadingSchedule = ref(false)
 const activeRunId = ref(null)
 
 const runningJobs = computed(() => Number(operationSummary.value?.runningJobs || 0))
@@ -886,6 +967,18 @@ async function fetchActivityLogs() {
   }
 }
 
+async function fetchSchedule() {
+  loadingSchedule.value = true
+  try {
+    const res = await api.get('/admin/system-playlists/schedule')
+    scheduleRows.value = res.data?.data || []
+  } catch (err) {
+    console.error('Lỗi lấy lịch trình playlist hệ thống:', err)
+  } finally {
+    loadingSchedule.value = false
+  }
+}
+
 function stopRunPolling() {
   if (runPollTimer) clearInterval(runPollTimer)
   runPollTimer = null
@@ -901,7 +994,8 @@ function stopRequestMonitor() {
 async function refreshOperationState() {
   await Promise.all([
     fetchOperationSummary(),
-    fetchActivityLogs()
+    fetchActivityLogs(),
+    fetchSchedule()
   ])
 }
 
@@ -932,11 +1026,12 @@ async function pollGenerationRun(runId) {
       stopRunPolling()
       isRegeneratingAll.value = false
       activeRunId.value = null
-      if (run.status === 'success') toast.showToast('Da tao lai playlist he thong thanh cong', 'success')
-      else if (run.status === 'partial_success') toast.showToast('Da tao lai mot phan, co playlist bi loi', 'warning')
-      else if (run.status === 'stale') toast.showToast('Tac vu tao lai da qua han hoac bi gian doan', 'warning')
-      else if (run.status === 'skipped') toast.showToast('Khong co playlist he thong nao can tao lai', 'info')
-      else if (run.status === 'failed') toast.showToast(run.errorMessage || 'Tao lai playlist he thong that bai', 'error')
+      if (run.status === 'success') toast.showToast('Đã làm mới playlist hệ thống thành công', 'success')
+      else if (run.status === 'partial_success') toast.showToast('Đã làm mới một phần, có playlist bị lỗi', 'warning')
+      else if (run.status === 'stale') toast.showToast('Tác vụ làm mới bị gián đoạn', 'warning')
+      else if (run.status === 'skipped') toast.showToast('Pipeline đã kiểm tra nhưng chưa ghi playlist mới', 'info')
+      else if (run.status === 'cancelled') toast.showToast('Tác vụ làm mới đã được hủy', 'info')
+      else if (run.status === 'failed') toast.showToast(run.errorMessage || 'Làm mới playlist hệ thống thất bại', 'error')
     } else if (Date.now() - lastProgressAt > 120000) {
       isRegeneratingAll.value = false
       toast.showToast('Tac vu dang chay lau hon du kien. Da tai lai trang thai tu backend.', 'warning')
@@ -947,7 +1042,7 @@ async function pollGenerationRun(runId) {
     isRegeneratingAll.value = false
     activeRunId.value = null
     await refreshOperationState()
-    toast.showToast(err.response?.data?.message || 'Khong doc duoc trang thai tac vu tao lai', 'error')
+    toast.showToast(err.response?.data?.message || 'Không đọc được trạng thái tác vụ làm mới', 'error')
   }
 }
 
@@ -970,7 +1065,7 @@ function startRequestMonitor() {
     requestMonitorTimer = null
     isRegeneratingAll.value = false
     await refreshOperationState()
-    toast.showToast('Tac vu tao lai chua phan hoi sau 2 phut. Da tai lai trang thai tu backend.', 'warning')
+    toast.showToast('Tác vụ làm mới chưa phản hồi sau 2 phút. Đã tải lại trạng thái từ backend.', 'warning')
   }, 120000)
 }
 
@@ -1102,6 +1197,12 @@ async function fetchSystemKeys() {
   try {
     const res = await api.get('/admin/system-playlists/system-keys')
     systemKeysOptions.value = res.data?.data || []
+    if (
+      selectedRegenerateKey.value &&
+      !refreshSystemKeysOptions.value.some((item) => item.key === selectedRegenerateKey.value)
+    ) {
+      selectedRegenerateKey.value = ''
+    }
   } catch (err) {
     console.error('Lỗi lấy system keys:', err)
   }
@@ -1179,7 +1280,7 @@ function getToolsActions(item) {
   if (item.user_id) {
     actions.push({ label: 'Xem người dùng', icon: 'person', onClick: () => router.push(`/admin/users/${item.user_id}`) })
   }
-  actions.push({ label: 'Tạo lại playlist này', icon: 'sync', onClick: () => regenerateSingle(item) })
+  actions.push({ label: 'Làm mới playlist này', icon: 'sync', onClick: () => regenerateSingle(item) })
   if (item.system_key) {
     actions.push({ label: 'Sao chép system_key', icon: 'content_copy', onClick: () => copySystemKey(item.system_key) })
   }
@@ -1206,17 +1307,17 @@ function copySystemKey(key) {
 async function regenerateSingle(item) {
   closeActionMenu()
   isRegeneratingSingle.value = true
-  toast.showToast('Đang tạo lại...', 'info')
+  toast.showToast('Đang làm mới...', 'info')
   try {
     await api.post(`/admin/system-playlists/${item.id}/regenerate`)
-    toast.showToast('Đã tạo lại thành công', 'success')
+    toast.showToast('Đã làm mới thành công', 'success')
     fetchPlaylists(currentPage.value)
     if (drawerItem.value && drawerItem.value.id === item.id) {
       drawerItem.value = null
       document.body.style.overflow = ''
     }
   } catch (err) {
-    toast.showToast(err.response?.data?.message || 'Lỗi khi tạo lại', 'error')
+    toast.showToast(err.response?.data?.message || 'Lỗi khi làm mới', 'error')
   } finally {
     isRegeneratingSingle.value = false
   }
@@ -1224,28 +1325,37 @@ async function regenerateSingle(item) {
 
 function confirmRegenerateAll() {
   if (isRegeneratingAll.value || runningJobs.value > 0) {
-    toast.showToast('Đang có tiến trình tạo lại playlist đang chạy', 'warning')
+    toast.showToast('Đang có pipeline làm mới playlist đang chạy', 'warning')
     return
   }
   showConfirmModal.value = true
 }
 
-async function executeRegenerateAll() {
-  showConfirmModal.value = false
+async function startRegenerateJob(payload, successMessage) {
   isRegeneratingAll.value = true
   startRequestMonitor()
-  toast.showToast('Bắt đầu tiến trình tạo lại hàng loạt...', 'info')
   try {
-    const res = await api.post('/admin/system-playlists/regenerate-all')
+    const res = await api.post('/admin/system-playlists/regenerate', payload)
+    toast.showToast(successMessage || res.data?.message || 'Đã đưa tác vụ làm mới playlist vào hàng chờ', 'info')
     stopRequestMonitor()
-    regenerateResult.value = res.data?.data || { success: 0, failed: 0, total: 0 }
-    if (res.data?.data?.runId) {
-      startRunPolling(res.data.data.runId)
+    const data = res.data?.data || {}
+    regenerateResult.value = {
+      success: data.success || 0,
+      failed: data.failed || 0,
+      skipped: data.skipped || 0,
+      total: data.total || 0,
+      runId: data.runId || res.data?.run_id,
+      status: data.status || 'running'
+    }
+    const runId = data.runId || res.data?.run_id
+    if (runId) {
+      startRunPolling(runId)
     }
     await Promise.all([
       fetchSummary(),
       fetchOperationSummary(),
       fetchActivityLogs(),
+      fetchSchedule(),
       fetchQualityReport(),
       fetchSystemKeys(),
       fetchPlaylists(1)
@@ -1254,7 +1364,13 @@ async function executeRegenerateAll() {
     stopRequestMonitor()
     stopRunPolling()
     activeRunId.value = null
-    toast.showToast(err.response?.data?.message || 'Lỗi tiến trình tạo lại hàng loạt', 'error')
+    const errorCode = err.response?.data?.code
+    const errorMessage = err.response?.data?.message
+    if (errorCode === 'NO_PLAYLIST_NEED_REGENERATE' || errorCode === 'NO_SYSTEM_PLAYLIST_TARGETS') {
+      toast.showToast(errorMessage || 'Không có playlist cần làm mới.', 'info')
+    } else {
+      toast.showToast(errorMessage || 'Lỗi tiến trình làm mới playlist hệ thống', 'error')
+    }
     await Promise.all([
       fetchOperationSummary(),
       fetchActivityLogs()
@@ -1266,27 +1382,61 @@ async function executeRegenerateAll() {
   }
 }
 
+async function executeQuickFix() {
+  await startRegenerateJob({
+    mode: 'quick_fix',
+    batchSize: 200,
+    concurrency: 2
+  }, 'Bắt đầu làm mới nhanh các playlist cần sửa')
+}
+
+async function executeRegenerateScope() {
+  if (!selectedRegenerateKey.value) {
+    toast.showToast('Vui lòng chọn loại playlist cần làm mới', 'warning')
+    return
+  }
+  await startRegenerateJob({
+    mode: 'regenerate_scope',
+    systemKeys: [selectedRegenerateKey.value],
+    batchSize: 200,
+    concurrency: 2
+  }, `Bắt đầu làm mới ${selectedRegenerateKey.value}`)
+}
+
+async function executeRegenerateAll() {
+  showConfirmModal.value = false
+  await startRegenerateJob({
+    mode: 'regenerate_all_background',
+    batchSize: 200,
+    concurrency: 2
+  }, 'Tác vụ bảo trì nền đã được đưa vào hàng chờ')
+}
+
 function closeResultModal() {
   regenerateResult.value = null
 }
 
 function canResetGenerationRun(log) {
-  return ['queued', 'running', 'failed', 'stale'].includes(log?.status)
+  return isActiveGenerationRun(log)
+}
+
+function isActiveGenerationRun(log) {
+  return ['queued', 'running', 'cancelling'].includes(log?.status)
 }
 
 async function resetGenerationRun(log) {
   if (!log?.id) return
   try {
-    await api.post(`/admin/system-playlists/generation-runs/${log.id}/cancel`)
-    if (activeRunId.value === log.id) {
-      activeRunId.value = null
-      isRegeneratingAll.value = false
-      stopRunPolling()
+    const res = await api.post(`/admin/system-playlists/runs/${log.id}/cancel`)
+    if (isActiveGenerationRun(log)) {
+      activeRunId.value = log.id
+      isRegeneratingAll.value = true
+      startRunPolling(log.id)
     }
     await refreshOperationState()
-    toast.showToast('Da dat lai trang thai tac vu tao lai playlist he thong', 'success')
+    toast.showToast(res.data?.message || 'Đã gửi yêu cầu hủy tác vụ', 'success')
   } catch (err) {
-    toast.showToast(err.response?.data?.message || 'Khong dat lai duoc tac vu tao lai', 'error')
+    toast.showToast(err.response?.data?.message || 'Không hủy được tác vụ làm mới', 'error')
   }
 }
 
@@ -1320,17 +1470,23 @@ function formatRunProgress(log) {
   const success = Number(log?.successCount || 0)
   const failed = Number(log?.failedCount || 0)
   const skipped = Number(log?.skippedCount || 0)
-  const processed = success + failed + skipped
+  const processed = Number(log?.processedCount ?? (success + failed + skipped))
   if (log?.status === 'running' || log?.status === 'queued') {
-    return total > 0 ? `Dang chay ${processed}/${total}` : 'Dang khoi tao'
+    return total > 0 ? `Đang chạy ${processed}/${total}` : 'Đang khởi tạo'
   }
-  if (log?.status === 'success') return `Thanh cong ${success}/${total}`
-  if (log?.status === 'partial_success') return `Hoan tat mot phan ${success}/${total}, loi ${failed}`
-  if (log?.status === 'failed') return failed > 0 ? `That bai ${failed}/${total}` : 'That bai'
-  if (log?.status === 'stale') return 'Bi gian doan / qua han'
-  if (log?.status === 'skipped') return 'Khong co du lieu can xu ly'
-  if (log?.status === 'cancelled') return 'Da huy'
-  return total > 0 ? `${success}/${total} thanh cong` : 'Khong co tien do'
+  if (log?.status === 'cancelling') {
+    return total > 0 ? `Đang hủy sau batch hiện tại ${processed}/${total}` : 'Đang hủy'
+  }
+  if (log?.status === 'success') return `Thành công ${success}/${total}`
+  if (log?.status === 'partial_success') return `Hoàn tất một phần ${success}/${total}, lỗi ${failed}`
+  if (log?.status === 'failed') return failed > 0 ? `Thất bại ${failed}/${total}` : 'Thất bại'
+  if (log?.status === 'stale') return 'Bị gián đoạn'
+  if (log?.status === 'skipped') {
+    if (total > 0 && skipped > 0) return `Pipeline bỏ qua ${skipped}/${total}, chưa ghi playlist mới`
+    return 'Không có playlist cần làm mới'
+  }
+  if (log?.status === 'cancelled') return total > 0 ? `Đã hủy ${processed}/${total}` : 'Đã hủy'
+  return total > 0 ? `${success}/${total} thành công` : 'Không có tiến độ'
 }
 
 function formatRunStatus(status) {
@@ -1343,14 +1499,80 @@ function formatRunStatus(status) {
     skipped: 'Bỏ qua',
     cancelled: 'Đã hủy',
     queued: 'Đang chờ',
-    running: 'Đang chạy'
+    running: 'Đang chạy',
+    cancelling: 'Đang hủy'
   }
   return map[status] || 'Chưa có dữ liệu'
 }
 
+function formatScheduleLabel(label) {
+  const map = {
+    'Thu 2 luc 00:00': 'Thứ 2 lúc 00:00',
+    'Thu 3 luc 00:00': 'Thứ 3 lúc 00:00',
+    'Thu 4 luc 00:00': 'Thứ 4 lúc 00:00',
+    'Thu 5 luc 00:00': 'Thứ 5 lúc 00:00',
+    'Thu 6 luc 00:00': 'Thứ 6 lúc 00:00',
+    'Thu 7 luc 00:00': 'Thứ 7 lúc 00:00',
+    'Chu nhat luc 00:00': 'Chủ nhật lúc 00:00',
+    'Hang ngay luc 00:00': 'Hằng ngày lúc 00:00'
+  }
+  return map[label] || label || 'Chưa có lịch'
+}
+
+function formatScheduleStatus(code, fallback) {
+  const map = {
+    NO_RUN_HISTORY: 'Chưa có lịch sử chạy',
+    RUNNING: 'Đang chạy',
+    SUCCESS: 'Đã chạy thành công',
+    PARTIAL_SUCCESS: 'Hoàn tất một phần',
+    SKIPPED: 'Đã kiểm tra, không có mục cần xử lý',
+    LAST_RUN_FAILED: 'Lỗi lần chạy gần nhất',
+    LAST_RUN_INTERRUPTED: 'Bị gián đoạn',
+    RAN_TODAY: 'Đã chạy hôm nay',
+    NOT_RUN_TODAY: 'Chưa chạy hôm nay',
+    LAST_WEEKLY_RUN_RECORDED: 'Đã ghi nhận lần chạy theo tuần'
+  }
+  return map[code] || fallback || 'Chưa có dữ liệu'
+}
+
+function scheduleStatusClass(code) {
+  if (code === 'RUNNING') return 'bg-orange-50 text-orange-700'
+  if (code === 'LAST_RUN_FAILED' || code === 'LAST_RUN_INTERRUPTED') return 'bg-rose-50 text-rose-700'
+  if (code === 'SUCCESS' || code === 'RAN_TODAY' || code === 'LAST_WEEKLY_RUN_RECORDED') return 'bg-emerald-50 text-emerald-700'
+  if (code === 'PARTIAL_SUCCESS') return 'bg-amber-50 text-amber-700'
+  if (code === 'SKIPPED') return 'bg-sky-50 text-sky-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+function formatTriggerSource(source) {
+  const map = {
+    scheduler: 'Hệ thống tự động',
+    admin: 'Quản trị viên',
+    user_lazy: 'Làm mới khi người dùng truy cập',
+    recovery: 'Phục hồi hệ thống'
+  }
+  return map[source] || 'Chưa có'
+}
+
+function formatScheduleResult(result) {
+  if (!result) return 'Chưa có kết quả'
+  if (result.status === 'skipped' && Number(result.total || 0) === 0) return 'Đã kiểm tra, không có mục cần xử lý'
+  return `${result.processed || 0}/${result.total || 0} xử lý, thành công ${result.success || 0}, lỗi ${result.failed || 0}, bỏ qua ${result.skipped || 0}`
+}
+
+function selectScheduleForMaintenance(row) {
+  if (!row?.systemKeys?.length) return
+  const firstKey = row.systemKeys[0]
+  const option = systemKeysOptions.value.find((item) => row.systemKeys.includes(item.key))
+  selectedRegenerateKey.value = option?.key || firstKey
+  toast.showToast(`Đã chọn ${row.groupLabel} để làm mới theo loại`, 'info')
+}
+
 function formatOperationType(value) {
   const map = {
-    regenerate_all: 'Tạo lại tất cả'
+    regenerate_all: 'Chạy bảo trì nền',
+    regenerate_scope: 'Làm mới theo loại',
+    system_playlist_regenerate: 'Làm mới playlist hệ thống'
   }
   return map[value] || String(value || 'Tác vụ hệ thống').replaceAll('_', ' ')
 }
@@ -1359,7 +1581,7 @@ function runStatusDotClass(status) {
   if (status === 'success') return 'bg-emerald-500'
   if (status === 'partial' || status === 'partial_success') return 'bg-amber-500'
   if (status === 'failed' || status === 'stale') return 'bg-rose-500'
-  if (status === 'running' || status === 'queued') return 'bg-orange-500'
+  if (status === 'running' || status === 'queued' || status === 'cancelling') return 'bg-orange-500'
   if (status === 'skipped' || status === 'cancelled') return 'bg-slate-400'
   return 'bg-slate-300'
 }
@@ -1392,6 +1614,7 @@ onMounted(() => {
   fetchQualityReport()
   fetchOperationSummary()
   fetchActivityLogs()
+  fetchSchedule()
   document.addEventListener('keydown', handleKeydown)
 })
 

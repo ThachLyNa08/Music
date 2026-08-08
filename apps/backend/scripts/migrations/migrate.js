@@ -635,6 +635,201 @@ async function normalizeSystemEmailAppealSchema(conn) {
   `);
 }
 
+async function normalizeSystemPlaylistGenerationRunsRecovery(conn) {
+  console.log('014_system_playlist_generation_runs_recovery');
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS system_playlist_generation_runs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      operation_type VARCHAR(80) NOT NULL,
+      status ENUM('queued','running','cancelling','success','partial_success','failed','stale','cancelled','skipped','partial') NOT NULL,
+      started_at DATETIME NOT NULL,
+      finished_at DATETIME NULL,
+      heartbeat_at DATETIME NULL,
+      duration_ms BIGINT NULL,
+      total_users INT DEFAULT 0,
+      total_count INT DEFAULT 0,
+      processed_count INT DEFAULT 0,
+      success_count INT DEFAULT 0,
+      failed_count INT DEFAULT 0,
+      skipped_count INT DEFAULT 0,
+      error_message TEXT NULL,
+      cancel_requested TINYINT(1) DEFAULT 0,
+      cancelled_at DATETIME NULL,
+      triggered_by_user_id BIGINT NULL,
+      metadata JSON NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_status (status),
+      INDEX idx_operation_type (operation_type),
+      INDEX idx_started_at (started_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await conn.query(`
+    ALTER TABLE system_playlist_generation_runs
+    MODIFY status ENUM('queued','running','cancelling','success','partial_success','failed','stale','cancelled','skipped','partial') NOT NULL
+  `);
+
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'heartbeat_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'total_count', 'INT DEFAULT 0');
+  if (await columnExists(conn, 'system_playlist_generation_runs', 'total_playlists')) {
+    await conn.query(`
+      UPDATE system_playlist_generation_runs
+      SET total_count = COALESCE(NULLIF(total_count, 0), total_playlists, 0)
+      WHERE total_count IS NULL OR total_count = 0
+    `);
+  }
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'processed_count', 'INT DEFAULT 0');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'cancel_requested', 'TINYINT(1) DEFAULT 0');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'cancelled_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'trigger_source', "VARCHAR(30) NOT NULL DEFAULT 'admin'");
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'scheduler_name', 'VARCHAR(100) NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'scheduled_for', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'mode', 'VARCHAR(50) NULL');
+  await conn.query("ALTER TABLE system_playlist_generation_runs MODIFY COLUMN trigger_source VARCHAR(30) NOT NULL DEFAULT 'admin'");
+  await conn.query('ALTER TABLE system_playlist_generation_runs MODIFY COLUMN scheduler_name VARCHAR(100) NULL');
+  await conn.query('ALTER TABLE system_playlist_generation_runs MODIFY COLUMN mode VARCHAR(50) NULL');
+
+  await conn.query(`
+    UPDATE system_playlist_generation_runs
+    SET status = 'stale',
+        finished_at = NOW(),
+        duration_ms = TIMESTAMPDIFF(MICROSECOND, started_at, NOW()) DIV 1000,
+        error_message = COALESCE(error_message, 'System playlist regenerate job timed out or backend stopped before completion.')
+    WHERE status IN ('queued', 'running', 'cancelling')
+      AND COALESCE(cancel_requested, 0) = 0
+      AND COALESCE(heartbeat_at, started_at, created_at) < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+  `);
+
+  await conn.query(`
+    UPDATE system_playlist_generation_runs
+    SET status = 'cancelled',
+        cancelled_at = COALESCE(cancelled_at, NOW()),
+        finished_at = COALESCE(finished_at, NOW()),
+        duration_ms = TIMESTAMPDIFF(MICROSECOND, started_at, NOW()) DIV 1000,
+        error_message = COALESCE(error_message, 'System playlist regenerate job was cancelled by admin.')
+    WHERE status IN ('queued', 'running', 'cancelling')
+      AND COALESCE(cancel_requested, 0) = 1
+      AND COALESCE(heartbeat_at, started_at, created_at) < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+  `);
+}
+
+async function addIndexIfTableAndColumnsExist(conn, tableName, indexName, columns, definition) {
+  if (!(await tableExists(conn, tableName))) return;
+
+  for (const columnName of columns) {
+    if (!(await columnExists(conn, tableName, columnName))) return;
+  }
+
+  await addIndexIfMissing(conn, tableName, indexName, definition);
+}
+
+async function normalizeSystemPlaylistRegenerateOptimization(conn) {
+  console.log('015_system_playlist_regenerate_optimization');
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS system_playlist_generation_runs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      operation_type VARCHAR(80) NOT NULL,
+      status ENUM('queued','running','cancelling','success','partial_success','failed','stale','cancelled','skipped','partial') NOT NULL,
+      started_at DATETIME NOT NULL,
+      finished_at DATETIME NULL,
+      heartbeat_at DATETIME NULL,
+      duration_ms BIGINT NULL,
+      total_users INT DEFAULT 0,
+      total_count INT DEFAULT 0,
+      processed_count INT DEFAULT 0,
+      success_count INT DEFAULT 0,
+      failed_count INT DEFAULT 0,
+      skipped_count INT DEFAULT 0,
+      error_message TEXT NULL,
+      cancel_requested TINYINT(1) DEFAULT 0,
+      cancelled_at DATETIME NULL,
+      triggered_by_user_id BIGINT NULL,
+      metadata JSON NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_status (status),
+      INDEX idx_operation_type (operation_type),
+      INDEX idx_started_at (started_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  if (await tableExists(conn, 'playlists')) {
+    await addColumnIfMissing(conn, 'playlists', 'status', "ENUM('active','empty','failed','stale','need_update') NOT NULL DEFAULT 'active'");
+    await addColumnIfMissing(conn, 'playlists', 'last_generated_at', 'DATETIME NULL');
+    await addColumnIfMissing(conn, 'playlists', 'song_count', 'INT DEFAULT 0');
+    await addColumnIfMissing(conn, 'playlists', 'first_song_cover_url', 'VARCHAR(500) NULL');
+    await addColumnIfMissing(conn, 'playlists', 'playlist_input_hash', 'VARCHAR(128) NULL');
+  }
+
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'total_count', 'INT DEFAULT 0');
+  if (await columnExists(conn, 'system_playlist_generation_runs', 'total_playlists')) {
+    await conn.query(`
+      UPDATE system_playlist_generation_runs
+      SET total_count = COALESCE(NULLIF(total_count, 0), total_playlists, 0)
+      WHERE total_count IS NULL OR total_count = 0
+    `);
+  }
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'processed_count', 'INT DEFAULT 0');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'cancel_requested', 'TINYINT(1) DEFAULT 0');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'cancelled_at', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'trigger_source', "VARCHAR(30) NOT NULL DEFAULT 'admin'");
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'scheduler_name', 'VARCHAR(100) NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'scheduled_for', 'DATETIME NULL');
+  await addColumnIfMissing(conn, 'system_playlist_generation_runs', 'mode', 'VARCHAR(50) NULL');
+  await conn.query("ALTER TABLE system_playlist_generation_runs MODIFY COLUMN trigger_source VARCHAR(30) NOT NULL DEFAULT 'admin'");
+  await conn.query('ALTER TABLE system_playlist_generation_runs MODIFY COLUMN scheduler_name VARCHAR(100) NULL');
+  await conn.query('ALTER TABLE system_playlist_generation_runs MODIFY COLUMN mode VARCHAR(50) NULL');
+
+  await conn.query(`
+    ALTER TABLE system_playlist_generation_runs
+    MODIFY status ENUM('queued','running','cancelling','success','partial_success','failed','stale','cancelled','skipped','partial') NOT NULL
+  `);
+
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'playlists',
+    'idx_playlists_type_status_key_updated',
+    ['type', 'status', 'system_key', 'updated_at'],
+    'INDEX idx_playlists_type_status_key_updated (type, status, system_key, updated_at)'
+  );
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'playlists',
+    'idx_playlists_user_type_key',
+    ['user_id', 'type', 'system_key'],
+    'INDEX idx_playlists_user_type_key (user_id, type, system_key)'
+  );
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'playlist_songs',
+    'idx_playlist_songs_playlist_position',
+    ['playlist_id', 'position'],
+    'INDEX idx_playlist_songs_playlist_position (playlist_id, position)'
+  );
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'listening_history',
+    'idx_listening_history_user_played',
+    ['user_id', 'listened_at'],
+    'INDEX idx_listening_history_user_played (user_id, listened_at)'
+  );
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'user_genre_preferences',
+    'idx_user_genre_preferences_user',
+    ['user_id'],
+    'INDEX idx_user_genre_preferences_user (user_id)'
+  );
+  await addIndexIfTableAndColumnsExist(
+    conn,
+    'user_artist_preferences',
+    'idx_user_artist_preferences_user',
+    ['user_id'],
+    'INDEX idx_user_artist_preferences_user (user_id)'
+  );
+}
+
 async function normalizeArtistContentModerationSchema(conn) {
   const moderationCols = [
     { name: 'metadata_score', def: 'INT NOT NULL DEFAULT 0' },
@@ -725,6 +920,8 @@ async function main() {
     await normalizeStemSeparationSchema(conn);
     await normalizeAiPlaylistHistorySchema(conn);
     await normalizeSystemEmailAppealSchema(conn);
+    await normalizeSystemPlaylistGenerationRunsRecovery(conn);
+    await normalizeSystemPlaylistRegenerateOptimization(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();

@@ -30,6 +30,10 @@ const path = require('path');
 const fs = require('fs');
 const csv = require('csv-parser');
 const {
+  getAllSystemPlaylistScheduleRules,
+  resolveScheduleRunStatus
+} = require('../utils/systemPlaylistSchedule.util');
+const {
   syncArtistMetadata,
   syncMissingArtistMetadata,
   syncArtistBio,
@@ -3507,12 +3511,49 @@ exports.getSystemPlaylistsSummary = async (req, res, next) => {
 
 exports.getSystemKeys = async (req, res, next) => {
   try {
+    const columns = await getExistingPlaylistColumns();
+    const userColumns = await getExistingRegenerateUserColumns();
+    const freshnessExpr = buildPlaylistFreshnessExpression(columns);
+    const statusExpr = buildPlaylistStatusExpression(columns);
+    const activeUserActivityParts = [];
+    if (userColumns.has('last_login_at')) {
+      activeUserActivityParts.push('u.last_login_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+    }
+    activeUserActivityParts.push('u.updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+    activeUserActivityParts.push(`EXISTS (
+      SELECT 1
+      FROM listening_history lh
+      WHERE lh.user_id = u.id
+        AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    )`);
+    const runnableTargetExpr = `(p.system_key = 'trending_now' OR (u.status = 'active' AND (${activeUserActivityParts.join(' OR ')})))`;
+
     const [rows] = await pool.query(`
-      SELECT system_key as \`key\`, COUNT(*) AS count
-      FROM playlists
-      WHERE system_key IS NOT NULL AND system_key <> ''
-      GROUP BY system_key
-      ORDER BY system_key ASC
+      SELECT p.system_key as \`key\`,
+             COUNT(DISTINCT p.id) AS count,
+             SUM(
+               CASE
+                 WHEN NOT ${runnableTargetExpr} THEN 0
+                 WHEN song_counts.song_count IS NULL OR song_counts.song_count = 0 THEN 1
+                 WHEN ${statusExpr} IN ('empty', 'failed', 'stale', 'need_update') THEN 1
+                 WHEN ${freshnessExpr} IS NULL THEN 1
+                 WHEN p.system_key IN ('weekly_mix', 'weeklymix')
+                   AND ${freshnessExpr} < DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1
+                 WHEN p.system_key IN ('trending_now', 'moodmix', 'dailymix_01', 'dailymix_02', 'dailymix_03', 'dailymix_04', 'dailymix_05', 'dailymix_06', 'morning_vibes', 'afternoon_vibes', 'evening_vibes', 'night_vibes')
+                   AND ${freshnessExpr} < DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1
+                 ELSE 0
+               END
+             ) AS needs_refresh_count
+      FROM playlists p
+      LEFT JOIN (
+        SELECT playlist_id, COUNT(*) AS song_count
+        FROM playlist_songs
+        GROUP BY playlist_id
+      ) song_counts ON song_counts.playlist_id = p.id
+      LEFT JOIN users u ON u.id = p.user_id
+      WHERE p.system_key IS NOT NULL AND p.system_key <> ''
+      GROUP BY p.system_key
+      ORDER BY p.system_key ASC
     `);
 
     const formatLabel = (key) => {
@@ -3524,11 +3565,17 @@ exports.getSystemKeys = async (req, res, next) => {
         .replace('Moodmix', 'Mood Mix');
     };
 
-    const data = rows.map(r => ({
-      key: r.key,
-      label: formatLabel(r.key),
-      count: r.count
-    }));
+    const data = rows.map((r) => {
+      const normalizedKey = normalizeRegenerateSystemKey(r.key);
+      return {
+        key: r.key,
+        normalizedKey,
+        label: formatLabel(r.key),
+        count: Number(r.count || 0),
+        needsRefreshCount: Number(r.needs_refresh_count || 0),
+        isRegeneratable: isRegeneratableSystemKey(r.key)
+      };
+    });
 
     res.json({ success: true, data });
   } catch (error) {
@@ -3846,10 +3893,10 @@ exports.regenerateSystemPlaylist = async (req, res, next) => {
         })) || null
       })
     });
-    res.json({ success: true, message: 'Đã tạo lại playlist thành công' });
+    res.json({ success: true, message: 'Đã làm mới playlist thành công' });
   } catch (error) {
     console.error('regenerateSystemPlaylist Error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi khi tạo lại playlist: ' + error.message });
+    res.status(500).json({ success: false, message: 'Lỗi khi làm mới playlist: ' + error.message });
   }
 };
 
@@ -3930,6 +3977,323 @@ const TIME_SLOT_BY_SYSTEM_KEY = {
   evening_vibes: 'evening',
   night_vibes: 'night'
 };
+const DAILY_MIX_DATE_BY_KEY = {
+  dailymix_01: '2026-08-03',
+  dailymix_02: '2026-08-04',
+  dailymix_03: '2026-08-05',
+  dailymix_04: '2026-08-06',
+  dailymix_05: '2026-08-07',
+  dailymix_06: '2026-08-08'
+};
+const ALL_REGENERATE_SYSTEM_KEYS = [
+  ...Object.keys(DAILY_MIX_DATE_BY_KEY),
+  'weekly_mix',
+  'moodmix',
+  ...TIME_BASED_SYSTEM_KEYS,
+  'trending_now'
+];
+const NON_REGENERATABLE_SYSTEM_KEYS = new Set([
+  'favorite',
+  'favorites',
+  'favorite_songs',
+  'fav',
+  'recent',
+  'recently_played',
+  'top_tracks',
+  'weeklymix'
+]);
+const SYSTEM_PLAYLIST_REGENERATE_OPERATION = 'system_playlist_regenerate';
+let cachedPlaylistColumns = null;
+let cachedRegenerateUserColumns = null;
+
+function clampSystemPlaylistBatchSize(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 200;
+  return Math.max(1, Math.min(Math.floor(n), 1000));
+}
+
+function clampSystemPlaylistConcurrency(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 2;
+  return Math.max(1, Math.min(Math.floor(n), 4));
+}
+
+function normalizeRegenerateSystemKey(key) {
+  const value = String(key || '').trim().toLowerCase();
+  if (!value) return '';
+  if (value === 'weeklymix') return 'weekly_mix';
+  if (value === 'daily_mix_1') return 'dailymix_01';
+  if (value === 'daily_mix_01') return 'dailymix_01';
+  return value;
+}
+
+function isRegeneratableSystemKey(key) {
+  const rawKey = String(key || '').trim().toLowerCase();
+  if (NON_REGENERATABLE_SYSTEM_KEYS.has(rawKey)) return false;
+  const normalized = normalizeRegenerateSystemKey(rawKey);
+  return ALL_REGENERATE_SYSTEM_KEYS.includes(normalized) && !NON_REGENERATABLE_SYSTEM_KEYS.has(normalized);
+}
+
+function getSystemPlaylistStaleHours(systemKey) {
+  const key = normalizeRegenerateSystemKey(systemKey);
+  if (key === 'weekly_mix') return 24 * 7;
+  if (key === 'trending_now') return 24;
+  if (key === 'moodmix') return 24;
+  if (key.startsWith('dailymix_')) return 24;
+  if (key.includes('vibes')) return 24;
+  return 24 * 7;
+}
+
+async function getExistingPlaylistColumns() {
+  if (cachedPlaylistColumns) return cachedPlaylistColumns;
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'playlists'`
+  );
+  cachedPlaylistColumns = new Set(rows.map((row) => row.COLUMN_NAME));
+  return cachedPlaylistColumns;
+}
+
+async function getExistingRegenerateUserColumns() {
+  if (cachedRegenerateUserColumns) return cachedRegenerateUserColumns;
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'`
+  );
+  cachedRegenerateUserColumns = new Set(rows.map((row) => row.COLUMN_NAME));
+  return cachedRegenerateUserColumns;
+}
+
+function buildPlaylistFreshnessExpression(columns) {
+  const parts = [];
+  if (columns.has('last_generated_at')) parts.push('p.last_generated_at');
+  if (columns.has('last_refreshed_at')) parts.push('p.last_refreshed_at');
+  parts.push('p.updated_at');
+  parts.push('p.created_at');
+  return `COALESCE(${parts.join(', ')})`;
+}
+
+function buildPlaylistStatusExpression(columns) {
+  return columns.has('status') ? 'p.status' : "'active'";
+}
+
+async function getSystemPlaylistRegenerateTargets({ mode, systemKeys = [], userIds = [], force = false } = {}) {
+  const columns = await getExistingPlaylistColumns();
+  const userColumns = await getExistingRegenerateUserColumns();
+  const freshnessExpr = buildPlaylistFreshnessExpression(columns);
+  const statusExpr = buildPlaylistStatusExpression(columns);
+  const activeUserActivityParts = [];
+  if (userColumns.has('last_login_at')) {
+    activeUserActivityParts.push('u.last_login_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+  }
+  activeUserActivityParts.push('u.updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+  activeUserActivityParts.push(`EXISTS (
+    SELECT 1
+    FROM listening_history lh
+    WHERE lh.user_id = u.id
+      AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+  )`);
+  const activePersonalizedUserExpr = `(u.status = 'active' AND (${activeUserActivityParts.join(' OR ')}))`;
+  const normalizedMode = String(mode || 'quick_fix').trim();
+  const params = [];
+  const where = ['(p.is_system = 1 OR p.type = "system")', 'p.system_key IS NOT NULL', 'p.system_key <> ""'];
+
+  if (normalizedMode === 'regenerate_scope') {
+    const keys = [...new Set(systemKeys.map(normalizeRegenerateSystemKey).filter(Boolean))];
+    if (!keys.length) {
+      const err = new Error('systemKeys must include at least one system playlist key.');
+      err.statusCode = 400;
+      err.code = 'SYSTEM_PLAYLIST_KEYS_REQUIRED';
+      throw err;
+    }
+    where.push(`p.system_key IN (${keys.map(() => '?').join(',')})`);
+    params.push(...keys);
+  } else if (normalizedMode === 'regenerate_user') {
+    const ids = [...new Set(userIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+    if (!ids.length) {
+      const err = new Error('userIds must include at least one user id.');
+      err.statusCode = 400;
+      err.code = 'SYSTEM_PLAYLIST_USER_IDS_REQUIRED';
+      throw err;
+    }
+    where.push(`p.user_id IN (${ids.map(() => '?').join(',')})`);
+    params.push(...ids);
+  } else if (normalizedMode !== 'quick_fix' && normalizedMode !== 'regenerate_all_background') {
+    const err = new Error(`Unsupported system playlist regenerate mode: ${normalizedMode}`);
+    err.statusCode = 400;
+    err.code = 'SYSTEM_PLAYLIST_REGENERATE_MODE_INVALID';
+    throw err;
+  }
+  where.push(`(p.system_key = 'trending_now' OR ${activePersonalizedUserExpr})`);
+
+  const [rows] = await pool.query(
+    `SELECT p.id,
+            p.user_id,
+            p.system_key,
+            p.name,
+            ${statusExpr} AS playlist_status,
+            ${freshnessExpr} AS last_generated_at,
+            COUNT(ps.song_id) AS song_count,
+            CASE
+              WHEN p.cover_url IS NULL OR p.cover_url = '' THEN 1
+              ELSE 0
+            END AS missing_cover
+     FROM playlists p
+     LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id
+     LEFT JOIN users u ON u.id = p.user_id
+     WHERE ${where.join(' AND ')}
+     GROUP BY p.id
+     ORDER BY
+       CASE WHEN COUNT(ps.song_id) = 0 THEN 0 ELSE 1 END,
+       ${freshnessExpr} ASC,
+       p.id ASC`,
+    params
+  );
+
+  return rows
+    .map((row) => ({
+      playlistId: Number(row.id),
+      userId: row.user_id !== null && row.user_id !== undefined ? Number(row.user_id) : null,
+      systemKey: normalizeRegenerateSystemKey(row.system_key),
+      originalSystemKey: row.system_key,
+      name: row.name,
+      status: row.playlist_status || 'active',
+      songCount: Number(row.song_count || 0),
+      missingCover: Number(row.missing_cover || 0) === 1,
+      lastGeneratedAt: row.last_generated_at
+    }))
+    .filter((target) => isRegeneratableSystemKey(target.originalSystemKey || target.systemKey))
+    .filter((target) => target.systemKey === 'trending_now' || Number.isInteger(target.userId))
+    .filter((target) => {
+      if (force) return true;
+      if (normalizedMode === 'regenerate_all_background') return true;
+      if (target.songCount <= 0 || target.missingCover) return true;
+      if (['empty', 'failed', 'stale', 'need_update'].includes(String(target.status || '').toLowerCase())) return true;
+      if (!target.lastGeneratedAt) return true;
+      const ageMs = Date.now() - new Date(target.lastGeneratedAt).getTime();
+      if (!Number.isFinite(ageMs) || ageMs < 0) return true;
+      return ageMs >= getSystemPlaylistStaleHours(target.systemKey) * 60 * 60 * 1000;
+    });
+}
+
+async function runWithConcurrency(items, concurrency, worker) {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor];
+      cursor += 1;
+      await worker(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+async function regenerateOneSystemPlaylistTarget(target) {
+  const systemKey = normalizeRegenerateSystemKey(target.systemKey);
+  if (systemKey.startsWith('dailymix_')) {
+    const dailyMixService = require('../services/dailyMix.service');
+    return dailyMixService.generateDailyMixForDate(target.userId, DAILY_MIX_DATE_BY_KEY[systemKey], {
+      perMix: 25,
+      forceApply: true
+    });
+  }
+  if (systemKey === 'weekly_mix') {
+    const weeklyMixService = require('../services/weeklyMix.service');
+    return weeklyMixService.generateWeeklyMixForUser(target.userId, { limit: 35, forceApply: true });
+  }
+  if (systemKey === 'moodmix') {
+    const moodMixService = require('../services/moodMix.service');
+    return moodMixService.generateMoodMixForUser(target.userId, { forceApply: true });
+  }
+  if (TIME_BASED_SYSTEM_KEYS.includes(systemKey)) {
+    const contextualService = require('../services/contextualMoodPlaylist.service');
+    return contextualService.generateContextualMoodPlaylistsForUser(target.userId, {
+      timeSlot: TIME_SLOT_BY_SYSTEM_KEY[systemKey],
+      playlistId: target.playlistId,
+      forceApply: true
+    });
+  }
+  if (systemKey === 'trending_now') {
+    const trendingService = require('../services/trendingPlaylist.service');
+    return trendingService.generateTrendingPlaylist({ forceApply: true });
+  }
+  const err = new Error(`Unsupported system playlist key: ${systemKey}`);
+  err.code = 'SYSTEM_PLAYLIST_KEY_UNSUPPORTED';
+  throw err;
+}
+
+function extractSystemPlaylistGenerationStats(result, fallbackSystemKey) {
+  const firstResult = Array.isArray(result?.results) ? result.results[0] : null;
+  return {
+    status: result?.status || firstResult?.status || 'success',
+    songCount: Number(
+      result?.insertedSongs
+      ?? result?.songsInserted
+      ?? result?.songCount
+      ?? firstResult?.insertedSongs
+      ?? firstResult?.songCount
+      ?? 0
+    ),
+    addedSongs: Number(result?.addedSongs ?? firstResult?.addedSongs ?? 0),
+    removedSongs: Number(result?.removedSongs ?? firstResult?.removedSongs ?? 0),
+    overlapRatio: result?.overlapRatio ?? firstResult?.overlapRatio ?? null,
+    systemKey: result?.systemKey || firstResult?.systemKey || fallbackSystemKey
+  };
+}
+
+async function syncSystemPlaylistGenerationMetadata(target, stats = {}) {
+  if (!target?.playlistId) return;
+  const columns = await getExistingPlaylistColumns();
+  const assignments = [];
+  const params = [];
+
+  if (columns.has('last_generated_at')) {
+    assignments.push('last_generated_at = NOW()');
+  }
+  if (columns.has('status')) {
+    assignments.push('status = ?');
+    params.push(stats.status === 'skipped' && Number(target.songCount || 0) <= 0 ? 'stale' : 'active');
+  }
+  if (columns.has('song_count')) {
+    assignments.push('song_count = (SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?)');
+    params.push(target.playlistId);
+  }
+  if (columns.has('first_song_cover_url')) {
+    assignments.push(`first_song_cover_url = (
+      SELECT s.cover_url
+      FROM playlist_songs ps
+      JOIN songs s ON s.id = ps.song_id
+      WHERE ps.playlist_id = ?
+      ORDER BY ps.position ASC
+      LIMIT 1
+    )`);
+    params.push(target.playlistId);
+  }
+  if (columns.has('playlist_input_hash')) {
+    assignments.push('playlist_input_hash = SHA2(CONCAT_WS(":", ?, ?, COALESCE((SELECT MAX(lh.listened_at) FROM listening_history lh WHERE lh.user_id = ?), "")), 256)');
+    params.push(target.userId || 0, target.systemKey || '', target.userId || 0);
+  }
+  if (!assignments.length) return;
+  assignments.push('updated_at = NOW()');
+
+  await pool.query(
+    `UPDATE playlists SET ${assignments.join(', ')} WHERE id = ?`,
+    [...params, target.playlistId]
+  );
+}
+
+exports._systemPlaylistMaintenance = {
+  getSystemPlaylistRegenerateTargets,
+  runWithConcurrency,
+  regenerateOneSystemPlaylistTarget,
+  extractSystemPlaylistGenerationStats,
+  syncSystemPlaylistGenerationMetadata,
+  SYSTEM_PLAYLIST_REGENERATE_OPERATION
+};
 
 exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
   const runLogService = require('../services/systemPlaylistRunLog.service');
@@ -3972,7 +4336,7 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         code: 'NO_SYSTEM_PLAYLIST_TARGETS',
-        message: 'Khong co playlist he thong nao can tao lai.'
+        message: 'Khong co playlist he thong nao can lam moi.'
       });
     }
 
@@ -4133,7 +4497,248 @@ exports.regenerateSystemPlaylistsScope = async (req, res, next) => {
   }
 };
 
+exports.regenerateSystemPlaylistsOptimized = async (req, res, next) => {
+  const runLogService = require('../services/systemPlaylistRunLog.service');
+  const { logSystemPlaylistRun } = require('../services/systemPlaylistRunLog.service');
+  let runId = null;
+
+  try {
+    const mode = String(req.body?.mode || 'quick_fix').trim();
+    const batchSize = clampSystemPlaylistBatchSize(req.body?.batchSize);
+    const concurrency = clampSystemPlaylistConcurrency(req.body?.concurrency);
+    const systemKeys = Array.isArray(req.body?.systemKeys) ? req.body.systemKeys : [];
+    const userIds = Array.isArray(req.body?.userIds) ? req.body.userIds : [];
+    const targets = await getSystemPlaylistRegenerateTargets({ mode, systemKeys, userIds });
+    const uniqueUsers = new Set(targets.map((target) => target.userId).filter(Boolean));
+
+    if (!targets.length) {
+      return res.status(400).json({
+        success: false,
+        code: 'NO_PLAYLIST_NEED_REGENERATE',
+        message: 'Không có playlist cần làm mới.'
+      });
+    }
+
+    runId = await runLogService.startGenerationRun({
+      operationType: SYSTEM_PLAYLIST_REGENERATE_OPERATION,
+      triggeredByUserId: req.user?.id || null,
+      totalUsers: uniqueUsers.size,
+      totalPlaylists: targets.length,
+      triggerSource: 'admin',
+      mode,
+      metadata: {
+        source: 'admin_system_playlists_page',
+        mode,
+        batchSize,
+        concurrency,
+        targetPreview: targets.slice(0, 20)
+      }
+    });
+
+    const progress = {
+      mode,
+      totalUsers: uniqueUsers.size,
+      totalPlaylists: targets.length,
+      successCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      processedCount: 0,
+      currentSystemKey: null,
+      failedItems: [],
+      skippedItems: [],
+      startedAt: new Date().toISOString()
+    };
+
+    await runLogService.updateGenerationRunProgress(runId, {
+      totalUsers: progress.totalUsers,
+      totalPlaylists: progress.totalPlaylists,
+      successCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      processedCount: 0,
+      metadata: progress
+    });
+
+    res.status(202).json({
+      success: true,
+      run_id: runId,
+      message: 'Tác vụ làm mới playlist đã được đưa vào hàng chờ.',
+      data: {
+        runId,
+        status: 'running',
+        mode,
+        total: targets.length,
+        batchSize,
+        concurrency
+      }
+    });
+
+    setImmediate(async () => {
+      const startedAt = Date.now();
+      let finalStatus = 'success';
+      let finalError = null;
+
+      async function updateProgress(errorMessage = null) {
+        await runLogService.updateGenerationRunProgress(runId, {
+          totalUsers: progress.totalUsers,
+          totalPlaylists: progress.totalPlaylists,
+          successCount: progress.successCount,
+          failedCount: progress.failedCount,
+          skippedCount: progress.skippedCount,
+          processedCount: progress.processedCount,
+          errorMessage,
+          metadata: {
+            ...progress,
+            durationMs: Date.now() - startedAt,
+            avgMsPerPlaylist: progress.processedCount > 0
+              ? Math.round((Date.now() - startedAt) / progress.processedCount)
+              : null
+          }
+        });
+      }
+
+      try {
+        for (let offset = 0; offset < targets.length; offset += batchSize) {
+          const latestRun = await runLogService.getGenerationRun(runId);
+          if (!latestRun || latestRun.cancelRequested || !['queued', 'running'].includes(latestRun.status)) {
+            const err = new Error(`System playlist regenerate run ${runId} is no longer active.`);
+            err.code = 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED';
+            throw err;
+          }
+
+          const batch = targets.slice(offset, offset + batchSize);
+          await runWithConcurrency(batch, concurrency, async (target) => {
+            progress.currentSystemKey = target.systemKey;
+            try {
+              const result = await regenerateOneSystemPlaylistTarget(target);
+              const stats = extractSystemPlaylistGenerationStats(result, target.systemKey);
+              await syncSystemPlaylistGenerationMetadata(target, stats);
+              if (stats.status === 'skipped' || result?.canApply === false) {
+                progress.skippedCount += 1;
+                if (progress.skippedItems.length < 25) {
+                  progress.skippedItems.push({
+                    playlistId: target.playlistId,
+                    userId: target.userId,
+                    systemKey: target.systemKey,
+                    reason: result?.message || result?.reason || 'skipped'
+                  });
+                }
+                await logSystemPlaylistRun({
+                  system_key: stats.systemKey,
+                  playlist_id: target.playlistId,
+                  user_id: target.userId,
+                  run_type: mode === 'regenerate_all_background' ? 'admin_all' : 'manual',
+                  status: 'skipped',
+                  playlist_count: 1,
+                  song_count: stats.songCount,
+                  message: JSON.stringify({ mode, target, result })
+                });
+              } else {
+                progress.successCount += 1;
+                await logSystemPlaylistRun({
+                  system_key: stats.systemKey,
+                  playlist_id: target.playlistId,
+                  user_id: target.userId,
+                  run_type: mode === 'regenerate_all_background' ? 'admin_all' : 'manual',
+                  status: 'success',
+                  playlist_count: 1,
+                  song_count: stats.songCount,
+                  songs_added: stats.addedSongs,
+                  songs_removed: stats.removedSongs,
+                  total_songs: stats.songCount,
+                  overlap_ratio: stats.overlapRatio,
+                  message: JSON.stringify({ mode, target, result })
+                });
+              }
+            } catch (err) {
+              progress.failedCount += 1;
+              if (progress.failedItems.length < 50) {
+                progress.failedItems.push({
+                  playlistId: target.playlistId,
+                  userId: target.userId,
+                  systemKey: target.systemKey,
+                  error: err.message
+                });
+              }
+              await logSystemPlaylistRun({
+                system_key: target.systemKey,
+                playlist_id: target.playlistId,
+                user_id: target.userId,
+                run_type: mode === 'regenerate_all_background' ? 'admin_all' : 'manual',
+                status: 'failed',
+                playlist_count: 1,
+                error_message: err.message,
+                message: JSON.stringify({ mode, target, error: err.message })
+              });
+            } finally {
+              progress.processedCount += 1;
+            }
+          });
+
+          const sampleErrors = progress.failedItems
+            .slice(0, 5)
+            .map((item) => `${item.playlistId}: ${item.error}`)
+            .join('; ');
+          await updateProgress(sampleErrors || null);
+        }
+
+        finalStatus = progress.failedCount > 0
+          ? (progress.successCount > 0 || progress.skippedCount > 0 ? 'partial_success' : 'failed')
+          : (progress.successCount > 0 ? 'success' : 'skipped');
+      } catch (err) {
+        finalStatus = err.code === 'SYSTEM_PLAYLIST_REGENERATE_CANCELLED' ? 'cancelled' : 'failed';
+        finalError = err.message;
+      } finally {
+        try {
+          await runLogService.finishGenerationRun(runId, {
+            status: finalStatus,
+            totalUsers: progress.totalUsers,
+            totalPlaylists: progress.totalPlaylists,
+            successCount: progress.successCount,
+            failedCount: progress.failedCount,
+            skippedCount: progress.skippedCount,
+            processedCount: progress.processedCount,
+            errorMessage: finalError || (progress.failedItems.length
+              ? progress.failedItems.slice(0, 10).map((item) => `${item.playlistId}: ${item.error}`).join('; ')
+              : null),
+            metadata: {
+              ...progress,
+              finishedAt: new Date().toISOString(),
+              durationMs: Date.now() - startedAt,
+              avgMsPerPlaylist: progress.processedCount > 0
+                ? Math.round((Date.now() - startedAt) / progress.processedCount)
+                : null
+            }
+          });
+        } catch (finishErr) {
+          console.warn('Failed to finish optimized system playlist regenerate run:', finishErr.message);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('regenerateSystemPlaylistsOptimized Error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code || 'SYSTEM_PLAYLIST_REGENERATE_FAILED',
+      message: error.message || 'Lỗi khi tạo tác vụ làm mới playlist hệ thống.',
+      data: error.runningRun ? {
+        runningRunId: error.runningRun.id,
+        startedAt: error.runningRun.started_at,
+        heartbeatAt: error.runningRun.heartbeat_at
+      } : undefined
+    });
+  }
+};
+
 exports.regenerateAllSystemPlaylists = async (req, res, next) => {
+  req.body = {
+    ...(req.body || {}),
+    mode: 'regenerate_all_background',
+    batchSize: req.body?.batchSize || 200,
+    concurrency: req.body?.concurrency || 2
+  };
+  return exports.regenerateSystemPlaylistsOptimized(req, res, next);
+
   const runLogService = require('../services/systemPlaylistRunLog.service');
   let runId = null;
   let aggregate = {
@@ -4196,7 +4801,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         code: 'NO_SYSTEM_PLAYLIST_TARGETS',
-        message: 'Khong co playlist he thong nao can tao lai.'
+        message: 'Khong co playlist he thong nao can lam moi.'
       });
     }
 
@@ -4232,7 +4837,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
 
     res.status(202).json({
       success: true,
-      message: 'Da bat dau tac vu tao lai playlist he thong. Vui long theo doi tien do.',
+      message: 'Da bat dau tac vu lam moi playlist he thong. Vui long theo doi tien do.',
       data: {
         runId,
         status: 'running',
@@ -4468,7 +5073,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
     if (!res.headersSent) {
       res.json({
         success: true,
-        message: 'Hoàn tất quá trình tạo lại',
+        message: 'Hoàn tất quá trình làm mới',
         data: {
           ...results,
           runId,
@@ -4503,7 +5108,7 @@ exports.regenerateAllSystemPlaylists = async (req, res, next) => {
       res.status(error.statusCode || 500).json({
         success: false,
         code: error.code || 'SYSTEM_PLAYLIST_REGENERATE_FAILED',
-        message: error.message || 'Lỗi hệ thống khi tạo lại toàn bộ',
+        message: error.message || 'Lỗi hệ thống khi làm mới toàn bộ',
         data: error.runningRun ? {
           runningRunId: error.runningRun.id,
           startedAt: error.runningRun.started_at,
@@ -5570,7 +6175,7 @@ exports.getSystemPlaylistGenerationRun = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         code: 'SYSTEM_PLAYLIST_RUN_NOT_FOUND',
-        message: 'Khong tim thay tac vu tao lai playlist he thong.'
+        message: 'Khong tim thay tac vu lam moi playlist he thong.'
       });
     }
     res.set('Cache-Control', 'no-store');
@@ -5588,23 +6193,88 @@ exports.cancelSystemPlaylistGenerationRun = async (req, res, next) => {
     const runLogService = require('../services/systemPlaylistRunLog.service');
     const affected = await runLogService.cancelGenerationRun(
       req.params.id,
-      `System playlist regenerate job was reset by admin ${req.user?.id || 'unknown'}.`
+      `System playlist regenerate cancel requested by admin ${req.user?.id || 'unknown'}.`
     );
     const run = await runLogService.getGenerationRun(req.params.id);
     if (!run) {
       return res.status(404).json({
         success: false,
         code: 'SYSTEM_PLAYLIST_RUN_NOT_FOUND',
-        message: 'Khong tim thay tac vu tao lai playlist he thong.'
+        message: 'Khong tim thay tac vu lam moi playlist he thong.'
       });
     }
     res.set('Cache-Control', 'no-store');
     res.json({
       success: true,
-      message: affected > 0 ? 'Da dat lai trang thai tac vu tao lai playlist he thong.' : 'Tac vu da ket thuc hoac khong the dat lai.',
+      message: affected > 0
+        ? 'Da gui yeu cau huy tac vu. He thong se dung sau batch hien tai.'
+        : 'Tac vu da ket thuc hoac khong the huy.',
       data: run
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+exports.getSystemPlaylistSchedule = async (req, res, next) => {
+  try {
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const rules = getAllSystemPlaylistScheduleRules();
+    const runSummary = await runLogService.getScheduleRunSummary(rules.map((rule) => rule.schedulerName));
+    const sourceLabels = {
+      scheduler: 'He thong tu dong',
+      admin: 'Quan tri vien',
+      user_lazy: 'Lam moi khi nguoi dung truy cap',
+      recovery: 'Phuc hoi he thong'
+    };
+    const statusLabels = {
+      NO_RUN_HISTORY: 'Chua co lich su chay',
+      RUNNING: 'Dang chay',
+      SUCCESS: 'Da chay thanh cong',
+      PARTIAL_SUCCESS: 'Hoan tat mot phan',
+      SKIPPED: 'Da kiem tra, khong co muc can xu ly',
+      LAST_RUN_FAILED: 'Loi lan chay gan nhat',
+      LAST_RUN_INTERRUPTED: 'Bi gian doan',
+      RAN_TODAY: 'Da chay hom nay',
+      NOT_RUN_TODAY: 'Chua chay hom nay',
+      LAST_WEEKLY_RUN_RECORDED: 'Da ghi nhan lan chay theo tuan'
+    };
+
+    const data = rules.map((rule) => {
+      const summary = runSummary[rule.schedulerName] || {};
+      const lastRun = summary.lastRun || null;
+      const lastSuccess = summary.lastSuccess || null;
+      const runStatusCode = resolveScheduleRunStatus({
+        scheduleKey: rule.schedulerName,
+        lastRun,
+        lastSuccess
+      });
+      return {
+        schedulerName: rule.schedulerName,
+        groupLabel: rule.groupLabel,
+        systemKeys: rule.systemKeys,
+        frequency: rule.frequency,
+        scheduleLabel: rule.label,
+        statusCode: runStatusCode,
+        statusLabel: statusLabels[runStatusCode] || runStatusCode,
+        lastRunAt: lastRun?.started_at || null,
+        lastFinishedAt: lastRun?.finished_at || null,
+        triggerSource: lastRun?.trigger_source || null,
+        triggerSourceLabel: lastRun?.trigger_source ? (sourceLabels[lastRun.trigger_source] || lastRun.trigger_source) : 'Chua co',
+        result: lastRun ? {
+          status: runLogService.normalizeGenerationStatus(lastRun.status),
+          total: Number(lastRun.total_count || 0),
+          processed: Number(lastRun.processed_count || 0),
+          success: Number(lastRun.success_count || 0),
+          failed: Number(lastRun.failed_count || 0),
+          skipped: Number(lastRun.skipped_count || 0)
+        } : null
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('getSystemPlaylistSchedule Error:', error);
     next(error);
   }
 };

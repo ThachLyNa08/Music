@@ -809,8 +809,8 @@ async function getQuickOperations(forceRefresh = false) {
               updatedAt;
             const latestScheduledFor = getLatestScheduledOccurrence(schedule, now);
             const isDueForLatestSchedule = Boolean(latestScheduledFor) && latestScheduledFor <= now && new Date(scheduleLastGeneratedAt) < latestScheduledFor;
-            const overdueMs = latestScheduledFor ? Math.max(0, now - latestScheduledFor) : 0;
-            const overdueDays = Math.floor(overdueMs / (1000 * 60 * 60 * 24));
+            const delayedMs = latestScheduledFor ? Math.max(0, now - latestScheduledFor) : 0;
+            const delayedDays = Math.floor(delayedMs / (1000 * 60 * 60 * 24));
 
             if (schedule.runDayOfWeek !== undefined) {
               // Weekly or specific day schedule
@@ -822,8 +822,8 @@ async function getQuickOperations(forceRefresh = false) {
               const nextRunText = `Lịch: ${weekdays[targetDay]} ${hh}:${mm}`;
 
               if (isStale) {
-                statusLabel = overdueDays > 0
-                  ? `Quá hạn ${overdueDays} ngày`
+                statusLabel = delayedDays > 0
+                  ? `Chưa ghi nhận ${delayedDays} ngày`
                   : `Đến hạn cập nhật · ${nextRunText}`;
               } else if (logMap.has(row.system_key) || logMap.has(normalizeSystemKey(row.system_key))) {
                 const runLog = logMap.get(row.system_key) || logMap.get(normalizeSystemKey(row.system_key));
@@ -853,8 +853,8 @@ async function getQuickOperations(forceRefresh = false) {
               const nextRunText = `Lịch: Mỗi ngày ${hh}:${mm}`;
 
               if (isStale) {
-                statusLabel = overdueDays > 0
-                  ? `Quá hạn ${overdueDays} ngày`
+                statusLabel = delayedDays > 0
+                  ? `Chưa ghi nhận ${delayedDays} ngày`
                   : `Đến hạn cập nhật · ${nextRunText}`;
               } else if (logMap.has(row.system_key) || logMap.has(normalizeSystemKey(row.system_key))) {
                 const runLog = logMap.get(row.system_key) || logMap.get(normalizeSystemKey(row.system_key));

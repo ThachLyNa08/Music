@@ -85,6 +85,12 @@ async function bootstrap() {
     console.log(`\n🚀 MusicFlow backend running on http://localhost:${PORT}`);
     console.log(`   Environment : ${process.env.NODE_ENV || 'development'}`);
     console.log(`   AI Service  : ${process.env.AI_SERVICE_URL}\n`);
+    try {
+      const { startSystemPlaylistCron } = require('./schedulers/systemPlaylistCron.scheduler');
+      startSystemPlaylistCron();
+    } catch (error) {
+      console.error('[SystemPlaylistCron] failed to start', error);
+    }
   });
 }
 

@@ -63,9 +63,12 @@ router.get('/system-playlists/activity-log', adminController.getSystemPlaylistsA
 router.get('/system-playlists/quality-report', adminController.getSystemPlaylistsQualityReport);
 router.get('/system-playlists/generation-runs/:id', adminController.getSystemPlaylistGenerationRun);
 router.post('/system-playlists/generation-runs/:id/cancel', adminController.cancelSystemPlaylistGenerationRun);
+router.post('/system-playlists/runs/:id/cancel', adminController.cancelSystemPlaylistGenerationRun);
+router.post('/system-playlists/regenerate', adminController.regenerateSystemPlaylistsOptimized);
 router.post('/system-playlists/regenerate-all', adminController.regenerateAllSystemPlaylists);
 router.post('/system-playlists/regenerate-scope', adminController.regenerateSystemPlaylistsScope);
 router.get('/system-playlists/system-keys', adminController.getSystemKeys);
+router.get('/system-playlists/schedule', adminController.getSystemPlaylistSchedule);
 router.get('/system-playlists', adminController.getSystemPlaylists);
 router.get('/system-playlists/:id', adminController.getSystemPlaylistDetail);
 router.post('/system-playlists/:id/regenerate', adminController.regenerateSystemPlaylist);
