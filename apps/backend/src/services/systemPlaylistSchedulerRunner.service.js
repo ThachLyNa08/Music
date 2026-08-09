@@ -2,7 +2,8 @@ const runLogService = require('./systemPlaylistRunLog.service');
 const {
   getDueSystemPlaylistScheduleRules,
   getSystemPlaylistScheduleRule,
-  getScheduledForDateTime
+  getScheduledForDateTime,
+  getClosedAnalysisWindow
 } = require('../utils/systemPlaylistSchedule.util');
 const {
   _systemPlaylistMaintenance: maintenance
@@ -10,6 +11,18 @@ const {
 
 const DEFAULT_BATCH_SIZE = 200;
 const DEFAULT_CONCURRENCY = 2;
+const SCHEDULER_PROCESS_ORDER = [
+  'weekly_mix',
+  'daily_mix_01',
+  'daily_mix_02',
+  'daily_mix_03',
+  'daily_mix_04',
+  'daily_mix_05',
+  'daily_mix_06',
+  'moodmix',
+  'vibes',
+  'trending_now'
+];
 
 function normalizeSchedulerOptions(options = {}) {
   return {
@@ -19,7 +32,9 @@ function normalizeSchedulerOptions(options = {}) {
     dryRun: options.dryRun === true,
     limitTargets: Number.isInteger(options.limitTargets) && options.limitTargets >= 0 ? options.limitTargets : null,
     batchSize: Number.isInteger(options.batchSize) && options.batchSize > 0 ? options.batchSize : DEFAULT_BATCH_SIZE,
-    concurrency: Number.isInteger(options.concurrency) && options.concurrency > 0 ? options.concurrency : DEFAULT_CONCURRENCY
+    concurrency: Number.isInteger(options.concurrency) && options.concurrency > 0 ? options.concurrency : DEFAULT_CONCURRENCY,
+    triggerSource: options.triggerSource || (options.force ? 'admin' : 'scheduler'),
+    mode: options.mode || (options.force ? 'admin_force' : 'scheduler')
   };
 }
 
@@ -29,27 +44,48 @@ function getRulesToRun(options) {
     if (!rule) throw new Error(`Unknown scheduler: ${options.scheduler}`);
     return [rule];
   }
-  if (options.allDue) return getDueSystemPlaylistScheduleRules(new Date());
+  if (options.allDue) {
+    return getDueSystemPlaylistScheduleRules(new Date()).sort((a, b) => {
+      const ai = SCHEDULER_PROCESS_ORDER.indexOf(a.schedulerName);
+      const bi = SCHEDULER_PROCESS_ORDER.indexOf(b.schedulerName);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }
   throw new Error('Use allDue=true or scheduler=<name>');
 }
 
-async function finishSkippedSchedulerRun(rule, scheduledFor, uniqueUsers, targets) {
-  const runId = await runLogService.startGenerationRun({
+async function startOrClaimRun(rule, scheduledFor, analysisWindow, uniqueUsers, targets, options = {}) {
+  const metadata = {
+    source: 'system_playlist_scheduler_once',
+    schedulerName: rule.schedulerName,
+    systemKeys: rule.systemKeys,
+    scheduledFor,
+    analysisWindow,
+    queuedRunId: options.queuedRunId || null
+  };
+  if (options.queuedRunId) {
+    await runLogService.claimQueuedGenerationRun(options.queuedRunId, {
+      operationType: maintenance.SYSTEM_PLAYLIST_REGENERATE_OPERATION,
+      totalUsers: uniqueUsers.size,
+      totalPlaylists: targets.length,
+      metadata
+    });
+    return options.queuedRunId;
+  }
+  return runLogService.startGenerationRun({
     operationType: maintenance.SYSTEM_PLAYLIST_REGENERATE_OPERATION,
-    triggerSource: 'scheduler',
+    triggerSource: options.triggerSource || 'scheduler',
     schedulerName: rule.schedulerName,
     scheduledFor,
-    mode: 'scheduler',
+    mode: options.mode || 'scheduler',
     totalUsers: uniqueUsers.size,
     totalPlaylists: targets.length,
-    metadata: {
-      source: 'system_playlist_scheduler_once',
-      schedulerName: rule.schedulerName,
-      systemKeys: rule.systemKeys,
-      scheduledFor,
-      reason: 'NO_RUNNABLE_TARGETS'
-    }
+    metadata
   });
+}
+
+async function finishSkippedSchedulerRun(rule, scheduledFor, analysisWindow, uniqueUsers, targets, options = {}) {
+  const runId = await startOrClaimRun(rule, scheduledFor, analysisWindow, uniqueUsers, targets, options);
 
   await runLogService.finishGenerationRun(runId, {
     status: 'skipped',
@@ -65,6 +101,7 @@ async function finishSkippedSchedulerRun(rule, scheduledFor, uniqueUsers, target
       schedulerName: rule.schedulerName,
       systemKeys: rule.systemKeys,
       scheduledFor,
+      analysisWindow,
       reason: 'NO_RUNNABLE_TARGETS',
       message: 'Khong co playlist can xu ly'
     }
@@ -72,7 +109,9 @@ async function finishSkippedSchedulerRun(rule, scheduledFor, uniqueUsers, target
 }
 
 async function runSchedulerRule(rule, options) {
-  const scheduledFor = getScheduledForDateTime(rule, new Date());
+  const runAt = options.runAt || new Date();
+  const scheduledFor = options.scheduledFor || getScheduledForDateTime(rule, runAt);
+  const analysisWindow = options.analysisWindow || getClosedAnalysisWindow(rule.schedulerName, runAt);
   let targets = await maintenance.getSystemPlaylistRegenerateTargets({
     mode: 'regenerate_scope',
     systemKeys: rule.systemKeys,
@@ -89,26 +128,12 @@ async function runSchedulerRule(rule, options) {
   }
 
   if (!targets.length) {
-    await finishSkippedSchedulerRun(rule, scheduledFor, uniqueUsers, targets);
+    await finishSkippedSchedulerRun(rule, scheduledFor, analysisWindow, uniqueUsers, targets, options);
     console.log(`[${rule.schedulerName}] no runnable targets`);
     return { schedulerName: rule.schedulerName, status: 'skipped', total: 0 };
   }
 
-  const runId = await runLogService.startGenerationRun({
-    operationType: maintenance.SYSTEM_PLAYLIST_REGENERATE_OPERATION,
-    triggerSource: 'scheduler',
-    schedulerName: rule.schedulerName,
-    scheduledFor,
-    mode: 'scheduler',
-    totalUsers: uniqueUsers.size,
-    totalPlaylists: targets.length,
-    metadata: {
-      source: 'system_playlist_scheduler_once',
-      schedulerName: rule.schedulerName,
-      systemKeys: rule.systemKeys,
-      scheduledFor
-    }
-  });
+  const runId = await startOrClaimRun(rule, scheduledFor, analysisWindow, uniqueUsers, targets, options);
 
   const progress = {
     schedulerName: rule.schedulerName,
@@ -153,7 +178,11 @@ async function runSchedulerRule(rule, options) {
       const batch = targets.slice(offset, offset + options.batchSize);
       await maintenance.runWithConcurrency(batch, options.concurrency, async (target) => {
         try {
-          const result = await maintenance.regenerateOneSystemPlaylistTarget(target);
+          const result = await maintenance.regenerateOneSystemPlaylistTarget(target, {
+            scheduledFor,
+            analysisWindow,
+            schedulerName: rule.schedulerName
+          });
           const stats = maintenance.extractSystemPlaylistGenerationStats(result, target.systemKey);
           await maintenance.syncSystemPlaylistGenerationMetadata(target, stats);
           if (stats.status === 'skipped' || result?.canApply === false) {
@@ -163,8 +192,10 @@ async function runSchedulerRule(rule, options) {
               system_key: stats.systemKey,
               playlist_id: target.playlistId,
               user_id: target.userId,
-              run_type: 'scheduled',
+              run_type: options.triggerSource === 'admin' ? 'manual' : 'scheduled',
               scheduled_for: scheduledFor,
+              source_start_date: analysisWindow.sourceStartDate,
+              source_end_date: analysisWindow.sourceEndDate,
               status: 'skipped',
               playlist_count: 1,
               song_count: stats.songCount,
@@ -176,8 +207,10 @@ async function runSchedulerRule(rule, options) {
               system_key: stats.systemKey,
               playlist_id: target.playlistId,
               user_id: target.userId,
-              run_type: 'scheduled',
+              run_type: options.triggerSource === 'admin' ? 'manual' : 'scheduled',
               scheduled_for: scheduledFor,
+              source_start_date: analysisWindow.sourceStartDate,
+              source_end_date: analysisWindow.sourceEndDate,
               status: 'success',
               playlist_count: 1,
               song_count: stats.songCount,
@@ -195,8 +228,10 @@ async function runSchedulerRule(rule, options) {
             system_key: target.systemKey,
             playlist_id: target.playlistId,
             user_id: target.userId,
-            run_type: 'scheduled',
+            run_type: options.triggerSource === 'admin' ? 'manual' : 'scheduled',
             scheduled_for: scheduledFor,
+            source_start_date: analysisWindow.sourceStartDate,
+            source_end_date: analysisWindow.sourceEndDate,
             status: 'failed',
             playlist_count: 1,
             error_message: error.message
@@ -237,13 +272,71 @@ async function runSchedulerRule(rule, options) {
   return { schedulerName: rule.schedulerName, status: finalStatus, total: progress.totalPlaylists };
 }
 
+async function prepareQueuedDueRules(rules, options) {
+  if (!options.allDue || options.force || options.dryRun) {
+    return rules.map((rule) => ({
+      rule,
+      queuedRunId: null,
+      scheduledFor: null,
+      analysisWindow: null
+    }));
+  }
+
+  const runAt = new Date();
+  const prepared = [];
+  for (const rule of rules) {
+    const scheduledFor = getScheduledForDateTime(rule, runAt);
+    const analysisWindow = getClosedAnalysisWindow(rule.schedulerName, runAt);
+    const existing = await runLogService.getGenerationRunForScheduledOccurrence(rule.schedulerName, scheduledFor);
+    const normalizedStatus = runLogService.normalizeGenerationStatus(existing?.status || null, null);
+
+    if (['running', 'cancelling'].includes(normalizedStatus)) {
+      prepared.push({ rule, queuedRunId: null, scheduledFor, analysisWindow, skipReason: 'already_running' });
+      continue;
+    }
+    if (['success', 'partial_success', 'failed', 'cancelled', 'skipped', 'partial'].includes(normalizedStatus)) {
+      continue;
+    }
+
+    const queuedRunId = normalizedStatus === 'queued'
+      ? Number(existing.id)
+      : await runLogService.queueGenerationRun({
+        operationType: maintenance.SYSTEM_PLAYLIST_REGENERATE_OPERATION,
+        triggerSource: options.triggerSource,
+        schedulerName: rule.schedulerName,
+        scheduledFor,
+        mode: options.mode || 'scheduler_catchup',
+        metadata: {
+          source: 'system_playlist_due_queue',
+          schedulerName: rule.schedulerName,
+          systemKeys: rule.systemKeys,
+          scheduledFor,
+          analysisWindow,
+          reason: existing?.status === 'stale' ? 'STALE_REQUEUED' : 'DUE_NOT_LOGGED'
+        }
+      });
+    prepared.push({ rule, queuedRunId, scheduledFor, analysisWindow });
+  }
+  return prepared;
+}
+
 async function runSystemPlaylistSchedulerOnce(rawOptions = {}) {
   const options = normalizeSchedulerOptions(rawOptions);
   const rules = getRulesToRun(options);
   const results = [];
   console.log('System Playlist Scheduler Once');
-  for (const rule of rules) {
-    results.push(await runSchedulerRule(rule, options));
+  const preparedRules = await prepareQueuedDueRules(rules, options);
+  for (const item of preparedRules) {
+    if (item.skipReason) {
+      results.push({ schedulerName: item.rule.schedulerName, status: 'queued', total: 0, reason: item.skipReason });
+      continue;
+    }
+    results.push(await runSchedulerRule(item.rule, {
+      ...options,
+      queuedRunId: item.queuedRunId,
+      scheduledFor: item.scheduledFor,
+      analysisWindow: item.analysisWindow
+    }));
   }
   return results;
 }
@@ -252,5 +345,6 @@ module.exports = {
   runSystemPlaylistSchedulerOnce,
   normalizeSchedulerOptions,
   getRulesToRun,
+  prepareQueuedDueRules,
   runSchedulerRule
 };

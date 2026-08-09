@@ -519,6 +519,29 @@ async function normalizeArtistSongSubmissionNoteSchema(conn) {
   await addColumnIfMissing(conn, 'songs', 'submission_note', 'TEXT NULL AFTER lyrics');
 }
 
+async function normalizeArtistSongReleaseDateSchema(conn) {
+  console.log('016_artist_song_release_date');
+
+  await addColumnIfMissing(conn, 'songs', 'release_date', 'DATE NULL AFTER lyrics');
+  await addColumnIfMissing(conn, 'songs', 'release_at', 'DATETIME NULL AFTER release_date');
+  await conn.query(`
+    UPDATE songs
+    SET release_at = TIMESTAMP(release_date, '00:00:00')
+    WHERE release_at IS NULL
+      AND release_date IS NOT NULL
+  `);
+  if (await tableExists(conn, 'artist_song_submissions')) {
+    await addColumnIfMissing(conn, 'artist_song_submissions', 'release_date', 'DATE NULL');
+    await addColumnIfMissing(conn, 'artist_song_submissions', 'release_at', 'DATETIME NULL');
+    await conn.query(`
+      UPDATE artist_song_submissions
+      SET release_at = TIMESTAMP(release_date, '00:00:00')
+      WHERE release_at IS NULL
+        AND release_date IS NOT NULL
+    `);
+  }
+}
+
 async function normalizeArtistAlbumReviewSchema(conn) {
   console.log('009_artist_album_review_workflow');
 
@@ -922,6 +945,7 @@ async function main() {
     await normalizeSystemEmailAppealSchema(conn);
     await normalizeSystemPlaylistGenerationRunsRecovery(conn);
     await normalizeSystemPlaylistRegenerateOptimization(conn);
+    await normalizeArtistSongReleaseDateSchema(conn);
     console.log('Migrations completed');
   } finally {
     await conn.end();

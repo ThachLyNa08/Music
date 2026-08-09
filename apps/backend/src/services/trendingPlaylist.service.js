@@ -54,7 +54,24 @@ function dedupeRows(rows) {
   return out;
 }
 
-async function fetchRecentTrendingCandidates(limit, days = 1) {
+function getClosedWindowFromOptions(options = {}, days = 1) {
+  const window = options.analysisWindow || options.listeningWindow;
+  const startAt = window?.analysisStart || window?.startAt;
+  const endAt = window?.analysisEnd || window?.endAt;
+  if (startAt && endAt) return { startAt, endAt, label: `${days}d_closed` };
+  return null;
+}
+
+async function fetchRecentTrendingCandidates(limit, days = 1, options = {}) {
+  const closedWindow = getClosedWindowFromOptions(options, days);
+  const listensCondition = closedWindow
+    ? 'lh.listened_at >= ? AND lh.listened_at < ?'
+    : 'lh.listened_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+  const likesCondition = closedWindow
+    ? 'liked_at >= ? AND liked_at < ?'
+    : 'liked_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+  const likeParams = closedWindow ? [closedWindow.startAt, closedWindow.endAt] : [days];
+  const listenParams = closedWindow ? [closedWindow.startAt, closedWindow.endAt] : [days];
   const [rows] = await pool.query(
     `SELECT
         s.id,
@@ -81,17 +98,17 @@ async function fetchRecentTrendingCandidates(limit, days = 1) {
      LEFT JOIN (
        SELECT song_id, COUNT(*) AS recent_likes
        FROM song_likes
-       WHERE liked_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       WHERE ${likesCondition}
        GROUP BY song_id
      ) likes ON likes.song_id = s.id
-     WHERE lh.listened_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+     WHERE ${listensCondition}
        AND ${publicSongCondition('s')}
        AND s.audio_url IS NOT NULL
        AND s.audio_url <> ''
      GROUP BY s.id, s.title, s.artist_id, a.name, s.genre_id, g.name, s.play_count, likes.recent_likes
      ORDER BY score DESC, recent_listens DESC, s.play_count DESC, s.id DESC
      LIMIT ?`,
-    [days, days, limit]
+    [...likeParams, ...listenParams, limit]
   );
 
   return rows.map((row) => ({
@@ -102,7 +119,7 @@ async function fetchRecentTrendingCandidates(limit, days = 1) {
     avg_completion_rate: Number(row.avg_completion_rate || 0),
     skip_count: Number(row.skip_count || 0),
     score: Number(row.score || 0),
-    strategy: `recent_${days}d`
+    strategy: closedWindow ? `recent_${days}d_closed` : `recent_${days}d`
   }));
 }
 
@@ -148,12 +165,20 @@ async function getTrendingCandidates(options = {}) {
   const limit = clampLimit(options.limit);
   const pullLimit = limit * 5;
   
-  let candidates = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 1));
+  let candidates = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 1, options));
   let hasRecentSignal = candidates.filter((row) => Number(row.recent_listens || 0) > 0).length >= Math.min(10, limit);
   let strategy = 'recent_1d';
 
   if (!hasRecentSignal || candidates.length < limit * 3) {
-    const candidates7d = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 7));
+    const candidates7d = dedupeRows(await fetchRecentTrendingCandidates(pullLimit, 7, {
+      ...options,
+      analysisWindow: options.analysisWindow
+        ? {
+          analysisStart: new Date(new Date(options.analysisWindow.analysisEnd).getTime() - 7 * 24 * 60 * 60 * 1000),
+          analysisEnd: options.analysisWindow.analysisEnd
+        }
+        : null
+    }));
     if (candidates7d.filter((row) => Number(row.recent_listens || 0) > 0).length > candidates.length) {
        candidates = candidates7d;
        hasRecentSignal = true;
@@ -244,7 +269,7 @@ async function generateTrendingPlaylist(options = {}) {
        oldSongIds = await getPlaylistSongIds(conn, playlistId);
     }
 
-    const result = await getTrendingCandidates({ limit });
+    const result = await getTrendingCandidates({ ...options, limit });
     
     const finalObjs = selectSongsWithOverlapCheck(result.candidates, oldSongIds, limit, 0.7);
     const finalIds = finalObjs.map(c => Number(c.id));
@@ -270,12 +295,13 @@ async function generateTrendingPlaylist(options = {}) {
       return summary;
     }
 
-    if (evalResult.canApply) {
+    if (evalResult.canApply || options.forceApply === true) {
       await conn.beginTransaction();
       const p = await ensureTrendingPlaylist(conn, finalIds);
       summary.playlistId = p.playlistId;
       summary.created = p.created;
       summary.insertedSongs = p.insertedSongs;
+      summary.forceApplied = options.forceApply === true && !evalResult.canApply;
       await conn.commit();
     }
     

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const premiumReminderService = require('./premiumReminder.service');
+const { getAllSystemPlaylistScheduleRules } = require('../utils/systemPlaylistSchedule.util');
 
 const AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -19,16 +20,16 @@ const AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 // ---------------------------------------------------------------------------
 
 const RECOMMENDATION_ENABLED = process.env.ENABLE_RECOMMENDATION_SCHEDULER === 'true';
+const RECOMMENDATION_SHARED_RUNNER_ENABLED = RECOMMENDATION_ENABLED && process.env.RECOMMENDATION_SCHEDULER_SHARED_RUNNER !== 'false';
+let recommendationSystemPlaylistRunActive = false;
 const RECOMMENDATION_TEST_MODE = process.env.RECOMMENDATION_SCHEDULER_TEST_MODE === 'true';
 
 if (RECOMMENDATION_ENABLED) {
   console.log('[RecommendationScheduler] ENABLE_RECOMMENDATION_SCHEDULER=true');
-  console.log('[RecommendationScheduler] Daily Mix stagger jobs registered');
-  console.log('  - Daily Mix (Tue-Sat 00:10, Mon 00:10)');
-  console.log('  - Weekly Mix (Sun 07:00)');
-  console.log('  - Mood Mix (Daily 01:00)');
-  console.log('  - Trending Now (Daily 00:30)');
-  console.log('  - Contextual Vibes (Daily 01:15)');
+  console.log('[RecommendationScheduler] System playlist jobs use shared 00:00 schedule rules');
+  for (const rule of getAllSystemPlaylistScheduleRules()) {
+    console.log(`  - ${rule.groupLabel} (${rule.label})`);
+  }
   if (RECOMMENDATION_TEST_MODE) {
     console.warn('[CRON-TEST] RECOMMENDATION_SCHEDULER_TEST_MODE=true - cron sẽ chạy mỗi 2 phút. TẮT NGAY khi test xong!');
   }
@@ -72,18 +73,69 @@ cron.schedule('0 8 * * *', () => {
 //   Thu -> dailymix_04, Fri -> dailymix_05, Sat|Sun -> dailymix_06.
 //
 // Lịch cron (giờ local server, server đang chạy ICT):
-//   00:10 Tue  -> analyze Mon  -> dailymix_01
-//   00:10 Wed  -> analyze Tue  -> dailymix_02
-//   00:10 Thu  -> analyze Wed  -> dailymix_03
-//   00:10 Fri  -> analyze Thu  -> dailymix_04
-//   00:10 Sat  -> analyze Fri  -> dailymix_05
-//   00:10 Mon  -> analyze Sat+Sun (weekend range) -> dailymix_06
-//   00:10 Sun  -> không có job (Daily Mix 06 chỉ chạy 00:10 Mon).
+//   00:00 Mon  -> dailymix_01
+//   00:00 Tue  -> dailymix_02
+//   00:00 Wed  -> dailymix_03
+//   00:00 Thu  -> dailymix_04
+//   00:00 Fri  -> dailymix_05
+//   00:00 Sat  -> dailymix_06
+//   Sunday is reserved for Weekly Mix at 00:00.
 //
-// Weekly Mix: Sun 07:00 -> cập nhật tất cả user.
+// Weekly Mix: Sun 00:00 -> update all users.
 // ---------------------------------------------------------------------------
 
-if (RECOMMENDATION_ENABLED) {
+if (RECOMMENDATION_SHARED_RUNNER_ENABLED) {
+  const schedule = RECOMMENDATION_TEST_MODE ? '*/2 * * * *' : '0 0 * * *';
+  cron.schedule(schedule, async () => {
+    if (recommendationSystemPlaylistRunActive) {
+      console.log('[RecommendationScheduler] System playlist shared runner skipped because in-process run is active');
+      return;
+    }
+    recommendationSystemPlaylistRunActive = true;
+    let lock = null;
+    console.log('[RecommendationScheduler] System playlist shared runner starting...');
+    try {
+      const {
+        acquireSchedulerLock,
+        releaseSchedulerLock,
+        getLockTtlMinutes
+      } = require('./systemPlaylistSchedulerLock.service');
+      lock = await acquireSchedulerLock('system_playlist_scheduler', getLockTtlMinutes());
+      if (!lock.acquired) {
+        console.log('[RecommendationScheduler] System playlist shared runner skipped because active lock detected');
+        return;
+      }
+      const { runSystemPlaylistSchedulerOnce } = require('./systemPlaylistSchedulerRunner.service');
+      const results = await runSystemPlaylistSchedulerOnce({
+        allDue: true,
+        force: RECOMMENDATION_TEST_MODE,
+        dryRun: false,
+        limitTargets: null,
+        triggerSource: 'scheduler',
+        mode: RECOMMENDATION_TEST_MODE ? 'scheduler_test' : 'scheduler'
+      });
+      console.log(`[RecommendationScheduler] System playlist shared runner done: ${results.map((r) => `${r.schedulerName}:${r.status}`).join(', ')}`);
+    } catch (e) {
+      console.error('[RecommendationScheduler] System playlist shared runner failed:', e.message);
+    } finally {
+      if (lock?.acquired) {
+        try {
+          const { releaseSchedulerLock } = require('./systemPlaylistSchedulerLock.service');
+          await releaseSchedulerLock('system_playlist_scheduler', lock.owner);
+        } catch (releaseError) {
+          console.error('[RecommendationScheduler] System playlist shared runner failed to release lock:', releaseError.message);
+        }
+      }
+      recommendationSystemPlaylistRunActive = false;
+    }
+  }, { timezone: 'Asia/Ho_Chi_Minh' });
+}
+
+if (RECOMMENDATION_ENABLED && process.env.RECOMMENDATION_SCHEDULER_LEGACY_JOBS === 'true' && RECOMMENDATION_SHARED_RUNNER_ENABLED) {
+  console.warn('[RecommendationScheduler] Legacy jobs disabled because shared runner is enabled. Set RECOMMENDATION_SCHEDULER_SHARED_RUNNER=false to run legacy jobs explicitly.');
+}
+
+if (RECOMMENDATION_ENABLED && process.env.RECOMMENDATION_SCHEDULER_LEGACY_JOBS === 'true' && !RECOMMENDATION_SHARED_RUNNER_ENABLED) {
   const dailyMixService = require('./dailyMix.service');
   const weeklyMixService = require('./weeklyMix.service');
   const { pool } = require('../config/database');
@@ -128,7 +180,7 @@ if (RECOMMENDATION_ENABLED) {
 
   /**
    * Tính target date cho dailymix_06 (cả Sat + Sun range).
-   * 00:10 Mon -> target = Sun của tuần trước.
+   * 00:00 Sat -> target = previous closed day.
    * computeTargetRange sẽ tự mở rộng thành [Sat 00:00, Mon 00:00).
    */
   function lastSunday() {
@@ -142,8 +194,7 @@ if (RECOMMENDATION_ENABLED) {
 
   /**
    * Tính target date cho dailymix_01..05.
-   * 00:10 Tue -> target = Mon vừa rồi
-   * 00:10 Wed -> target = Tue vừa rồi
+   * 00:00 -> target = the closed day before scheduler run.
    * ...
    */
   function yesterday() {
@@ -161,41 +212,41 @@ if (RECOMMENDATION_ENABLED) {
     });
   } else {
     // Production: 6 cron jobs
-    // 00:10 Tue -> dailymix_01 (analyze Mon)
-    cron.schedule('10 0 * * 2', () => {
+    // 00:00 Mon -> dailymix_01
+    cron.schedule('0 0 * * 1', () => {
       const t = new Date();
       const mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(mon);
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Wed -> dailymix_02 (analyze Tue)
-    cron.schedule('10 0 * * 3', () => {
+    // 00:00 Tue -> dailymix_02
+    cron.schedule('0 0 * * 2', () => {
       const t = new Date();
       const tue = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(tue);
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Thu -> dailymix_03 (analyze Wed)
-    cron.schedule('10 0 * * 4', () => {
+    // 00:00 Wed -> dailymix_03
+    cron.schedule('0 0 * * 3', () => {
       const t = new Date();
       const wed = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(wed);
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Fri -> dailymix_04 (analyze Thu)
-    cron.schedule('10 0 * * 5', () => {
+    // 00:00 Thu -> dailymix_04
+    cron.schedule('0 0 * * 4', () => {
       const t = new Date();
       const thu = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(thu);
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Sat -> dailymix_05 (analyze Fri)
-    cron.schedule('10 0 * * 6', () => {
+    // 00:00 Fri -> dailymix_05
+    cron.schedule('0 0 * * 5', () => {
       const t = new Date();
       const fri = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
       runDailyMixForAllUsers(fri);
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Mon -> dailymix_06 (analyze weekend Sat+Sun)
-    cron.schedule('10 0 * * 1', () => {
+    // 00:00 Sat -> dailymix_06
+    cron.schedule('0 0 * * 6', () => {
       runDailyMixForAllUsers(lastSunday());
     }, { timezone: 'Asia/Ho_Chi_Minh' });
-    // 00:10 Sun -> KHÔNG có job Daily Mix.
+    // Sunday is reserved for Weekly Mix at 00:00.
   }
 
   // ---- Weekly Mix cron job ------------------------------------------------
@@ -203,22 +254,39 @@ if (RECOMMENDATION_ENABLED) {
     cron.schedule('*/2 * * * *', async () => {
       console.log('[CRON-TEST] Weekly Mix run starting...');
       try {
-        const stats = await weeklyMixService.generateWeeklyMixForAllUsers({});
-        console.log(`[CRON-TEST] Weekly Mix done: users=${stats.usersProcessed} err=${stats.errors}`);
+        const { runSystemPlaylistSchedulerOnce } = require('./systemPlaylistSchedulerRunner.service');
+        const results = await runSystemPlaylistSchedulerOnce({
+          scheduler: 'weekly_mix',
+          force: true,
+          dryRun: false,
+          limitTargets: null,
+          triggerSource: 'scheduler',
+          mode: 'scheduler_test'
+        });
+        const stats = results[0] || {};
+        console.log(`[CRON-TEST] Weekly Mix done: status=${stats.status || 'unknown'} total=${stats.total || 0}`);
       } catch (e) {
         console.error('[CRON-TEST] Weekly Mix failed:', e.message);
       }
     });
   } else {
-    // Sun 07:00 -> cập nhật Weekly Mix cho tất cả user
-    cron.schedule('0 7 * * 0', async () => {
+    // Sun 00:00 -> update Weekly Mix for all users
+    cron.schedule('0 0 * * 0', async () => {
       console.log('[CRON] Weekly Mix run starting...');
       try {
-        const stats = await weeklyMixService.generateWeeklyMixForAllUsers({});
+        const { runSystemPlaylistSchedulerOnce } = require('./systemPlaylistSchedulerRunner.service');
+        const results = await runSystemPlaylistSchedulerOnce({
+          scheduler: 'weekly_mix',
+          force: false,
+          dryRun: false,
+          limitTargets: null,
+          triggerSource: 'scheduler',
+          mode: 'scheduler'
+        });
+        const stats = results[0] || {};
         console.log(
-          `[CRON] Weekly Mix done: users=${stats.usersProcessed} ` +
-          `created=${stats.playlistsCreated} updated=${stats.playlistsUpdated} ` +
-          `songs=${stats.songsInserted} err=${stats.errors}`,
+          `[CRON] Weekly Mix done: scheduler=${stats.schedulerName || 'weekly_mix'} ` +
+          `status=${stats.status || 'unknown'} total=${stats.total || 0}`,
         );
       } catch (e) {
         console.error('[CRON] Weekly Mix failed:', e.message);
@@ -239,8 +307,8 @@ if (RECOMMENDATION_ENABLED) {
       }
     });
   } else {
-    // Everyday at 01:00 -> refresh Mood Mix for all users
-    cron.schedule('0 1 * * *', async () => {
+    // Everyday at 00:00 -> refresh Mood Mix for all users
+    cron.schedule('0 0 * * *', async () => {
       console.log('[CRON] Mood Mix run starting...');
       try {
         const count = await moodMixService.generateMoodMixForAllUsers({});
@@ -264,8 +332,8 @@ if (RECOMMENDATION_ENABLED) {
       }
     });
   } else {
-    // Everyday at 01:15 -> refresh Contextual Mood for all users
-    cron.schedule('15 1 * * *', async () => {
+    // Everyday at 00:00 -> refresh Contextual Mood for all users
+    cron.schedule('0 0 * * *', async () => {
       console.log('[CRON] Contextual Mood run starting...');
       try {
         const summary = await contextualMoodPlaylistService.generateContextualMoodPlaylistsForAllUsers({});
@@ -289,8 +357,8 @@ if (RECOMMENDATION_ENABLED) {
       }
     });
   } else {
-    // Everyday at 00:30 -> refresh Trending Now globally
-    cron.schedule('30 0 * * *', async () => {
+    // Everyday at 00:00 -> refresh Trending Now globally
+    cron.schedule('0 0 * * *', async () => {
       console.log('[CRON] Trending Now run starting...');
       try {
         const result = await trendingPlaylistService.generateTrendingPlaylist({});

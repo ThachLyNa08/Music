@@ -241,17 +241,48 @@ const DAILY_MIX_MYSQL_DAYS = {
   dailymix_06: [7, 1]  // Thứ Bảy + Chủ Nhật
 };
 
+function normalizeAnalysisWindow(options = {}) {
+  if (!options.analysisWindow) return null;
+  const startAt = options.analysisWindow.analysisStart || options.analysisWindow.startAt;
+  const endAt = options.analysisWindow.analysisEnd || options.analysisWindow.endAt;
+  if (!startAt || !endAt) return null;
+  return { startAt, endAt };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers về target range + listened rows (DAYOFWEEK-based tiered fetch)
 // ---------------------------------------------------------------------------
 
-async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
+async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey, options = {}) {
   const mysqlDays = DAILY_MIX_MYSQL_DAYS[systemKey];
   if (!mysqlDays) throw new Error(`No DAYOFWEEK mapping for ${systemKey}`);
 
   const dayPlaceholders = mysqlDays.map(() => '?').join(',');
 
   const tierResults = { tier1: 0, tier2: 0, tier3: 0, tier4: 0 };
+  const analysisWindow = normalizeAnalysisWindow(options);
+
+  if (analysisWindow) {
+    const [closedRows] = await conn.query(
+      `SELECT lh.id, lh.song_id, lh.completion_rate, lh.is_skipped, lh.implicit_rating,
+              s.id AS s_id, s.title, s.genre_id, s.artist_id, s.market,
+              s.audio_url, s.is_active, s.release_status, s.play_count
+       FROM listening_history lh
+       JOIN songs s ON s.id = lh.song_id
+       WHERE lh.user_id = ?
+         AND lh.listened_at >= ?
+         AND lh.listened_at < ?
+         AND ${publicSongCondition('s')}
+         AND s.audio_url IS NOT NULL
+         AND s.audio_url <> ''
+       ORDER BY lh.listened_at DESC`,
+      [userId, analysisWindow.startAt, analysisWindow.endAt]
+    );
+    tierResults.tier1 = closedRows.length;
+    if (closedRows.length >= FALLBACK_LISTENED_COUNT_FOR_ANCHOR) {
+      return { rows: closedRows, tierUsed: 'tier_1_closed_window', tierResults };
+    }
+  }
 
   // Tier 1: same weekday within 4 weeks
   const [tier1Rows] = await conn.query(
@@ -262,12 +293,13 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
      JOIN songs s ON s.id = lh.song_id
      WHERE lh.user_id = ?
        AND DAYOFWEEK(lh.listened_at) IN (${dayPlaceholders})
-       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 28 DAY)
+       AND lh.listened_at >= DATE_SUB(?, INTERVAL 28 DAY)
+       AND lh.listened_at < ?
        AND ${publicSongCondition('s')}
        AND s.audio_url IS NOT NULL
        AND s.audio_url <> ''
      ORDER BY lh.listened_at DESC`,
-    [userId, ...mysqlDays]
+    [userId, ...mysqlDays, analysisWindow?.endAt || new Date(), analysisWindow?.endAt || new Date()]
   );
   tierResults.tier1 = tier1Rows.length;
 
@@ -284,12 +316,13 @@ async function fetchListeningRowsByDayOfWeek(conn, userId, systemKey) {
      JOIN songs s ON s.id = lh.song_id
      WHERE lh.user_id = ?
        AND DAYOFWEEK(lh.listened_at) IN (${dayPlaceholders})
-       AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 56 DAY)
+       AND lh.listened_at >= DATE_SUB(?, INTERVAL 56 DAY)
+       AND lh.listened_at < ?
        AND ${publicSongCondition('s')}
        AND s.audio_url IS NOT NULL
        AND s.audio_url <> ''
      ORDER BY lh.listened_at DESC`,
-    [userId, ...mysqlDays]
+    [userId, ...mysqlDays, analysisWindow?.endAt || new Date(), analysisWindow?.endAt || new Date()]
   );
   tierResults.tier2 = tier2Rows.length;
 
@@ -584,7 +617,7 @@ async function generateDailyMixForDate(userId, date, options = {}) {
   const dryRun = Boolean(options.dryRun);
 
   const dateObj = parseDateInput(date);
-  const systemKey = weekdayToSystemKey(dateObj);
+  const systemKey = options.systemKey || options.system_key || weekdayToSystemKey(dateObj);
   if (!systemKey) {
     throw new Error(`Cannot map date to system_key (weekday=${dateObj.getDay()})`);
   }
@@ -604,7 +637,7 @@ async function generateDailyMixForDate(userId, date, options = {}) {
     const crossOverlapBefore = calculateCrossOverlapRatio(oldSongIds, otherDailyMixSongs);
 
     // 1) Fetch listening rows using DAYOFWEEK-based tiered approach
-    const tieredResult = await fetchListeningRowsByDayOfWeek(conn, uid, systemKey);
+    const tieredResult = await fetchListeningRowsByDayOfWeek(conn, uid, systemKey, options);
     let rows = tieredResult.rows;
     const tierUsed = tieredResult.tierUsed;
     const tierResults = tieredResult.tierResults;
@@ -640,7 +673,8 @@ async function generateDailyMixForDate(userId, date, options = {}) {
     try {
       const rec = await recommendationService.getRecommendationsForUser(uid, {
         limit: RECOMMEND_PULL,
-        context: 'daily_mix'
+        context: 'daily_mix',
+        listeningWindow: normalizeAnalysisWindow(options) || undefined
       });
       recStrategy = rec.strategy;
       recReason = rec.reason;
@@ -994,7 +1028,7 @@ async function generateDailyMixForDate(userId, date, options = {}) {
       dryRun,
     };
 
-    if (!dryRun && evalResult.canApply) {
+    if (!dryRun && (evalResult.canApply || options.forceApply === true)) {
       await conn.beginTransaction();
       try {
         const { playlistId, created } = await ensurePlaylist(conn, uid, systemKey, name, description);
@@ -1004,6 +1038,11 @@ async function generateDailyMixForDate(userId, date, options = {}) {
         summary.playlistId = playlistId;
         summary.created = created;
         summary.insertedSongs = inserted;
+        summary.forceApplied = options.forceApply === true && !evalResult.canApply;
+        if (summary.forceApplied && inserted > 0) {
+          summary.status = 'warning';
+          summary.canApply = true;
+        }
       } catch (err) {
         try { await conn.rollback(); } catch (_) { /* ignore */ }
         throw err;
@@ -1163,7 +1202,13 @@ async function generateDailyMixByKeyForAllUsers(systemKey, options = {}) {
 
   for (const row of rows) {
     try {
-      const m = await generateDailyMixForDate(row.id, targetDate, { perMix, dryRun });
+      const m = await generateDailyMixForDate(row.id, targetDate, {
+        perMix,
+        dryRun,
+        systemKey,
+        scheduledFor: options.scheduledFor || null,
+        analysisWindow: options.analysisWindow || null
+      });
       stats.usersProcessed += 1;
       if (!dryRun) {
         if (m.created) stats.playlistsCreated += 1;

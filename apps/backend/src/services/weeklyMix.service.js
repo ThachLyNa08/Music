@@ -39,14 +39,14 @@ function clampLimit(value) {
 function getWeeklyMixListeningWindow(referenceDate) {
   const ref = referenceDate ? new Date(referenceDate) : new Date();
   const day = ref.getDay(); // 0 = Sun, 1 = Mon...
-  
-  // Target: the most recent Sunday 07:00 (or if today is Sunday, this Sunday)
+
+  // Target: the most recent Sunday 00:00 (or if today is Sunday, this Sunday)
   const d = new Date(ref.getTime());
-  d.setHours(7, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
 
   let diffToSun = day === 0 ? 0 : day;
   if (day === 0 && ref.getTime() < d.getTime()) {
-    diffToSun = 7; // It's Sunday but before 07:00, use last Sunday
+    diffToSun = 7; // It is Sunday before the scheduled 00:00 boundary; use last Sunday.
   }
   
   // The end of the window is the Sunday at 00:00.
@@ -54,11 +54,18 @@ function getWeeklyMixListeningWindow(referenceDate) {
   endAt.setDate(ref.getDate() - diffToSun);
   endAt.setHours(0, 0, 0, 0);
 
-  // The start of the window is the Monday before that Sunday at 00:00 (i.e. 6 days before Sunday).
+  // The start of the closed 7-day window before Sunday 00:00.
   const startAt = new Date(endAt.getTime());
-  startAt.setDate(startAt.getDate() - 6);
+  startAt.setDate(startAt.getDate() - 7);
 
   return { startAt, endAt };
+}
+
+function getListeningWindowFromOptions(options = {}) {
+  const window = options.analysisWindow || options.listeningWindow;
+  const startAt = window?.analysisStart || window?.startAt;
+  const endAt = window?.analysisEnd || window?.endAt;
+  return startAt && endAt ? { startAt, endAt } : null;
 }
 
 async function findExistingPlaylist(conn, userId) {
@@ -145,8 +152,8 @@ async function generateWeeklyMixForUser(userId, options = {}) {
   const uid = Number(userId);
   const limit = clampLimit(options.limit);
   const dryRun = Boolean(options.dryRun);
-  const referenceDate = options.referenceDate || null;
-  const listeningWindow = getWeeklyMixListeningWindow(referenceDate);
+  const referenceDate = options.referenceDate || options.scheduledFor || null;
+  const listeningWindow = getListeningWindowFromOptions(options) || getWeeklyMixListeningWindow(referenceDate);
 
   const conn = await pool.getConnection();
   try {
@@ -310,7 +317,7 @@ async function generateWeeklyMixForUser(userId, options = {}) {
     return { ...summary, listeningWindow, topSongIds: songIds.slice(0, 10) };
   }
 
-  if (evalResult.canApply) {
+  if (evalResult.canApply || options.forceApply === true) {
     await conn.beginTransaction();
     const { playlistId, created } = await ensurePlaylist(conn, uid);
     const publicIds = await fetchPublicSongIds(conn, songIds);
@@ -320,6 +327,11 @@ async function generateWeeklyMixForUser(userId, options = {}) {
     summary.created = created;
     summary.insertedSongs = inserted;
     summary.dedupedCount = publicIds.length;
+    summary.forceApplied = options.forceApply === true && !evalResult.canApply;
+    if (summary.forceApplied && inserted > 0) {
+      summary.status = 'warning';
+      summary.canApply = true;
+    }
     
     // Post-apply verification logging
     console.log(`[WeeklyMix] Post-apply verification for User ${uid}:`, {

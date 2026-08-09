@@ -122,6 +122,7 @@ CREATE TABLE songs (
     cover_url       VARCHAR(500)    NULL,                   -- Ảnh bìa riêng (override album)
     lyrics          LONGTEXT        NULL,                   -- Lời bài hát (plain text có timestamp)
     tempo           FLOAT           NULL,                   -- BPM – dùng cho Content-based Filtering
+    release_date    DATE            NULL,
     language        VARCHAR(20)     NULL,                   -- 'vi', 'en', 'ko', ...
     play_count      INT UNSIGNED    NOT NULL DEFAULT 0,     -- Tổng lượt nghe
     is_active       BOOLEAN         NOT NULL DEFAULT TRUE,  -- Trạng thái hiển thị (dùng kết hợp release_status)

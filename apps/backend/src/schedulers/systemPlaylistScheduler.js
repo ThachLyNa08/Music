@@ -6,6 +6,13 @@ const moodMixService = require('../services/moodMix.service');
 const contextualService = require('../services/contextualMoodPlaylist.service');
 const trendingService = require('../services/trendingPlaylist.service');
 const behaviorPlaylistService = require('../services/behaviorSystemPlaylist.service');
+const { getAllSystemPlaylistScheduleRules, getClosedAnalysisWindow } = require('../utils/systemPlaylistSchedule.util');
+const {
+  acquireSchedulerLock,
+  releaseSchedulerLock,
+  getLockTtlMinutes
+} = require('../services/systemPlaylistSchedulerLock.service');
+const { runSystemPlaylistSchedulerOnce } = require('../services/systemPlaylistSchedulerRunner.service');
 
 const SYSTEM_PLAYLIST_SCHEDULES = [
   {
@@ -13,7 +20,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 1',
     runDayOfWeek: 2, // Thứ Ba
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_01', options)
   },
@@ -22,7 +29,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 2',
     runDayOfWeek: 3, // Thứ Tư
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_02', options)
   },
@@ -31,7 +38,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 3',
     runDayOfWeek: 4, // Thứ Năm
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_03', options)
   },
@@ -40,7 +47,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 4',
     runDayOfWeek: 5, // Thứ Sáu
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_04', options)
   },
@@ -49,7 +56,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 5',
     runDayOfWeek: 6, // Thứ Bảy
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_05', options)
   },
@@ -58,7 +65,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     label: 'Daily Mix 6',
     runDayOfWeek: 1, // Thứ Hai
     hour: 0,
-    minute: 10,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => dailyMixService.generateDailyMixByKeyForAllUsers('dailymix_06', options)
   },
@@ -66,7 +73,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['weekly_mix'],
     label: 'Weekly Mix',
     runDayOfWeek: 0, // Chủ Nhật
-    hour: 7,
+    hour: 0,
     minute: 0,
     staleAfterHours: 24 * 7,
     regenerate: async (options) => weeklyMixService.generateWeeklyMixForAllUsers(options)
@@ -83,7 +90,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['morning_vibes'],
     label: 'Morning Vibes',
     hour: 5,
-    minute: 30,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => contextualService.generateContextualMoodPlaylistsForAllUsers({ ...options, timeSlot: 'morning' })
   },
@@ -91,7 +98,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['afternoon_vibes'],
     label: 'Afternoon Vibes',
     hour: 12,
-    minute: 30,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => contextualService.generateContextualMoodPlaylistsForAllUsers({ ...options, timeSlot: 'afternoon' })
   },
@@ -99,7 +106,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['evening_vibes'],
     label: 'Evening Vibes',
     hour: 17,
-    minute: 30,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => contextualService.generateContextualMoodPlaylistsForAllUsers({ ...options, timeSlot: 'evening' })
   },
@@ -107,7 +114,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['night_vibes'],
     label: 'Night Vibes',
     hour: 20,
-    minute: 30,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => contextualService.generateContextualMoodPlaylistsForAllUsers({ ...options, timeSlot: 'night' })
   },
@@ -115,7 +122,7 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
     keys: ['trending_now'],
     label: 'Trending Now',
     hour: 0,
-    minute: 30,
+    minute: 0,
     staleAfterHours: 24,
     regenerate: async (options) => trendingService.generateTrendingPlaylist(options)
   },
@@ -159,6 +166,19 @@ const SYSTEM_PLAYLIST_SCHEDULES = [
 
 let isRunning = false;
 let intervalId = null;
+let sharedRunnerActive = false;
+
+const scheduleRuleBySystemKey = new Map();
+for (const rule of getAllSystemPlaylistScheduleRules()) {
+  for (const key of rule.systemKeys) scheduleRuleBySystemKey.set(key, rule);
+}
+for (const schedule of SYSTEM_PLAYLIST_SCHEDULES) {
+  const rule = scheduleRuleBySystemKey.get(schedule.keys[0]);
+  if (!rule) continue;
+  schedule.runDayOfWeek = rule.frequency === 'weekly' ? rule.dayOfWeek : undefined;
+  schedule.hour = rule.hour;
+  schedule.minute = rule.minute;
+}
 
 const SYSTEM_KEY_ALIASES = {
   weeklymix: 'weekly_mix',
@@ -419,7 +439,11 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
         if (compareRun) {
           if (debug) console.log(`[SystemPlaylistScheduler] [COMPARE] Regenerating ${schedule.label} (${schedule.keys.join(', ')})`);
           try {
-             const stats = await schedule.regenerate({ dryRun: true });
+             const stats = await schedule.regenerate({
+               dryRun: true,
+               scheduledFor,
+               analysisWindow: getClosedAnalysisWindow(schedule.keys[0], scheduledFor || now)
+             });
              const { details, ...loggableStats } = stats;
              console.log(JSON.stringify(loggableStats, null, 2));
              successCount++;
@@ -429,6 +453,23 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
         } else if (dryRun) {
           if (debug) console.log(`[SystemPlaylistScheduler] [DRY RUN] Due: ${schedule.label} (${schedule.keys.join(', ')})`);
           successCount++;
+        } else if (schedule.keys.includes('weekly_mix')) {
+          try {
+            const { runSystemPlaylistSchedulerOnce } = require('../services/systemPlaylistSchedulerRunner.service');
+            const [result] = await runSystemPlaylistSchedulerOnce({
+              scheduler: 'weekly_mix',
+              force: Boolean(forceKeys),
+              dryRun: false,
+              limitTargets: null,
+              triggerSource: forceKeys ? 'admin' : 'scheduler',
+              mode: forceKeys ? 'admin_force' : 'scheduler'
+            });
+            if (result?.status === 'failed') failedCount++;
+            else successCount++;
+          } catch (err) {
+            console.error(`[SystemPlaylistScheduler] Failed ${schedule.label}:`, err.message);
+            failedCount++;
+          }
         } else {
           if (debug) console.log(`[SystemPlaylistScheduler] Regenerating ${schedule.label} (${schedule.keys.join(', ')})`);
           const startedAt = new Date();
@@ -438,7 +479,10 @@ async function checkAndRunDueSystemPlaylists(forceKeys = null, dryRun = false, c
           let stats = null;
 
           try {
-            stats = await schedule.regenerate({ scheduledFor });
+            stats = await schedule.regenerate({
+              scheduledFor,
+              analysisWindow: getClosedAnalysisWindow(schedule.keys[0], scheduledFor || now)
+            });
             status = normalizeRunStatus(stats?.status);
             if (debug) console.log(`[SystemPlaylistScheduler] Completed ${schedule.label}`);
             successCount++;
@@ -528,21 +572,61 @@ function startSystemPlaylistScheduler() {
 
   // Initial check after 30s
   setTimeout(() => {
-    checkAndRunDueSystemPlaylists();
+    runSharedDueSystemPlaylistScheduler('startup catch-up');
   }, 30 * 1000);
 
   // Periodic check every 60m
   intervalId = setInterval(() => {
-    checkAndRunDueSystemPlaylists();
+    runSharedDueSystemPlaylistScheduler('interval catch-up');
   }, 60 * 60 * 1000);
 
   console.log('[SystemPlaylistScheduler] Mounted and scheduled to run every 60m');
+}
+
+async function runSharedDueSystemPlaylistScheduler(label = 'interval') {
+  if (sharedRunnerActive) {
+    console.log(`[SystemPlaylistScheduler] ${label} skipped because in-process run is active`);
+    return { skipped: true, reason: 'active_run' };
+  }
+  sharedRunnerActive = true;
+  let lock = null;
+  try {
+    console.log(`[SystemPlaylistScheduler] ${label} triggered`);
+    lock = await acquireSchedulerLock('system_playlist_scheduler', getLockTtlMinutes());
+    if (!lock.acquired) {
+      console.log(`[SystemPlaylistScheduler] ${label} skipped because active lock detected`);
+      return { skipped: true, reason: 'active_lock' };
+    }
+    const results = await runSystemPlaylistSchedulerOnce({
+      allDue: true,
+      force: false,
+      dryRun: false,
+      limitTargets: null,
+      triggerSource: 'scheduler',
+      mode: label === 'startup catch-up' ? 'scheduler_startup_catchup' : 'scheduler_interval_catchup'
+    });
+    console.log(`[SystemPlaylistScheduler] ${label} finished: ${results.map((r) => `${r.schedulerName}:${r.status}`).join(', ')}`);
+    return { skipped: false, results };
+  } catch (error) {
+    console.error(`[SystemPlaylistScheduler] ${label} failed:`, error.message);
+    return { skipped: false, reason: 'failed', error };
+  } finally {
+    if (lock?.acquired) {
+      try {
+        await releaseSchedulerLock('system_playlist_scheduler', lock.owner);
+      } catch (releaseError) {
+        console.error('[SystemPlaylistScheduler] failed to release lock:', releaseError.message);
+      }
+    }
+    sharedRunnerActive = false;
+  }
 }
 
 module.exports = {
   SYSTEM_PLAYLIST_SCHEDULES,
   checkAndRunDueSystemPlaylists,
   startSystemPlaylistScheduler,
+  runSharedDueSystemPlaylistScheduler,
   getLatestScheduledOccurrence,
   getLastGeneratedAtForKey,
   getLastGeneratedAtForSchedule,

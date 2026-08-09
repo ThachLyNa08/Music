@@ -31,6 +31,10 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const {
   getAllSystemPlaylistScheduleRules,
+  getScheduledForDateTime,
+  getClosedAnalysisWindow,
+  getSystemPlaylistScheduleRule,
+  isRuleDueToday,
   resolveScheduleRunStatus
 } = require('../utils/systemPlaylistSchedule.util');
 const {
@@ -49,6 +53,7 @@ const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.ut
 const { getArtistTotalPlaysQuery } = require('../utils/artistStats.util');
 const { getArtistStats } = require('../services/artistStats.service');
 const {
+  publicSongCondition,
   effectiveReleaseStatusExpression,
   normalizeReleasePayload,
   pushReleaseFields,
@@ -57,6 +62,7 @@ const {
 } = require('../utils/public.utils');
 const recommendationService = require('../services/recommendation.service');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
+const { getSchedulerLockStatus } = require('../services/systemPlaylistSchedulerLock.service');
 const {
   getWidgetSnapshot,
   buildListeningTrendsPayload,
@@ -861,7 +867,7 @@ exports.getAvailableSongsForAlbum = async (req, res, next) => {
       JOIN artists a ON a.id = s.artist_id
       LEFT JOIN albums al ON al.id = s.album_id
       LEFT JOIN genres g ON g.id = s.genre_id
-      WHERE s.artist_id = ? AND s.is_active = TRUE AND s.review_status = 'approved'
+      WHERE s.artist_id = ? AND ${publicSongCondition('s')}
       ORDER BY s.album_id IS NULL DESC, s.title ASC
     `, [artistId]);
 
@@ -2286,6 +2292,8 @@ exports.deleteUser = async (req, res, next) => {
 exports.getAllSongs = async (req, res, next) => {
   try {
     const { group, search, page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC', genreId, artistId, status, releaseStatus } = req.query;
+    const usePublicCatalogScope = !status && !releaseStatus;
+    const baseWhere = usePublicCatalogScope ? publicSongCondition('s') : "s.review_status = 'approved'";
 
     let query = `
       SELECT s.id
@@ -2293,7 +2301,7 @@ exports.getAllSongs = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      WHERE s.review_status = 'approved'
+      WHERE ${baseWhere}
     `;
     const params = [];
 
@@ -2385,7 +2393,7 @@ exports.getAllSongs = async (req, res, next) => {
       JOIN artists a ON s.artist_id = a.id
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN genres g ON s.genre_id = g.id
-      WHERE 1=1
+      WHERE ${baseWhere}
     `;
     const countParams = [];
     if (group && group !== 'ALL') {
@@ -2601,23 +2609,24 @@ exports.deleteSong = async (req, res, next) => {
 
 exports.getSongGroupsSummary = async (req, res, next) => {
   try {
+    const publicSql = publicSongCondition('s');
     const [rows] = await pool.query(`
       SELECT
-        COUNT(*) as totalSongs_ALL,
-        CAST(SUM(CASE WHEN s.is_active = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_ALL,
-        CAST(COALESCE(SUM(s.play_count), 0) AS UNSIGNED) as totalListens_ALL,
+        CAST(SUM(CASE WHEN ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_ALL,
+        CAST(SUM(CASE WHEN ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_ALL,
+        CAST(SUM(CASE WHEN ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_ALL,
 
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_KPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND s.is_active = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_KPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_KPOP,
 
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_VPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND s.is_active = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_VPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_VPOP,
 
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_USUK,
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND s.is_active = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_USUK,
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_USUK
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_USUK,
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_USUK,
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_USUK
       FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
       WHERE s.review_status = 'approved'
@@ -2637,10 +2646,10 @@ exports.getSongGroupsSummary = async (req, res, next) => {
     });
 
     const queries = [
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s WHERE s.review_status = 'approved' ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s WHERE ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
     ];
 
     const [[topKpop], [topVpop], [topUsuk], [topAll]] = await Promise.all(queries);
@@ -2660,7 +2669,7 @@ exports.getSongGroupsSummary = async (req, res, next) => {
 exports.getSongStatistics = async (req, res, next) => {
   try {
     const { group } = req.query;
-    let whereClause = "WHERE s.review_status = 'approved'";
+    let whereClause = `WHERE ${publicSongCondition('s')}`;
     let params = [];
     if (group && group !== 'ALL') {
       if (group === 'KPOP') {
@@ -3977,16 +3986,16 @@ const TIME_SLOT_BY_SYSTEM_KEY = {
   evening_vibes: 'evening',
   night_vibes: 'night'
 };
-const DAILY_MIX_DATE_BY_KEY = {
-  dailymix_01: '2026-08-03',
-  dailymix_02: '2026-08-04',
-  dailymix_03: '2026-08-05',
-  dailymix_04: '2026-08-06',
-  dailymix_05: '2026-08-07',
-  dailymix_06: '2026-08-08'
-};
+const DAILY_MIX_SYSTEM_KEYS = [
+  'dailymix_01',
+  'dailymix_02',
+  'dailymix_03',
+  'dailymix_04',
+  'dailymix_05',
+  'dailymix_06'
+];
 const ALL_REGENERATE_SYSTEM_KEYS = [
-  ...Object.keys(DAILY_MIX_DATE_BY_KEY),
+  ...DAILY_MIX_SYSTEM_KEYS,
   'weekly_mix',
   'moodmix',
   ...TIME_BASED_SYSTEM_KEYS,
@@ -4192,34 +4201,46 @@ async function runWithConcurrency(items, concurrency, worker) {
   await Promise.all(workers);
 }
 
-async function regenerateOneSystemPlaylistTarget(target) {
+function getDateOnlyFromDateTime(value) {
+  return String(value || '').slice(0, 10);
+}
+
+async function regenerateOneSystemPlaylistTarget(target, context = {}) {
   const systemKey = normalizeRegenerateSystemKey(target.systemKey);
+  const schedulerName = context.schedulerName || systemKey;
+  const analysisWindow = context.analysisWindow || getClosedAnalysisWindow(schedulerName, new Date());
+  const scheduledFor = context.scheduledFor || null;
   if (systemKey.startsWith('dailymix_')) {
     const dailyMixService = require('../services/dailyMix.service');
-    return dailyMixService.generateDailyMixForDate(target.userId, DAILY_MIX_DATE_BY_KEY[systemKey], {
+    return dailyMixService.generateDailyMixForDate(target.userId, getDateOnlyFromDateTime(analysisWindow.analysisStart), {
       perMix: 25,
-      forceApply: true
+      forceApply: true,
+      systemKey,
+      scheduledFor,
+      analysisWindow
     });
   }
   if (systemKey === 'weekly_mix') {
     const weeklyMixService = require('../services/weeklyMix.service');
-    return weeklyMixService.generateWeeklyMixForUser(target.userId, { limit: 35, forceApply: true });
+    return weeklyMixService.generateWeeklyMixForUser(target.userId, { limit: 35, forceApply: true, scheduledFor, analysisWindow });
   }
   if (systemKey === 'moodmix') {
     const moodMixService = require('../services/moodMix.service');
-    return moodMixService.generateMoodMixForUser(target.userId, { forceApply: true });
+    return moodMixService.generateMoodMixForUser(target.userId, { forceApply: true, scheduledFor, analysisWindow });
   }
   if (TIME_BASED_SYSTEM_KEYS.includes(systemKey)) {
     const contextualService = require('../services/contextualMoodPlaylist.service');
     return contextualService.generateContextualMoodPlaylistsForUser(target.userId, {
       timeSlot: TIME_SLOT_BY_SYSTEM_KEY[systemKey],
       playlistId: target.playlistId,
-      forceApply: true
+      forceApply: true,
+      scheduledFor,
+      analysisWindow
     });
   }
   if (systemKey === 'trending_now') {
     const trendingService = require('../services/trendingPlaylist.service');
-    return trendingService.generateTrendingPlaylist({ forceApply: true });
+    return trendingService.generateTrendingPlaylist({ forceApply: true, scheduledFor, analysisWindow });
   }
   const err = new Error(`Unsupported system playlist key: ${systemKey}`);
   err.code = 'SYSTEM_PLAYLIST_KEY_UNSUPPORTED';
@@ -6216,11 +6237,72 @@ exports.cancelSystemPlaylistGenerationRun = async (req, res, next) => {
   }
 };
 
+exports.runSystemPlaylistScheduleNow = async (req, res, next) => {
+  try {
+    const schedulerName = String(req.params.schedulerName || req.body?.schedulerName || '').trim();
+    const rule = getSystemPlaylistScheduleRule(schedulerName);
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        code: 'UNKNOWN_SYSTEM_PLAYLIST_SCHEDULER',
+        message: 'Khong tim thay scheduler playlist he thong.'
+      });
+    }
+
+    const { runSystemPlaylistSchedulerOnce } = require('../services/systemPlaylistSchedulerRunner.service');
+    const results = await runSystemPlaylistSchedulerOnce({
+      scheduler: rule.schedulerName,
+      force: true,
+      dryRun: false,
+      limitTargets: null,
+      batchSize: clampSystemPlaylistBatchSize(req.body?.batchSize),
+      concurrency: clampSystemPlaylistConcurrency(req.body?.concurrency),
+      triggerSource: 'admin',
+      mode: 'admin_force'
+    });
+    const result = results[0] || {};
+    const runLogService = require('../services/systemPlaylistRunLog.service');
+    const summary = await runLogService.getScheduleRunSummary([rule.schedulerName]);
+    const lastRun = summary[rule.schedulerName]?.lastRun || null;
+    const total = Number(lastRun?.total_count ?? result.total ?? 0);
+    const success = Number(lastRun?.success_count || 0);
+    const failed = Number(lastRun?.failed_count || 0);
+    const skipped = Number(lastRun?.skipped_count || 0);
+    const processed = Number(lastRun?.processed_count ?? (success + failed + skipped));
+
+    return res.json({
+      success: result.status !== 'failed',
+      message: `Da chay ${rule.groupLabel}: cap nhat ${success} playlist, xu ly ${processed}/${total}, bo qua ${skipped}, loi ${failed}.`,
+      data: {
+        schedulerName: rule.schedulerName,
+        status: result.status || runLogService.normalizeGenerationStatus(lastRun?.status),
+        runId: lastRun?.id ? Number(lastRun.id) : null,
+        total,
+        processed,
+        success,
+        failed,
+        skipped
+      }
+    });
+  } catch (error) {
+    console.error('runSystemPlaylistScheduleNow Error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code || 'SYSTEM_PLAYLIST_SCHEDULER_RUN_FAILED',
+      message: error.message
+    });
+  }
+};
+
 exports.getSystemPlaylistSchedule = async (req, res, next) => {
   try {
     const runLogService = require('../services/systemPlaylistRunLog.service');
     const rules = getAllSystemPlaylistScheduleRules();
     const runSummary = await runLogService.getScheduleRunSummary(rules.map((rule) => rule.schedulerName));
+    const graceMinutes = Math.max(1, Math.min(Number(process.env.SYSTEM_PLAYLIST_OVERDUE_GRACE_MINUTES || 120) || 120, 24 * 60));
+    const now = new Date();
+    const activeRun = await runLogService.getRunningGenerationRun('system_playlist_regenerate');
+    const schedulerLock = await getSchedulerLockStatus('system_playlist_scheduler');
     const sourceLabels = {
       scheduler: 'He thong tu dong',
       admin: 'Quan tri vien',
@@ -6228,49 +6310,150 @@ exports.getSystemPlaylistSchedule = async (req, res, next) => {
       recovery: 'Phuc hoi he thong'
     };
     const statusLabels = {
-      NO_RUN_HISTORY: 'Chua co lich su chay',
-      RUNNING: 'Dang chay',
+      NO_RUN_HISTORY: 'Da chay thanh cong',
+      NOT_DUE: 'Da chay thanh cong',
+      QUEUED: 'Dang xu ly',
+      RUNNING: 'Dang cap nhat',
       SUCCESS: 'Da chay thanh cong',
-      PARTIAL_SUCCESS: 'Hoan tat mot phan',
-      SKIPPED: 'Da kiem tra, khong co muc can xu ly',
-      LAST_RUN_FAILED: 'Loi lan chay gan nhat',
-      LAST_RUN_INTERRUPTED: 'Bi gian doan',
-      RAN_TODAY: 'Da chay hom nay',
-      NOT_RUN_TODAY: 'Chua chay hom nay',
-      LAST_WEEKLY_RUN_RECORDED: 'Da ghi nhan lan chay theo tuan'
+      PARTIAL_SUCCESS: 'Da chay thanh cong',
+      SKIPPED: 'Da chay thanh cong',
+      OVERDUE_NO_RUN: 'Loi cap nhat',
+      LAST_RUN_FAILED: 'Loi cap nhat',
+      LAST_RUN_INTERRUPTED: 'Loi cap nhat',
+      RAN_TODAY: 'Da chay thanh cong',
+      NOT_RUN_TODAY: 'Da chay thanh cong',
+      LAST_WEEKLY_RUN_RECORDED: 'Da chay thanh cong'
     };
 
-    const data = rules.map((rule) => {
+    function resolveOccurrenceStatus({ due, scheduledFor, occurrenceRun }) {
+      if (!due) return 'NOT_DUE';
+      const status = runLogService.normalizeGenerationStatus(occurrenceRun?.status || null, null);
+      if (status === 'queued') return 'QUEUED';
+      if (status === 'running' || status === 'cancelling') return 'RUNNING';
+      if (status === 'success') return 'SUCCESS';
+      if (status === 'partial_success' || status === 'partial') return 'PARTIAL_SUCCESS';
+      if (status === 'skipped') return 'SKIPPED';
+      if (status === 'failed') return 'LAST_RUN_FAILED';
+      if (status === 'stale' || status === 'cancelled') return 'LAST_RUN_INTERRUPTED';
+
+      const scheduledAt = new Date(scheduledFor);
+      const graceUntil = new Date(scheduledAt.getTime() + graceMinutes * 60 * 1000);
+      if (activeRun || schedulerLock.active || now <= graceUntil) return 'QUEUED';
+      return 'OVERDUE_NO_RUN';
+    }
+
+    function buildScheduleDisplayState(lastRun) {
+      if (!lastRun) {
+        return {
+          displayStatus: 'healthy',
+          displayLabel: 'Da chay thanh cong',
+          resultMessage: 'San sang chay theo lich tu dong'
+        };
+      }
+
+      const status = runLogService.normalizeGenerationStatus(lastRun.status, 'success');
+      const total = Number(lastRun.total_count || 0);
+      const processed = Number(lastRun.processed_count || 0);
+      const success = Number(lastRun.success_count || 0);
+      const failed = Number(lastRun.failed_count || 0);
+
+      if (status === 'queued') {
+        return {
+          displayStatus: 'processing',
+          displayLabel: 'Dang xu ly',
+          resultMessage: total > 0 ? `Dang cho xu ly ${processed}/${total} muc` : 'Dang xu ly'
+        };
+      }
+      if (status === 'running' || status === 'cancelling') {
+        return {
+          displayStatus: 'running',
+          displayLabel: 'Dang cap nhat',
+          resultMessage: total > 0 ? `Dang cap nhat ${processed}/${total} muc` : 'Dang cap nhat'
+        };
+      }
+      if (status === 'failed' || status === 'stale' || status === 'cancelled') {
+        const message = String(lastRun.error_message || 'Cap nhat that bai').trim();
+        return {
+          displayStatus: 'failed',
+          displayLabel: 'Loi cap nhat',
+          resultMessage: message.length > 140 ? `${message.slice(0, 137)}...` : message
+        };
+      }
+      if (status === 'skipped') {
+        return {
+          displayStatus: 'healthy',
+          displayLabel: 'Da chay thanh cong',
+          resultMessage: 'Da kiem tra, khong co muc can xu ly'
+        };
+      }
+      if (status === 'success' || status === 'partial_success' || status === 'partial') {
+        return {
+          displayStatus: 'healthy',
+          displayLabel: 'Da chay thanh cong',
+          resultMessage: total > 0
+            ? `Da cap nhat ${success} playlist, ${processed}/${total} muc xu ly`
+            : 'Da chay thanh cong'
+        };
+      }
+
+      return {
+        displayStatus: failed > 0 ? 'failed' : 'healthy',
+        displayLabel: failed > 0 ? 'Loi cap nhat' : 'Da chay thanh cong',
+        resultMessage: failed > 0 ? 'Cap nhat that bai' : 'Da chay thanh cong'
+      };
+    }
+
+    const data = await Promise.all(rules.map(async (rule) => {
       const summary = runSummary[rule.schedulerName] || {};
-      const lastRun = summary.lastRun || null;
+      const fallbackLastRun = summary.lastRun || null;
       const lastSuccess = summary.lastSuccess || null;
-      const runStatusCode = resolveScheduleRunStatus({
-        scheduleKey: rule.schedulerName,
-        lastRun,
-        lastSuccess
+      const scheduledFor = getScheduledForDateTime(rule, now);
+      const due = isRuleDueToday(rule, now);
+      const occurrenceRun = due
+        ? await runLogService.getGenerationRunForScheduledOccurrence(rule.schedulerName, scheduledFor)
+        : null;
+      const lastRun = occurrenceRun || fallbackLastRun;
+      const runStatusCode = resolveOccurrenceStatus({
+        due,
+        scheduledFor,
+        occurrenceRun
       });
+      const displayState = buildScheduleDisplayState(lastRun);
       return {
         schedulerName: rule.schedulerName,
         groupLabel: rule.groupLabel,
         systemKeys: rule.systemKeys,
         frequency: rule.frequency,
         scheduleLabel: rule.label,
+        scheduledFor,
         statusCode: runStatusCode,
         statusLabel: statusLabels[runStatusCode] || runStatusCode,
+        rawStatusCode: runStatusCode,
+        displayStatus: displayState.displayStatus,
+        displayLabel: displayState.displayLabel,
+        resultMessage: displayState.resultMessage,
         lastRunAt: lastRun?.started_at || null,
         lastFinishedAt: lastRun?.finished_at || null,
         triggerSource: lastRun?.trigger_source || null,
-        triggerSourceLabel: lastRun?.trigger_source ? (sourceLabels[lastRun.trigger_source] || lastRun.trigger_source) : 'Chua co',
+        triggerSourceLabel: lastRun?.trigger_source ? (sourceLabels[lastRun.trigger_source] || lastRun.trigger_source) : 'He thong tu dong',
         result: lastRun ? {
           status: runLogService.normalizeGenerationStatus(lastRun.status),
           total: Number(lastRun.total_count || 0),
           processed: Number(lastRun.processed_count || 0),
           success: Number(lastRun.success_count || 0),
           failed: Number(lastRun.failed_count || 0),
-          skipped: Number(lastRun.skipped_count || 0)
-        } : null
+          skipped: Number(lastRun.skipped_count || 0),
+          errorMessage: lastRun.error_message || null
+        } : null,
+        diagnostics: {
+          due,
+          occurrenceRunId: occurrenceRun?.id ? Number(occurrenceRun.id) : null,
+          overdueGraceMinutes: graceMinutes,
+          schedulerLockActive: Boolean(schedulerLock.active),
+          activeRunId: activeRun?.id ? Number(activeRun.id) : null
+        }
       };
-    });
+    }));
 
     res.json({ success: true, data });
   } catch (error) {

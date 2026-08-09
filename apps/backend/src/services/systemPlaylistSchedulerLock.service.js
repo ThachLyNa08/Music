@@ -26,6 +26,13 @@ async function acquireSchedulerLock(lockKey, ttlMinutes = null) {
   await ensureSchedulerLockTableExists();
   const safeTtl = getLockTtlMinutes(ttlMinutes);
   const owner = `${os.hostname()}:${process.pid}:${Date.now()}:${crypto.randomBytes(4).toString('hex')}`;
+  const [[existingLock]] = await pool.query(
+    `SELECT locked_by, locked_until
+     FROM system_scheduler_locks
+     WHERE lock_key = ?
+     LIMIT 1`,
+    [lockKey]
+  );
 
   await pool.query(
     `INSERT INTO system_scheduler_locks (lock_key, locked_until, locked_by)
@@ -44,6 +51,11 @@ async function acquireSchedulerLock(lockKey, ttlMinutes = null) {
      LIMIT 1`,
     [lockKey]
   );
+
+  const staleReleased = existingLock?.locked_until && new Date(existingLock.locked_until) < new Date();
+  if (staleReleased) {
+    console.log(`[SystemPlaylistCron] stale lock released lock_key=${lockKey} locked_until=${existingLock.locked_until}`);
+  }
 
   return {
     acquired: row?.locked_by === owner,
@@ -66,9 +78,32 @@ async function releaseSchedulerLock(lockKey, owner) {
   return Number(result.affectedRows || 0);
 }
 
+async function getSchedulerLockStatus(lockKey) {
+  await ensureSchedulerLockTableExists();
+  const [[row]] = await pool.query(
+    `SELECT lock_key, locked_by, locked_until, updated_at
+     FROM system_scheduler_locks
+     WHERE lock_key = ?
+     LIMIT 1`,
+    [lockKey]
+  );
+  if (!row) {
+    return { exists: false, active: false, lockedUntil: null, lockedBy: null };
+  }
+  const lockedUntil = row.locked_until || null;
+  return {
+    exists: true,
+    active: lockedUntil ? new Date(lockedUntil) > new Date() : false,
+    lockedUntil,
+    lockedBy: row.locked_by || null,
+    updatedAt: row.updated_at || null
+  };
+}
+
 module.exports = {
   acquireSchedulerLock,
   releaseSchedulerLock,
+  getSchedulerLockStatus,
   ensureSchedulerLockTableExists,
   getLockTtlMinutes
 };

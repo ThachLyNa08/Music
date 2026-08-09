@@ -228,6 +228,22 @@ async function getRunningGenerationRun(operationType = 'regenerate_all') {
   return rows[0] || null;
 }
 
+async function getActiveGenerationRun(operationType = 'regenerate_all') {
+  await ensureGenerationRunsTableExists();
+  await recoverStaleSystemPlaylistRuns(operationType);
+  const [rows] = await pool.query(
+    `SELECT *
+     FROM system_playlist_generation_runs
+     WHERE operation_type = ?
+       AND status IN ('running', 'cancelling')
+       AND COALESCE(heartbeat_at, started_at, created_at) >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+     ORDER BY started_at DESC
+     LIMIT 1`,
+    [operationType, getRunTimeoutMinutes()]
+  );
+  return rows[0] || null;
+}
+
 async function startGenerationRun({
   operationType = 'regenerate_all',
   triggeredByUserId = null,
@@ -255,7 +271,7 @@ async function startGenerationRun({
 
     try {
       await recoverStaleSystemPlaylistRuns(operationType);
-      const running = await getRunningGenerationRun(operationType);
+      const running = await getActiveGenerationRun(operationType);
       if (running) {
         const err = new Error('Dang co tac vu tao lai playlist he thong. Vui long cho hoan tat.');
         err.statusCode = 409;
@@ -294,6 +310,82 @@ async function startGenerationRun({
   } finally {
     conn.release();
   }
+}
+
+async function getGenerationRunForScheduledOccurrence(schedulerName, scheduledFor) {
+  await ensureGenerationRunsTableExists();
+  await recoverStaleSystemPlaylistRuns();
+  if (!schedulerName || !scheduledFor) return null;
+  const [rows] = await pool.query(
+    `SELECT *
+     FROM system_playlist_generation_runs
+     WHERE scheduler_name = ?
+       AND scheduled_for = ?
+     ORDER BY started_at DESC, id DESC
+     LIMIT 1`,
+    [schedulerName, scheduledFor]
+  );
+  return rows[0] || null;
+}
+
+async function queueGenerationRun({
+  operationType = 'regenerate_all',
+  metadata = null,
+  totalUsers = 0,
+  totalPlaylists = 0,
+  triggerSource = 'scheduler',
+  schedulerName = null,
+  scheduledFor = null,
+  mode = 'scheduler_catchup'
+} = {}) {
+  await ensureGenerationRunsTableExists();
+  const existing = await getGenerationRunForScheduledOccurrence(schedulerName, scheduledFor);
+  if (existing && existing.status !== 'stale') return existing.id;
+
+  const [result] = await pool.query(
+    `INSERT INTO system_playlist_generation_runs
+      (operation_type, status, started_at, heartbeat_at, total_users, total_count,
+       trigger_source, scheduler_name, scheduled_for, mode, metadata)
+     VALUES (?, 'queued', NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      operationType,
+      Number(totalUsers || 0),
+      Number(totalPlaylists || 0),
+      ['scheduler', 'admin', 'user_lazy', 'recovery'].includes(triggerSource) ? triggerSource : 'scheduler',
+      schedulerName || null,
+      scheduledFor || null,
+      mode || 'scheduler_catchup',
+      metadata ? JSON.stringify(metadata) : null
+    ]
+  );
+  return result.insertId;
+}
+
+async function claimQueuedGenerationRun(runId, data = {}) {
+  await ensureGenerationRunsTableExists();
+  await recoverStaleSystemPlaylistRuns(data.operationType || null);
+  const [result] = await pool.query(
+    `UPDATE system_playlist_generation_runs
+     SET status = 'running',
+         heartbeat_at = NOW(),
+         total_users = ?,
+         total_count = ?,
+         metadata = ?
+     WHERE id = ?
+       AND status = 'queued'`,
+    [
+      Number(data.totalUsers || 0),
+      Number(data.totalPlaylists || 0),
+      data.metadata ? JSON.stringify(data.metadata) : null,
+      runId
+    ]
+  );
+  if (Number(result.affectedRows || 0) !== 1) {
+    const err = new Error('Queued system playlist run is no longer claimable.');
+    err.code = 'QUEUED_GENERATION_RUN_NOT_CLAIMABLE';
+    throw err;
+  }
+  return runId;
 }
 
 async function updateGenerationRunProgress(runId, data = {}) {
@@ -548,8 +640,12 @@ module.exports = {
   logSystemPlaylistRun,
   ensureGenerationRunsTableExists,
   getRunningGenerationRun,
+  getActiveGenerationRun,
   markStaleRunningGenerationRuns,
   recoverStaleSystemPlaylistRuns,
+  getGenerationRunForScheduledOccurrence,
+  queueGenerationRun,
+  claimQueuedGenerationRun,
   startGenerationRun,
   updateGenerationRunProgress,
   finishGenerationRun,

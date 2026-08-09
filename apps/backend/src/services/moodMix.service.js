@@ -19,6 +19,13 @@ const MOODMIX_LIMITS = {
   maxOverlap: 0.90 // allow up to 90%
 };
 
+function getClosedWindow(options = {}, fallbackDays = 30) {
+  const window = options.analysisWindow || options.listeningWindow;
+  const endAt = window?.analysisEnd || window?.endAt || new Date();
+  const startAt = window?.analysisStart || window?.startAt || new Date(new Date(endAt).getTime() - fallbackDays * 24 * 60 * 60 * 1000);
+  return { startAt, endAt };
+}
+
 async function hydrateSongsWithAudioFeatures(songIds) {
   if (!songIds || !songIds.length) return [];
   const [rows] = await pool.query(
@@ -53,6 +60,7 @@ async function hydrateSongsWithAudioFeatures(songIds) {
 async function getMoodMixCandidates(userId, options = {}) {
   const limit = options.limit || 30;
   const targetCandidateCount = Math.max(180, limit * 6);
+  const closedWindow = getClosedWindow(options, 30);
   
   const candidateCountByTier = { tier1: 0, tier2: 0, tier3: 0, tier4: 0 };
   const candidates = [];
@@ -64,23 +72,28 @@ async function getMoodMixCandidates(userId, options = {}) {
     SELECT saf.mood, COUNT(*) as count
     FROM listening_history lh
     JOIN song_audio_features saf ON lh.song_id = saf.song_id
-    WHERE lh.user_id = ? AND lh.listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    WHERE lh.user_id = ?
+      AND lh.listened_at >= ?
+      AND lh.listened_at < ?
       AND saf.mood IS NOT NULL
     GROUP BY saf.mood
     ORDER BY count DESC
     LIMIT 1
-  `, [userId]);
+  `, [userId, closedWindow.startAt, closedWindow.endAt]);
   const dominantMood = recentMoods.length > 0 ? recentMoods[0].mood : null;
 
   const [topGenres] = await pool.query(`
     SELECT s.genre_id, COUNT(*) as count
     FROM listening_history lh
     JOIN songs s ON lh.song_id = s.id
-    WHERE lh.user_id = ? AND s.genre_id IS NOT NULL
+    WHERE lh.user_id = ?
+      AND lh.listened_at >= ?
+      AND lh.listened_at < ?
+      AND s.genre_id IS NOT NULL
     GROUP BY s.genre_id
     ORDER BY count DESC
     LIMIT 3
-  `, [userId]);
+  `, [userId, closedWindow.startAt, closedWindow.endAt]);
   const genreIds = topGenres.map(g => g.genre_id);
 
   // --- Tier 1: Personalized history & mood match ---
@@ -97,14 +110,14 @@ async function getMoodMixCandidates(userId, options = {}) {
       SELECT song_id, COUNT(*) as recent_listens,
              SUM(IF(skip_at_sec IS NOT NULL AND skip_at_sec < 30, 1, 0)) as skip_count
       FROM listening_history
-      WHERE user_id = ? AND listened_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      WHERE user_id = ? AND listened_at >= ? AND listened_at < ?
       GROUP BY song_id
     ) lh_stats ON s.id = lh_stats.song_id
     WHERE ${publicSongCondition('s')}
       AND (sl.song_id IS NOT NULL OR lh_stats.song_id IS NOT NULL OR saf.mood = ?)
     ORDER BY base_score DESC
     LIMIT 60
-  `, [dominantMood, userId, userId, dominantMood]);
+  `, [dominantMood, userId, userId, closedWindow.startAt, closedWindow.endAt, dominantMood]);
 
   if (tier1Songs.length > 0) {
     const hydrated = await hydrateSongsWithAudioFeatures(tier1Songs.map(s => s.id));
@@ -237,7 +250,10 @@ async function generateMoodMixForUser(userId, options = {}) {
   const dryRun = options.dryRun || false;
 
   const targetSize = MOODMIX_LIMITS.targetSize;
-  const { dominantMood, candidates, candidateCount, candidateCountByTier, missingAudioFeatureRatio, fallbackUsed: candFallback, fallbackReason: candReason } = await getMoodMixCandidates(userId, { limit: targetSize });
+  const { dominantMood, candidates, candidateCount, candidateCountByTier, missingAudioFeatureRatio, fallbackUsed: candFallback, fallbackReason: candReason } = await getMoodMixCandidates(userId, {
+    limit: targetSize,
+    analysisWindow: options.analysisWindow || null
+  });
 
   // Normalize candidates if needed
   for (const c of candidates) {
@@ -364,7 +380,7 @@ async function generateMoodMixForUser(userId, options = {}) {
       );
     }
 
-    if (evalResult.canApply) {
+    if (evalResult.canApply || options.forceApply === true) {
       // Xóa bài cũ và thêm bài mới
       await conn.query('DELETE FROM playlist_songs WHERE playlist_id = ?', [playlistId]);
       
@@ -376,6 +392,11 @@ async function generateMoodMixForUser(userId, options = {}) {
         );
       }
       summary.insertedSongs = values.length;
+      summary.forceApplied = options.forceApply === true && !evalResult.canApply;
+      if (summary.forceApplied && values.length > 0) {
+        summary.status = 'warning';
+        summary.canApply = true;
+      }
     }
     
     await conn.commit();

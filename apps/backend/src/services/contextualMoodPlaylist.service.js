@@ -166,6 +166,7 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       timeSlot: slot,
       limit: limit * 5,
       now: options.now,
+      analysisWindow: options.analysisWindow || null,
       req: options.req || null
     });
 
@@ -307,6 +308,8 @@ async function generateContextualMoodPlaylistForSlot(userId, timeSlot, options =
       if (ownsConnection) await conn.commit();
       return {
         ...baseResult,
+        status: options.forceApply === true && !evalResult.canApply ? 'warning' : baseResult.status,
+        canApply: options.forceApply === true && !evalResult.canApply && songIds.length > 0 ? true : baseResult.canApply,
         forceApplied: options.forceApply === true && !evalResult.canApply,
         ...writeResult
       };

@@ -16,6 +16,11 @@ const LOCK_KEY = 'system_playlist_scheduler';
 let cronTask = null;
 let isRunningInProcess = false;
 let startupCatchupTimer = null;
+let startupCatchupRetryCount = 0;
+
+const STARTUP_CATCHUP_LABEL = 'startup catch-up';
+const STARTUP_CATCHUP_RETRY_DELAY_MS = 60 * 1000;
+const STARTUP_CATCHUP_MAX_RETRIES = 3;
 
 function isCronEnabled() {
   return String(process.env.SYSTEM_PLAYLIST_CRON_ENABLED || '').trim().toLowerCase() === 'true';
@@ -30,7 +35,7 @@ function getCronTimezone() {
 }
 
 function isStartupCatchupEnabled() {
-  return String(process.env.SYSTEM_PLAYLIST_CRON_RUN_ON_STARTUP || '').trim().toLowerCase() === 'true';
+  return String(process.env.SYSTEM_PLAYLIST_CRON_RUN_ON_STARTUP || 'true').trim().toLowerCase() !== 'false';
 }
 
 function getStartupDelaySeconds() {
@@ -41,16 +46,16 @@ function getStartupDelaySeconds() {
 
 async function runCronTick(context = {}) {
   const label = context.label || 'cron';
-  const prefix = label === 'startup catch-up' ? '[SystemPlaylistCron] startup catch-up' : '[SystemPlaylistCron]';
+  const prefix = label === STARTUP_CATCHUP_LABEL ? '[SystemPlaylistCron] startup catch-up' : '[SystemPlaylistCron]';
   if (isRunningInProcess) {
     console.log(`${prefix} skipped because another scheduler run is active`);
-    return;
+    return { skipped: true, reason: 'active_run' };
   }
 
   isRunningInProcess = true;
   let lock = null;
   try {
-    if (label === 'startup catch-up') {
+    if (label === STARTUP_CATCHUP_LABEL) {
       console.log('[SystemPlaylistCron] startup catch-up triggered');
     } else {
       console.log(`[SystemPlaylistCron] triggered at ${new Date().toISOString()}`);
@@ -58,13 +63,13 @@ async function runCronTick(context = {}) {
     lock = await acquireSchedulerLock(LOCK_KEY, getLockTtlMinutes());
     if (!lock.acquired) {
       console.log(`${prefix} skipped because another scheduler run is active`);
-      return;
+      return { skipped: true, reason: 'active_run' };
     }
 
     const activeRun = await runLogService.getRunningGenerationRun(maintenance.SYSTEM_PLAYLIST_REGENERATE_OPERATION);
-    if (activeRun) {
+    if (activeRun && activeRun.status !== 'queued') {
       console.log(`${prefix} skipped because another scheduler run is active`);
-      return;
+      return { skipped: true, reason: 'active_run' };
     }
 
     await runSystemPlaylistSchedulerOnce({
@@ -73,13 +78,15 @@ async function runCronTick(context = {}) {
       dryRun: false,
       limitTargets: null
     });
-    if (label === 'startup catch-up') {
+    if (label === STARTUP_CATCHUP_LABEL) {
       console.log('[SystemPlaylistCron] startup catch-up finished');
     } else {
       console.log('[SystemPlaylistCron] finished');
     }
+    return { skipped: false, reason: null };
   } catch (error) {
     console.error(`${prefix} failed:`, error);
+    return { skipped: false, reason: 'failed', error };
   } finally {
     if (lock?.acquired) {
       try {
@@ -92,6 +99,25 @@ async function runCronTick(context = {}) {
   }
 }
 
+function scheduleStartupCatchupRetry() {
+  if (startupCatchupRetryCount >= STARTUP_CATCHUP_MAX_RETRIES) return;
+  startupCatchupRetryCount += 1;
+  console.log(`[SystemPlaylistCron] startup catch-up retry scheduled attempt=${startupCatchupRetryCount}/${STARTUP_CATCHUP_MAX_RETRIES}`);
+  setTimeout(() => {
+    console.log(`[SystemPlaylistCron] startup catch-up retry triggered attempt=${startupCatchupRetryCount}/${STARTUP_CATCHUP_MAX_RETRIES}`);
+    runStartupCatchup().catch((error) => {
+      console.error('[SystemPlaylistCron] startup catch-up retry failed:', error);
+    });
+  }, STARTUP_CATCHUP_RETRY_DELAY_MS).unref?.();
+}
+
+async function runStartupCatchup() {
+  const result = await runCronTick({ label: STARTUP_CATCHUP_LABEL });
+  if (result?.skipped && result.reason === 'active_run') {
+    scheduleStartupCatchupRetry();
+  }
+}
+
 function scheduleStartupCatchup() {
   if (!isStartupCatchupEnabled()) return;
   if (startupCatchupTimer) return;
@@ -99,7 +125,7 @@ function scheduleStartupCatchup() {
   console.log(`[SystemPlaylistCron] startup catch-up scheduled after ${delaySeconds}s`);
   startupCatchupTimer = setTimeout(() => {
     startupCatchupTimer = null;
-    runCronTick({ label: 'startup catch-up' }).catch((error) => {
+    runStartupCatchup().catch((error) => {
       console.error('[SystemPlaylistCron] startup catch-up failed:', error);
     });
   }, delaySeconds * 1000);

@@ -159,15 +159,15 @@
               <td class="px-3 py-2 text-slate-600">{{ formatScheduleLabel(row.scheduleLabel) }}</td>
               <td class="px-3 py-2 text-slate-600">{{ formatDateTime(row.lastRunAt) || 'Chưa ghi nhận' }}</td>
               <td class="px-3 py-2">
-                <span class="rounded-md px-2 py-1 text-[11px] font-semibold" :class="scheduleStatusClass(row.statusCode)">
-                  {{ formatScheduleStatus(row.statusCode, row.statusLabel) }}
+                <span class="rounded-md px-2 py-1 text-[11px] font-semibold" :class="scheduleStatusClass(row.displayStatus || row.statusCode)">
+                  {{ formatScheduleDisplayLabel(row) }}
                 </span>
               </td>
-              <td class="px-3 py-2 text-slate-600">{{ formatTriggerSource(row.triggerSource) }}</td>
-              <td class="px-3 py-2 text-slate-500">{{ formatScheduleResult(row.result) }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ formatScheduleTriggerSource(row) }}</td>
+              <td class="px-3 py-2 text-slate-500">{{ formatScheduleDisplayResult(row) }}</td>
               <td class="px-3 py-2 text-right">
-                <button class="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50" @click="selectScheduleForMaintenance(row)">
-                  Chạy
+                <button class="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60" @click="runScheduleNow(row)" :disabled="runningScheduleName === row.schedulerName">
+                  {{ runningScheduleName === row.schedulerName ? 'Đang chạy...' : 'Chạy' }}
                 </button>
               </td>
             </tr>
@@ -902,6 +902,7 @@ const loadingActivity = ref(false)
 const scheduleRows = ref([])
 const loadingSchedule = ref(false)
 const activeRunId = ref(null)
+const runningScheduleName = ref(null)
 
 const runningJobs = computed(() => Number(operationSummary.value?.runningJobs || 0))
 const terminalRunStatuses = ['success', 'partial_success', 'failed', 'stale', 'skipped', 'cancelled']
@@ -1412,6 +1413,35 @@ async function executeRegenerateAll() {
   }, 'Tác vụ bảo trì nền đã được đưa vào hàng chờ')
 }
 
+async function runScheduleNow(row) {
+  if (!row?.schedulerName) return
+  runningScheduleName.value = row.schedulerName
+  toast.showToast(`Đang chạy ${row.groupLabel}...`, 'info')
+  try {
+    const res = await api.post(`/admin/system-playlists/schedule/${row.schedulerName}/run`, {
+      batchSize: 200,
+      concurrency: 2
+    })
+    const data = res.data?.data || {}
+    toast.showToast(
+      res.data?.message || `Đã cập nhật ${data.success || 0} playlist, xử lý ${data.processed || 0}/${data.total || 0}`,
+      'success'
+    )
+    await Promise.all([
+      fetchSchedule(),
+      fetchOperationSummary(),
+      fetchActivityLogs(),
+      fetchSystemKeys(),
+      fetchPlaylists(currentPage.value)
+    ])
+  } catch (err) {
+    toast.showToast(err.response?.data?.message || `Không chạy được ${row.groupLabel}`, 'error')
+    await Promise.all([fetchSchedule(), fetchActivityLogs()])
+  } finally {
+    runningScheduleName.value = null
+  }
+}
+
 function closeResultModal() {
   regenerateResult.value = null
 }
@@ -1521,27 +1551,45 @@ function formatScheduleLabel(label) {
 
 function formatScheduleStatus(code, fallback) {
   const map = {
-    NO_RUN_HISTORY: 'Chưa có lịch sử chạy',
-    RUNNING: 'Đang chạy',
+    healthy: 'Đã chạy thành công',
+    running: 'Đang cập nhật',
+    processing: 'Đang xử lý',
+    failed: 'Lỗi cập nhật',
+    NO_RUN_HISTORY: 'Đã chạy thành công',
+    NOT_DUE: 'Đã chạy thành công',
+    QUEUED: 'Đang xử lý',
+    RUNNING: 'Đang cập nhật',
     SUCCESS: 'Đã chạy thành công',
-    PARTIAL_SUCCESS: 'Hoàn tất một phần',
-    SKIPPED: 'Đã kiểm tra, không có mục cần xử lý',
-    LAST_RUN_FAILED: 'Lỗi lần chạy gần nhất',
-    LAST_RUN_INTERRUPTED: 'Bị gián đoạn',
-    RAN_TODAY: 'Đã chạy hôm nay',
-    NOT_RUN_TODAY: 'Chưa chạy hôm nay',
-    LAST_WEEKLY_RUN_RECORDED: 'Đã ghi nhận lần chạy theo tuần'
+    PARTIAL_SUCCESS: 'Đã chạy thành công',
+    SKIPPED: 'Đã chạy thành công',
+    OVERDUE_NO_RUN: 'Lỗi cập nhật',
+    LAST_RUN_FAILED: 'Lỗi cập nhật',
+    LAST_RUN_INTERRUPTED: 'Lỗi cập nhật',
+    RAN_TODAY: 'Đã chạy thành công',
+    NOT_RUN_TODAY: 'Đã chạy thành công',
+    LAST_WEEKLY_RUN_RECORDED: 'Đã chạy thành công'
   }
-  return map[code] || fallback || 'Chưa có dữ liệu'
+  return map[code] || fallback || 'Đã chạy thành công'
+}
+
+function formatScheduleDisplayLabel(row) {
+  return formatScheduleStatus(row?.displayStatus || row?.statusCode, row?.displayLabel || row?.statusLabel)
 }
 
 function scheduleStatusClass(code) {
-  if (code === 'RUNNING') return 'bg-orange-50 text-orange-700'
+  if (code === 'healthy') return 'bg-emerald-50 text-emerald-700'
+  if (code === 'running') return 'bg-blue-50 text-blue-700'
+  if (code === 'processing') return 'bg-sky-50 text-sky-700'
+  if (code === 'failed') return 'bg-rose-50 text-rose-700'
+  if (code === 'RUNNING') return 'bg-blue-50 text-blue-700'
+  if (code === 'QUEUED') return 'bg-sky-50 text-sky-700'
+  if (code === 'NOT_DUE' || code === 'NO_RUN_HISTORY') return 'bg-emerald-50 text-emerald-700'
   if (code === 'LAST_RUN_FAILED' || code === 'LAST_RUN_INTERRUPTED') return 'bg-rose-50 text-rose-700'
+  if (code === 'OVERDUE_NO_RUN') return 'bg-rose-50 text-rose-700'
   if (code === 'SUCCESS' || code === 'RAN_TODAY' || code === 'LAST_WEEKLY_RUN_RECORDED') return 'bg-emerald-50 text-emerald-700'
-  if (code === 'PARTIAL_SUCCESS') return 'bg-amber-50 text-amber-700'
-  if (code === 'SKIPPED') return 'bg-sky-50 text-sky-700'
-  return 'bg-slate-100 text-slate-600'
+  if (code === 'PARTIAL_SUCCESS') return 'bg-emerald-50 text-emerald-700'
+  if (code === 'SKIPPED') return 'bg-emerald-50 text-emerald-700'
+  return 'bg-emerald-50 text-emerald-700'
 }
 
 function formatTriggerSource(source) {
@@ -1554,10 +1602,29 @@ function formatTriggerSource(source) {
   return map[source] || 'Chưa có'
 }
 
+function formatScheduleTriggerSource(row) {
+  return 'Hệ thống tự động'
+}
+
 function formatScheduleResult(result) {
-  if (!result) return 'Chưa có kết quả'
-  if (result.status === 'skipped' && Number(result.total || 0) === 0) return 'Đã kiểm tra, không có mục cần xử lý'
+  if (!result) return 'Sẵn sàng chạy theo lịch tự động'
+  if (result.status === 'skipped') return 'Đã kiểm tra, không có mục cần xử lý'
+  if (result.status === 'failed' || result.status === 'stale' || result.status === 'cancelled') {
+    return result.errorMessage || 'Lỗi cập nhật'
+  }
+  if (result.status === 'success' || result.status === 'partial_success' || result.status === 'partial') {
+    return `Đã cập nhật ${result.success || 0} playlist, ${result.processed || 0}/${result.total || 0} mục xử lý`
+  }
   return `${result.processed || 0}/${result.total || 0} xử lý, thành công ${result.success || 0}, lỗi ${result.failed || 0}, bỏ qua ${result.skipped || 0}`
+}
+
+function formatScheduleDisplayResult(row) {
+  const result = row?.result
+  const status = row?.displayStatus
+  if (status === 'processing') return 'Đang xử lý'
+  if (status === 'running') return 'Đang cập nhật'
+  if (status === 'failed') return formatScheduleResult(result)
+  return formatScheduleResult(result)
 }
 
 function selectScheduleForMaintenance(row) {
