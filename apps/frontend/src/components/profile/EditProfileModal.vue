@@ -183,6 +183,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/user'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const props = defineProps({
   show: Boolean,
@@ -277,9 +278,7 @@ const passwordValidationMessage = computed(() => {
 
 const localFormatImageUrl = (url) => {
   if (!url) return ''
-  if (url.startsWith('http') || url.startsWith('blob:')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function triggerFileInput() {

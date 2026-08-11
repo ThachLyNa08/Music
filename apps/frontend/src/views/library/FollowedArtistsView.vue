@@ -113,6 +113,7 @@ import ToastManager from '@/components/common/ToastManager.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
 import UserPagination from '@/components/common/UserPagination.vue'
 import { DEFAULT_SPECIAL_COVERS, normalizeAssetUrl } from '@/utils/imageUrl'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -153,9 +154,7 @@ const showToast = (msg, type = 'success') => toastManager.value?.addToast(msg, t
 
 const localFormatImageUrl = (url) => {
   if (!url) return '/default-artist.png'
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 async function fetchArtists() {

@@ -31,7 +31,8 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const {
   getAllSystemPlaylistScheduleRules,
-  getScheduledForDateTime,
+  getLatestScheduledForDateTime,
+  formatScheduledForDisplay,
   getClosedAnalysisWindow,
   getSystemPlaylistScheduleRule,
   isRuleDueToday,
@@ -2292,8 +2293,7 @@ exports.deleteUser = async (req, res, next) => {
 exports.getAllSongs = async (req, res, next) => {
   try {
     const { group, search, page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC', genreId, artistId, status, releaseStatus } = req.query;
-    const usePublicCatalogScope = !status && !releaseStatus;
-    const baseWhere = usePublicCatalogScope ? publicSongCondition('s') : "s.review_status = 'approved'";
+    const baseWhere = "s.review_status = 'approved'";
 
     let query = `
       SELECT s.id
@@ -2435,13 +2435,33 @@ exports.updateSong = async (req, res, next) => {
     const { title, artist_name, album_title, genre_id, is_active, artist_id: reqArtistId, album_id: reqAlbumId } = req.body;
     const songColumns = await getTableColumns('songs');
     const hasReleaseStatus = req.body.release_status !== undefined || req.body.releaseStatus !== undefined;
-    const releasePayload = hasReleaseStatus
-      ? normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: false })
-      : null;
+    let releasePayload = null;
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      const [[existingSong]] = await conn.query(
+        'SELECT release_status, release_at FROM songs WHERE id = ? LIMIT 1',
+        [id]
+      );
+      if (!existingSong) {
+        const err = new Error('Bài hát không tồn tại');
+        err.statusCode = 404;
+        throw err;
+      }
+      const existingReleaseAt = existingSong.release_at ? new Date(existingSong.release_at).getTime() : null;
+      const isReleasePublished =
+        existingSong.release_status === 'published' ||
+        (
+          existingSong.release_status === 'scheduled' &&
+          existingReleaseAt &&
+          !Number.isNaN(existingReleaseAt) &&
+          existingReleaseAt <= Date.now()
+        );
+      if (hasReleaseStatus && !isReleasePublished) {
+        releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: false });
+      }
 
       let artistId = reqArtistId || null;
       let isNewArtist = false;
@@ -2609,24 +2629,25 @@ exports.deleteSong = async (req, res, next) => {
 
 exports.getSongGroupsSummary = async (req, res, next) => {
   try {
-    const publicSql = publicSongCondition('s');
+    const adminSql = "s.review_status = 'approved'";
+    const activeAdminSql = `${adminSql} AND s.is_active = TRUE`;
     const [rows] = await pool.query(`
       SELECT
-        CAST(SUM(CASE WHEN ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_ALL,
-        CAST(SUM(CASE WHEN ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_ALL,
-        CAST(SUM(CASE WHEN ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_ALL,
+        CAST(SUM(CASE WHEN ${adminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_ALL,
+        CAST(SUM(CASE WHEN ${activeAdminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_ALL,
+        CAST(SUM(CASE WHEN ${adminSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_ALL,
 
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_KPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_KPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${adminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${activeAdminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_KPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'KPOP%' AND ${adminSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_KPOP,
 
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_VPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_VPOP,
-        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${adminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${activeAdminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_VPOP,
+        CAST(SUM(CASE WHEN g.name LIKE 'VPOP%' AND ${adminSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_VPOP,
 
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_USUK,
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_USUK,
-        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_USUK
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${adminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as totalSongs_USUK,
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${activeAdminSql} THEN 1 ELSE 0 END) AS UNSIGNED) as activeSongs_USUK,
+        CAST(SUM(CASE WHEN (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${adminSql} THEN COALESCE(s.play_count, 0) ELSE 0 END) AS UNSIGNED) as totalListens_USUK
       FROM songs s
       LEFT JOIN genres g ON s.genre_id = g.id
       WHERE s.review_status = 'approved'
@@ -2646,10 +2667,10 @@ exports.getSongGroupsSummary = async (req, res, next) => {
     });
 
     const queries = [
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
-      pool.query(`SELECT s.title, s.cover_url FROM songs s WHERE ${publicSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'KPOP%' AND ${adminSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE g.name LIKE 'VPOP%' AND ${adminSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s LEFT JOIN genres g ON s.genre_id = g.id WHERE (g.name LIKE 'USUK%' OR g.name LIKE 'US-UK%') AND ${adminSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
+      pool.query(`SELECT s.title, s.cover_url FROM songs s WHERE ${adminSql} ORDER BY COALESCE(s.play_count, 0) DESC LIMIT 1`),
     ];
 
     const [[topKpop], [topVpop], [topUsuk], [topAll]] = await Promise.all(queries);
@@ -2669,7 +2690,7 @@ exports.getSongGroupsSummary = async (req, res, next) => {
 exports.getSongStatistics = async (req, res, next) => {
   try {
     const { group } = req.query;
-    let whereClause = `WHERE ${publicSongCondition('s')}`;
+    let whereClause = `WHERE s.review_status = 'approved'`;
     let params = [];
     if (group && group !== 'ALL') {
       if (group === 'KPOP') {
@@ -6407,7 +6428,7 @@ exports.getSystemPlaylistSchedule = async (req, res, next) => {
       const summary = runSummary[rule.schedulerName] || {};
       const fallbackLastRun = summary.lastRun || null;
       const lastSuccess = summary.lastSuccess || null;
-      const scheduledFor = getScheduledForDateTime(rule, now);
+      const scheduledFor = getLatestScheduledForDateTime(rule, now);
       const due = isRuleDueToday(rule, now);
       const occurrenceRun = due
         ? await runLogService.getGenerationRunForScheduledOccurrence(rule.schedulerName, scheduledFor)
@@ -6434,6 +6455,10 @@ exports.getSystemPlaylistSchedule = async (req, res, next) => {
         resultMessage: displayState.resultMessage,
         lastRunAt: lastRun?.started_at || null,
         lastFinishedAt: lastRun?.finished_at || null,
+        lastRunScheduledFor: lastRun?.scheduled_for || null,
+        lastRunScheduledForDisplay: formatScheduledForDisplay(lastRun?.scheduled_for || null),
+        actualStartedAt: lastRun?.started_at || null,
+        actualFinishedAt: lastRun?.finished_at || null,
         triggerSource: lastRun?.trigger_source || null,
         triggerSourceLabel: lastRun?.trigger_source ? (sourceLabels[lastRun.trigger_source] || lastRun.trigger_source) : 'He thong tu dong',
         result: lastRun ? {

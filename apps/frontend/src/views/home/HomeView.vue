@@ -225,6 +225,7 @@
             :showIndex="true"
             :showAlbum="true"
             :compact="true"
+            :play-on-row-click="true"
             @play="playTrendingSong"
             @open-menu="handleOpenMenu"
             @toggle-like="toggleLike"
@@ -867,10 +868,20 @@ function playRecentSong(song) {
 function playTrendingSong(song) {
   const queue = trendingSongs.value.map(s => ({
     ...s,
+    id: s.song_id || s.id,
     artist_name: s.artist_name || s.artist
   }))
+  const songId = song?.song_id || song?.id
+  const targetIndex = queue.findIndex(s => String(s.song_id || s.id) === String(songId))
+  const target = queue[targetIndex >= 0 ? targetIndex : 0]
+  const currentId = player.currentSong?.song_id || player.currentSong?.id
+  const targetId = target?.song_id || target?.id
+  if (currentId && targetId && String(currentId) === String(targetId)) {
+    player.togglePlay()
+    return
+  }
   player.playbackSource = 'chart'
-  player.setSong(queue[trendingSongs.value.indexOf(song)], queue)
+  player.setSong(target, queue, targetIndex >= 0 ? targetIndex : 0)
 }
 
 function onTrendingViewAll() {

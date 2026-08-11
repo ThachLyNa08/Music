@@ -187,15 +187,65 @@ exports.notifyArtistContentRejected = async ({ userId, contentType, contentId, t
   }
 };
 
+async function isContentPublicNow(contentType, contentId) {
+  if (contentType === 'song') {
+    const [rows] = await pool.query(
+      `SELECT review_status, is_active, release_status, release_at
+       FROM songs
+       WHERE id = ?
+       LIMIT 1`,
+      [contentId]
+    );
+    const song = rows[0];
+    if (!song) return false;
+    if (song.review_status && song.review_status !== 'approved') return false;
+    if (song.is_active === 0) return false;
+    if (song.release_status === 'hidden' || song.release_status === 'draft') return false;
+    if (song.release_at && new Date(song.release_at).getTime() > Date.now()) return false;
+    if (song.release_status === 'scheduled') {
+      return !!song.release_at && new Date(song.release_at).getTime() <= Date.now();
+    }
+    return song.release_status === 'published' || !song.release_status;
+  }
+
+  if (contentType === 'album') {
+    const [rows] = await pool.query(
+      `SELECT review_status, release_status, release_at
+       FROM albums
+       WHERE id = ?
+       LIMIT 1`,
+      [contentId]
+    );
+    const album = rows[0];
+    if (!album) return false;
+    if (album.review_status && album.review_status !== 'approved') return false;
+    if (album.release_status === 'hidden' || album.release_status === 'draft') return false;
+    if (album.release_at && new Date(album.release_at).getTime() > Date.now()) return false;
+    if (album.release_status === 'scheduled') {
+      return !!album.release_at && new Date(album.release_at).getTime() <= Date.now();
+    }
+    return album.release_status === 'published' || !album.release_status;
+  }
+
+  return false;
+}
+
 exports.notifyInterestedUsersContentApproved = async ({ contentType, contentId, title, artistId, artistName, coverUrl }) => {
   try {
+    const notiType = contentType === 'song' ? 'new_song' : 'new_album';
+    const isPublicNow = await isContentPublicNow(contentType, contentId);
+    if (!isPublicNow) {
+      console.log(`[Notification] ${contentType} ${contentId} is approved but not public yet. Skipping listener notification.`);
+      return;
+    }
+
     // 1. Check if we already notified for this content to prevent duplicates
     const [existingNotis] = await pool.query(
       `SELECT id FROM notifications 
-       WHERE type = 'artist_new_release' 
-       AND JSON_EXTRACT(data, '$.contentType') = ? 
-       AND JSON_EXTRACT(data, '$.contentId') = ? LIMIT 1`,
-      [contentType, contentId]
+       WHERE type = ?
+       AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.contentType')) = ?
+       AND CAST(JSON_UNQUOTE(JSON_EXTRACT(data, '$.contentId')) AS UNSIGNED) = ? LIMIT 1`,
+      [notiType, contentType, Number(contentId)]
     );
     if (existingNotis.length > 0) {
       console.log(`Notification for ${contentType} ${contentId} already sent. Skipping.`);
@@ -285,9 +335,6 @@ exports.notifyInterestedUsersContentApproved = async ({ contentType, contentId, 
       ? `${artistName} vừa phát hành bài hát mới: "${title}".`
       : `${artistName} vừa phát hành album mới: "${title}".`;
     
-    // Use the old 'new_song' type to ensure frontend shows the special icon
-    const notiType = contentType === 'song' ? 'new_song' : 'new_album';
-
     const io = getIo();
     const createdDate = new Date();
 

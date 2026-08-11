@@ -1,8 +1,11 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { API_BASE_URL, clearAuthTokensWhenApiBaseChanged } from '@/config/runtime'
+
+clearAuthTokensWhenApiBaseChanged()
 
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:3000/api',
+  baseURL: API_BASE_URL,
   timeout: 10000,
 })
 
@@ -36,7 +39,7 @@ api.interceptors.response.use(
       original._retry = true
       try {
         const refresh = localStorage.getItem('refreshToken')
-        const { data } = await axios.post('http://127.0.0.1:3000/api/auth/refresh', { refreshToken: refresh })
+        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken: refresh })
         localStorage.setItem('accessToken', data.data.accessToken)
         original.headers.Authorization = `Bearer ${data.data.accessToken}`
         return api(original)

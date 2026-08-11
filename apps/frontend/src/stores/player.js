@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { spotifyApi } from '@/api/spotify'
 import api from '@/api/axios'
 import { addToast } from '@/utils/toast'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 export const usePlayerStore = defineStore('player', () => {
   const audio = ref(new Audio())
@@ -113,7 +114,7 @@ export const usePlayerStore = defineStore('player', () => {
   function getAudioUrl(song) {
     const audioSource = getAudioSource(song)
     if (!audioSource) return ''
-    return audioSource.startsWith('http') ? audioSource : `http://localhost:3000${audioSource}`
+    return toBackendAssetUrl(audioSource)
   }
 
   function firstValue(...values) {
@@ -248,12 +249,7 @@ export const usePlayerStore = defineStore('player', () => {
 
       isPlaying.value = false
       if (currentSong.value?.audio_url) {
-        if (currentSong.value.audio_url.startsWith('http')) {
-          audio.value.src = currentSong.value.audio_url
-        } else {
-          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-          audio.value.src = `${baseUrl}${currentSong.value.audio_url}`
-        }
+        audio.value.src = toBackendAssetUrl(currentSong.value.audio_url)
       }
     } catch (err) {
       console.warn('Lỗi khi khôi phục player state:', err)
@@ -321,7 +317,8 @@ export const usePlayerStore = defineStore('player', () => {
       })
 
       if (response.data?.success) {
-        session.hasTrackedListen = true
+        const isEligibleForTop = listenDuration >= 30 || completionRate >= 0.5 || isCompleted
+        session.hasTrackedListen = Boolean(!options.in_progress || isEligibleForTop || options.skipped)
 
         const returnedHistoryId = response.data?.data?.history_id || response.data?.history_id
         if (returnedHistoryId) {
@@ -366,7 +363,6 @@ export const usePlayerStore = defineStore('player', () => {
           const isEligible = sec >= 30 || completionRate >= 0.5
 
           if (isEligible && !session.hasTrackedListen && !session.trackInFlight) {
-            session.trackInFlight = true
             trackCurrentSong({ in_progress: false })
           }
         }

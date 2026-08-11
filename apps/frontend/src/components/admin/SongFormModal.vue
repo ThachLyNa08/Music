@@ -63,13 +63,24 @@
                   <label class="block text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
                     Trạng thái phát hành
                   </label>
-                  <select v-model="form.release_status" class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                  <select
+                    v-model="form.release_status"
+                    :disabled="isReleasePublishedLocked"
+                    class="w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:disabled:bg-gray-800 dark:disabled:text-gray-400"
+                  >
                     <option value="draft">Nháp</option>
-                    <option value="published">Phát hành ngay</option>
+                    <option value="published">{{ isReleasePublishedLocked ? 'Đã phát hành' : 'Phát hành ngay' }}</option>
                     <option value="scheduled">Lên lịch phát hành</option>
                     <option value="hidden">Ẩn</option>
                   </select>
-                  <input v-if="form.release_status === 'scheduled'" v-model="form.release_at" type="datetime-local" required class="mt-3 w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+                  <input
+                    v-if="form.release_status === 'scheduled'"
+                    v-model="form.release_at"
+                    type="datetime-local"
+                    required
+                    :disabled="isReleasePublishedLocked"
+                    class="mt-3 w-full px-4 py-3 bg-white dark:bg-bg-card border border-gray-200 dark:border-bg-border rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:disabled:bg-gray-800 dark:disabled:text-gray-400"
+                  />
                 </div>
               </div>
 
@@ -157,6 +168,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import SearchableCombobox from '@/components/common/SearchableCombobox.vue';
 import { useToastStore } from '@/stores/toast';
+import { toBackendAssetUrl } from '@/config/runtime';
 
 const toast = useToastStore();
 
@@ -175,8 +187,7 @@ const emit = defineEmits(['close', 'submit']);
 // Utility formatting URL
 const formatImageUrl = (url) => {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `http://localhost:5000${url}`;
+  return toBackendAssetUrl(url);
 };
 
 const audioInput = ref(null);
@@ -194,6 +205,19 @@ const form = reactive({
 });
 
 const coverPreview = ref(null);
+
+function isPublishedRelease(song) {
+  if (!song) return false;
+  if (song.effective_release_status === 'published') return true;
+  if (song.release_status === 'published') return true;
+  if (song.release_status === 'scheduled' && song.release_at) {
+    const releaseTime = new Date(song.release_at).getTime();
+    return !Number.isNaN(releaseTime) && releaseTime <= Date.now();
+  }
+  return false;
+}
+
+const isReleasePublishedLocked = computed(() => props.isEditing && isPublishedRelease(props.songData));
 
 const isArtistSelected = computed(() => {
   return form.artistSelection && (!form.artistSelection.isNew || form.artistSelection.label);
@@ -224,8 +248,8 @@ watch(() => props.isOpen, (newVal) => {
       form.artistSelection = props.songData.artist_id || '';
       form.albumSelection = props.songData.album_id || -1;
       form.genreSelection = props.songData.genre_id || '';
-      form.release_status = props.songData.release_status || 'published';
-      form.release_at = toDateTimeLocal(props.songData.release_at);
+      form.release_status = isPublishedRelease(props.songData) ? 'published' : (props.songData.release_status || 'published');
+      form.release_at = isPublishedRelease(props.songData) ? '' : toDateTimeLocal(props.songData.release_at);
       coverPreview.value = props.songData.cover_url ? formatImageUrl(props.songData.cover_url) : null;
     } else {
       resetForm();
@@ -344,8 +368,10 @@ function handleSubmit() {
   // Files
   if (form.audio) formData.append('audio', form.audio);
   if (form.cover) formData.append('cover', form.cover);
-  formData.append('release_status', form.release_status || 'published');
-  formData.append('release_at', form.release_status === 'scheduled' ? form.release_at : '');
+  if (!isReleasePublishedLocked.value) {
+    formData.append('release_status', form.release_status || 'published');
+    formData.append('release_at', form.release_status === 'scheduled' ? form.release_at : '');
+  }
 
   // Log kiểm tra FormData trước khi gửi
   console.log("=== FORMDATA UPLOAD SONG ===");

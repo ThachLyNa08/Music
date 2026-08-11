@@ -2,6 +2,7 @@ function publicSongCondition(alias = 's') {
   return `
   ${alias}.is_active = TRUE
   AND ${alias}.review_status = 'approved'
+  AND (${alias}.release_at IS NULL OR ${alias}.release_at <= NOW())
   AND (
     ${alias}.release_status = 'published'
     OR (
@@ -16,6 +17,7 @@ function publicSongCondition(alias = 's') {
 function publicAlbumCondition(alias = 'al') {
   return `
   ${alias}.review_status = 'approved'
+  AND (${alias}.release_at IS NULL OR ${alias}.release_at <= NOW())
   AND (
     ${alias}.release_status = 'published'
     OR (
@@ -30,6 +32,9 @@ function publicAlbumCondition(alias = 'al') {
 function effectiveReleaseStatusExpression(alias = 's') {
   return `
     CASE
+      WHEN ${alias}.release_at IS NOT NULL
+        AND ${alias}.release_at > NOW()
+      THEN 'scheduled'
       WHEN ${alias}.release_status = 'scheduled'
         AND ${alias}.release_at IS NOT NULL
         AND ${alias}.release_at <= NOW()

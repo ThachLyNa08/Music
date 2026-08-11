@@ -191,6 +191,7 @@ import { usePlayerStore } from '@/stores/player'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import PremiumReminderBanner from '@/components/common/PremiumReminderBanner.vue'
 import api from '@/api/axios'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 defineProps({
   isQueueOpen: {
@@ -218,9 +219,7 @@ const avatarText = computed(() => displayName.value?.charAt(0)?.toUpperCase() ||
 
 function getAvatarUrl(url) {
   if (!url) return ''
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function goBack() {

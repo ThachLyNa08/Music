@@ -263,6 +263,7 @@ import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
 import RecentSongCard from '@/components/common/RecentSongCard.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -299,9 +300,7 @@ const followedArtistCount = ref(0)
 
 const localFormatImageUrl = (url) => {
   if (!url) return '' // handled by @error
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatDuration(seconds) {

@@ -353,6 +353,7 @@ import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import MfIcon from '@/components/common/MfIcon.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
+import { toBackendAssetUrl } from '@/config/runtime'
 import { Line as LineChart } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -611,7 +612,7 @@ function truncateUrl(url) {
 
 function formatImageUrl(url) {
   if (!url) return 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&q=80'
-  return url.startsWith('http') ? url : `http://localhost:3000${url}`
+  return toBackendAssetUrl(url)
 }
 
 function handleImageError(e) {

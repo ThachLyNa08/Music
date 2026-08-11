@@ -367,6 +367,7 @@ import AdminActionMenu from '@/components/admin/AdminActionMenu.vue'
 import AdminPagination from '@/components/admin/AdminPagination.vue'
 import AdminResetButton from '@/components/admin/AdminResetButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const router = useRouter()
 const route = useRoute()
@@ -1110,7 +1111,7 @@ function handleImageError(e) {
 
 function formatAvatarUrl(url) {
   if (!url) return 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&q=80'
-  return url.startsWith('http') ? url : `http://localhost:3000${url}`
+  return toBackendAssetUrl(url)
 }
 
 function getRegionBadgeClass(region) {

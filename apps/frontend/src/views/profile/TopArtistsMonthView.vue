@@ -107,6 +107,7 @@ import api from '@/api/axios'
 import ArtistCard from '@/components/common/ArtistCard.vue'
 import UserPagination from '@/components/common/UserPagination.vue'
 import { DEFAULT_SPECIAL_COVERS, normalizeAssetUrl } from '@/utils/imageUrl'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const router = useRouter()
 const route = useRoute()
@@ -145,9 +146,7 @@ function handleTimeRangeChange() {
 
 const localFormatImageUrl = (url) => {
   if (!url) return '' 
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatNumber(num) {

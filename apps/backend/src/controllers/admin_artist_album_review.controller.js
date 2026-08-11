@@ -63,7 +63,7 @@ exports.getArtistAlbumReviews = async (req, res) => {
     // Data query
     const dataQuery = `
       SELECT
-        al.id, al.title, COALESCE(NULLIF(al.cover_url, ''), (SELECT s.cover_url FROM songs s WHERE s.album_id = al.id AND s.cover_url IS NOT NULL AND s.cover_url != '' ORDER BY s.id ASC LIMIT 1)) AS cover_url, al.review_status, al.submitted_at, al.release_date, al.rejection_reason,
+        al.id, al.title, COALESCE(NULLIF(al.cover_url, ''), (SELECT s.cover_url FROM songs s WHERE s.album_id = al.id AND s.cover_url IS NOT NULL AND s.cover_url != '' ORDER BY s.id ASC LIMIT 1)) AS cover_url, al.review_status, al.submitted_at, al.release_date, al.release_at, al.rejection_reason,
         COALESCE(al.metadata_score, 0) as metadata_score,
         COALESCE(al.risk_score, 0) as risk_score,
         COALESCE(al.moderation_level, 'normal') as moderation_level,
@@ -96,6 +96,7 @@ exports.getArtistAlbumReviews = async (req, res) => {
         reviewStatus: a.review_status,
         submittedAt: a.submitted_at,
         releaseDate: a.release_date,
+        releaseAt: a.release_at,
         rejectionReason: a.rejection_reason,
         metadataScore: Number(a.metadata_score || 0),
         riskScore: Number(a.risk_score || 0),
@@ -197,11 +198,14 @@ exports.approveArtistAlbum = async (req, res) => {
       UPDATE albums
       SET
         review_status = 'approved',
-        release_status = CASE WHEN release_date > NOW() THEN 'scheduled' ELSE 'published' END,
-        release_at = CASE WHEN release_date IS NOT NULL THEN release_date ELSE NULL END,
+        release_status = CASE WHEN COALESCE(release_at, release_date) > NOW() THEN 'scheduled' ELSE 'published' END,
+        release_at = COALESCE(release_at, release_date),
         reviewed_by_admin_id = ?,
         reviewed_at = NOW(),
-        published_at = COALESCE(published_at, NOW()),
+        published_at = CASE
+          WHEN COALESCE(release_at, release_date) > NOW() THEN published_at
+          ELSE COALESCE(published_at, NOW())
+        END,
         rejection_reason = NULL
       WHERE id = ?
     `, [adminId, albumId]);
@@ -372,11 +376,14 @@ exports.bulkApproveArtistAlbums = async (req, res) => {
       await pool.query(
         `UPDATE albums
          SET review_status = 'approved',
-             release_status = CASE WHEN release_date > NOW() THEN 'scheduled' ELSE 'published' END,
-             release_at = CASE WHEN release_date IS NOT NULL THEN release_date ELSE NULL END,
+             release_status = CASE WHEN COALESCE(release_at, release_date) > NOW() THEN 'scheduled' ELSE 'published' END,
+             release_at = COALESCE(release_at, release_date),
              reviewed_by_admin_id = ?,
              reviewed_at = NOW(),
-             published_at = COALESCE(published_at, NOW()),
+             published_at = CASE
+               WHEN COALESCE(release_at, release_date) > NOW() THEN published_at
+               ELSE COALESCE(published_at, NOW())
+             END,
              rejection_reason = NULL
          WHERE id IN (?)`,
         [adminId, approvedIds]

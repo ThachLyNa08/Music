@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import api from '@/api/axios'
 import { io } from 'socket.io-client'
 import { useToastStore } from '@/stores/toast'
+import { SOCKET_URL } from '@/config/runtime'
 
 function normalizeNotification(notification) {
   if (!notification) return notification
@@ -65,11 +66,9 @@ export const useNotificationStore = defineStore('notification', {
         return
       }
 
-      const baseURL = api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000/api'
-      const socketURL = baseURL.replace('/api', '')
       const token = localStorage.getItem('accessToken')
 
-      this.socket = io(socketURL, {
+      this.socket = io(SOCKET_URL, {
         withCredentials: true,
         auth: { token }
       })

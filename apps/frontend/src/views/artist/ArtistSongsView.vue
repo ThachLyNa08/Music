@@ -88,15 +88,15 @@
       <!-- Song List -->
       <div class="songs-container">
         <div class="song-table-wrapper" :class="{ 'is-loading': loading }">
-          <table class="song-table" style="table-layout: fixed; min-width: 1040px;">
+          <table class="song-table" style="table-layout: fixed; min-width: 1080px;">
             <colgroup>
               <col style="width: 22%;">
-              <col style="width: 14%;">
               <col style="width: 11%;">
-              <col style="width: 8%;">
-              <col style="width: 9%;">
               <col style="width: 10%;">
-              <col style="width: 26%;">
+              <col style="width: 8%;">
+              <col style="width: 12%;">
+              <col style="width: 18%;">
+              <col style="width: 19%;">
             </colgroup>
             <thead>
               <tr>
@@ -135,7 +135,8 @@
                 </td>
                 <td class="text-center">
                   <span class="status-badge" :class="getReviewStatusClass(song.reviewStatus)">
-                    {{ formatReviewStatus(song.reviewStatus) }}
+                    <span>{{ formatArtistSongStatusMain(song) }}</span>
+                    <span v-if="formatArtistSongStatusSub(song)" class="status-badge-sub">{{ formatArtistSongStatusSub(song) }}</span>
                   </span>
                 </td>
                 <td class="text-right actions-cell">
@@ -217,7 +218,7 @@
             <img :src="normalizeImageUrl(selectedSong.coverUrl) || fallbackCover" @error="onImageError" class="detail-cover" alt="" />
             <div class="detail-titles">
               <span class="status-badge" :class="selectedSong.metadataStatus">{{ formatMetadataStatus(selectedSong.metadataStatus) }}</span>
-              <span class="status-badge" :class="getReviewStatusClass(selectedSong.reviewStatus)" style="margin-left: 8px;">{{ formatReviewStatus(selectedSong.reviewStatus) }}</span>
+              <span class="status-badge" :class="getReviewStatusClass(selectedSong.reviewStatus)" style="margin-left: 8px;">{{ formatArtistSongStatus(selectedSong) }}</span>
               <h3>{{ selectedSong.title }}</h3>
               <p class="muted">{{ formatDuration(selectedSong.duration) }} • {{ formatNumber(selectedSong.playCount) }} lượt nghe • {{ formatNumber(selectedSong.likeCount) }} lượt thích</p>
             </div>
@@ -321,7 +322,7 @@
                   <div class="helper-text">&#272;&#432;&#7907;c g&aacute;n theo h&#7891; s&#417; ngh&#7879; s&#297;</div>
                   <div v-if="!uploadArtistGenreId" class="warning-text">T&agrave;i kho&#7843;n ngh&#7879; s&#297; ch&#432;a &#273;&#432;&#7907;c Admin g&aacute;n th&#7875; lo&#7841;i, ch&#432;a th&#7875; g&#7917;i b&agrave;i h&aacute;t.</div>
                 </div>
-                <div class="form-group full-width">
+                <div class="form-group">
                   <label>Album / EP <span class="muted">(tu&#7923; ch&#7885;n)</span></label>
                   <select v-model="uploadForm.albumId" class="select-dark">
                     <option value="">Single / Không thuộc album</option>
@@ -329,6 +330,14 @@
                       {{ album.title }}
                     </option>
                   </select>
+                </div>
+                <div class="form-group">
+                  <label>Thời điểm phát hành <span class="muted">(tuỳ chọn)</span></label>
+                  <div class="release-time-grid">
+                    <input type="date" v-model="uploadForm.release_date" :min="minReleaseDateValue" class="input-dark" aria-label="Ngày phát hành" />
+                    <input type="time" v-model="uploadForm.release_time" :min="getMinReleaseTimeValue(uploadForm.release_date)" class="input-dark" aria-label="Giờ phát hành" />
+                  </div>
+                  <div class="helper-text">Chọn ngày và giờ dự kiến công khai bài hát. Khi gửi duyệt, thời điểm phát hành phải cách hiện tại ít nhất 15 ngày.</div>
                 </div>
               </div>
             </div>
@@ -425,6 +434,14 @@
 
             <div class="form-section">
               <h3>Thông tin bổ sung</h3>
+              <div class="form-group">
+                <label>Thời điểm phát hành <span class="muted">(tuỳ chọn)</span></label>
+                <div class="release-time-grid">
+                  <input type="date" v-model="resubmitForm.release_date" :min="minReleaseDateValue" class="input-dark" aria-label="Ngày phát hành" />
+                  <input type="time" v-model="resubmitForm.release_time" :min="getMinReleaseTimeValue(resubmitForm.release_date)" class="input-dark" aria-label="Giờ phát hành" />
+                </div>
+                <div class="helper-text">Chọn ngày và giờ dự kiến công khai bài hát. Khi gửi duyệt lại, thời điểm phát hành phải cách hiện tại ít nhất 15 ngày.</div>
+              </div>
               <div class="form-group">
                 <label>Lyrics</label>
                 <textarea v-model="resubmitForm.lyrics" class="input-dark textarea-dark" rows="4"></textarea>
@@ -689,6 +706,60 @@ const formatReviewStatus = (status) => {
   }
 }
 
+const getReleaseTimestamp = (song = {}) => {
+  const value = song.releaseAt || song.release_at || song.releaseDate || song.release_date
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? null : time
+}
+
+const formatDateTimeVi = (value) => {
+  if (!value) return ''
+  return new Date(value).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const formatArtistSongStatus = (song = {}) => {
+  const status = song.reviewStatus || song.review_status
+  const releaseTs = getReleaseTimestamp(song)
+  if (status === 'pending_review') {
+    if (releaseTs && releaseTs > Date.now()) return `Chờ duyệt - Dự kiến phát hành ${formatDateTimeVi(song.releaseAt || song.release_at || song.releaseDate || song.release_date)}`
+    if (releaseTs && releaseTs <= Date.now()) return 'Chờ duyệt - Đã quá thời điểm phát hành dự kiến'
+  }
+  if (status === 'approved') {
+    if (releaseTs && releaseTs > Date.now()) return 'Đã duyệt - Chờ phát hành'
+    return 'Đã phát hành'
+  }
+  return formatReviewStatus(status)
+}
+
+const formatArtistSongStatusMain = (song = {}) => {
+  const status = song.reviewStatus || song.review_status
+  if (status === 'pending_review') return 'Chờ duyệt'
+  if (status === 'approved') {
+    const releaseTs = getReleaseTimestamp(song)
+    return releaseTs && releaseTs > Date.now() ? 'Đã duyệt' : 'Đã phát hành'
+  }
+  return formatReviewStatus(status)
+}
+
+const formatArtistSongStatusSub = (song = {}) => {
+  const status = song.reviewStatus || song.review_status
+  const releaseTs = getReleaseTimestamp(song)
+  const releaseValue = song.releaseAt || song.release_at || song.releaseDate || song.release_date
+  if (status === 'pending_review') {
+    if (releaseTs && releaseTs > Date.now()) return `Dự kiến phát hành ${formatDateTimeVi(releaseValue)}`
+    if (releaseTs && releaseTs <= Date.now()) return 'Đã quá thời điểm phát hành dự kiến'
+  }
+  if (status === 'approved' && releaseTs && releaseTs > Date.now()) return 'Chờ phát hành'
+  return ''
+}
+
 const onImageError = (e) => {
   e.target.src = fallbackCover
 }
@@ -703,6 +774,8 @@ const uploadForm = ref({
   id: null,
   title: '',
   albumId: '',
+  release_date: '',
+  release_time: '',
   lyrics: '',
   submissionNote: '',
   audioFile: null,
@@ -741,6 +814,8 @@ const resetUploadForm = () => {
     id: null,
     title: '',
     albumId: '',
+    release_date: '',
+    release_time: '',
     lyrics: '',
     submissionNote: '',
     audioFile: null,
@@ -833,6 +908,7 @@ const buildUploadFormData = () => {
   const formData = new FormData()
   if (uploadForm.value.title.trim()) formData.append('title', uploadForm.value.title.trim())
   if (uploadForm.value.id || uploadForm.value.albumId) formData.append('albumId', uploadForm.value.albumId)
+  formData.append('release_at', buildReleaseAtValue(uploadForm.value))
   if (uploadForm.value.lyrics.trim()) formData.append('lyrics', uploadForm.value.lyrics.trim())
   if (uploadForm.value.submissionNote.trim()) formData.append('submissionNote', uploadForm.value.submissionNote.trim())
   if (uploadForm.value.audioFile) formData.append('audio', uploadForm.value.audioFile)
@@ -845,7 +921,15 @@ const applyUploadError = (err, fallback) => {
   const errMsg = err.response?.data?.message
   const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
 
-  if (duplicateMessage) {
+  if (errCode === 'RELEASE_LEAD_TIME_TOO_SHORT') {
+    const msg = errMsg || 'Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.'
+    uploadError.value = msg
+    toast.showToast(msg, 'error')
+  } else if (errCode === 'INVALID_RELEASE_AT' || errCode === 'INVALID_RELEASE_DATE') {
+    const msg = 'Thời điểm phát hành không hợp lệ.'
+    uploadError.value = msg
+    toast.showToast(msg, 'error')
+  } else if (duplicateMessage) {
     uploadError.value = duplicateMessage
     toast.showToast(duplicateMessage, 'error')
   } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
@@ -859,6 +943,55 @@ const applyUploadError = (err, fallback) => {
   } else {
     uploadError.value = errMsg || fallback
   }
+}
+
+const formatDateTimeLocalInput = (date) => {
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (num) => String(num).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const toDateTimeLocalValue = (value) => {
+  if (!value) return ''
+  if (value instanceof Date) return formatDateTimeLocalInput(value)
+
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return `${normalized}T00:00`
+
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+    if (!hasTimezone && /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(normalized)) {
+      return normalized.replace(' ', 'T').slice(0, 16)
+    }
+  }
+
+  return formatDateTimeLocalInput(new Date(value))
+}
+
+const RELEASE_REVIEW_LEAD_DAYS = 15
+const minReleaseAtValue = computed(() => {
+  const date = new Date()
+  date.setDate(date.getDate() + RELEASE_REVIEW_LEAD_DAYS)
+  return toDateTimeLocalValue(date)
+})
+const minReleaseDateValue = computed(() => minReleaseAtValue.value.slice(0, 10))
+const minReleaseTimeValue = computed(() => minReleaseAtValue.value.slice(11, 16))
+
+const splitReleaseAtValue = (value) => {
+  const localValue = toDateTimeLocalValue(value)
+  return {
+    release_date: localValue ? localValue.slice(0, 10) : '',
+    release_time: localValue ? localValue.slice(11, 16) : ''
+  }
+}
+
+const buildReleaseAtValue = (form) => {
+  if (!form.release_date || !form.release_time) return ''
+  return `${form.release_date}T${form.release_time}`
+}
+
+const getMinReleaseTimeValue = (releaseDate) => {
+  return releaseDate === minReleaseDateValue.value ? minReleaseTimeValue.value : undefined
 }
 
 const handleSaveDraft = async () => {
@@ -930,7 +1063,15 @@ const handleUpload = async () => {
     const errMsg = err.response?.data?.message
     const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
 
-    if (duplicateMessage) {
+    if (errCode === 'RELEASE_LEAD_TIME_TOO_SHORT') {
+      const msg = errMsg || 'Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.'
+      uploadError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (errCode === 'INVALID_RELEASE_AT' || errCode === 'INVALID_RELEASE_DATE') {
+      const msg = 'Thời điểm phát hành không hợp lệ.'
+      uploadError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (duplicateMessage) {
       uploadError.value = duplicateMessage
       toast.showToast(duplicateMessage, 'error')
     } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
@@ -957,10 +1098,13 @@ const openDraftEditor = async (songId) => {
     const res = await artistStudioApi.getSongDetail(songId)
     if (res.data.success) {
       const song = res.data.song
+      const releaseParts = splitReleaseAtValue(song.releaseAt || song.release_at || song.releaseDate || song.release_date)
       uploadForm.value = {
         id: song.id,
         title: song.title || '',
         albumId: song.album?.id ? String(song.album.id) : '',
+        release_date: releaseParts.release_date,
+        release_time: releaseParts.release_time,
         lyrics: song.lyrics || '',
         submissionNote: song.submissionNote || '',
         audioFile: null,
@@ -1019,6 +1163,8 @@ const resubmitError = ref('')
 const resubmitForm = ref({
   id: null,
   title: '',
+  release_date: '',
+  release_time: '',
   lyrics: '',
   submissionNote: '',
   rejectionReason: '',
@@ -1027,9 +1173,12 @@ const resubmitForm = ref({
 })
 
 const openResubmitModal = (song) => {
+  const releaseParts = splitReleaseAtValue(song.releaseAt || song.release_at || song.releaseDate || song.release_date)
   resubmitForm.value = {
     id: song.id,
     title: song.title || '',
+    release_date: releaseParts.release_date,
+    release_time: releaseParts.release_time,
     lyrics: song.lyrics || '',
     submissionNote: song.submissionNote || song.submission_note || '',
     rejectionReason: song.rejectionReason || song.rejection_reason || '',
@@ -1066,6 +1215,7 @@ const handleResubmit = async () => {
   try {
     const formData = new FormData()
     formData.append('title', resubmitForm.value.title.trim())
+    formData.append('release_at', buildReleaseAtValue(resubmitForm.value))
     if (resubmitForm.value.lyrics.trim()) formData.append('lyrics', resubmitForm.value.lyrics.trim())
     if (resubmitForm.value.submissionNote.trim()) formData.append('submissionNote', resubmitForm.value.submissionNote.trim())
     if (resubmitForm.value.audioFile) formData.append('audio', resubmitForm.value.audioFile)
@@ -1086,7 +1236,15 @@ const handleResubmit = async () => {
     const errMsg = err.response?.data?.message
     const duplicateMessage = getDuplicateAudioMessage(err.response?.data)
 
-    if (duplicateMessage) {
+    if (errCode === 'RELEASE_LEAD_TIME_TOO_SHORT') {
+      const msg = errMsg || 'Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.'
+      resubmitError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (errCode === 'INVALID_RELEASE_AT' || errCode === 'INVALID_RELEASE_DATE') {
+      const msg = 'Thời điểm phát hành không hợp lệ.'
+      resubmitError.value = msg
+      toast.showToast(msg, 'error')
+    } else if (duplicateMessage) {
       resubmitError.value = duplicateMessage
       toast.showToast(duplicateMessage, 'error')
     } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
@@ -1547,6 +1705,23 @@ const handleResubmit = async () => {
   letter-spacing: 0.02em;
   line-height: 1;
 }
+
+.song-table .status-badge {
+  flex-direction: column;
+  gap: 3px;
+  white-space: nowrap;
+  max-width: 100%;
+  line-height: 1.05;
+}
+
+.status-badge-sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.9;
+  letter-spacing: 0;
+}
+
 .status-badge.approved, .status-badge.complete {
   background: rgba(46, 213, 115, 0.12);
   color: #2ed573;
@@ -1575,8 +1750,14 @@ const handleResubmit = async () => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.song-table .actions-cell .btn-icon {
+  padding: 6px 7px;
+  min-height: 28px;
+  font-size: 10px;
 }
 
 .btn-icon {
@@ -2023,6 +2204,16 @@ const handleResubmit = async () => {
   font-size: 12px;
 }
 
+.release-time-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 10px;
+}
+
+.release-time-grid .input-dark {
+  width: 100%;
+}
+
 .warning-text {
   color: var(--warning);
   font-size: 12px;
@@ -2040,6 +2231,10 @@ const handleResubmit = async () => {
 
 @media (max-width: 640px) {
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-time-grid {
     grid-template-columns: 1fr;
   }
 }

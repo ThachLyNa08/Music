@@ -47,6 +47,88 @@ const KEYWORD_RULES = [
   { terms: ['rock', 'indie'], keywords: ['rock', 'indie'] },
 ];
 
+const NEGATIVE_TERMS = ['khong lay', 'loai tru', 'tru', 'dung co', 'khong co', 'avoid', 'exclude', 'no'];
+const GENRE_EXCLUDE_RULES = [
+  { genre: 'ballad', terms: ['ballad'] },
+  { genre: 'rap_hiphop', terms: ['rap', 'hip hop', 'hiphop', 'hip-hop'] },
+  { genre: 'rnb', terms: ['rnb', 'r&b'] },
+  { genre: 'edm', terms: ['edm', 'remix', 'vinahouse'] },
+  { genre: 'rock_indie', terms: ['rock', 'indie'] },
+  { genre: 'acoustic', terms: ['acoustic'] },
+  { genre: 'lofi', terms: ['lofi', 'lo-fi'] },
+  { genre: 'dance', terms: ['dance'] },
+];
+
+const GENRE_EXCLUDE_ALIASES = {
+  ballad: ['ballad'],
+  rap_hiphop: ['rap', 'hip hop', 'hiphop', 'hip-hop'],
+  rnb: ['rnb', 'r&b'],
+  edm: ['edm', 'remix', 'vinahouse'],
+  rock_indie: ['rock', 'indie'],
+  acoustic: ['acoustic'],
+  lofi: ['lofi', 'lo-fi'],
+  dance: ['dance']
+};
+
+function detectNegativeSearchConstraints(normalizedPrompt = '') {
+  if (!NEGATIVE_TERMS.some((term) => normalizedPrompt.includes(term))) {
+    return { excludeGenres: [], excludeArtists: [] };
+  }
+
+  const excludeGenres = [];
+  for (const rule of GENRE_EXCLUDE_RULES) {
+    if (rule.terms.some((term) => normalizedPrompt.includes(normalizeText(term)))) {
+      excludeGenres.push(rule.genre);
+    }
+  }
+
+  return {
+    excludeGenres: [...new Set(excludeGenres)],
+    excludeArtists: []
+  };
+}
+
+function applySearchNegativeGuards(intent = {}, prompt = '') {
+  const normalizedPrompt = normalizeText(prompt || intent.rawPrompt || intent.normalizedPrompt || '');
+  const promptNegative = detectNegativeSearchConstraints(normalizedPrompt);
+  const genreLikeArtists = (intent.excludeArtists || [])
+    .map((value) => {
+      const normalized = normalizeText(value);
+      const match = GENRE_EXCLUDE_RULES.find((rule) => rule.terms.some((term) => normalizeText(term) === normalized));
+      return { value, genre: match?.genre || null };
+    })
+    .filter((item) => item.genre);
+  const genreLikeArtistValues = new Set(genreLikeArtists.map((item) => normalizeText(item.value)));
+  const excludeGenres = [
+    ...(intent.excludeGenres || []),
+    ...promptNegative.excludeGenres,
+    ...genreLikeArtists.map((item) => item.genre)
+  ];
+  const excludeArtists = (intent.excludeArtists || [])
+    .filter((value) => !genreLikeArtistValues.has(normalizeText(value)));
+  const excludedKeywordSet = new Set([
+    ...excludeGenres.flatMap((genre) => GENRE_EXCLUDE_ALIASES[genre] || [genre]),
+    ...excludeArtists,
+    'khong',
+    'lay',
+    'loai',
+    'tru',
+    'dung',
+    'co',
+    'avoid',
+    'exclude',
+    'no'
+  ].map((value) => normalizeText(value)));
+
+  return {
+    ...intent,
+    excludeGenres: [...new Set(excludeGenres)].filter(Boolean),
+    excludeArtists: [...new Set(excludeArtists)].filter(Boolean),
+    keywords: (intent.keywords || [])
+      .filter((keyword) => !excludedKeywordSet.has(normalizeText(keyword)))
+  };
+}
+
 function extractSongTitleQuery(prompt = '') {
   const normalized = normalizeText(prompt);
   const rawMatch = String(prompt).trim().match(/^(?:mở|mo|phát|phat|nghe|bật|bat|play)\s+(?:bài\s+hát|bai\s+hat|bài|bai)\s+(.+)$/i);
@@ -176,6 +258,7 @@ function parseIntent(prompt = '') {
   let songTitleQuery = extractSongTitleQuery(prompt);
   const seedSongQuery = extractSeedSongQuery(prompt);
   const beatIntent = detectBeatSearchIntent(prompt);
+  const negativeConstraints = detectNegativeSearchConstraints(normalized);
 
   if (seedSongQuery) {
     songTitleQuery = null;
@@ -222,12 +305,13 @@ function parseIntent(prompt = '') {
     'mo', 'phat', 'nghe', 'bat', 'play', 'tim', 'goi', 'y', 'de', 'xuat',
     'danh', 'sach', 'nhac', 'bai', 'hat', 'cho', 'minh', 'toi', 'mot', 'vai',
     'di', 'nhe', 'nha', 'playlist', 'cua', 'co', 'vibe', 'giong', 'kieu',
-    'tuong', 'tu', 'ca', 'khuc', 'track'
+    'tuong', 'tu', 'ca', 'khuc', 'track', 'khong', 'lay', 'loai', 'tru', 'dung'
   ]);
   const seedWords = new Set(normalizeText(seedSongQuery || '').split(/\s+/).filter(Boolean));
+  const excludedWords = new Set(negativeConstraints.excludeGenres.flatMap((genre) => GENRE_EXCLUDE_ALIASES[genre] || [genre]));
   const promptTerms = normalized
     .split(' ')
-    .filter((term) => term.length >= 2 && !filler.has(term) && !seedWords.has(term));
+    .filter((term) => term.length >= 2 && !filler.has(term) && !seedWords.has(term) && !excludedWords.has(term));
 
   return {
     rawPrompt: prompt,
@@ -240,6 +324,8 @@ function parseIntent(prompt = '') {
     market: market.length > 0 ? market : undefined,
     energy,
     rhythm: beatIntent?.rhythm,
+    excludeGenres: negativeConstraints.excludeGenres,
+    excludeArtists: negativeConstraints.excludeArtists,
     keywords: [...new Set([...matchedKeywords, ...promptTerms])].slice(0, 12),
   };
 }
@@ -291,17 +377,21 @@ async function parseIntentWithLlmFallback(prompt = '') {
     mode: 'ai_search',
     taxonomyIntent
   });
+  const guardedIntent = applySearchNegativeGuards(intentResult.intent, prompt);
+  const guardedParsedIntent = intentResult.parsedIntent
+    ? applySearchNegativeGuards(intentResult.parsedIntent, prompt)
+    : intentResult.parsedIntent;
 
   console.log('[AI Search Intent]', {
     provider: intentResult.provider,
     fallbackUsed: intentResult.fallbackUsed,
     fallbackReason: intentResult.fallbackReason,
-    parsedIntent: intentResult.parsedIntent,
-    intent: intentResult.intent
+    parsedIntent: guardedParsedIntent,
+    intent: guardedIntent
   });
 
   return {
-    ...intentResult.intent,
+    ...guardedIntent,
     llmProvider: intentResult.provider,
     llmFallbackUsed: intentResult.fallbackUsed,
     llmFallbackReason: intentResult.fallbackReason
@@ -456,8 +546,25 @@ function scoreFeatureSimilarity(feature, seedFeature) {
   return fields.reduce((sum, [value, target, weight]) => sum + Math.max(0, 1 - Math.abs(value - target)) * weight, 0);
 }
 
+function isExcludedBySearchIntent(row, intent = {}) {
+  const rowText = normalizeText(`${row.title || ''} ${row.artist_name || ''} ${row.genre_name || ''} ${row.genre_slug || ''}`);
+  for (const genre of intent.excludeGenres || []) {
+    const aliases = GENRE_EXCLUDE_ALIASES[genre] || [genre];
+    if (aliases.some((alias) => rowText.includes(normalizeText(alias)))) return true;
+  }
+  for (const artist of intent.excludeArtists || []) {
+    const normalizedArtist = normalizeText(artist);
+    if (normalizedArtist && normalizeText(row.artist_name || '').includes(normalizedArtist)) return true;
+  }
+  return false;
+}
+
 function scoreSemanticCandidate(row, intent) {
   let score = 0;
+
+  if (isExcludedBySearchIntent(row, intent)) {
+    return -10000;
+  }
 
   if (intent.artistQuery) {
     const normArtist = normalizeText(row.artist_name);
@@ -730,7 +837,12 @@ async function fetchTitleMatches({ titleQuery, currentSongId = null, userId = nu
 }
 
 async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userId = null, limit = 15 }) {
-  const searchValues = intent.keywords.length > 0 ? [...intent.keywords] : [intent.normalizedPrompt].filter(Boolean);
+  const excludedKeywordSet = new Set([
+    ...((intent.excludeGenres || []).flatMap((genre) => GENRE_EXCLUDE_ALIASES[genre] || [genre])),
+    ...(intent.excludeArtists || [])
+  ].map((value) => normalizeText(value)));
+  const searchValues = (intent.keywords.length > 0 ? [...intent.keywords] : [intent.normalizedPrompt].filter(Boolean))
+    .filter((value) => !excludedKeywordSet.has(normalizeText(value)));
   if (intent.artistQuery) {
     searchValues.push(normalizeText(intent.artistQuery));
   }
@@ -781,7 +893,9 @@ async function fetchKeywordMatches({ intent, prompt, currentSongId = null, userI
     LIMIT ?
   `, queryParams);
 
-  const scoredRows = rows.map(row => {
+  const scoredRows = rows
+    .filter((row) => !isExcludedBySearchIntent(row, intent))
+    .map(row => {
     return { ...row, _score: scoreSemanticCandidate(row, intent) };
   });
 

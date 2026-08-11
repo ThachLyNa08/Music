@@ -2,7 +2,7 @@
   <div 
     class="home-row group relative flex cursor-pointer items-center gap-4 px-4 py-2"
     :class="{ 'bg-white/5': isPlaying || active }"
-    @click="$router.push(`/song/${normalizedSong.id}`)"
+    @click="handleRowClick"
   >
     <!-- Left side -->
     <!-- Index / Play Icon -->
@@ -41,9 +41,15 @@
             {{ normalizedSong.artist }}
           </span>
         </div>
-        <div v-if="normalizedSong.matchType === 'lyrics'" class="text-xs text-gray-400 truncate mt-1 flex items-center gap-1.5">
+        <div v-if="isLyricsMatch" class="text-xs text-gray-400 truncate mt-1 flex items-center gap-1.5" :class="{ 'is-semantic-lyrics': normalizedSong.matchType === 'semantic_lyrics' }">
+           <span v-if="normalizedSong.matchType === 'semantic_lyrics'" class="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-semibold text-gray-300 uppercase leading-none shrink-0">Khớp ngữ nghĩa lời bài hát</span>
            <span class="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-semibold text-gray-300 uppercase leading-none shrink-0">Khớp lời bài hát</span>
-           <span v-if="normalizedSong.matchedSnippet" class="italic opacity-80 truncate">"{{ normalizedSong.matchedSnippet }}"</span>
+           <span
+             v-if="normalizedSong.highlightedSnippet"
+             class="lyric-snippet italic opacity-80 truncate"
+             v-html="normalizedSong.highlightedSnippet"
+           ></span>
+           <span v-else-if="lyricSnippet" class="italic opacity-80 truncate">"{{ lyricSnippet }}"</span>
         </div>
       </div>
     </div>
@@ -103,10 +109,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import CoverImage from '@/components/common/CoverImage.vue'
 import { getItemCover } from '@/utils/imageUrl'
 import { useLibraryStore } from '@/stores/library'
 import LikeButton from '@/components/common/LikeButton.vue'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const props = defineProps({
   song: { type: Object, required: true },
@@ -120,11 +128,13 @@ const props = defineProps({
   showPlays: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
   active: { type: Boolean, default: false },
-  isPlaying: { type: Boolean, default: false }
+  isPlaying: { type: Boolean, default: false },
+  playOnRowClick: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['play', 'open-menu', 'toggle-like'])
 const library = useLibraryStore()
+const router = useRouter()
 
 // Normalize different song formats from API
 const normalizedSong = computed(() => {
@@ -147,11 +157,19 @@ const normalizedSong = computed(() => {
   }
 })
 
+const lyricMatchTypes = new Set(['lyrics', 'lyrics_normalized', 'fuzzy_lyrics', 'semantic_lyrics'])
+const isLyricsMatch = computed(() => lyricMatchTypes.has(normalizedSong.value.matchType))
+const lyricSnippet = computed(() => (
+  normalizedSong.value.lyricSnippet
+  || normalizedSong.value.lyricsSnippet
+  || normalizedSong.value.lyric_snippet
+  || normalizedSong.value.matchedSnippet
+  || ''
+))
+
 const localFormatImageUrl = (url) => {
   if (!url) return '/default-cover.png' 
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatDuration(seconds) {
@@ -179,6 +197,16 @@ function openMenu(event) {
     x: rect.left,
     y: rect.bottom + 8
   })
+}
+
+function handleRowClick() {
+  if (props.playOnRowClick) {
+    emit('play', normalizedSong.value)
+    return
+  }
+  if (normalizedSong.value.id) {
+    router.push(`/song/${normalizedSong.value.id}`)
+  }
 }
 
 </script>
@@ -223,5 +251,16 @@ function openMenu(event) {
 .song-like-button--active .song-like-icon {
   fill: currentColor;
   stroke: currentColor;
+}
+
+.lyric-snippet :deep(mark) {
+  border-radius: 3px;
+  background: rgba(30, 215, 96, 0.18);
+  color: #bbf7d0;
+  padding: 0 2px;
+}
+
+.is-semantic-lyrics > span:nth-child(2) {
+  display: none;
 }
 </style>

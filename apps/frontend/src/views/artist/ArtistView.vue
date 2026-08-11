@@ -305,6 +305,7 @@ import ArtistCard from '@/components/common/ArtistCard.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import PlaybackButton from '@/components/common/PlaybackButton.vue'
 import { getItemCover } from '@/utils/imageUrl'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const route = useRoute()
 const router = useRouter()
@@ -364,8 +365,7 @@ const getAvatarUrl = (item) => {
   if (!item) return '/default-artist.png'
   let url = item.avatar_url || item.avatarUrl || item.image_url || item.thumbnail_url || item.avatar || '/default-artist.png'
   if (url.startsWith('http') || url.startsWith('/default-')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatDuration(seconds) {

@@ -2,8 +2,10 @@ const { pool } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const spotifyService = require('../services/spotify.service');
 const recommendationService = require('../services/recommendation.service');
+const { ensureLyricsSemanticIndexReady, searchLyricsSemantic } = require('../services/lyricsSemanticSearch.service');
 const { computeTempoMatchScore } = require('../utils/tempoFeature.util');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
+const { normalizeVietnamese, normalizeLyricsQueryIntent, escapeHtml } = require('../utils/vietnameseText.util');
 const {
   publicSongCondition,
   publicAlbumCondition,
@@ -19,6 +21,7 @@ function getUserId(req) {
 
 // Helper: normalize search text - bỏ dấu, gạch ngang → space
 function normalizeSearchText(value = '') {
+  return normalizeVietnamese(value);
   return String(value)
     .toLowerCase()
     .normalize('NFD')
@@ -129,6 +132,40 @@ function makeSnippet(cleanLyrics, startIndex, endIndex, context = 80) {
   return snippet;
 }
 
+function makeLineSnippet(cleanLyrics, startIndex, endIndex) {
+  if (!cleanLyrics || startIndex < 0) return null;
+  const lines = String(cleanLyrics).split('\n');
+  let offset = 0;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineStart = offset;
+    const lineEnd = offset + lines[i].length;
+    if (startIndex >= lineStart && startIndex <= lineEnd) {
+      const selected = lines
+        .slice(Math.max(0, i - 1), Math.min(lines.length, i + 2))
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join(' / ');
+      return selected || makeSnippet(cleanLyrics, startIndex, endIndex);
+    }
+    offset = lineEnd + 1;
+  }
+
+  return makeSnippet(cleanLyrics, startIndex, endIndex);
+}
+
+function highlightSnippet(snippet, queryTokens = []) {
+  if (!snippet) return null;
+  const tokenSet = new Set(queryTokens.filter(token => token.length >= 2));
+  const escaped = escapeHtml(snippet);
+  if (tokenSet.size === 0) return escaped;
+
+  return escaped.replace(/[\p{L}\p{N}]+/gu, (word) => {
+    const normalized = normalizeSearchText(word);
+    return tokenSet.has(normalized) ? `<mark>${word}</mark>` : word;
+  });
+}
+
 function findExactLyricWindow(lyricTokens, queryTokens) {
   if (!lyricTokens.length || !queryTokens.length) return null;
 
@@ -183,28 +220,90 @@ function findBestPartialLyricWindow(lyricTokens, queryTokens) {
   return best && best.count > 0 ? best : null;
 }
 
+function editDistanceWithinOne(a = '', b = '') {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  if (i < a.length || j < b.length) edits += 1;
+  return edits <= 1;
+}
+
+function findBestFuzzyLyricWindow(lyricTokens, queryTokens) {
+  const fuzzyTokens = queryTokens.filter(token => token.length >= 4);
+  if (!lyricTokens.length || !fuzzyTokens.length) return null;
+
+  let best = null;
+  const windowSize = Math.min(
+    lyricTokens.length,
+    Math.max(fuzzyTokens.length + 4, Math.ceil(fuzzyTokens.length * 1.6), 8)
+  );
+
+  for (let i = 0; i < lyricTokens.length; i += 1) {
+    const matched = new Set();
+    const endExclusive = Math.min(lyricTokens.length, i + windowSize);
+    for (let j = i; j < endExclusive; j += 1) {
+      for (const queryToken of fuzzyTokens) {
+        if (editDistanceWithinOne(lyricTokens[j].value, queryToken)) {
+          matched.add(queryToken);
+        }
+      }
+    }
+
+    if (!best || matched.size > best.count) {
+      best = {
+        count: matched.size,
+        start: lyricTokens[i].start,
+        end: lyricTokens[endExclusive - 1].end,
+      };
+    }
+  }
+
+  return best && best.count > 0 ? best : null;
+}
+
 function analyzeLyricsMatch(rawLyrics, normalizedQuery) {
   const cleanLyrics = stripLrcMetadata(rawLyrics || '');
   if (!cleanLyrics || !normalizedQuery) {
-    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+    return { score: 0, matchedSnippet: null, highlightedSnippet: null, matchType: null, exact: false, ratio: 0, matchedCount: 0 };
   }
 
   const orderedQueryTokens = getOrderedSearchTokens(normalizedQuery);
   const queryTokens = getLyricSearchTokens(normalizedQuery);
   if (orderedQueryTokens.length === 0 || queryTokens.length === 0) {
-    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+    return { score: 0, matchedSnippet: null, highlightedSnippet: null, matchType: null, exact: false, ratio: 0, matchedCount: 0 };
   }
 
   const lyricTokens = buildLyricTokenIndex(cleanLyrics);
   if (lyricTokens.length === 0) {
-    return { score: 0, matchedSnippet: null, exact: false, ratio: 0, matchedCount: 0 };
+    return { score: 0, matchedSnippet: null, highlightedSnippet: null, matchType: null, exact: false, ratio: 0, matchedCount: 0 };
   }
 
   const exactWindow = findExactLyricWindow(lyricTokens, orderedQueryTokens);
   if (exactWindow) {
+    const snippet = makeLineSnippet(cleanLyrics, exactWindow.start, exactWindow.end);
     return {
-      score: 95 + Math.min(orderedQueryTokens.length, 12) * 3,
-      matchedSnippet: makeSnippet(cleanLyrics, exactWindow.start, exactWindow.end),
+      score: 720 + Math.min(orderedQueryTokens.length, 12) * 4,
+      matchedSnippet: snippet,
+      highlightedSnippet: highlightSnippet(snippet, orderedQueryTokens),
+      matchType: 'lyrics_normalized',
       exact: true,
       ratio: 1,
       matchedCount: orderedQueryTokens.length,
@@ -219,18 +318,36 @@ function analyzeLyricsMatch(rawLyrics, normalizedQuery) {
     : Math.max(3, Math.ceil(queryTokens.length * 0.6));
 
   if (matchedCount < requiredMatches) {
-    return { score: 0, matchedSnippet: null, exact: false, ratio, matchedCount };
+    const fuzzyWindow = findBestFuzzyLyricWindow(lyricTokens, queryTokens);
+    const fuzzyRequired = queryTokens.length <= 2 ? queryTokens.length : Math.max(2, Math.ceil(queryTokens.length * 0.5));
+    if (!fuzzyWindow || fuzzyWindow.count < fuzzyRequired) {
+      return { score: 0, matchedSnippet: null, highlightedSnippet: null, matchType: null, exact: false, ratio, matchedCount };
+    }
+
+    const fuzzySnippet = makeLineSnippet(cleanLyrics, fuzzyWindow.start, fuzzyWindow.end);
+    return {
+      score: 260 + (fuzzyWindow.count / queryTokens.length) * 45,
+      matchedSnippet: fuzzySnippet,
+      highlightedSnippet: highlightSnippet(fuzzySnippet, queryTokens),
+      matchType: 'fuzzy_lyrics',
+      exact: false,
+      ratio: fuzzyWindow.count / queryTokens.length,
+      matchedCount: fuzzyWindow.count,
+    };
   }
 
   const partialWindow = findBestPartialLyricWindow(lyricTokens, queryTokens);
   if (!partialWindow || partialWindow.count < requiredMatches) {
-    return { score: 0, matchedSnippet: null, exact: false, ratio, matchedCount };
+    return { score: 0, matchedSnippet: null, highlightedSnippet: null, matchType: null, exact: false, ratio, matchedCount };
   }
 
   const windowRatio = partialWindow.count / queryTokens.length;
+  const partialSnippet = makeLineSnippet(cleanLyrics, partialWindow.start, partialWindow.end);
   return {
-    score: 58 + windowRatio * 35 + Math.min(partialWindow.count, 10) * 2,
-    matchedSnippet: makeSnippet(cleanLyrics, partialWindow.start, partialWindow.end),
+    score: 580 + windowRatio * 70 + Math.min(partialWindow.count, 10) * 3,
+    matchedSnippet: partialSnippet,
+    highlightedSnippet: highlightSnippet(partialSnippet, queryTokens),
+    matchType: 'lyrics_normalized',
     exact: false,
     ratio: windowRatio,
     matchedCount: partialWindow.count,
@@ -554,11 +671,32 @@ exports.getRecommendedSongs = async (req, res, next) => {
   }
 };
 
+async function fetchSearchSongsByIds(songIds = []) {
+  const ids = Array.from(new Set(songIds.map(Number).filter(id => Number.isInteger(id) && id > 0)));
+  if (ids.length === 0) return [];
+
+  const [rows] = await pool.query(`
+    SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count,
+           NULL AS lyrics,
+           NULL AS lyrics_normalized,
+           al.title as album, al.id as album_id,
+           a.name as artist, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre
+    FROM songs s
+    JOIN artists a ON s.artist_id = a.id
+    LEFT JOIN albums al ON s.album_id = al.id
+    LEFT JOIN genres g ON s.genre_id = g.id
+    WHERE ${publicSongCondition('s')} AND s.id IN (?)
+  `, [ids]);
+
+  return rows;
+}
+
 exports.searchSongs = async (req, res, next) => {
   try {
     const userId = getUserId(req);
     const q = (req.query.q || '').trim();
     const limit = Math.min(parseInt(req.query.limit) || 10, 30);
+    const includeLyrics = String(req.query.includeLyrics || 'true') !== 'false';
 
     if (!q || q.length < 1) {
       return res.json({ success: true, data: { songs: [], artists: [], albums: [], genres: [] } });
@@ -566,6 +704,7 @@ exports.searchSongs = async (req, res, next) => {
 
     const searchTerm = `%${q}%`;
     const normalizedQ = normalizeSearchText(q);
+    const lyricsIntentQ = normalizeLyricsQueryIntent(q) || normalizedQ;
     const compactQ = compactSearchText(q);
     const qNoAccent = normalizedQ;
     const searchTermNoAccent = `%${normalizedQ}%`;
@@ -578,7 +717,12 @@ exports.searchSongs = async (req, res, next) => {
     // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu, không dấu, LOWER case, token matching + genre aliases) ──
     const tokens = q.split(/\s+/).filter(t => t.length > 0);
     const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
-    const lyricProbeTokens = getLyricProbeTokens(normalizedQ, 5);
+    if (includeLyrics) {
+      await ensureLyricsSemanticIndexReady();
+    }
+    const semanticMatches = includeLyrics ? searchLyricsSemantic(q, { limit: 25 }) : [];
+    const semanticBySongId = new Map(semanticMatches.map(match => [Number(match.songId), match]));
+    const lyricProbeTokens = includeLyrics ? getLyricProbeTokens(lyricsIntentQ, 5) : [];
     const lyricRequiredTokens = lyricProbeTokens.slice(0, Math.min(3, lyricProbeTokens.length));
     const rawTokenByNorm = new Map();
     tokens.forEach((token) => {
@@ -587,6 +731,7 @@ exports.searchSongs = async (req, res, next) => {
     });
 
     const lyricSql = `COALESCE(NULLIF(sl.plain_lyrics, ''), NULLIF(s.lyrics, ''), NULLIF(sl.synced_lyrics, ''))`;
+    const lyricNormalizedSql = `COALESCE(NULLIF(sl.lyrics_normalized, ''), NULLIF(s.lyrics_normalized, ''))`;
     const lyricSearchExpr = sqlSearchExpr(lyricSql);
     let songWhereConditions = [
       `LOWER(s.title) LIKE LOWER(?)`,
@@ -618,10 +763,13 @@ exports.searchSongs = async (req, res, next) => {
       songParams.push(`%${t}%`);
     });
 
-    if (lyricRequiredTokens.length > 0) {
-      songWhereConditions.push(`(${lyricRequiredTokens.map(() => `(LOWER(${lyricSql}) LIKE LOWER(?) OR ${lyricSearchExpr} LIKE LOWER(?))`).join(' AND ')})`);
+    if (includeLyrics && lyricRequiredTokens.length > 0) {
+      songWhereConditions.push(`${lyricNormalizedSql} LIKE ?`);
+      songParams.push(`%${lyricsIntentQ}%`);
+      songWhereConditions.push(`(${lyricRequiredTokens.map(() => `(LOWER(${lyricSql}) LIKE LOWER(?) OR ${lyricSearchExpr} LIKE LOWER(?) OR ${lyricNormalizedSql} LIKE ?)`).join(' AND ')})`);
       lyricRequiredTokens.forEach((token) => {
         songParams.push(`%${rawTokenByNorm.get(token) || token}%`);
+        songParams.push(`%${token}%`);
         songParams.push(`%${token}%`);
       });
     }
@@ -633,9 +781,10 @@ exports.searchSongs = async (req, res, next) => {
 
     const songWhere = `${publicSongCondition('s')} AND (${songWhereConditions.join(' OR ')})`;
 
-    const [rows] = await pool.query(`
+    let [rows] = await pool.query(`
       SELECT s.id, s.title, s.duration_sec, s.audio_url, s.cover_url, s.artist_id, s.play_count,
              ${lyricSql} AS lyrics,
+             ${lyricNormalizedSql} AS lyrics_normalized,
              al.title as album, al.id as album_id,
              a.name as artist, a.name as artist_name, a.avatar_url as artist_avatar, g.name as genre
       FROM songs s
@@ -650,6 +799,7 @@ exports.searchSongs = async (req, res, next) => {
           WHEN LOWER(s.title) LIKE LOWER(?) OR ${sqlSearchExpr('s.title')} LIKE LOWER(?) THEN 1
           WHEN LOWER(a.name) LIKE LOWER(?) OR ${sqlSearchExpr('a.name')} LIKE LOWER(?) THEN 2
           WHEN LOWER(al.title) LIKE LOWER(?) OR ${sqlSearchExpr('al.title')} LIKE LOWER(?) THEN 3
+          WHEN ${lyricNormalizedSql} LIKE ? THEN 4
           ELSE 5
         END,
         s.play_count DESC
@@ -663,42 +813,82 @@ exports.searchSongs = async (req, res, next) => {
       searchTerm,
       searchTermNoAccent,
       searchTerm,
-      searchTermNoAccent
+      searchTermNoAccent,
+      `%${lyricsIntentQ}%`
     ]);
+
+    if (semanticBySongId.size > 0) {
+      const existingIds = new Set(rows.map(row => Number(row.id)));
+      const missingSemanticIds = Array.from(semanticBySongId.keys()).filter(id => !existingIds.has(id));
+      if (missingSemanticIds.length > 0) {
+        const semanticRows = await fetchSearchSongsByIds(missingSemanticIds);
+        rows = rows.concat(semanticRows);
+      }
+    }
 
     const scoredSongs = rows.map(row => {
       let score = 0;
-      let matchType = 'semantic';
+      let matchType = 'token';
       let matchedSnippet = null;
+      let highlightedSnippet = null;
       let matchedField = null;
+      let reasonText = null;
 
       const normTitle = normalizeSearchText(row.title);
       const normQuery = normalizedQ;
+      const lyricNormQuery = lyricsIntentQ;
       const normArtist = normalizeSearchText(row.artist_name);
       const normAlbum = normalizeSearchText(row.album || '');
-      const lyricsMatch = analyzeLyricsMatch(row.lyrics, normQuery);
+      const lyricsMatch = analyzeLyricsMatch(row.lyrics, lyricNormQuery);
+      const semanticMatch = semanticBySongId.get(Number(row.id));
+      const rawLyricText = stripLrcMetadata(row.lyrics || '');
+      const rawLyricIndex = rawLyricText.toLowerCase().indexOf(q.toLowerCase());
+      const rawLyricsMatch = includeLyrics && rawLyricIndex >= 0
+        ? {
+          score: 700,
+          matchedSnippet: makeLineSnippet(rawLyricText, rawLyricIndex, rawLyricIndex + q.length),
+        }
+        : null;
 
       if (normTitle === normQuery) {
-        score += 120;
+        score += 1000;
         matchType = 'title';
         matchedField = 'title';
       } else if (normTitle.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normTitle)) {
-        score += 90;
+        score += 900;
         matchType = 'title';
         matchedField = 'title';
       } else if (normArtist === normQuery || normArtist.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normArtist)) {
-        score += 80;
+        score += 800;
         matchType = 'artist';
         matchedField = 'artist';
       } else if (normAlbum && (normAlbum.includes(normQuery) || isMeaningfulReverseMatch(normQuery, normAlbum))) {
-        score += 50;
+        score += 700;
         matchType = 'album';
         matchedField = 'album';
-      } else if (lyricsMatch.score > 0) {
-        score += lyricsMatch.score;
+      } else if (rawLyricsMatch) {
+        score += rawLyricsMatch.score;
         matchType = 'lyrics';
         matchedField = 'lyrics';
+        matchedSnippet = rawLyricsMatch.matchedSnippet;
+        highlightedSnippet = highlightSnippet(matchedSnippet, getOrderedSearchTokens(lyricNormQuery));
+        reasonText = 'Khớp với đoạn lời bài hát';
+      } else if (includeLyrics && lyricsMatch.score > 0) {
+        score += lyricsMatch.score;
+        matchType = lyricsMatch.matchType || 'lyrics_normalized';
+        matchedField = 'lyrics';
         matchedSnippet = lyricsMatch.matchedSnippet;
+        highlightedSnippet = lyricsMatch.highlightedSnippet;
+        reasonText = matchType === 'fuzzy_lyrics'
+          ? 'Khớp gần đúng với lời bài hát'
+          : 'Khớp với lời bài hát sau khi chuẩn hóa không dấu';
+      } else if (includeLyrics && semanticMatch) {
+        score += 430 + semanticMatch.vectorScore * 180;
+        matchType = 'semantic_lyrics';
+        matchedField = 'lyrics';
+        matchedSnippet = semanticMatch.lyricSnippet;
+        highlightedSnippet = semanticMatch.highlightedSnippet;
+        reasonText = 'Khớp ngữ nghĩa lời bài hát';
       } else {
         const queryTokens = getSearchTokens(normQuery);
         if (queryTokens.length > 0) {
@@ -714,33 +904,51 @@ exports.searchSongs = async (req, res, next) => {
           });
 
           if (matchCount > 0) {
-            score += matchCount * 15;
+            score += matchCount * 30;
             matchType = 'token';
             matchedField = 'token';
           }
         }
       }
 
-      score += Math.min(Number(row.play_count) || 0, 1000000) / 100000 * 10;
+      score += Math.min(Number(row.play_count) || 0, 1000000) / 100000;
 
       return {
          ...row,
          _score: score,
+         matchScore: Number(score.toFixed(3)),
          matchType,
          matchedSnippet,
+         lyricSnippet: matchedSnippet,
+         highlightedSnippet,
          lyric_snippet: matchedSnippet,
          lyricsSnippet: matchedSnippet,
-         matchedField
+         matchedField,
+         reasonText,
+         debugSearch: req.query.debug === 'true' ? {
+           keywordScore: matchType === 'semantic_lyrics' ? 0 : Number(score.toFixed(3)),
+           vectorScore: semanticMatch?.vectorScore || 0,
+           matchedChunk: semanticMatch?.matchedChunk || null,
+           finalScore: Number(score.toFixed(3)),
+         } : undefined
       };
     });
 
-    const songs = scoredSongs
+    const dedupedSongs = Array.from(scoredSongs.reduce((map, song) => {
+      const id = Number(song.id);
+      const current = map.get(id);
+      if (!current || song._score > current._score) map.set(id, song);
+      return map;
+    }, new Map()).values());
+
+    const songs = dedupedSongs
       .filter(s => s._score > 0)
       .sort((a, b) => b._score - a._score)
       .slice(0, limit)
       .map(row => {
          delete row._score;
          delete row.lyrics;
+         delete row.lyrics_normalized;
          return row;
       });
 

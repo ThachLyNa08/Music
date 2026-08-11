@@ -5,7 +5,7 @@ export const songApi = {
   getTrending: () => api.get('/songs/trending'),
   getRecommended: () => api.get('/songs/recommended'),
   getLiked: () => api.get('/songs/liked'),
-  search: (q, limit = 10, config = {}) => api.get('/songs/search', { params: { q, limit }, ...config }),
+  search: (q, limit = 10, config = {}) => api.get('/songs/search', { params: { q, limit, includeLyrics: true }, ...config }),
   getSuggestions: (q, config = {}) => api.get('/songs/suggestions', { params: { q }, ...config }),
   getSongDetail: (id) => api.get(`/songs/${id}/detail`),
   getRelatedSongs: (id, limit = 10) => api.get(`/songs/${id}/related`, { params: { limit } }),

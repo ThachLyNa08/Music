@@ -211,6 +211,31 @@ function getScheduledForDateTime(rule, date = new Date()) {
   return `${parts.dateKey} ${hour}:${minute}:00`;
 }
 
+function getLatestScheduledForDateTime(rule, date = new Date(), timezone = DEFAULT_TIMEZONE) {
+  const parts = getVietnamDateParts(date, timezone);
+  const scheduledMinutes = Number(rule.hour || 0) * 60 + Number(rule.minute || 0);
+  const currentMinutes = Number(parts.hour || 0) * 60 + Number(parts.minute || 0);
+  let dayOffset = 0;
+
+  if (rule.frequency === 'weekly') {
+    dayOffset = -((parts.dayOfWeek - Number(rule.dayOfWeek) + 7) % 7);
+    if (dayOffset === 0 && currentMinutes < scheduledMinutes) dayOffset = -7;
+  } else if (currentMinutes < scheduledMinutes) {
+    dayOffset = -1;
+  }
+
+  const scheduledParts = dayOffset === 0 ? parts : shiftVietnamDateParts(parts, dayOffset, timezone);
+  return formatLocalDateTime(scheduledParts, rule.hour || 0, rule.minute || 0, 0);
+}
+
+function formatScheduledForDisplay(value) {
+  if (!value) return null;
+  const text = String(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return `00:00 ${match[3]}/${match[2]}/${match[1]}`;
+}
+
 function isSameVietnamDate(value, date = new Date()) {
   if (!value) return false;
   return getVietnamDateParts(new Date(value)).dateKey === getVietnamDateParts(date).dateKey;
@@ -253,6 +278,8 @@ module.exports = {
   getAllSystemPlaylistScheduleRules,
   getDueSystemPlaylistScheduleRules,
   getScheduledForDateTime,
+  getLatestScheduledForDateTime,
+  formatScheduledForDisplay,
   getClosedAnalysisWindow,
   getVietnamDateParts,
   isRuleDueToday,

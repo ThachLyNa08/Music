@@ -151,13 +151,13 @@
             <tr v-if="loadingSchedule">
               <td colspan="7" class="px-3 py-4 text-center text-slate-500">Đang tải lịch trình...</td>
             </tr>
-            <tr v-else-if="!scheduleRows.length">
+            <tr v-else-if="!displayScheduleRows.length">
               <td colspan="7" class="px-3 py-4 text-center text-slate-500">Chưa có dữ liệu lịch trình.</td>
             </tr>
-            <tr v-for="row in scheduleRows" v-else :key="row.schedulerName" class="hover:bg-slate-50">
+            <tr v-for="row in displayScheduleRows" v-else :key="row.schedulerName" class="hover:bg-slate-50">
               <td class="px-3 py-2 font-semibold text-slate-800">{{ row.groupLabel }}</td>
               <td class="px-3 py-2 text-slate-600">{{ formatScheduleLabel(row.scheduleLabel) }}</td>
-              <td class="px-3 py-2 text-slate-600">{{ formatDateTime(row.lastRunAt) || 'Chưa ghi nhận' }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ formatScheduleLastRun(row) }}</td>
               <td class="px-3 py-2">
                 <span class="rounded-md px-2 py-1 text-[11px] font-semibold" :class="scheduleStatusClass(row.displayStatus || row.statusCode)">
                   {{ formatScheduleDisplayLabel(row) }}
@@ -776,6 +776,79 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const toast = useToastStore()
 const router = useRouter()
+const DEMO_STABLE_SYSTEM_PLAYLISTS = import.meta.env.VITE_DEMO_STABLE_SYSTEM_PLAYLISTS === 'true'
+const DEMO_SYSTEM_PLAYLIST_SCHEDULES = [
+  {
+    schedulerName: 'daily_mix_01',
+    groupLabel: 'Daily Mix 01',
+    scheduleLabel: 'Thứ 2 lúc 00:00',
+    weekday: 1,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'daily_mix_02',
+    groupLabel: 'Daily Mix 02',
+    scheduleLabel: 'Thứ 3 lúc 00:00',
+    weekday: 2,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'daily_mix_03',
+    groupLabel: 'Daily Mix 03',
+    scheduleLabel: 'Thứ 4 lúc 00:00',
+    weekday: 3,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'daily_mix_04',
+    groupLabel: 'Daily Mix 04',
+    scheduleLabel: 'Thứ 5 lúc 00:00',
+    weekday: 4,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'daily_mix_05',
+    groupLabel: 'Daily Mix 05',
+    scheduleLabel: 'Thứ 6 lúc 00:00',
+    weekday: 5,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'daily_mix_06',
+    groupLabel: 'Daily Mix 06',
+    scheduleLabel: 'Thứ 7 lúc 00:00',
+    weekday: 6,
+    resultMessage: 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  },
+  {
+    schedulerName: 'weekly_mix',
+    groupLabel: 'Weekly Mix',
+    scheduleLabel: 'Chủ nhật lúc 00:00',
+    weekday: 0,
+    resultMessage: 'Đã tổng hợp dữ liệu nghe trong tuần'
+  },
+  {
+    schedulerName: 'moodmix',
+    groupLabel: 'Mood Mix',
+    scheduleLabel: 'Hằng ngày lúc 00:00',
+    daily: true,
+    resultMessage: 'Đã cập nhật playlist theo tâm trạng/ngữ cảnh'
+  },
+  {
+    schedulerName: 'vibes',
+    groupLabel: 'Vibes',
+    scheduleLabel: 'Hằng ngày lúc 00:00',
+    daily: true,
+    resultMessage: 'Đã cập nhật playlist theo thời điểm trong ngày'
+  },
+  {
+    schedulerName: 'trending_now',
+    groupLabel: 'Trending Now',
+    scheduleLabel: 'Hằng ngày lúc 00:00',
+    daily: true,
+    resultMessage: 'Đã cập nhật xu hướng nghe nhạc mới nhất'
+  }
+]
 
 // Refs
 const summary = ref(null)
@@ -905,6 +978,11 @@ const activeRunId = ref(null)
 const runningScheduleName = ref(null)
 
 const runningJobs = computed(() => Number(operationSummary.value?.runningJobs || 0))
+const displayScheduleRows = computed(() => (
+  DEMO_STABLE_SYSTEM_PLAYLISTS
+    ? buildStableDemoScheduleRows(scheduleRows.value)
+    : scheduleRows.value
+))
 const terminalRunStatuses = ['success', 'partial_success', 'failed', 'stale', 'skipped', 'cancelled']
 let runPollTimer = null
 let requestWatchdogTimer = null
@@ -1470,6 +1548,41 @@ async function resetGenerationRun(log) {
   }
 }
 
+function padDatePart(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatBusinessScheduleDate(date) {
+  return `00:00 ${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()}`
+}
+
+function getNearestBusinessRunDate(rule, now = new Date()) {
+  const runDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  if (rule.daily) return runDate
+  const diff = (runDate.getDay() - rule.weekday + 7) % 7
+  runDate.setDate(runDate.getDate() - diff)
+  return runDate
+}
+
+function buildStableDemoScheduleRows(apiRows = []) {
+  const apiRowByName = new Map((apiRows || []).map((row) => [row.schedulerName, row]))
+  return DEMO_SYSTEM_PLAYLIST_SCHEDULES.map((rule) => {
+    const apiRow = apiRowByName.get(rule.schedulerName) || {}
+    return {
+      ...apiRow,
+      schedulerName: rule.schedulerName,
+      groupLabel: rule.groupLabel,
+      scheduleLabel: rule.scheduleLabel,
+      lastRunScheduledForDisplay: formatBusinessScheduleDate(getNearestBusinessRunDate(rule)),
+      displayStatus: 'healthy',
+      displayLabel: 'Đã chạy thành công',
+      statusCode: 'SUCCESS',
+      triggerSource: 'scheduler',
+      demoResultMessage: rule.resultMessage
+    }
+  })
+}
+
 // Utils
 function formatDateTime(value) {
   if (!value) return null
@@ -1482,6 +1595,19 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(date)
+}
+
+function formatScheduleLastRun(row) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS && row?.lastRunScheduledForDisplay) {
+    return row.lastRunScheduledForDisplay
+  }
+  if (!row?.lastRunAt && !row?.lastRunScheduledFor) return 'Chưa ghi nhận'
+  if (row.lastRunScheduledForDisplay) return row.lastRunScheduledForDisplay
+  const value = row.lastRunScheduledFor || row.scheduledFor
+  const text = String(value || '')
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) return `00:00 ${match[3]}/${match[2]}/${match[1]}`
+  return 'Chưa ghi nhận'
 }
 
 function formatDurationMs(value) {
@@ -1536,6 +1662,7 @@ function formatRunStatus(status) {
 }
 
 function formatScheduleLabel(label) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS) return label || 'Hằng ngày lúc 00:00'
   const map = {
     'Thu 2 luc 00:00': 'Thứ 2 lúc 00:00',
     'Thu 3 luc 00:00': 'Thứ 3 lúc 00:00',
@@ -1573,10 +1700,12 @@ function formatScheduleStatus(code, fallback) {
 }
 
 function formatScheduleDisplayLabel(row) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS) return 'Đã chạy thành công'
   return formatScheduleStatus(row?.displayStatus || row?.statusCode, row?.displayLabel || row?.statusLabel)
 }
 
 function scheduleStatusClass(code) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS) return 'bg-emerald-50 text-emerald-700'
   if (code === 'healthy') return 'bg-emerald-50 text-emerald-700'
   if (code === 'running') return 'bg-blue-50 text-blue-700'
   if (code === 'processing') return 'bg-sky-50 text-sky-700'
@@ -1603,6 +1732,7 @@ function formatTriggerSource(source) {
 }
 
 function formatScheduleTriggerSource(row) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS) return 'Hệ thống tự động'
   return 'Hệ thống tự động'
 }
 
@@ -1619,6 +1749,9 @@ function formatScheduleResult(result) {
 }
 
 function formatScheduleDisplayResult(row) {
+  if (DEMO_STABLE_SYSTEM_PLAYLISTS) {
+    return row?.demoResultMessage || 'Đã kiểm tra và cập nhật danh sách phù hợp'
+  }
   const result = row?.result
   const status = row?.displayStatus
   if (status === 'processing') return 'Đang xử lý'

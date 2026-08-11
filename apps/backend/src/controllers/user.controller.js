@@ -22,6 +22,30 @@ function toPublicUsername(email) {
   return username || null;
 }
 
+function listeningTimeExpr(alias = 'lh') {
+  return `COALESCE(${alias}.listened_at, ${alias}.created_at)`;
+}
+
+function buildListeningTimeFilter(query = {}, defaultRange = 'this_month') {
+  const { time_range, month } = query;
+  const timeExpr = listeningTimeExpr('lh');
+
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    return `AND ${timeExpr} >= '${month}-01' AND ${timeExpr} < DATE_ADD('${month}-01', INTERVAL 1 MONTH)`;
+  }
+  if (time_range === 'all_time') {
+    return '';
+  }
+  if (time_range === 'last_30_days' || (!time_range && defaultRange === 'last_30_days')) {
+    return `AND ${timeExpr} >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
+  }
+  if (time_range === 'this_month' || defaultRange === 'this_month') {
+    return `AND ${timeExpr} >= DATE_FORMAT(NOW(), '%Y-%m-01')`;
+  }
+
+  return '';
+}
+
 exports.getPublicProfile = async (req, res, next) => {
   try {
     const userId = Number(req.params.id);
@@ -128,18 +152,7 @@ exports.getProfileStats = async (req, res, next) => {
       stats = statRows[0];
     }
 
-    const { time_range, month } = req.query;
-
-    let timeFilter = "AND lh.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      timeFilter = `AND lh.created_at >= '${month}-01' AND lh.created_at < DATE_ADD('${month}-01', INTERVAL 1 MONTH)`;
-    } else if (time_range === 'all_time') {
-      timeFilter = "";
-    } else if (time_range === 'this_month') {
-      timeFilter = "AND lh.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')";
-    } else if (time_range === 'last_30_days') {
-      timeFilter = "AND lh.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-    }
+    const timeFilter = buildListeningTimeFilter(req.query, 'last_30_days');
 
     // 2. Get top artist this month (based on listening history)
     const [artistRows] = await pool.query(`
@@ -191,25 +204,17 @@ exports.getRecentlyPlayed = async (req, res, next) => {
     const userId = req.user.id;
     // Tăng giới hạn tối đa từ 100 lên 500 để client có thể lấy dữ liệu lịch sử cũ hơn (nhiều ngày trước)
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
-    const { time_range, month } = req.query;
-
-    let timeFilter = "";
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      timeFilter = `AND lh.created_at >= '${month}-01' AND lh.created_at < DATE_ADD('${month}-01', INTERVAL 1 MONTH)`;
-    } else if (time_range === 'this_month') {
-      timeFilter = "AND lh.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')";
-    } else if (time_range === 'last_30_days') {
-      timeFilter = "AND lh.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-    }
+    const timeFilter = buildListeningTimeFilter(req.query, 'all_time');
 
     const [history] = await pool.query(`
       WITH ranked_history AS (
         SELECT
           lh.*,
-          DATE(lh.created_at) AS listen_date,
+          ${listeningTimeExpr('lh')} AS activity_at,
+          DATE(${listeningTimeExpr('lh')}) AS listen_date,
           ROW_NUMBER() OVER (
-            PARTITION BY lh.user_id, lh.song_id, DATE(lh.created_at)
-            ORDER BY lh.created_at DESC
+            PARTITION BY lh.user_id, lh.song_id, DATE(${listeningTimeExpr('lh')})
+            ORDER BY ${listeningTimeExpr('lh')} DESC
           ) AS rn
         FROM listening_history lh
         WHERE lh.user_id = ? ${timeFilter}
@@ -224,7 +229,7 @@ exports.getRecentlyPlayed = async (req, res, next) => {
         rh.is_completed,
         rh.is_skipped,
         rh.source,
-        rh.created_at,
+        rh.activity_at AS created_at,
 
         s.id,
         s.title,
@@ -251,7 +256,7 @@ exports.getRecentlyPlayed = async (req, res, next) => {
       LEFT JOIN genres g ON s.genre_id = g.id
       LEFT JOIN song_likes sl ON sl.song_id = s.id AND sl.user_id = ?
       WHERE rh.rn = 1
-      ORDER BY rh.created_at DESC
+      ORDER BY rh.activity_at DESC
       LIMIT ?
     `, [userId, userId, limit]);
 
@@ -268,18 +273,7 @@ exports.getRecentlyPlayed = async (req, res, next) => {
 exports.getFullProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { time_range, month } = req.query;
-
-    let timeFilter = "AND lh.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')";
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      timeFilter = `AND lh.created_at >= '${month}-01' AND lh.created_at < DATE_ADD('${month}-01', INTERVAL 1 MONTH)`;
-    } else if (time_range === 'last_30_days') {
-      timeFilter = "AND lh.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-    } else if (time_range === 'all_time') {
-      timeFilter = "";
-    } else if (time_range === 'this_month') {
-      timeFilter = "AND lh.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')";
-    }
+    const timeFilter = buildListeningTimeFilter(req.query, 'this_month');
 
     // 1. User Info
     const [users] = await pool.query(
@@ -297,7 +291,7 @@ exports.getFullProfile = async (req, res, next) => {
       SELECT
         COALESCE(SUM(listen_duration), 0) AS total_listening_seconds,
         COUNT(*) AS total_songs_played,
-        COUNT(DISTINCT DATE(lh.created_at)) AS active_days,
+        COUNT(DISTINCT DATE(${listeningTimeExpr('lh')})) AS active_days,
         COUNT(DISTINCT s.artist_id) AS unique_artists,
         COUNT(DISTINCT s.genre_id) AS unique_genres
       FROM listening_history lh
@@ -376,16 +370,16 @@ exports.getFullProfile = async (req, res, next) => {
     const [recentlyPlayed] = await pool.query(`
       WITH ranked_history AS (
         SELECT
-          lh.id, lh.song_id, lh.created_at, lh.source,
+          lh.id, lh.song_id, ${listeningTimeExpr('lh')} AS activity_at, lh.source,
           ROW_NUMBER() OVER (
-            PARTITION BY lh.user_id, lh.song_id, DATE(lh.created_at)
-            ORDER BY lh.created_at DESC
+            PARTITION BY lh.user_id, lh.song_id, DATE(${listeningTimeExpr('lh')})
+            ORDER BY ${listeningTimeExpr('lh')} DESC
           ) AS rn
         FROM listening_history lh
         WHERE lh.user_id = ?
       )
       SELECT
-        rh.id AS history_id, rh.created_at, rh.source,
+        rh.id AS history_id, rh.activity_at AS created_at, rh.source,
         s.id, s.title, s.cover_url, s.audio_url, s.duration_sec,
         a.id AS artist_id, a.name AS artist_name,
         al.id AS album_id, al.title AS album_title,
@@ -396,7 +390,7 @@ exports.getFullProfile = async (req, res, next) => {
       LEFT JOIN albums al ON s.album_id = al.id
       LEFT JOIN song_likes sl ON sl.song_id = s.id AND sl.user_id = ?
       WHERE rh.rn = 1
-      ORDER BY rh.created_at DESC
+      ORDER BY rh.activity_at DESC
       LIMIT 20
     `, [userId, userId]);
 

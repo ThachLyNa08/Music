@@ -285,6 +285,20 @@ function validateAndNormalizeIntent(rawIntent, fallbackIntent = {}) {
         textSignals.some((x) => ['chill', 'calm', 'focus', 'study', 'relax', 'sad'].includes(x)) ||
         ['study', 'focus', 'sleep', 'relax'].includes(String(normalized.activity || '').toLowerCase());
 
+    const genreLikeExcludeArtists = normalized.excludeArtists
+        .map((value) => ({ value, genre: mapGenre(value) }))
+        .filter((item) => item.genre);
+    if (genreLikeExcludeArtists.length) {
+        const genreLikeValues = new Set(genreLikeExcludeArtists.map((item) => item.value));
+        normalized.excludeArtists = normalized.excludeArtists.filter((value) => !genreLikeValues.has(value));
+        normalized.excludeGenres = [
+            ...new Set([
+                ...normalized.excludeGenres,
+                ...genreLikeExcludeArtists.map((item) => item.genre)
+            ])
+        ];
+    }
+
     if (isChillStudy && normalized.energy === 'high') {
         normalized.energy = 'low_or_medium';
         normalized.avoidEnergy = 'high';
@@ -463,6 +477,8 @@ function mergeAssistantIntent(fallbackIntent = {}, flatIntent = {}, options = {}
     if (normalized.market && explicitMarket) next.market = [normalized.market];
     if (normalized.energy === 'low_or_medium') next.energy = 'low';
     else if (normalized.energy) next.energy = normalized.energy;
+    next.excludeGenres = [...new Set([...(next.excludeGenres || []), ...normalized.excludeGenres.map(mapGenre).filter(Boolean)])];
+    next.excludeArtists = [...new Set([...(next.excludeArtists || []), ...normalized.excludeArtists])];
 
     for (const value of [
         ...normalized.genres,
@@ -476,7 +492,15 @@ function mergeAssistantIntent(fallbackIntent = {}, flatIntent = {}, options = {}
         if (keyword) keywords.add(keyword);
     }
 
-    next.keywords = [...keywords].filter(Boolean).slice(0, 12);
+    const excludedKeywords = new Set([
+        ...next.excludeGenres.map((value) => normalizeText(value)),
+        ...next.excludeArtists.map((value) => normalizeText(value))
+    ]);
+    next.keywords = [...keywords]
+        .filter(Boolean)
+        .filter((keyword) => !excludedKeywords.has(normalizeText(keyword)))
+        .filter((keyword) => !['khong', 'lay', 'loai', 'tru', 'dung', 'co', 'avoid'].includes(normalizeText(keyword)))
+        .slice(0, 12);
     next.llmIntentApplied = true;
     next.llmProvider = flatIntent?._provider || 'unknown';
     if (Object.values(normalized.rhythm || {}).some(Boolean)) {

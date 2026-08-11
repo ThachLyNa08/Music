@@ -1,5 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
-const ASSET_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '') || 'http://localhost:3000'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 export const DEFAULT_COVER = '/images/default-cover.svg'
 
@@ -31,12 +30,9 @@ export function normalizeImageUrl(url) {
     return clean
   }
 
-  if (clean.startsWith('/uploads')) {
-    return `${ASSET_BASE_URL}${clean}`
-  }
-
-  if (clean.startsWith('uploads')) {
-    return `${ASSET_BASE_URL}/${clean}`
+  const backendUrl = toBackendAssetUrl(clean)
+  if (backendUrl !== clean) {
+    return backendUrl
   }
 
   if (clean.startsWith('/images')) {
@@ -77,11 +73,9 @@ export function normalizeCoverUrl(url) {
   if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
     return clean;
   }
-  if (clean.startsWith('/uploads')) {
-    return `${ASSET_BASE_URL}${clean}`;
-  }
-  if (clean.startsWith('uploads')) {
-    return `${ASSET_BASE_URL}/${clean}`;
+  const backendUrl = toBackendAssetUrl(clean);
+  if (backendUrl !== clean) {
+    return backendUrl;
   }
   if (clean.startsWith('/images')) {
     return clean;

@@ -824,6 +824,7 @@ import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import ChatListenTogether from './components/ChatListenTogether.vue'
 import SystemMessageItem from '@/components/chat/SystemMessageItem.vue'
 import { useToastStore } from '@/stores/toast'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const UserAvatar = {
   props: {
@@ -855,9 +856,7 @@ const UserAvatar = {
   methods: {
     resolveAvatar(url) {
       if (!url) return ''
-      if (url.startsWith('http')) return url
-      const baseURL = (api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000/api').replace(/\/api\/?$/, '')
-      return `${baseURL}${url.startsWith('/') ? '' : '/'}${url}`
+      return toBackendAssetUrl(url)
     },
   },
 }

@@ -67,6 +67,7 @@ Quy tac:
 - "gym", "tap luyen", "chay bo", "soi dong", "chay" => tempo fast, energy high.
 - "buon", "sad", "co don", "tam trang" => mood sad/relax, energy low_or_medium.
 - "khong lay", "loai tru", "tru", "dung co" => dua vao excludeGenres/excludeArtists/negative constraints.
+- Neu tu bi loai tru la genre nhu "ballad", "rap", "R&B", "EDM", "lofi", "acoustic", "dance" thi bat buoc dua vao excludeGenres, khong dua vao excludeArtists.
 - Prompt tao playlist => action create_playlist.
 - Prompt mo/tim nhac => action search hoac play.
 - "KPOP", "VPOP", "USUK" la market, khong phai artist. Khong dung mode direct_artist neu prompt chi noi KPOP/VPOP/USUK ma khong co ten nghe si cu the.

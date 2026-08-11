@@ -131,21 +131,21 @@ exports.getPremiumUsers = async (req, res, next) => {
       params.push(`%${q}%`, `%${q}%`, q);
     }
 
-    if (plan && plan !== 'Táº¥t cáº£') {
+    if (plan && plan !== 'Tất cả') {
       whereClause += ' AND p.name = ?';
       params.push(plan);
     }
 
-    const statusVal = status || 'Táº¥t cáº£ Premium';
-    if (statusVal === 'Táº¥t cáº£ Premium') {
+    const statusVal = status || 'Tất cả Premium';
+    if (statusVal === 'Tất cả Premium') {
       whereClause += " AND (u.premium_expires_at IS NOT NULL OR EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid'))";
-    } else if (statusVal === 'Äang hoáº¡t Ä‘á»™ng') {
+    } else if (statusVal === 'Đang hoạt động') {
       whereClause += ' AND u.premium_expires_at > NOW()';
-    } else if (statusVal === 'Sáº¯p háº¿t háº¡n') {
+    } else if (statusVal === 'Sắp hết hạn') {
       whereClause += ' AND u.premium_expires_at > NOW() AND u.premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)';
-    } else if (statusVal === 'ÄĂ£ háº¿t háº¡n') {
+    } else if (statusVal === 'Đã hết hạn') {
       whereClause += ' AND (u.premium_expires_at IS NOT NULL AND u.premium_expires_at <= NOW())';
-    } else if (statusVal === 'ChÆ°a Premium') {
+    } else if (statusVal === 'Chưa Premium') {
       whereClause += " AND u.premium_expires_at IS NULL AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid')";
     }
 
@@ -160,13 +160,13 @@ exports.getPremiumUsers = async (req, res, next) => {
     }
 
     let orderClause = 'ORDER BY u.created_at DESC';
-    if (sort === 'Háº¿t háº¡n gáº§n nháº¥t') {
+    if (sort === 'Hết hạn gần nhất') {
       orderClause = 'ORDER BY CASE WHEN u.premium_expires_at > NOW() THEN 0 ELSE 1 END, u.premium_expires_at ASC, u.id DESC';
-    } else if (sort === 'Má»›i nĂ¢ng cáº¥p gáº§n Ä‘Ă¢y') {
+    } else if (sort === 'Mới nâng cấp gần đây') {
       orderClause = 'ORDER BY (SELECT MAX(paid_at) FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = "paid") DESC, u.id DESC';
-    } else if (sort === 'Chi tiĂªu cao nháº¥t') {
+    } else if (sort === 'Chi tiêu cao nhất') {
       orderClause = 'ORDER BY (SELECT COALESCE(SUM(amount), 0) FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = "paid") DESC, u.id DESC';
-    } else if (sort === 'TĂªn A-Z') {
+    } else if (sort === 'Tên A-Z') {
       orderClause = 'ORDER BY u.display_name ASC, u.id DESC';
     }
 
@@ -214,7 +214,7 @@ exports.getPremiumUsers = async (req, res, next) => {
         email: r.email,
         avatar_url: r.avatar_url,
         plan_id: r.plan_id,
-        plan_name: r.plan_name || 'â€”',
+        plan_name: r.plan_name || '—',
         premium_status: getPremiumStatus(r.premium_expires_at),
         premium_started_at: r.premium_started_at,
         premium_expires_at: r.premium_expires_at,
@@ -275,10 +275,10 @@ exports.updatePremium = async (req, res, next) => {
     const { planId, expiresAt, note } = req.body;
 
     if (!planId) {
-      return res.status(400).json({ success: false, message: 'Thiáº¿u planId' });
+      return res.status(400).json({ success: false, message: 'Thiếu planId' });
     }
     if (!expiresAt) {
-      return res.status(400).json({ success: false, message: 'Thiáº¿u expiresAt' });
+      return res.status(400).json({ success: false, message: 'Thiếu expiresAt' });
     }
 
     conn = await pool.getConnection();
@@ -287,13 +287,13 @@ exports.updatePremium = async (req, res, next) => {
     const [[user]] = await conn.query('SELECT id, premium_plan_id, premium_expires_at FROM users WHERE id = ?', [userId]);
     if (!user) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: 'NgÆ°á»i dĂ¹ng khĂ´ng tá»“n táº¡i' });
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
     const [[plan]] = await conn.query('SELECT id, name FROM premium_plans WHERE id = ?', [planId]);
     if (!plan) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: 'GĂ³i Premium khĂ´ng tá»“n táº¡i' });
+      return res.status(404).json({ success: false, message: 'Gói Premium không tồn tại' });
     }
 
     // Optional: Log admin action (if audit log table existed, we would insert it here. But there is no audit log table in musicflow_schema.sql. If it exists somewhere else, we could log it. I will skip inserting to audit log if table doesn't exist, but we can log to console).
@@ -327,7 +327,7 @@ exports.updatePremium = async (req, res, next) => {
     }
 
     await conn.commit();
-    res.json({ success: true, message: 'Cáº­p nháº­t Premium thĂ nh cĂ´ng' });
+    res.json({ success: true, message: 'Cập nhật Premium thành công' });
   } catch (error) {
     if (conn) await conn.rollback();
     console.error('updatePremium Error:', error);
@@ -349,7 +349,7 @@ exports.cancelPremium = async (req, res, next) => {
     const [[user]] = await conn.query('SELECT id, premium_expires_at FROM users WHERE id = ?', [userId]);
     if (!user) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: 'NgÆ°á»i dĂ¹ng khĂ´ng tá»“n táº¡i' });
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
     console.log(`[ADMIN AUDIT] User ID: ${req.user?.id || 'admin'} cancelled premium for User ID: ${userId}. Note: ${note}`);
@@ -374,8 +374,8 @@ exports.cancelPremium = async (req, res, next) => {
       const notificationService = require('../services/notification.service');
       await notificationService.createNotification({
         userId: userId,
-        title: 'Premium Ä‘Ă£ bá»‹ há»§y',
-        message: note ? `GĂ³i Premium cá»§a báº¡n Ä‘Ă£ bá»‹ há»§y vá»›i lĂ½ do: ${note}` : 'GĂ³i Premium cá»§a báº¡n Ä‘Ă£ bá»‹ há»§y bá»Ÿi Quáº£n trá»‹ viĂªn.',
+        title: 'Premium đã bị hủy',
+        message: note ? `Gói Premium của bạn đã bị hủy với lý do: ${note}` : 'Gói Premium của bạn đã bị hủy bởi Quản trị viên.',
         type: 'system',
         link: '/profile'
       });
@@ -383,7 +383,7 @@ exports.cancelPremium = async (req, res, next) => {
       console.error('Error sending cancel premium notification:', notiErr);
     }
 
-    res.json({ success: true, message: 'Há»§y Premium thĂ nh cĂ´ng' });
+    res.json({ success: true, message: 'Hủy Premium thành công' });
   } catch (error) {
     if (conn) await conn.rollback();
     console.error('cancelPremium Error:', error);
@@ -405,21 +405,21 @@ exports.exportPremium = async (req, res, next) => {
       params.push(`%${q}%`, `%${q}%`, q);
     }
 
-    if (plan && plan !== 'Táº¥t cáº£') {
+    if (plan && plan !== 'Tất cả') {
       whereClause += ' AND p.name = ?';
       params.push(plan);
     }
 
-    const statusVal = status || 'Táº¥t cáº£ Premium';
-    if (statusVal === 'Táº¥t cáº£ Premium') {
+    const statusVal = status || 'Tất cả Premium';
+    if (statusVal === 'Tất cả Premium') {
       whereClause += " AND (u.premium_expires_at IS NOT NULL OR EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid'))";
-    } else if (statusVal === 'Äang hoáº¡t Ä‘á»™ng') {
+    } else if (statusVal === 'Đang hoạt động') {
       whereClause += ' AND u.premium_expires_at > NOW()';
-    } else if (statusVal === 'Sáº¯p háº¿t háº¡n') {
+    } else if (statusVal === 'Sắp hết hạn') {
       whereClause += ' AND u.premium_expires_at > NOW() AND u.premium_expires_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)';
-    } else if (statusVal === 'ÄĂ£ háº¿t háº¡n') {
+    } else if (statusVal === 'Đã hết hạn') {
       whereClause += ' AND (u.premium_expires_at IS NOT NULL AND u.premium_expires_at <= NOW())';
-    } else if (statusVal === 'ChÆ°a Premium') {
+    } else if (statusVal === 'Chưa Premium') {
       whereClause += " AND u.premium_expires_at IS NULL AND NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.user_id = u.id AND pt.status = 'paid')";
     }
 
@@ -454,10 +454,10 @@ exports.exportPremium = async (req, res, next) => {
 
     const formattedRows = rows.map(row => {
       const pStatus = getPremiumStatus(row.premium_expires_at);
-      let statusStr = 'KhĂ´ng cĂ³';
-      if (pStatus === 'active') statusStr = 'Äang hoáº¡t Ä‘á»™ng';
-      else if (pStatus === 'expiring_soon') statusStr = 'Sáº¯p háº¿t háº¡n';
-      else if (pStatus === 'expired') statusStr = 'ÄĂ£ háº¿t háº¡n';
+      let statusStr = 'Không có';
+      if (pStatus === 'active') statusStr = 'Đang hoạt động';
+      else if (pStatus === 'expiring_soon') statusStr = 'Sắp hết hạn';
+      else if (pStatus === 'expired') statusStr = 'Đã hết hạn';
 
       const now = new Date();
       const expiry = row.premium_expires_at ? new Date(row.premium_expires_at) : null;
@@ -470,7 +470,7 @@ exports.exportPremium = async (req, res, next) => {
         user_id: row.user_id,
         name: row.name,
         email: row.email,
-        plan_name: row.plan_name || 'KhĂ´ng xĂ¡c Ä‘á»‹nh',
+        plan_name: row.plan_name || 'Không xác định',
         status: statusStr,
         start_date: row.last_transaction_date,
         end_date: row.premium_expires_at,
@@ -534,13 +534,13 @@ exports.remindExpiring = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         code: 'MANUAL_REMINDER_ALREADY_SENT',
-        message: 'Admin Ä‘Ă£ gá»­i nháº¯c nhá»Ÿ thá»§ cĂ´ng cho ká»³ Premium nĂ y.'
+        message: 'Admin đã gửi nhắc nhở thủ công cho kỳ Premium này.'
       });
     }
 
     res.json({
       success: true,
-      message: 'ÄĂ£ gá»­i nháº¯c nhá»Ÿ gia háº¡n Premium.'
+      message: 'Đã gửi nhắc nhở gia hạn Premium.'
     });
   } catch (error) {
     console.error('remindExpiring Error:', error);

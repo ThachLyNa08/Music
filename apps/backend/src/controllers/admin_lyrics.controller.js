@@ -2,7 +2,16 @@ const { pool } = require('../config/database');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 
-const APPROVED_CATALOG_WHERE = `COALESCE(s.review_status, 'approved') = 'approved' AND (s.is_active = 1 OR s.is_active IS NULL)`;
+const APPROVED_CATALOG_WHERE = `
+  COALESCE(s.review_status, 'approved') = 'approved'
+  AND (s.is_active = 1 OR s.is_active IS NULL)
+  AND (s.release_at IS NULL OR s.release_at <= NOW())
+  AND (
+    s.release_status IS NULL
+    OR s.release_status = 'published'
+    OR (s.release_status = 'scheduled' AND s.release_at IS NOT NULL AND s.release_at <= NOW())
+  )
+`;
 const HAS_LEGACY_LYRICS_SQL = `NULLIF(TRIM(COALESCE(s.lyrics, '')), '') IS NOT NULL`;
 const HAS_PLAIN_LYRICS_SQL = `(NULLIF(TRIM(COALESCE(sl.plain_lyrics, '')), '') IS NOT NULL OR ${HAS_LEGACY_LYRICS_SQL})`;
 const HAS_SYNCED_LYRICS_SQL = `NULLIF(TRIM(COALESCE(sl.synced_lyrics, '')), '') IS NOT NULL`;
@@ -56,8 +65,7 @@ exports.getList = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     let whereConditions = [
-      `COALESCE(s.review_status, 'approved') = 'approved'`,
-      `(s.is_active = 1 OR s.is_active IS NULL)`
+      APPROVED_CATALOG_WHERE
     ];
     let queryParams = [];
 
@@ -169,6 +177,12 @@ exports.getDetail = async (req, res, next) => {
       WHERE s.id = ?
         AND COALESCE(s.review_status, 'approved') = 'approved'
         AND (s.is_active = 1 OR s.is_active IS NULL)
+        AND (s.release_at IS NULL OR s.release_at <= NOW())
+        AND (
+          s.release_status IS NULL
+          OR s.release_status = 'published'
+          OR (s.release_status = 'scheduled' AND s.release_at IS NOT NULL AND s.release_at <= NOW())
+        )
     `, [songId]);
 
     if (!song) {
@@ -234,6 +248,12 @@ exports.updateLyrics = async (req, res, next) => {
       WHERE id = ?
         AND COALESCE(review_status, 'approved') = 'approved'
         AND (is_active = 1 OR is_active IS NULL)
+        AND (release_at IS NULL OR release_at <= NOW())
+        AND (
+          release_status IS NULL
+          OR release_status = 'published'
+          OR (release_status = 'scheduled' AND release_at IS NOT NULL AND release_at <= NOW())
+        )
     `, [songId]);
     if (!song) {
       return res.status(404).json({ success: false, message: 'Song not found' });
@@ -300,8 +320,7 @@ exports.exportLyrics = async (req, res, next) => {
     const { q, status, provider } = req.query;
 
     let whereConditions = [
-      `COALESCE(s.review_status, 'approved') = 'approved'`,
-      `(s.is_active = 1 OR s.is_active IS NULL)`
+      APPROVED_CATALOG_WHERE
     ];
     let queryParams = [];
 

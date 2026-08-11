@@ -2,11 +2,7 @@ import { defineStore } from 'pinia'
 import { io } from 'socket.io-client'
 import api from '@/api/axios'
 import { messagesApi } from '@/api/messages'
-
-function getSocketURL() {
-  const baseURL = api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000/api'
-  return baseURL.replace(/\/api\/?$/, '')
-}
+import { SOCKET_URL } from '@/config/runtime'
 
 export const useMessagesStore = defineStore('messages', {
   state: () => ({
@@ -45,7 +41,7 @@ export const useMessagesStore = defineStore('messages', {
       }
 
       const token = localStorage.getItem('accessToken')
-      this.socket = io(getSocketURL(), {
+      this.socket = io(SOCKET_URL, {
         withCredentials: true,
         auth: { token },
       })

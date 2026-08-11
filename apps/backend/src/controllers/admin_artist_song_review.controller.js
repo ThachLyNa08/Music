@@ -91,6 +91,8 @@ exports.getArtistSongReviews = async (req, res, next) => {
     const { status = 'pending_review', q, level, flag, artistId, page = 1, limit = 20, sort = 'newest' } = req.query;
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
+    const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
+    const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
     const offset = (Number(page) - 1) * Number(limit);
     const limitNum = Number(limit);
@@ -123,9 +125,19 @@ exports.getArtistSongReviews = async (req, res, next) => {
       queryParams.push(`%${q}%`, `%${q}%`);
     }
 
-    let orderBy = 's.submitted_at DESC';
+    const releasePriorityOrder = `
+      CASE
+        WHEN s.review_status = 'pending_review' AND s.release_at IS NOT NULL AND s.release_at < NOW() THEN 0
+        WHEN s.review_status = 'pending_review' AND s.release_at IS NOT NULL AND DATE(s.release_at) = CURDATE() THEN 1
+        WHEN s.review_status = 'pending_review' AND s.release_at IS NOT NULL AND s.release_at <= DATE_ADD(NOW(), INTERVAL 24 HOUR) THEN 2
+        WHEN s.review_status = 'pending_review' AND s.release_at IS NOT NULL AND s.release_at <= DATE_ADD(NOW(), INTERVAL 72 HOUR) THEN 3
+        WHEN s.review_status = 'pending_review' AND s.release_at IS NOT NULL THEN 4
+        ELSE 5
+      END ASC
+    `;
+    let orderBy = `${releasePriorityOrder}, s.submitted_at DESC`;
     if (sort === 'oldest') orderBy = 's.submitted_at ASC';
-    else if (sort === 'risk_desc') orderBy = 's.risk_score DESC, s.submitted_at DESC';
+    else if (sort === 'risk_desc') orderBy = `${releasePriorityOrder}, s.risk_score DESC, s.submitted_at DESC`;
 
     const countParams = [...queryParams];
     const [countRows] = await pool.query(
@@ -164,6 +176,8 @@ exports.getArtistSongReviews = async (req, res, next) => {
         ref_s.title as duplicateReferenceTitle,
         ref_a.name as duplicateReferenceArtistName,
         ${submissionNoteSelect}
+        ${releaseDateSelect}
+        ${releaseAtSelect}
         a.id as artist_id, a.name as artist_name, a.avatar_url as artist_avatar_url,
         al.id as album_id, al.title as album_title,
         g.id as genre_id, g.name as genre_name
@@ -214,6 +228,8 @@ exports.getArtistSongReviews = async (req, res, next) => {
           duration: r.duration
         }),
         submissionNote: r.submission_note || null,
+        releaseAt: r.release_at || null,
+        releaseDate: r.release_date || null,
         submittedAt: r.submitted_at,
         reviewedAt: r.reviewed_at,
         rejectionReason: r.rejection_reason,
@@ -254,12 +270,16 @@ exports.getArtistSongReviewDetail = async (req, res, next) => {
     const songId = req.params.songId;
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
+    const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
+    const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
     const [rows] = await pool.query(
       `SELECT
         s.id, s.title, s.cover_url, s.audio_url, s.duration_sec as duration, s.lyrics,
         s.review_status, s.submitted_at, s.reviewed_at, s.rejection_reason,
         ${submissionNoteSelect}
+        ${releaseDateSelect}
+        ${releaseAtSelect}
         a.id as artist_id, a.name as artist_name, a.avatar_url as artist_avatar_url,
         al.id as album_id, al.title as album_title,
         g.id as genre_id, g.name as genre_name
@@ -288,6 +308,8 @@ exports.getArtistSongReviewDetail = async (req, res, next) => {
         lyrics: r.lyrics,
         lyricsStatus: r.lyrics ? 'available' : 'missing',
         submissionNote: r.submission_note || null,
+        releaseAt: r.release_at || null,
+        releaseDate: r.release_date || null,
         metadataStatus: getMetadataStatus({
           title: r.title,
           audioUrl: r.audio_url,
@@ -353,7 +375,10 @@ exports.approveArtistSong = async (req, res, next) => {
            reviewed_by_admin_id = ?,
            reviewed_at = NOW(),
            rejection_reason = NULL,
-           published_at = COALESCE(published_at, NOW())
+           published_at = CASE
+             WHEN release_at > NOW() THEN published_at
+             ELSE COALESCE(published_at, NOW())
+           END
        WHERE id = ? AND submitted_by_artist_id IS NOT NULL`,
       [adminId, songId]
     );
@@ -666,7 +691,10 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
              reviewed_by_admin_id = ?,
              reviewed_at = NOW(),
              rejection_reason = NULL,
-             published_at = COALESCE(published_at, NOW())
+             published_at = CASE
+               WHEN release_at > NOW() THEN published_at
+               ELSE COALESCE(published_at, NOW())
+             END
          WHERE id IN (?)`,
         [adminId, approvedIds]
       );

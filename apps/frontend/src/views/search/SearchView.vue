@@ -156,7 +156,7 @@
       </div>
 
       <!-- No results -->
-      <div v-else-if="!isWaitingForSearch && totalResults === 0" class="flex flex-col items-center justify-center py-20 text-center">
+      <div v-else-if="canShowNoResults" class="flex flex-col items-center justify-center py-20 text-center">
         <div class="w-16 h-16 mb-4 rounded-full bg-white/5 flex items-center justify-center">
           <svg class="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
         </div>
@@ -421,6 +421,7 @@ const hasSearched = computed(() => committedQuery.value.length > 0)
 const isSearching = ref(false)
 const lastQuery = ref('')
 const completedQuery = ref('')
+const lastSettledQuery = ref('')
 const recentSearches = ref([])
 const userTopGenres = ref([])
 
@@ -441,6 +442,15 @@ const totalResults = computed(() => {
 const isWaitingForSearch = computed(() => {
   const q = committedQuery.value
   return Boolean(q) && (isSearching.value || completedQuery.value !== q)
+})
+
+const canShowNoResults = computed(() => {
+  const current = query.value.trim()
+  return Boolean(current)
+    && !isSearching.value
+    && completedQuery.value === current
+    && lastSettledQuery.value === current
+    && totalResults.value === 0
 })
 
 const aiSongs = computed(() => aiResult.value?.songs || [])
@@ -652,6 +662,7 @@ watch(query, (val) => {
     committedQuery.value = ''
     lastQuery.value = ''
     completedQuery.value = ''
+    lastSettledQuery.value = ''
     songResults.value = []
     artistResults.value = []
     albumResults.value = []
@@ -719,6 +730,7 @@ async function executeSearch(q) {
     const res = await songApi.search(q, 15, { signal: controller.signal })
     if (requestId !== searchRequestId) return
     completedQuery.value = q
+    lastSettledQuery.value = q
     if (res.data?.success) {
       const data = Array.isArray(res.data.data)
         ? { songs: res.data.data, artists: [], albums: [], genres: [] }
@@ -737,6 +749,7 @@ async function executeSearch(q) {
     if (err.name === 'CanceledError' || err.message === 'canceled') return;
     if (requestId !== searchRequestId) return
     completedQuery.value = q
+    lastSettledQuery.value = q
     console.warn('Search error:', err)
     songResults.value = []
     artistResults.value = []
@@ -874,6 +887,7 @@ function clearSearch() {
   committedQuery.value = ''
   lastQuery.value = ''
   completedQuery.value = ''
+  lastSettledQuery.value = ''
   isGenreMode.value = false
   explicitGenreName.value = null
   aiError.value = ''

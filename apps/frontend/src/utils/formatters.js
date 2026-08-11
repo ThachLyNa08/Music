@@ -1,10 +1,8 @@
+import { toBackendAssetUrl } from '@/config/runtime';
+
 export function formatImageUrl(url) {
   if (!url) return '/default-cover.png';
-  if (url.startsWith('http')) return url;
-  
-  // Lấy API base URL từ biến môi trường
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  return `${baseUrl}${url}`;
+  return toBackendAssetUrl(url);
 }
 
 export function formatDuration(seconds) {

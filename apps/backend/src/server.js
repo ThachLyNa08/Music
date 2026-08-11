@@ -8,6 +8,7 @@ const app                    = require('./app');
 const { testConnection, pool }     = require('./config/database');
 const { connectRedis }       = require('./config/redis');
 const { registerSocketEvents } = require('./services/socket.service');
+const { initializeLyricsSemanticIndex } = require('./services/lyricsSemanticSearch.service');
 
 const PORT   = process.env.PORT || 3000;
 
@@ -40,6 +41,8 @@ async function bootstrap() {
   }
 
   await connectRedis();
+
+  await initializeLyricsSemanticIndex();
 
   const { ensureLogTableExists, ensureGenerationRunsTableExists, recoverStaleSystemPlaylistRuns } = require('./services/systemPlaylistRunLog.service');
   await ensureLogTableExists();
@@ -90,6 +93,12 @@ async function bootstrap() {
       startSystemPlaylistCron();
     } catch (error) {
       console.error('[SystemPlaylistCron] failed to start', error);
+    }
+    try {
+      const { startSongReleaseCron } = require('./schedulers/songReleaseCron.scheduler');
+      startSongReleaseCron();
+    } catch (error) {
+      console.error('[SongReleaseCron] failed to start', error);
     }
   });
 }

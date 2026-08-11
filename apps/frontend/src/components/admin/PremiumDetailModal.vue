@@ -4,7 +4,7 @@
       <div class="modal-content">
       <!-- Header -->
       <div class="modal-header">
-        <h2 class="modal-title">Chi tiáº¿t gĂ³i Premium</h2>
+        <h2 class="modal-title">Chi tiết gói Premium</h2>
         <button class="close-btn" @click="closeModal">
           <MfIcon name="close" size="24" />
         </button>
@@ -12,7 +12,7 @@
 
       <!-- Body -->
       <div class="modal-body" v-if="user">
-        <!-- A. ThĂ´ng tin ngÆ°á»i dĂ¹ng -->
+        <!-- A. Thông tin người dùng -->
         <div class="info-block user-profile">
           <img v-if="user.avatar_url" :src="normalizeImageUrl(user.avatar_url, 'user')" class="avatar" alt="Avatar" />
           <div v-else class="avatar-placeholder">
@@ -23,37 +23,37 @@
             <div class="user-email">{{ user.email }}</div>
             <div class="user-id">User ID: {{ user.user_id }}</div>
             <button class="link-btn mt-2" @click="goToUserDetail">
-              <MfIcon name="open_in_new" size="14" /> Má»Ÿ há»“ sÆ¡ ngÆ°á»i dĂ¹ng
+              <MfIcon name="open_in_new" size="14" /> Mở hồ sơ người dùng
             </button>
           </div>
         </div>
 
-        <!-- B. Tráº¡ng thĂ¡i gĂ³i -->
+        <!-- B. Trạng thái gói -->
         <div class="info-block package-status">
-          <div class="block-header">Tráº¡ng thĂ¡i gĂ³i</div>
+          <div class="block-header">Trạng thái gói</div>
           <div class="status-grid">
             <div class="status-item">
-              <span class="label">GĂ³i hiá»‡n táº¡i</span>
+              <span class="label">Gói hiện tại</span>
               <span class="value font-bold">{{ user.plan_name && user.plan_name !== '-' ? user.plan_name : 'Free' }}</span>
             </div>
             <div class="status-item">
-              <span class="label">Tráº¡ng thĂ¡i</span>
+              <span class="label">Trạng thái</span>
               <span class="status-badge" :class="user.premium_status">
                 {{ formatPremiumStatus(user.premium_status) }}
               </span>
             </div>
             <div class="status-item">
-              <span class="label">NgĂ y báº¯t Ä‘áº§u</span>
+              <span class="label">Ngày bắt đầu</span>
               <span class="value">{{ formatDate(user.premium_started_at) }}</span>
             </div>
             <div class="status-item">
-              <span class="label">NgĂ y háº¿t háº¡n</span>
+              <span class="label">Ngày hết hạn</span>
               <span class="value" :class="{'text-rose-500': user.premium_status === 'expired'}">
                 {{ formatDate(user.premium_expires_at) }}
               </span>
             </div>
             <div class="status-item full-width" v-if="user.days_remaining !== null">
-              <span class="label">Thá»i gian cĂ²n láº¡i</span>
+              <span class="label">Thời gian còn lại</span>
               <span class="value" :class="{'text-rose-500': user.days_remaining <= 7, 'text-slate-400': user.days_remaining < 0}">
                 {{ formatDaysRemaining(user.days_remaining) }}
               </span>
@@ -61,22 +61,22 @@
           </div>
         </div>
 
-        <!-- C. Tá»•ng quan thanh toĂ¡n -->
+        <!-- C. Tổng quan thanh toán -->
         <div class="info-block payment-summary">
-          <div class="block-header">Tá»•ng quan thanh toĂ¡n</div>
+          <div class="block-header">Tổng quan thanh toán</div>
           <div class="status-grid">
             <div class="status-item">
-              <span class="label">Tá»•ng chi tiĂªu</span>
+              <span class="label">Tổng chi tiêu</span>
               <span class="value font-bold text-indigo-600">{{ formatCurrency(user.total_spent) }}</span>
             </div>
             <div class="status-item">
-              <span class="label">Láº§n thanh toĂ¡n cuá»‘i</span>
+              <span class="label">Lần thanh toán cuối</span>
               <span class="value">{{ formatDate(user.last_paid_at) }}</span>
             </div>
             <div class="status-item full-width">
-              <span class="label">MĂ£ giao dá»‹ch gáº§n nháº¥t</span>
+              <span class="label">Mã giao dịch gần nhất</span>
               <span class="value font-mono bg-slate-100 px-2 py-1 rounded text-sm">
-                {{ user.last_transaction_code ? '#' + user.last_transaction_code : 'ChÆ°a cĂ³' }}
+                {{ user.last_transaction_code ? '#' + user.last_transaction_code : 'Chưa có' }}
               </span>
             </div>
           </div>
@@ -86,16 +86,16 @@
       <!-- Footer -->
       <div class="modal-footer">
         <button class="link-btn mr-auto" @click="goToTransactions">
-          <MfIcon name="receipt_long" size="16" /> Xem lá»‹ch sá»­ giao dá»‹ch
+          <MfIcon name="receipt_long" size="16" /> Xem lịch sử giao dịch
         </button>
         
         <div class="action-buttons">
           <button v-if="user?.premium_status === 'active' || user?.premium_status === 'expiring_soon'" 
                   class="btn-danger" @click="emitAction('cancel')">
-            Há»§y Premium
+            Hủy Premium
           </button>
           <button class="btn-primary" @click="emitAction(user?.plan_id ? 'extend' : 'activate')">
-            {{ user?.plan_id ? 'Gia háº¡n thĂªm' : 'KĂ­ch hoáº¡t Premium' }}
+            {{ user?.plan_id ? 'Gia hạn thêm' : 'Kích hoạt Premium' }}
           </button>
         </div>
       </div>
@@ -170,27 +170,27 @@ function goToTransactions() {
 }
 
 function formatCurrency(val) {
-  if (val == null) return '0 â‚«'
+  if (val == null) return '0 đ'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return 'â€”'
+  if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('vi-VN')
 }
 
 function formatDaysRemaining(days) {
-  if (days < 0) return `QuĂ¡ háº¡n ${Math.abs(days)} ngĂ y`
-  if (days === 0) return 'Háº¿t háº¡n hĂ´m nay'
-  return `CĂ²n ${days} ngĂ y`
+  if (days < 0) return `Quá hạn ${Math.abs(days)} ngày`
+  if (days === 0) return 'Hết hạn hôm nay'
+  return `Còn ${days} ngày`
 }
 
 function formatPremiumStatus(status) {
   switch (status) {
-    case 'active': return 'Äang hoáº¡t Ä‘á»™ng'
-    case 'expiring_soon': return 'Sáº¯p háº¿t háº¡n'
-    case 'expired': return 'ÄĂ£ háº¿t háº¡n'
-    case 'none': return 'ChÆ°a Premium'
+    case 'active': return 'Đang hoạt động'
+    case 'expiring_soon': return 'Sắp hết hạn'
+    case 'expired': return 'Đã hết hạn'
+    case 'none': return 'Chưa Premium'
     default: return status
   }
 }

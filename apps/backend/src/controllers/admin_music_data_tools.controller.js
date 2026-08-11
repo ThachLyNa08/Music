@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const songImageService = require('../services/songImage.service');
 const audioFeatureService = require('../services/audioFeature.service');
+const { publicSongCondition } = require('../utils/public.utils');
 
 const getStatusCondition = (statusParam, field) => {
   if (statusParam === 'missing') return `${field} IS NULL OR ${field} = ''`;
@@ -14,7 +15,7 @@ const getBoolFieldCondition = (statusParam, field) => {
   return null;
 }
 
-const APPROVED_CATALOG_WHERE = `COALESCE(s.review_status, 'approved') = 'approved' AND (s.is_active = 1 OR s.is_active IS NULL)`;
+const APPROVED_CATALOG_WHERE = publicSongCondition('s');
 
 exports.getSummary = async (req, res, next) => {
   try {
@@ -69,10 +70,7 @@ exports.getList = async (req, res, next) => {
     const offset = (page - 1) * limit;
     const { search, cover, lyrics, features } = req.query;
 
-    let whereClauses = [
-      `COALESCE(s.review_status, 'approved') = 'approved'`,
-      `(s.is_active = 1 OR s.is_active IS NULL)`
-    ];
+    let whereClauses = [APPROVED_CATALOG_WHERE];
     let params = [];
 
     if (search) {
@@ -404,8 +402,7 @@ exports.exportLyricsBacklog = async (req, res, next) => {
       LEFT JOIN genres g ON s.genre_id = g.id
       LEFT JOIN song_lyrics sl ON s.id = sl.song_id
       WHERE (sl.song_id IS NULL OR TRIM(sl.plain_lyrics) = '' OR sl.plain_lyrics IS NULL)
-        AND COALESCE(s.review_status, 'approved') = 'approved'
-        AND (s.is_active = 1 OR s.is_active IS NULL)
+        AND ${APPROVED_CATALOG_WHERE}
     `);
 
     const FAILED_LYRICS_DIRS = [

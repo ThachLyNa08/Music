@@ -2,7 +2,7 @@ const runLogService = require('./systemPlaylistRunLog.service');
 const {
   getDueSystemPlaylistScheduleRules,
   getSystemPlaylistScheduleRule,
-  getScheduledForDateTime,
+  getLatestScheduledForDateTime,
   getClosedAnalysisWindow
 } = require('../utils/systemPlaylistSchedule.util');
 const {
@@ -110,7 +110,7 @@ async function finishSkippedSchedulerRun(rule, scheduledFor, analysisWindow, uni
 
 async function runSchedulerRule(rule, options) {
   const runAt = options.runAt || new Date();
-  const scheduledFor = options.scheduledFor || getScheduledForDateTime(rule, runAt);
+  const scheduledFor = options.scheduledFor || getLatestScheduledForDateTime(rule, runAt);
   const analysisWindow = options.analysisWindow || getClosedAnalysisWindow(rule.schedulerName, runAt);
   let targets = await maintenance.getSystemPlaylistRegenerateTargets({
     mode: 'regenerate_scope',
@@ -285,7 +285,7 @@ async function prepareQueuedDueRules(rules, options) {
   const runAt = new Date();
   const prepared = [];
   for (const rule of rules) {
-    const scheduledFor = getScheduledForDateTime(rule, runAt);
+    const scheduledFor = getLatestScheduledForDateTime(rule, runAt);
     const analysisWindow = getClosedAnalysisWindow(rule.schedulerName, runAt);
     const existing = await runLogService.getGenerationRunForScheduledOccurrence(rule.schedulerName, scheduledFor);
     const normalizedStatus = runLogService.normalizeGenerationStatus(existing?.status || null, null);

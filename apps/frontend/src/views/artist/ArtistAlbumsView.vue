@@ -73,7 +73,7 @@
                 <tr>
                   <th>ALBUM</th>
                   <th class="text-center">SỐ BÀI HÁT</th>
-                  <th class="text-center">NGÀY PHÁT HÀNH</th>
+                  <th class="text-center">THỜI ĐIỂM PHÁT HÀNH</th>
                   <th class="text-center">TRẠNG THÁI</th>
                   <th class="text-right">HÀNH ĐỘNG</th>
                 </tr>
@@ -95,7 +95,7 @@
                     </div>
                   </td>
                   <td class="text-center">{{ album.songCount }}</td>
-                  <td class="text-center"><span class="muted">{{ formatDate(album.releaseDate) }}</span></td>
+                  <td class="text-center"><span class="muted">{{ formatDateTime(album.releaseAt || album.releaseDate) }}</span></td>
                   <td class="text-center">
                     <span class="status-badge" :class="getReviewStatusClass(album.reviewStatus)">
                       {{ formatReviewStatus(album.reviewStatus) }}
@@ -163,8 +163,12 @@
                 </div>
 
                 <div class="form-group full-width">
-                  <label>Ngày phát hành dự kiến</label>
-                  <input v-model="uploadForm.releaseDate" type="date" class="input-dark" />
+                  <label>Thời điểm phát hành dự kiến</label>
+                  <div class="release-time-grid">
+                    <input v-model="uploadForm.releaseDate" type="date" :min="minAlbumReleaseDateValue" class="input-dark" aria-label="Ngày phát hành" />
+                    <input v-model="uploadForm.releaseTime" type="time" :min="getMinAlbumReleaseTimeValue(uploadForm.releaseDate)" class="input-dark" aria-label="Giờ phát hành" />
+                  </div>
+                  <div class="helper-text">Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.</div>
                 </div>
 
                 <div class="form-group full-width">
@@ -272,8 +276,8 @@
               </div>
             </div>
             <div class="info-item">
-              <label>Ngày phát hành:</label>
-              <span>{{ formatDate(selectedAlbum.releaseDate) || '-' }}</span>
+              <label>Thời điểm phát hành:</label>
+              <span>{{ formatDateTime(selectedAlbum.releaseAt || selectedAlbum.releaseDate) || '-' }}</span>
             </div>
             <div class="info-item">
               <label>Ngày gửi duyệt:</label>
@@ -342,8 +346,12 @@
                 </div>
 
                 <div class="form-group full-width">
-                  <label>Ngày phát hành dự kiến</label>
-                  <input v-model="resubmitForm.releaseDate" type="date" class="input-dark" />
+                  <label>Thời điểm phát hành dự kiến</label>
+                  <div class="release-time-grid">
+                    <input v-model="resubmitForm.releaseDate" type="date" :min="minAlbumReleaseDateValue" class="input-dark" aria-label="Ngày phát hành" />
+                    <input v-model="resubmitForm.releaseTime" type="time" :min="getMinAlbumReleaseTimeValue(resubmitForm.releaseDate)" class="input-dark" aria-label="Giờ phát hành" />
+                  </div>
+                  <div class="helper-text">Thời điểm phát hành phải cách thời điểm gửi duyệt lại ít nhất 15 ngày.</div>
                 </div>
 
                 <div class="form-group full-width">
@@ -437,6 +445,54 @@ const formatFlagText = (flag) => {
 const toast = useToastStore()
 const fallbackCover = 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&q=80'
 const heroImage = normalizeImageUrl('/uploads/artist/albums.png')
+const RELEASE_REVIEW_LEAD_DAYS = 15
+
+const formatDateTimeLocalInput = (date) => {
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (num) => String(num).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const toDateTimeLocalValue = (value) => {
+  if (!value) return ''
+  if (value instanceof Date) return formatDateTimeLocalInput(value)
+
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return `${normalized}T00:00`
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+    if (!hasTimezone && /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(normalized)) {
+      return normalized.replace(' ', 'T').slice(0, 16)
+    }
+  }
+
+  return formatDateTimeLocalInput(new Date(value))
+}
+
+const minAlbumReleaseAtValue = computed(() => {
+  const date = new Date()
+  date.setDate(date.getDate() + RELEASE_REVIEW_LEAD_DAYS)
+  return toDateTimeLocalValue(date)
+})
+const minAlbumReleaseDateValue = computed(() => minAlbumReleaseAtValue.value.slice(0, 10))
+const minAlbumReleaseTimeValue = computed(() => minAlbumReleaseAtValue.value.slice(11, 16))
+
+const splitAlbumReleaseAtValue = (value) => {
+  const localValue = toDateTimeLocalValue(value)
+  return {
+    releaseDate: localValue ? localValue.slice(0, 10) : '',
+    releaseTime: localValue ? localValue.slice(11, 16) : ''
+  }
+}
+
+const buildAlbumReleaseAtValue = (form) => {
+  if (!form.releaseDate || !form.releaseTime) return ''
+  return `${form.releaseDate}T${form.releaseTime}`
+}
+
+const getMinAlbumReleaseTimeValue = (releaseDate) => {
+  return releaseDate === minAlbumReleaseDateValue.value ? minAlbumReleaseTimeValue.value : undefined
+}
 
 const albums = ref([])
 const initialLoading = ref(true)
@@ -547,6 +603,19 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('vi-VN')
 }
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 const formatReviewStatus = (status) => {
   switch (status) {
     case 'approved': return 'Đã duyệt'
@@ -573,6 +642,7 @@ const uploadForm = ref({
   title: '',
   description: '',
   releaseDate: '',
+  releaseTime: '',
   coverFile: null
 })
 
@@ -598,7 +668,7 @@ const fetchAlbumSongOptions = async (albumId = null) => {
 }
 
 const openUploadModal = async () => {
-  uploadForm.value = { title: '', description: '', releaseDate: '', coverFile: null }
+  uploadForm.value = { title: '', description: '', releaseDate: '', releaseTime: '', coverFile: null }
   uploadError.value = ''
   selectedSongs.value = []
   songSearchQuery.value = ''
@@ -631,6 +701,11 @@ const submitUpload = async () => {
     return
   }
 
+  if (!buildAlbumReleaseAtValue(uploadForm.value)) {
+    uploadError.value = 'Vui lòng chọn thời điểm phát hành. Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.'
+    return
+  }
+
   uploadError.value = ''
   uploading.value = true
 
@@ -638,7 +713,9 @@ const submitUpload = async () => {
     const formData = new FormData()
     formData.append('title', uploadForm.value.title.trim())
     if (uploadForm.value.description.trim()) formData.append('description', uploadForm.value.description.trim())
-    if (uploadForm.value.releaseDate) formData.append('releaseDate', uploadForm.value.releaseDate)
+    const releaseAt = buildAlbumReleaseAtValue(uploadForm.value)
+    formData.append('release_at', releaseAt)
+    formData.append('releaseDate', uploadForm.value.releaseDate)
     formData.append('cover', uploadForm.value.coverFile)
     formData.append('songIds', JSON.stringify(selectedSongs.value))
 
@@ -669,6 +746,7 @@ const resubmitForm = ref({
   coverUrl: '',
   description: '',
   releaseDate: '',
+  releaseTime: '',
   submissionNote: '',
   rejectionReason: '',
   coverFile: null
@@ -691,7 +769,7 @@ const openResubmitModal = async (album) => {
     title: targetAlbum.name || targetAlbum.title || '',
     coverUrl: targetAlbum.coverUrl || targetAlbum.cover_url || '',
     description: targetAlbum.description || '',
-    releaseDate: targetAlbum.releaseDate ? targetAlbum.releaseDate.split('T')[0] : (targetAlbum.release_date ? targetAlbum.release_date.split('T')[0] : ''),
+    ...splitAlbumReleaseAtValue(targetAlbum.releaseAt || targetAlbum.release_at || targetAlbum.releaseDate || targetAlbum.release_date),
     submissionNote: targetAlbum.submissionNote || targetAlbum.submission_note || '',
     rejectionReason: targetAlbum.rejectionReason || targetAlbum.rejection_reason || '',
     coverFile: null
@@ -727,6 +805,11 @@ const submitResubmit = async () => {
     return
   }
 
+  if (!buildAlbumReleaseAtValue(resubmitForm.value)) {
+    resubmitError.value = 'Vui lòng chọn thời điểm phát hành. Thời điểm phát hành phải cách thời điểm gửi duyệt ít nhất 15 ngày.'
+    return
+  }
+
   resubmitError.value = ''
   resubmitting.value = true
 
@@ -734,7 +817,9 @@ const submitResubmit = async () => {
     const formData = new FormData()
     formData.append('title', resubmitForm.value.title.trim())
     if (resubmitForm.value.description) formData.append('description', resubmitForm.value.description)
-    if (resubmitForm.value.releaseDate) formData.append('releaseDate', resubmitForm.value.releaseDate)
+    const releaseAt = buildAlbumReleaseAtValue(resubmitForm.value)
+    formData.append('release_at', releaseAt)
+    formData.append('releaseDate', resubmitForm.value.releaseDate)
     if (resubmitForm.value.submissionNote) formData.append('submissionNote', resubmitForm.value.submissionNote)
     formData.append('songIds', JSON.stringify(resubmitSelectedSongs.value))
 
@@ -1306,6 +1391,12 @@ const closeDetailModal = () => {
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .form-group label { font-size: 14px; font-weight: 500; }
+.release-time-grid { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 10px; }
+.release-time-grid .input-dark { width: 100%; }
 .textarea-dark { width: 100%; min-height: 86px; padding: 10px 12px; resize: vertical; }
 .form-group input[type="file"] { padding: 10px 12px; background: rgba(255, 255, 255, 0.03); border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 8px; cursor: pointer; }
+
+@media (max-width: 640px) {
+  .release-time-grid { grid-template-columns: 1fr; }
+}
 </style>

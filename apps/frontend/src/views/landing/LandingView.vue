@@ -400,6 +400,7 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import MfIcon from '@/components/common/MfIcon.vue'
 import { useScrollReveal } from '@/composables/useScrollReveal'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const auth = useAuthStore()
 const landingRef = ref(null)
@@ -411,9 +412,7 @@ const handleLandingAction = () => {
 
 const apiMediaUrl = (url) => {
   if (!url) return ''
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'
-  return `${baseUrl.replace(/\/api\/?$/, '')}${url}`
+  return toBackendAssetUrl(url)
 }
 
 // Local mock data purely for landing page visual rendering

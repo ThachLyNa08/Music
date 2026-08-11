@@ -263,14 +263,15 @@ import LyricsPanel from '@/components/player/LyricsPanel.vue'
 import MicInputCard from '@/components/user/MicInputCard.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 import { useToastStore } from '@/stores/toast'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const auth = useAuthStore()
 const player = usePlayerStore()
 const toast = useToastStore()
 const isPremium = computed(() => auth.isPremium)
 
-const vocalVolume = ref(20)
-const instVolume = ref(85)
+const vocalVolume = ref(100)
+const instVolume = ref(100)
 const stemJob = ref(null)
 const stemLoading = ref(false)
 const stemError = ref('')
@@ -361,9 +362,7 @@ const karaokeSuggestions = computed(() => {
 
 function apiMediaUrl(url) {
   if (!url) return ''
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'
-  return `${baseUrl.replace(/\/api\/?$/, '')}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatTime(seconds) {

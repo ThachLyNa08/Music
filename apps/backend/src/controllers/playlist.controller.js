@@ -55,6 +55,14 @@ function isManualEditablePlaylist(playlist) {
   );
 }
 
+function isUserDeletablePlaylist(playlist) {
+  return (
+    playlist &&
+    ['manual', 'ai'].includes(String(playlist.type || 'manual').toLowerCase()) &&
+    !isSystemPlaylistRecord(playlist)
+  );
+}
+
 async function getPlaylistSongs(conn, playlistId, userId) {
   const [songs] = await conn.query(
     `SELECT
@@ -200,6 +208,7 @@ exports.getMyPlaylists = async (req, res, next) => {
       pl.is_owner = String(pl.user_id) === String(userId);
       pl.is_system = isValidSystemPlaylist(pl);
       pl.can_edit = pl.is_owner && isManualEditablePlaylist(pl);
+      pl.can_delete = pl.is_owner && isUserDeletablePlaylist(pl);
       pl.is_saved = Boolean(pl.saved_playlist_id);
       delete pl.saved_playlist_id;
       pl.item_type = 'playlist';
@@ -318,6 +327,7 @@ exports.getPlaylistDetail = async (req, res, next) => {
     playlist.is_owner = isOwner;
     playlist.is_system = isSystem;
     playlist.can_edit = isOwner && isManualEditablePlaylist(playlist);
+    playlist.can_delete = isOwner && isUserDeletablePlaylist(playlist);
     playlist.is_saved = isSaved;
     delete playlist.saved_playlist_id;
 
@@ -606,7 +616,7 @@ exports.deletePlaylist = async (req, res, next) => {
     if (playlists[0].is_system === 1 || playlists[0].system_key) {
       return res.status(403).json({ success: false, message: 'Không thể xóa playlist hệ thống' });
     }
-    if (!isManualEditablePlaylist(playlists[0])) {
+    if (!isUserDeletablePlaylist(playlists[0])) {
       return res.status(403).json({ success: false, message: 'Chỉ có thể xóa playlist thủ công' });
     }
 

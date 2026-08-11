@@ -81,6 +81,7 @@
 
 <script setup>
 import LikeButton from '@/components/common/LikeButton.vue'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 defineProps({
   song: {
@@ -117,8 +118,7 @@ defineEmits(['click', 'play', 'toggleLike', 'menu'])
 
 function formatImageUrl(url) {
   if (!url) return '/default-cover.png'
-  if (url.startsWith('http')) return url
-  return `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${url}`
+  return toBackendAssetUrl(url)
 }
 
 function formatDuration(seconds) {

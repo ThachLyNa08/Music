@@ -52,7 +52,7 @@
     </div>
 
     <!-- Section: Vận hành nhanh -->
-    <article class="panel quick-ops-panel mb-8 border border-slate-200/50 rounded-2xl p-6 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.02)] mt-6" v-if="!loading">
+    <article class="panel quick-ops-panel mb-8 border border-slate-200/50 rounded-2xl p-6 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.02)] mt-6" v-if="false">
       <div class="panel-header mb-6">
         <div>
           <h2 class="text-xl font-bold text-slate-800">Vận hành nhanh</h2>

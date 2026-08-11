@@ -429,6 +429,7 @@ import AdminKpiCard from '@/components/admin/AdminKpiCard.vue'
 
 import AdminTableShell from '@/components/admin/AdminTableShell.vue'
 import { useToastStore } from '@/stores/toast'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const AlbumSongsTable = defineComponent({
   props: {
@@ -444,7 +445,7 @@ const AlbumSongsTable = defineComponent({
     }
     const image = url => {
       if (!url) return '/default-cover.png'
-      return String(url).startsWith('http') ? url : `http://127.0.0.1:3000${url}`
+      return toBackendAssetUrl(url)
     }
     return () => {
       if (!props.songs.length) {
@@ -667,7 +668,7 @@ const coverPreviewSrc = computed(() => {
   if (coverObjectUrl.value) return coverObjectUrl.value
   if (form.cover_url && String(form.cover_url).trim()) {
     const url = String(form.cover_url).trim()
-    return url.startsWith('http') ? url : `http://127.0.0.1:3000${url}`
+    return toBackendAssetUrl(url)
   }
   return ''
 })
@@ -1163,7 +1164,7 @@ function goToArtist(artistId) {
 
 function formatImageUrl(url) {
   if (!url) return '/default-cover.png'
-  return String(url).startsWith('http') ? url : `http://127.0.0.1:3000${url}`
+  return toBackendAssetUrl(url)
 }
 
 function handleImageError(event) {

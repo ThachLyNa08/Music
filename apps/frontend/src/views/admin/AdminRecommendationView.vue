@@ -68,7 +68,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div v-if="false" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
           <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Benchmark users</p>
           <p class="text-2xl font-bold text-slate-900">{{ formatNumber(summary?.benchmarkUsers || summary?.serving?.benchmarkUsers || 2000) }}</p>

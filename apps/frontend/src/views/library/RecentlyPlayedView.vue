@@ -163,6 +163,7 @@ import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import CoverImage from '@/components/common/CoverImage.vue'
 import { getPlaylistCover } from '@/utils/imageUrl'
 import { useAuthStore } from '@/stores/auth'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const router = useRouter()
 const player = usePlayerStore()
@@ -176,9 +177,7 @@ const timeRange = ref('all_time')
 
 const localFormatImageUrl = (url) => {
   if (!url) return '/default-cover.png'
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 const todayStart = new Date()

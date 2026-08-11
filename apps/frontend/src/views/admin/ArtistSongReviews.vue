@@ -229,6 +229,10 @@
                   <div class="flex flex-col">
                     <span class="text-gray-700 dark:text-gray-300">{{ formatDate(review.submittedAt) }}</span>
                     <span class="text-[11px] text-gray-500">{{ formatTime(review.submittedAt) }}</span>
+                    <span class="text-[11px] text-gray-500 mt-1">Phát hành: {{ formatReleaseDateTime(review.releaseAt || review.releaseDate) }}</span>
+                    <span class="mt-1 inline-flex w-fit px-1.5 py-0.5 rounded text-[10px] font-bold" :class="getReleaseReviewBadgeClass(review)">
+                      {{ getReleaseReviewBadgeText(review) }}
+                    </span>
                   </div>
                 </td>
                 <td class="py-2 px-3 text-center">
@@ -396,6 +400,10 @@
                   <span class="block text-xs font-semibold text-gray-500 uppercase mb-1">Album</span>
                   <span class="font-medium text-gray-800 dark:text-gray-200">{{ selectedReview.album?.title || 'Single' }}</span>
                 </div>
+                <div v-if="currentTab === 'songs'">
+                  <span class="block text-xs font-semibold text-gray-500 uppercase mb-1">Thời điểm phát hành</span>
+                  <span class="font-medium text-gray-800 dark:text-gray-200">{{ formatReleaseDateTime(selectedReview.releaseAt || selectedReview.releaseDate) }}</span>
+                </div>
                 <div>
                   <span class="block text-xs font-semibold text-gray-500 uppercase mb-1">Ngày gửi</span>
                   <span class="font-medium text-gray-800 dark:text-gray-200">{{ formatDateTime(selectedReview.submittedAt) }}</span>
@@ -404,6 +412,10 @@
                   <span class="block text-xs font-semibold text-gray-500 uppercase mb-1">Dữ liệu</span>
                   <span class="font-medium text-gray-800 dark:text-gray-200">{{ formatMetadataStatus(selectedReview.metadataStatus) }}</span>
                 </div>
+              </div>
+
+              <div v-if="currentTab === 'songs' && selectedReview.reviewStatus === 'pending_review'" class="mb-4 rounded-xl border p-3 text-sm font-semibold" :class="getReleaseWarningClass(selectedReview)">
+                {{ getReleaseWarningText(selectedReview) }}
               </div>
 
               <div v-if="selectedReview.submissionNote" class="mb-4">
@@ -1274,6 +1286,64 @@ const formatDuration = (sec) => {
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('vi-VN')
+}
+
+const formatReleaseDate = (dateStr) => {
+  if (!dateStr) return 'Chưa thiết lập'
+  return new Date(dateStr).toLocaleDateString('vi-VN')
+}
+
+const formatReleaseDateTime = (dateStr) => {
+  if (!dateStr) return 'Chưa thiết lập'
+  return new Date(dateStr).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getReleaseAtTime = (review = {}) => {
+  const value = review.releaseAt || review.release_at || review.releaseDate || review.release_date
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? null : time
+}
+
+const getReleaseReviewBadgeText = (review = {}) => {
+  const releaseTime = getReleaseAtTime(review)
+  if (!releaseTime) return 'Chưa thiết lập'
+  const now = Date.now()
+  const hoursLeft = (releaseTime - now) / 36e5
+  if ((review.reviewStatus || review.review_status) === 'pending_review' && releaseTime < now) return 'Quá hạn duyệt phát hành'
+  if (new Date(releaseTime).toLocaleDateString('vi-VN') === new Date().toLocaleDateString('vi-VN')) return 'Phát hành hôm nay'
+  if (hoursLeft <= 24) return 'Cần duyệt gấp'
+  if (hoursLeft <= 72) return 'Sắp phát hành'
+  return 'Đã lên lịch'
+}
+
+const getReleaseReviewBadgeClass = (review = {}) => {
+  const text = getReleaseReviewBadgeText(review)
+  if (text === 'Quá hạn duyệt phát hành') return 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+  if (text === 'Phát hành hôm nay' || text === 'Cần duyệt gấp') return 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+  if (text === 'Sắp phát hành') return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+  if (text === 'Đã lên lịch') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+  return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+}
+
+const getReleaseWarningText = (review = {}) => {
+  const releaseTime = getReleaseAtTime(review)
+  if (releaseTime && releaseTime < Date.now()) {
+    return 'Bài hát đã quá thời điểm phát hành dự kiến. Nếu được duyệt, bài hát sẽ được công khai ngay.'
+  }
+  return 'Bài hát cần được duyệt trước thời điểm phát hành để tránh ảnh hưởng đến lịch ra mắt của nghệ sĩ.'
+}
+
+const getReleaseWarningClass = (review = {}) => {
+  const releaseTime = getReleaseAtTime(review)
+  if (releaseTime && releaseTime < Date.now()) return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
+  return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
 }
 
 const formatTime = (dateStr) => {

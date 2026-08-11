@@ -154,8 +154,18 @@ async function fetchAudioFeaturesForSongs(songIds) {
 const candidatesCache = new Map();
 const candidatesInFlight = new Map();
 
-async function fetchCandidatesFromService(userId) {
-  const cacheKey = String(userId);
+function normalizeListeningWindow(options = {}) {
+  const window = options.analysisWindow || options.listeningWindow;
+  const startAt = window?.analysisStart || window?.startAt;
+  const endAt = window?.analysisEnd || window?.endAt;
+  return startAt && endAt ? { startAt, endAt } : null;
+}
+
+async function fetchCandidatesFromService(userId, options = {}) {
+  const listeningWindow = normalizeListeningWindow(options);
+  const cacheKey = listeningWindow
+    ? `${userId}:${listeningWindow.startAt}:${listeningWindow.endAt}`
+    : String(userId);
   if (candidatesCache.has(cacheKey)) {
     const cached = candidatesCache.get(cacheKey);
     if (Date.now() - cached.timestamp < 15 * 60 * 1000) { // 15 mins TTL
@@ -169,7 +179,11 @@ async function fetchCandidatesFromService(userId) {
 
   const promise = (async () => {
     try {
-      const res = await recommendationService.getRecommendationsForUser(userId, { limit: CANDIDATE_PULL, context: 'vibes' });
+      const res = await recommendationService.getRecommendationsForUser(userId, {
+        limit: CANDIDATE_PULL,
+        context: 'vibes',
+        listeningWindow: listeningWindow || undefined
+      });
       if (res && Array.isArray(res.items) && res.items.length) {
         const data = { items: res.items, strategy: res.strategy };
         candidatesCache.set(cacheKey, { timestamp: Date.now(), data });
@@ -454,7 +468,7 @@ async function getContextualMoodRecommendations(userId, options = {}) {
   const slot = TIME_SLOT_DEFS[timeSlot];
 
   // 1. Lấy candidate từ BPR-MF / fallback chain. (Tier 1)
-  const fromService = await fetchCandidatesFromService(userId);
+  const fromService = await fetchCandidatesFromService(userId, options);
   let candidates = fromService.items.map(shapeFromServiceItem);
   let candidateSource = fromService.strategy;
   

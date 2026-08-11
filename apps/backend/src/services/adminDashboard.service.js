@@ -911,7 +911,7 @@ async function getQuickOperations(forceRefresh = false) {
       const enabled = process.env.ENABLE_SYSTEM_PLAYLIST_SCHEDULER !== 'false';
       result.playlistAutomation = {
         schedulerEnabled: enabled,
-        scheduleDescription: 'Daily Mix: Tue-Sat/Mon 00:10; Weekly: Sun 07:00; Trending: daily 00:30; Mood: daily 01:00; Vibes: daily 01:15.',
+        scheduleDescription: 'Daily Mix 01-06: Mon-Sat 00:00; Weekly: Sun 00:00; Trending, Mood, Vibes: daily 00:00.',
         nextRunHint: 'Backend kiểm tra mỗi 60 phút và catch-up job đã quá mốc nếu chưa chạy thành công.'
       };
 

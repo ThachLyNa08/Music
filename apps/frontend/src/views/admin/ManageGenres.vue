@@ -24,7 +24,7 @@
 
     <div class="p-4 md:p-6 flex flex-col gap-4">
       <!-- Stat Cards -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 mb-2">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-2">
         <AdminKpiCard
           v-for="item in genreKpiCards"
           :key="item.title"
@@ -34,72 +34,6 @@
           compact
         />
       </div>
-
-    <!-- Genre Intelligence -->
-    <h2 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-      <MfIcon name="ai" size="18" class="text-indigo-500" />
-      Genre Intelligence
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <!-- Trending -->
-      <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-xl shadow-md text-white relative overflow-hidden group">
-        <MfIcon name="activity" size="80" class="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform" />
-        <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
-          Đang Trending
-        </div>
-        <div v-if="insightsLoading" class="space-y-2">
-          <div class="h-3 w-28 rounded bg-white/25 animate-pulse"></div>
-          <div class="h-3 w-20 rounded bg-white/20 animate-pulse"></div>
-          <div class="text-xs text-white/70">Đang cập nhật phân tích thể loại...</div>
-        </div>
-        <div v-else-if="insights.trending && insights.trending.length > 0" class="space-y-1">
-          <div v-for="(t, idx) in insights.trending" :key="t.id" class="text-sm font-bold truncate flex justify-between">
-            <span>{{ idx + 1 }}. {{ t.name }}</span>
-            <span class="text-white/70 text-xs">{{ formatNumber(t.listens) }}</span>
-          </div>
-        </div>
-        <div v-else class="text-sm">Chưa có dữ liệu</div>
-      </div>
-
-      <!-- Needs Optimization -->
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 shadow-sm relative overflow-hidden">
-        <div class="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 text-blue-500">
-          Cần tối ưu gợi ý
-        </div>
-        <div class="flex items-end gap-2">
-          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
-          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.needs_optimization_count }}</span>
-          <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
-        </div>
-        <p class="text-[10px] text-gray-400 mt-1">Đang bật Suggest nhưng ít lượt nghe (< 50).</p>
-      </div>
-
-      <!-- Few Songs -->
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
-        <div class="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 text-amber-500">
-          Quá ít bài hát
-        </div>
-        <div class="flex items-end gap-2">
-          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
-          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.few_songs_count }}</span>
-          <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
-        </div>
-        <p class="text-[10px] text-gray-400 mt-1">Có dưới 50 bài hát, ảnh hưởng Cold Start.</p>
-      </div>
-
-      <!-- Missing Data -->
-      <div class="bg-white dark:bg-bg-surface p-4 rounded-xl border border-rose-100 dark:border-rose-900/30 shadow-sm relative overflow-hidden">
-        <div class="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 text-rose-500">
-          Thiếu Metadata
-        </div>
-        <div class="flex items-end gap-2">
-          <span v-if="insightsLoading" class="h-8 w-12 rounded bg-gray-100 dark:bg-gray-800 animate-pulse"></span>
-          <span v-else class="text-3xl font-black text-gray-900 dark:text-white">{{ insights.missing_data_count }}</span>
-          <span class="text-sm text-gray-500 dark:text-gray-400 mb-1">thể loại</span>
-        </div>
-        <p class="text-[10px] text-gray-400 mt-1">Chưa có ảnh Cover hoặc Mô tả.</p>
-      </div>
-    </div>
 
     <!-- Filters & Bulk Actions -->
     <div class="flex flex-col xl:flex-row justify-between gap-3 mb-2">
@@ -435,7 +369,6 @@ function getGenreActions(genre) {
 
 const loading = ref(false);
 const isStatsLoading = ref(false);
-const insightsLoading = ref(false);
 const genres = ref([]);
 const allGenresForDropdown = ref([]);
 const pagination = reactive({ page: 1, limit: 10, totalPages: 1, total: 0 });
@@ -448,16 +381,7 @@ const summary = reactive({
   active_with_data: 0,
   empty_active: 0,
   featured: 0,
-  listens_7d: 0,
-  users_selected: 0,
-  playlist_usage: 0
-});
-
-const insights = reactive({
-  trending: [],
-  missing_data_count: 0,
-  few_songs_count: 0,
-  needs_optimization_count: 0
+  listens_7d: 0
 });
 
 // Bulk Action State
@@ -511,43 +435,8 @@ const fetchGenresSummary = async () => {
   }
 };
 
-const fetchGenresInsights = async () => {
-  insightsLoading.value = true;
-  let keepLoading = false;
-  try {
-    const insightsRes = await api.get('/admin/genres/insights');
-    if (insightsRes.data?.meta?.refreshing) {
-      keepLoading = true;
-      setTimeout(fetchGenresInsights, 1500);
-      return;
-    }
-    if (insightsRes.data.success) Object.assign(insights, insightsRes.data.data);
-  } catch (error) {
-    console.error('Lỗi khi tải genre insights', error);
-  } finally {
-    if (!keepLoading) insightsLoading.value = false;
-  }
-};
-
 const fetchDashboardData = async () => {
-  await Promise.allSettled([
-    fetchGenresSummary(),
-    fetchGenresInsights()
-  ]);
-  return;
-  isStatsLoading.value = true;
-  try {
-    const [summaryRes, insightsRes] = await Promise.all([
-      api.get('/admin/genres/summary'),
-      Promise.resolve({ data: { success: false } })
-    ]);
-    if (summaryRes.data.success) Object.assign(summary, summaryRes.data.data);
-    if (insightsRes.data.success) Object.assign(insights, insightsRes.data.data);
-  } catch (error) {
-    console.error('Lỗi khi tải dashboard data', error);
-  } finally {
-    isStatsLoading.value = false;
-  }
+  await fetchGenresSummary();
 };
 
 const fetchGenres = async () => {
@@ -755,20 +644,6 @@ const genreKpiCards = computed(() => [
     subtitle: 'Tổng lượt nghe',
     icon: 'activity',
     tone: 'purple'
-  },
-  {
-    title: 'User đăng ký',
-    value: formatNumber(summary.users_selected),
-    subtitle: 'Theo gu nghe',
-    icon: 'users',
-    tone: 'cyan'
-  },
-  {
-    title: 'Playlist dùng',
-    value: formatNumber(summary.playlist_usage),
-    subtitle: 'AI/System playlist',
-    icon: 'list-music',
-    tone: 'rose'
   }
 ]);
 

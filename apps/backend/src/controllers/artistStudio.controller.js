@@ -86,6 +86,7 @@ async function ensureSongDraftSchema() {
     await pool.query("ALTER TABLE songs MODIFY review_status ENUM('draft','approved','pending_review','rejected','changes_required') NOT NULL DEFAULT 'approved'").catch(() => {});
     await pool.query('ALTER TABLE songs MODIFY audio_url VARCHAR(500) NULL').catch(() => {});
     await pool.query('ALTER TABLE songs ADD COLUMN last_saved_at DATETIME NULL').catch(() => {});
+    await pool.query('ALTER TABLE songs ADD COLUMN release_date DATE NULL').catch(() => {});
     await pool.query('CREATE INDEX idx_song_last_saved_at ON songs(last_saved_at)').catch(() => {});
 
     cachedSongColumns = null;
@@ -103,6 +104,129 @@ async function getSongColumns() {
   const [rows] = await pool.query('SHOW COLUMNS FROM songs');
   cachedSongColumns = new Set(rows.map(row => row.Field));
   return cachedSongColumns;
+}
+
+function normalizeReleaseDateInput(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const normalized = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const err = new Error('Ngày phát hành không hợp lệ.');
+    err.statusCode = 400;
+    err.code = 'INVALID_RELEASE_DATE';
+    throw err;
+  }
+
+  const [year, month, day] = normalized.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    const err = new Error('Ngày phát hành không hợp lệ.');
+    err.statusCode = 400;
+    err.code = 'INVALID_RELEASE_DATE';
+    throw err;
+  }
+
+  return normalized;
+}
+
+function normalizeArtistReleaseAtInput(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const normalized = String(value).trim().replace('T', ' ');
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) {
+    const err = new Error('Thời điểm phát hành không hợp lệ.');
+    err.statusCode = 400;
+    err.code = 'INVALID_RELEASE_AT';
+    throw err;
+  }
+
+  const [, y, m, d, hh = '00', mm = '00', ss = '00'] = match;
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const hour = Number(hh);
+  const minute = Number(mm);
+  const second = Number(ss);
+  const date = new Date(year, month - 1, day, hour, minute, second);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute ||
+    date.getSeconds() !== second
+  ) {
+    const err = new Error('Thời điểm phát hành không hợp lệ.');
+    err.statusCode = 400;
+    err.code = 'INVALID_RELEASE_AT';
+    throw err;
+  }
+
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+}
+
+function resolveArtistReleaseAt(body = {}) {
+  const rawReleaseAt = body.release_at ?? body.releaseAt;
+  if (rawReleaseAt !== undefined && rawReleaseAt !== null && String(rawReleaseAt).trim() !== '') {
+    return normalizeArtistReleaseAtInput(rawReleaseAt);
+  }
+  return normalizeReleaseDateInput(body.release_date ?? body.releaseDate);
+}
+
+const ARTIST_RELEASE_REVIEW_LEAD_TIME_DAYS = Number(process.env.ARTIST_RELEASE_REVIEW_LEAD_TIME_DAYS || 15);
+
+function getArtistReleaseReviewLeadDays() {
+  return Number.isFinite(ARTIST_RELEASE_REVIEW_LEAD_TIME_DAYS) && ARTIST_RELEASE_REVIEW_LEAD_TIME_DAYS > 0
+    ? ARTIST_RELEASE_REVIEW_LEAD_TIME_DAYS
+    : 15;
+}
+
+function parseLocalReleaseTime(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
+  }
+  const normalized = String(value).trim().replace('T', ' ');
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return null;
+
+  const [, y, m, d, hh = '00', mm = '00', ss = '00'] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function getMinimumReleaseTime(value, leadDays) {
+  const hasExplicitTime = /[T\s]\d{2}:\d{2}/.test(String(value || ''));
+  const min = new Date();
+  min.setDate(min.getDate() + leadDays);
+  if (!hasExplicitTime) {
+    min.setHours(0, 0, 0, 0);
+  }
+  return min;
+}
+
+function assertReleaseLeadTime(value, label = 'Thời điểm phát hành') {
+  const leadDays = getArtistReleaseReviewLeadDays();
+  const releaseTime = parseLocalReleaseTime(value);
+
+  if (!releaseTime) {
+    const err = new Error(`${label} là bắt buộc khi gửi duyệt và phải cách thời điểm gửi ít nhất ${leadDays} ngày.`);
+    err.statusCode = 400;
+    err.code = 'RELEASE_LEAD_TIME_TOO_SHORT';
+    throw err;
+  }
+
+  if (releaseTime.getTime() < getMinimumReleaseTime(value, leadDays).getTime()) {
+    const err = new Error(`${label} phải cách thời điểm gửi duyệt ít nhất ${leadDays} ngày.`);
+    err.statusCode = 400;
+    err.code = 'RELEASE_LEAD_TIME_TOO_SHORT';
+    throw err;
+  }
 }
 
 const optionalTableColumnsCache = new Map();
@@ -415,10 +539,12 @@ function sendUploadError(res, error) {
   if (error.payload) {
     return res.status(error.statusCode || 409).json(error.payload);
   }
-  return res.status(error.statusCode || 500).json({
+  const payload = {
     success: false,
     message: error.message || 'Co loi xay ra.'
-  });
+  };
+  if (error.code) payload.code = error.code;
+  return res.status(error.statusCode || 500).json(payload);
 }
 
 function validateSongReadyForSubmission(song) {
@@ -1008,6 +1134,8 @@ exports.getSongs = async (req, res, next) => {
     const { q, status, page = 1, limit = 20, sort = 'newest' } = req.query;
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
+    const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
+    const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
     const offset = (Number(page) - 1) * Number(limit);
     const limitNum = Number(limit);
@@ -1047,6 +1175,8 @@ exports.getSongs = async (req, res, next) => {
         s.play_count, s.created_at,
         s.review_status, s.rejection_reason, s.resubmission_count, s.can_resubmit, s.resubmit_locked_reason, s.submitted_at, s.reviewed_at,
         ${submissionNoteSelect}
+        ${releaseDateSelect}
+        ${releaseAtSelect}
         s.lyrics,
         al.id as album_id, al.title as album_title,
         g.id as genre_id, g.name as genre_name, g.slug as genre_code,
@@ -1085,6 +1215,8 @@ exports.getSongs = async (req, res, next) => {
         lyricsStatus: r.lyrics ? 'available' : 'missing',
         metadataStatus,
         submissionNote: r.submission_note || null,
+        releaseAt: r.release_at || null,
+        releaseDate: r.release_date || null,
         createdAt: r.created_at,
         reviewStatus: r.review_status,
         rejectionReason: r.rejection_reason,
@@ -1162,6 +1294,8 @@ exports.getSongDetail = async (req, res, next) => {
     const songId = req.params.id;
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
+    const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
+    const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
     const [rows] = await pool.query(
       `SELECT
@@ -1169,6 +1303,8 @@ exports.getSongDetail = async (req, res, next) => {
         s.play_count, s.created_at,
         s.review_status, s.rejection_reason, s.resubmission_count, s.can_resubmit, s.resubmit_locked_reason, s.submitted_at, s.reviewed_at,
         ${submissionNoteSelect}
+        ${releaseDateSelect}
+        ${releaseAtSelect}
         al.id as album_id, al.title as album_title,
         g.id as genre_id, g.name as genre_name, g.slug as genre_code,
         (SELECT COUNT(*) FROM song_likes sl WHERE sl.song_id = s.id) AS like_count
@@ -1210,6 +1346,8 @@ exports.getSongDetail = async (req, res, next) => {
         lyricsStatus: r.lyrics ? 'available' : 'missing',
         metadataStatus,
         submissionNote: r.submission_note || null,
+        releaseAt: r.release_at || null,
+        releaseDate: r.release_date || null,
         createdAt: r.created_at,
         reviewStatus: r.review_status,
         rejectionReason: r.rejection_reason,
@@ -1230,6 +1368,8 @@ exports.uploadSong = async (req, res, next) => {
     const artistId = req.artist.id;
     const userId = req.user.id;
     const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
+    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
+    assertReleaseLeadTime(normalizedReleaseAt, 'Thời điểm phát hành');
     const uploadedFiles = [
       ...(req.files?.audio || []),
       ...(req.files?.cover || [])
@@ -1393,6 +1533,24 @@ exports.uploadSong = async (req, res, next) => {
       placeholders.splice(reviewIndex, 0, '?');
       values.splice(7, 0, submissionNote || reviewNote || null);
     }
+    if (songColumns.has('release_date')) {
+      fields.push('release_date');
+      if (normalizedReleaseAt) {
+        placeholders.push('?');
+        values.push(normalizedReleaseAt.slice(0, 10));
+      } else {
+        placeholders.push('CURDATE()');
+      }
+    }
+    if (songColumns.has('release_at')) {
+      fields.push('release_at');
+      if (normalizedReleaseAt) {
+        placeholders.push('?');
+        values.push(normalizedReleaseAt);
+      } else {
+        placeholders.push('NOW()');
+      }
+    }
 
     const [result] = await pool.query(
       `INSERT INTO songs (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`,
@@ -1425,6 +1583,7 @@ exports.uploadSong = async (req, res, next) => {
     }
   } catch (error) {
     cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
+    if (error.statusCode) return sendUploadError(res, error);
     next(error);
   }
 };
@@ -1434,6 +1593,7 @@ exports.createSongDraft = async (req, res, next) => {
     const artistId = req.artist.id;
     const userId = req.user.id;
     const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
+    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
     const uploadedFiles = [
       ...(req.files?.audio || []),
       ...(req.files?.cover || [])
@@ -1480,6 +1640,16 @@ exports.createSongDraft = async (req, res, next) => {
       placeholders.splice(reviewIndex, 0, '?');
       values.splice(7, 0, submissionNote || reviewNote || null);
     }
+    if (songColumns.has('release_date')) {
+      fields.push('release_date');
+      placeholders.push('?');
+      values.push(normalizedReleaseAt ? normalizedReleaseAt.slice(0, 10) : null);
+    }
+    if (songColumns.has('release_at')) {
+      fields.push('release_at');
+      placeholders.push('?');
+      values.push(normalizedReleaseAt);
+    }
     if (songColumns.has('last_saved_at')) {
       fields.push('last_saved_at');
       placeholders.push('NOW()');
@@ -1522,6 +1692,7 @@ exports.updateSong = async (req, res, next) => {
     const artistId = req.artist.id;
     const songId = parseInt(req.params.id, 10);
     const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
+    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
     const uploadedFiles = [
       ...(req.files?.audio || []),
       ...(req.files?.cover || [])
@@ -1559,6 +1730,16 @@ exports.updateSong = async (req, res, next) => {
     if (songColumns.has('submission_note') && (submissionNote !== undefined || reviewNote !== undefined)) {
       updateFields.push('submission_note = ?');
       values.push(submissionNote || reviewNote || null);
+    }
+    if (req.body.release_at !== undefined || req.body.releaseAt !== undefined || req.body.release_date !== undefined || req.body.releaseDate !== undefined) {
+      if (songColumns.has('release_date')) {
+        updateFields.push('release_date = ?');
+        values.push(normalizedReleaseAt ? normalizedReleaseAt.slice(0, 10) : null);
+      }
+      if (songColumns.has('release_at')) {
+        updateFields.push('release_at = ?');
+        values.push(normalizedReleaseAt);
+      }
     }
     if (fileData.audioUrl) {
       updateFields.push('audio_url = ?');
@@ -1614,6 +1795,7 @@ exports.submitSong = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Bai hat khong o trang thai co the gui duyet.' });
     }
 
+    assertReleaseLeadTime(song.release_at || song.release_date, 'Thời điểm phát hành');
     validateSongReadyForSubmission(song);
 
     if (song.audio_hash) {
@@ -1672,6 +1854,12 @@ exports.submitSong = async (req, res, next) => {
     }
     if (songColumns.has('last_saved_at')) {
       updateFields.push('last_saved_at = NOW()');
+    }
+    if (songColumns.has('release_date')) {
+      updateFields.push('release_date = COALESCE(release_date, CURDATE())');
+    }
+    if (songColumns.has('release_at')) {
+      updateFields.push('release_at = COALESCE(release_at, release_date, NOW())');
     }
 
     values.push(songId, artistId);
@@ -1767,6 +1955,13 @@ exports.deleteSongDraft = async (req, res, next) => {
     return res.json({ success: true, message: 'Da xoa ban nhap bai hat.', deletedId: songId });
   } catch (error) {
     await connection.rollback();
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message || 'Có lỗi xảy ra.'
+      });
+    }
     next(error);
   } finally {
     connection.release();
@@ -1790,6 +1985,7 @@ exports.getAlbums = async (req, res, next) => {
       albumColumns.has('cover_url') ? `COALESCE(NULLIF(al.cover_url, ''), (SELECT s.cover_url FROM songs s WHERE s.album_id = al.id AND s.cover_url IS NOT NULL AND s.cover_url != '' ORDER BY s.id ASC LIMIT 1)) as coverUrl` : 'NULL as coverUrl',
       albumColumns.has('description') ? 'al.description' : 'NULL as description',
       albumColumns.has('release_date') ? 'al.release_date as releaseDate' : 'NULL as releaseDate',
+      albumColumns.has('release_at') ? 'al.release_at as releaseAt' : 'NULL as releaseAt',
       albumColumns.has('review_status') ? 'al.review_status as reviewStatus' : "'approved' as reviewStatus",
       albumColumns.has('submitted_at') ? 'al.submitted_at as submittedAt' : 'NULL as submittedAt',
       albumColumns.has('reviewed_at') ? 'al.reviewed_at as reviewedAt' : 'NULL as reviewedAt',
@@ -1830,6 +2026,7 @@ exports.getAlbumDetail = async (req, res, next) => {
       albumColumns.has('cover_url') ? `COALESCE(NULLIF(al.cover_url, ''), (SELECT s.cover_url FROM songs s WHERE s.album_id = al.id AND s.cover_url IS NOT NULL AND s.cover_url != '' ORDER BY s.id ASC LIMIT 1)) as coverUrl` : 'NULL as coverUrl',
       albumColumns.has('description') ? 'al.description' : 'NULL as description',
       albumColumns.has('release_date') ? 'al.release_date as releaseDate' : 'NULL as releaseDate',
+      albumColumns.has('release_at') ? 'al.release_at as releaseAt' : 'NULL as releaseAt',
       albumColumns.has('review_status') ? 'al.review_status as reviewStatus' : "'approved' as reviewStatus",
       albumColumns.has('submitted_at') ? 'al.submitted_at as submittedAt' : 'NULL as submittedAt',
       albumColumns.has('reviewed_at') ? 'al.reviewed_at as reviewedAt' : 'NULL as reviewedAt',
@@ -1894,10 +2091,30 @@ exports.getAlbumSongOptions = async (req, res, next) => {
     if (songColumns.has('submitted_at')) {
       selectParts.push('submitted_at AS approvedAt');
     }
+    const whereParts = [
+      'artist_id = ?',
+      "review_status = 'approved'",
+      `(album_id IS NULL${(albumId && !isNaN(albumId)) ? ' OR album_id = ?' : ''})`
+    ];
+    if (songColumns.has('is_active')) {
+      whereParts.push('(is_active = 1 OR is_active IS NULL)');
+    }
+    if (songColumns.has('release_at')) {
+      whereParts.push('(release_at IS NULL OR release_at <= NOW())');
+    }
+    if (songColumns.has('release_status') && songColumns.has('release_at')) {
+      whereParts.push(`(
+        release_status IS NULL
+        OR release_status = 'published'
+        OR (release_status = 'scheduled' AND release_at IS NOT NULL AND release_at <= NOW())
+      )`);
+    } else if (songColumns.has('release_status')) {
+      whereParts.push(`(release_status IS NULL OR release_status = 'published')`);
+    }
     const queryStr = `
       SELECT ${selectParts.join(', ')}
       FROM songs
-      WHERE artist_id = ? AND review_status = 'approved' AND (album_id IS NULL${(albumId && !isNaN(albumId)) ? ' OR album_id = ?' : ''})
+      WHERE ${whereParts.join(' AND ')}
       ${orderClause}
     `;
     const queryParams = (albumId && !isNaN(albumId)) ? [artistId, albumId] : [artistId];
@@ -1915,6 +2132,9 @@ exports.createAlbum = async (req, res, next) => {
     await connection.beginTransaction();
     const artistId = req.artist.id;
     const { title, description, releaseDate, submissionNote } = req.body;
+    const normalizedAlbumReleaseAt = resolveArtistReleaseAt(req.body);
+    const normalizedAlbumReleaseDate = normalizedAlbumReleaseAt ? normalizedAlbumReleaseAt.slice(0, 10) : null;
+    assertReleaseLeadTime(normalizedAlbumReleaseAt, 'Thời điểm phát hành');
     let songIds = [];
     if (req.body.songIds) {
       try {
@@ -1983,12 +2203,12 @@ exports.createAlbum = async (req, res, next) => {
     if (albumColumns.has('release_date')) {
       fields.push('release_date');
       placeholders.push('?');
-      values.push(releaseDate || null);
+      values.push(normalizedAlbumReleaseDate);
     }
     if (albumColumns.has('release_at')) {
       fields.push('release_at');
       placeholders.push('?');
-      values.push(releaseDate || null);
+      values.push(normalizedAlbumReleaseAt);
     }
     if (albumColumns.has('submission_note')) {
       fields.push('submission_note');
@@ -2094,6 +2314,13 @@ exports.createAlbum = async (req, res, next) => {
     }
   } catch (error) {
     await connection.rollback();
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message || 'Có lỗi xảy ra.'
+      });
+    }
     next(error);
   } finally {
     connection.release();
@@ -2105,6 +2332,8 @@ exports.resubmitSong = async (req, res, next) => {
     const artistId = req.artist.id;
     const songId = parseInt(req.params.id, 10);
     const { title, lyrics, submissionNote } = req.body;
+    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
+    assertReleaseLeadTime(normalizedReleaseAt, 'Thời điểm phát hành');
     const uploadedFiles = [
       ...(req.files?.audio || []),
       ...(req.files?.cover || [])
@@ -2237,6 +2466,22 @@ exports.resubmitSong = async (req, res, next) => {
       updateFields.push('submission_note = ?');
       values.push(submissionNote || null);
     }
+    if (songColumns.has('release_date')) {
+      updateFields.push('release_date = ?');
+      if (normalizedReleaseAt) {
+        values.push(normalizedReleaseAt.slice(0, 10));
+      } else {
+        updateFields[updateFields.length - 1] = 'release_date = CURDATE()';
+      }
+    }
+    if (songColumns.has('release_at')) {
+      updateFields.push('release_at = ?');
+      if (normalizedReleaseAt) {
+        values.push(normalizedReleaseAt);
+      } else {
+        updateFields[updateFields.length - 1] = 'release_at = NOW()';
+      }
+    }
 
     if (songColumns.has('audio_hash') && audioHash) {
       updateFields.push('audio_hash = ?');
@@ -2291,6 +2536,7 @@ exports.resubmitSong = async (req, res, next) => {
 
   } catch (error) {
     cleanupUploadedFiles(req.files ? [...(req.files.audio || []), ...(req.files.cover || [])] : []);
+    if (error.statusCode) return sendUploadError(res, error);
     next(error);
   }
 };
@@ -2302,6 +2548,9 @@ exports.resubmitAlbum = async (req, res, next) => {
     const artistId = req.artist.id;
     const albumId = parseInt(req.params.id, 10);
     const { title, description, releaseDate, submissionNote } = req.body;
+    const normalizedAlbumReleaseAt = resolveArtistReleaseAt(req.body);
+    const normalizedAlbumReleaseDate = normalizedAlbumReleaseAt ? normalizedAlbumReleaseAt.slice(0, 10) : null;
+    assertReleaseLeadTime(normalizedAlbumReleaseAt, 'Thời điểm phát hành');
     let songIds = [];
     if (req.body.songIds) {
       try {
@@ -2417,11 +2666,11 @@ exports.resubmitAlbum = async (req, res, next) => {
     }
     if (albumColumns.has('release_date')) {
       updateFields.push('release_date = ?');
-      values.push(releaseDate || null);
+      values.push(normalizedAlbumReleaseDate);
     }
     if (albumColumns.has('release_at')) {
       updateFields.push('release_at = ?');
-      values.push(releaseDate || null);
+      values.push(normalizedAlbumReleaseAt);
     }
     if (albumColumns.has('submission_note')) {
       updateFields.push('submission_note = ?');
@@ -2481,6 +2730,13 @@ exports.resubmitAlbum = async (req, res, next) => {
   } catch (error) {
     if (req.file) cleanupUploadedFiles([req.file]);
     await connection.rollback();
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message || 'Có lỗi xảy ra.'
+      });
+    }
     next(error);
   } finally {
     connection.release();

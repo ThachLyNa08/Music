@@ -50,6 +50,7 @@ import { ref, watch } from 'vue'
 import api from '@/api/axios'
 import { getPlaylistCover } from '@/utils/imageUrl'
 import { useToastStore } from '@/stores/toast'
+import { toBackendAssetUrl } from '@/config/runtime'
 
 const toastStore = useToastStore()
 
@@ -66,9 +67,7 @@ const playlists = ref([])
 
 const localFormatImageUrl = (url) => {
   if (!url) return '' 
-  if (url.startsWith('http')) return url
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  return `${baseUrl}${url}`
+  return toBackendAssetUrl(url)
 }
 
 watch(() => props.show, async (newVal) => {
