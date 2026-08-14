@@ -6,6 +6,12 @@ const {
 } = require('../utils/aiPlaylistIntentSchema');
 const { isValidLabel } = require('../utils/aiPlaylistLabels');
 
+const PROVIDERS = Object.freeze({
+    GROQ: 'groq',
+    GEMINI: 'gemini',
+    TAXONOMY: 'taxonomy'
+});
+
 const intentCache = new Map();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -13,6 +19,8 @@ function getCacheKey(prompt, options = {}) {
     return [
         options.mode || 'default',
         options.targetCount || '',
+        normalizeProvider(process.env.LLM_PROVIDER, PROVIDERS.GROQ),
+        normalizeProvider(process.env.LLM_FALLBACK_PROVIDER, PROVIDERS.GEMINI),
         String(prompt || '').trim().toLowerCase()
     ].join(':');
 }
@@ -119,6 +127,67 @@ function detectExplicitMarket(prompt = '') {
 
 function unique(values) {
     return [...new Set(normalizeArray(values))];
+}
+
+function normalizeProvider(value, fallback = PROVIDERS.GROQ) {
+    const provider = String(value || '').trim().toLowerCase();
+    return [PROVIDERS.GROQ, PROVIDERS.GEMINI].includes(provider) ? provider : fallback;
+}
+
+function hasMeaningfulParsedIntent(parsedIntent = {}) {
+    if (!parsedIntent || typeof parsedIntent !== 'object') return false;
+    if (parsedIntent.mode && parsedIntent.mode !== 'unknown') return true;
+    if (parsedIntent.market) return true;
+    if ((parsedIntent.genres || []).length) return true;
+    if ((parsedIntent.artists || []).length) return true;
+    if ((parsedIntent.includeArtists || []).length) return true;
+    if ((parsedIntent.excludeArtists || []).length) return true;
+    if ((parsedIntent.mood || []).length) return true;
+    if ((parsedIntent.context || []).length) return true;
+    if (parsedIntent.activity) return true;
+    if (parsedIntent.tempo && parsedIntent.tempo !== 'medium') return true;
+    if (parsedIntent.energy && parsedIntent.energy !== 'medium') return true;
+    if (parsedIntent.avoidEnergy) return true;
+    if ((parsedIntent.excludeGenres || []).length) return true;
+    if (hasRhythmIntent(parsedIntent.rhythm)) return true;
+    if (parsedIntent.seedSongTitle) return true;
+    return Number(parsedIntent.confidence || 0) > 0;
+}
+
+function validateProviderIntent(result, options = {}, taxonomyIntent = {}) {
+    if (!result?.ok) return result;
+
+    const parsedIntent = applyPromptGuardsToNormalizedIntent(validateAndNormalizeIntent(result.intent, {
+        forceAction: options.mode === 'ai_playlist' ? 'create_playlist' : undefined,
+        targetCount: options.targetCount || 20
+    }), options.prompt || '', taxonomyIntent);
+
+    if (!hasMeaningfulParsedIntent(parsedIntent)) {
+        return {
+            ...result,
+            ok: false,
+            reason: 'INVALID_INTENT',
+            parsedIntent
+        };
+    }
+
+    return {
+        ...result,
+        parsedIntent
+    };
+}
+
+function logProviderSuccess(result) {
+    const latency = Number.isFinite(Number(result?.latencyMs)) ? ` latency=${result.latencyMs}ms` : '';
+    const model = result?.model ? ` model=${result.model}` : '';
+    console.log(`[LLM] success provider=${result.provider}${model}${latency}`);
+}
+
+function logProviderFailure(result) {
+    const provider = result?.provider || 'unknown';
+    const reason = result?.reason || 'UNKNOWN';
+    const latency = Number.isFinite(Number(result?.latencyMs)) ? ` latency=${result.latencyMs}ms` : '';
+    console.warn(`[LLM] ${provider} failed reason=${reason}${latency}`);
 }
 
 function mapGenre(value) {
@@ -564,7 +633,10 @@ async function parseStructuredIntent(prompt, options = {}) {
         };
     }
 
-    const taxonomyIntent = getTaxonomyIntent(prompt, options);
+    const rawTaxonomyIntent = getTaxonomyIntent(prompt, options);
+    const taxonomyIntent = options.mode === 'ai_playlist'
+        ? sanitizeAiPlaylistIntent(rawTaxonomyIntent)
+        : rawTaxonomyIntent;
 
     if (process.env.LLM_ENABLED !== 'true') {
         const result = {
@@ -578,56 +650,59 @@ async function parseStructuredIntent(prompt, options = {}) {
         return result;
     }
 
-    const groqResult = await parseIntentWithGroq(prompt, options);
+    const primaryProvider = normalizeProvider(process.env.LLM_PROVIDER, PROVIDERS.GROQ);
+    const fallbackProvider = normalizeProvider(process.env.LLM_FALLBACK_PROVIDER, PROVIDERS.GEMINI);
+    const parseByProvider = primaryProvider === PROVIDERS.GEMINI ? parseIntentWithGemini : parseIntentWithGroq;
+    let primaryResult = validateProviderIntent(await parseByProvider(prompt, options), { ...options, prompt }, taxonomyIntent);
 
-    if (groqResult.ok) {
-        const llmIntent = { ...groqResult.intent, _provider: 'groq' };
-        const parsedIntent = applyPromptGuardsToNormalizedIntent(validateAndNormalizeIntent(groqResult.intent, {
-            forceAction: options.mode === 'ai_playlist' ? 'create_playlist' : undefined,
-            targetCount: options.targetCount || 20
-        }), prompt, taxonomyIntent);
+    if (primaryResult.ok) {
+        logProviderSuccess(primaryResult);
+        const llmIntent = { ...primaryResult.intent, _provider: primaryProvider };
         const result = {
-            provider: 'groq',
+            provider: primaryProvider,
             intent: mergeIntent(taxonomyIntent, llmIntent, { ...options, prompt }),
             fallbackUsed: false,
-            parsedIntent
+            parsedIntent: primaryResult.parsedIntent
         };
 
         setCachedIntent(cacheKey, result);
         return result;
     }
 
-    let geminiResult = null;
+    logProviderFailure(primaryResult);
+    let fallbackResult = null;
 
-    if (process.env.LLM_FALLBACK_PROVIDER === 'gemini') {
-        geminiResult = await parseIntentWithGemini(prompt, options);
+    if (fallbackProvider && fallbackProvider !== primaryProvider) {
+        console.warn(`[LLM] fallback=${fallbackProvider}`);
+        const fallbackParser = fallbackProvider === PROVIDERS.GEMINI ? parseIntentWithGemini : parseIntentWithGroq;
+        fallbackResult = validateProviderIntent(await fallbackParser(prompt, options), { ...options, prompt }, taxonomyIntent);
 
-        if (geminiResult.ok) {
-            const llmIntent = { ...geminiResult.intent, _provider: 'gemini' };
-            const parsedIntent = applyPromptGuardsToNormalizedIntent(validateAndNormalizeIntent(geminiResult.intent, {
-                forceAction: options.mode === 'ai_playlist' ? 'create_playlist' : undefined,
-                targetCount: options.targetCount || 20
-            }), prompt, taxonomyIntent);
+        if (fallbackResult.ok) {
+            logProviderSuccess(fallbackResult);
+            const llmIntent = { ...fallbackResult.intent, _provider: fallbackProvider };
             const result = {
-                provider: 'gemini',
+                provider: fallbackProvider,
                 intent: mergeIntent(taxonomyIntent, llmIntent, { ...options, prompt }),
                 fallbackUsed: true,
-                fallbackReason: groqResult.reason,
-                parsedIntent
+                fallbackReason: primaryResult.reason,
+                parsedIntent: fallbackResult.parsedIntent
             };
 
             setCachedIntent(cacheKey, result);
             return result;
         }
+
+        logProviderFailure(fallbackResult);
     }
 
+    console.warn('[LLM] fallback=local_taxonomy');
     const result = {
-        provider: 'taxonomy',
+        provider: PROVIDERS.TAXONOMY,
         intent: taxonomyIntent,
         fallbackUsed: true,
-        fallbackReason: geminiResult?.reason
-            ? `${groqResult.reason};${geminiResult.reason}`
-            : groqResult.reason
+        fallbackReason: fallbackResult?.reason
+            ? `${primaryResult.reason};${fallbackResult.reason}`
+            : primaryResult.reason
     };
 
     setCachedIntent(cacheKey, result);

@@ -1,6 +1,38 @@
 ﻿const { pool } = require('../config/database');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 
+function normalizePositiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function normalizeFutureDate(value, fieldLabel) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(`${fieldLabel} không hợp lệ`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (date <= new Date()) {
+    const error = new Error(`${fieldLabel} phải ở tương lai`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return date;
+}
+
+function normalizeOptionalText(value, maxLength, fieldLabel) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  if (text.length > maxLength) {
+    const error = new Error(`${fieldLabel} không được vượt quá ${maxLength} ký tự`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return text || null;
+}
+
 // Helper to determine if user is currently premium
 const getPremiumStatus = (expiresAt) => {
   if (!expiresAt) return 'none';
@@ -271,9 +303,14 @@ exports.getPremiumPlans = async (req, res, next) => {
 exports.updatePremium = async (req, res, next) => {
   let conn;
   try {
-    const userId = req.params.id;
-    const { planId, expiresAt, note } = req.body;
+    const userId = normalizePositiveId(req.params.id);
+    const planId = normalizePositiveId(req.body.planId);
+    const expiresAt = normalizeFutureDate(req.body.expiresAt, 'Ngày hết hạn Premium');
+    const note = normalizeOptionalText(req.body.note, 500, 'Ghi chú');
 
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID người dùng không hợp lệ' });
+    }
     if (!planId) {
       return res.status(400).json({ success: false, message: 'Thiếu planId' });
     }
@@ -290,14 +327,14 @@ exports.updatePremium = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
-    const [[plan]] = await conn.query('SELECT id, name FROM premium_plans WHERE id = ?', [planId]);
+    const [[plan]] = await conn.query('SELECT id, name FROM premium_plans WHERE id = ? AND is_active = 1', [planId]);
     if (!plan) {
       await conn.rollback();
       return res.status(404).json({ success: false, message: 'Gói Premium không tồn tại' });
     }
 
     // Optional: Log admin action (if audit log table existed, we would insert it here. But there is no audit log table in musicflow_schema.sql. If it exists somewhere else, we could log it. I will skip inserting to audit log if table doesn't exist, but we can log to console).
-    console.log(`[ADMIN AUDIT] User ID: ${req.user?.id || 'admin'} updated premium for User ID: ${userId}. Old plan: ${user.premium_plan_id}, New plan: ${planId}, Note: ${note}`);
+    console.log(`[ADMIN AUDIT] User ID: ${req.user?.id || 'admin'} updated premium for User ID: ${userId}. Old plan: ${user.premium_plan_id}, New plan: ${planId}, Note: ${note || ''}`);
 
     // Update users table
     await conn.query(`
@@ -340,8 +377,11 @@ exports.updatePremium = async (req, res, next) => {
 exports.cancelPremium = async (req, res, next) => {
   let conn;
   try {
-    const userId = req.params.id;
-    const { note } = req.body;
+    const userId = normalizePositiveId(req.params.id);
+    const note = normalizeOptionalText(req.body?.note, 500, 'Ghi chú');
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID người dùng không hợp lệ' });
+    }
 
     conn = await pool.getConnection();
     await conn.beginTransaction();
@@ -352,7 +392,7 @@ exports.cancelPremium = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
-    console.log(`[ADMIN AUDIT] User ID: ${req.user?.id || 'admin'} cancelled premium for User ID: ${userId}. Note: ${note}`);
+    console.log(`[ADMIN AUDIT] User ID: ${req.user?.id || 'admin'} cancelled premium for User ID: ${userId}. Note: ${note || ''}`);
 
     // Set expiration to NOW() to effectively cancel it without deleting history
     await conn.query(`
@@ -500,8 +540,11 @@ exports.exportPremium = async (req, res, next) => {
 
 exports.remindExpiring = async (req, res, next) => {
   try {
-    const { userId } = req.params;
+    const userId = normalizePositiveId(req.params.userId);
     const adminId = req.user?.id; // Assuming requireAdmin middleware puts user in req.user
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID người dùng không hợp lệ' });
+    }
 
     // Check if user has active premium and is within 7 days of expiry
     const [users] = await pool.query(

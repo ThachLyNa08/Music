@@ -1,4 +1,7 @@
 const OpenAI = require('openai');
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+const DEFAULT_GROQ_TIMEOUT_MS = 10000;
+const RETRIABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 const SYSTEM_PROMPT = `
 Ban la bo phan tich intent cho he thong nghe nhac MusicFlow.
@@ -105,6 +108,53 @@ function safeParseJson(text) {
     }
 }
 
+function resolveTimeoutMs(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_GROQ_TIMEOUT_MS;
+    return Math.min(parsed, 30000);
+}
+
+function getGroqModel() {
+    return String(process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL).trim() || DEFAULT_GROQ_MODEL;
+}
+
+function getSafeErrorInfo(error) {
+    return {
+        name: error?.name || null,
+        status: error?.status || error?.statusCode || null,
+        code: error?.code || null,
+        message: error?.message ? String(error.message).slice(0, 220) : null
+    };
+}
+
+function classifyGroqError(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    if (error?.name === 'AbortError' || error?.code === 'ABORT_ERR') return 'GROQ_TIMEOUT';
+    if (status === 408) return 'GROQ_TIMEOUT';
+    if (status === 429) return 'GROQ_RATE_LIMIT';
+    if (status >= 500 && status <= 599) return `GROQ_${status}`;
+    if (status === 404) return 'GROQ_MODEL_NOT_FOUND';
+    return error?.code || error?.name || 'GROQ_API_ERROR';
+}
+
+function shouldRetryGroq(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    return error?.name === 'AbortError'
+        || error?.code === 'ABORT_ERR'
+        || RETRIABLE_STATUSES.has(status)
+        || ['APIConnectionError', 'FetchError', 'TimeoutError'].includes(error?.name);
+}
+
+async function createCompletionWithTimeout(client, request, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await client.chat.completions.create(request, { signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function parseIntentWithGroq(prompt, options = {}) {
     if (process.env.LLM_ENABLED !== 'true') {
         return { ok: false, provider: 'groq', reason: 'LLM_DISABLED' };
@@ -119,11 +169,12 @@ async function parseIntentWithGroq(prompt, options = {}) {
         baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'
     });
 
-    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 8000);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const model = getGroqModel();
+    const timeoutMs = resolveTimeoutMs(options.timeoutMs || process.env.GROQ_TIMEOUT_MS || process.env.LLM_TIMEOUT_MS);
+    const startedAt = Date.now();
 
     try {
+        console.log(`[LLM] provider=groq model=${model}`);
         const userPrompt = `
 Prompt nguoi dung: ${prompt}
 
@@ -133,20 +184,35 @@ Target count: ${options.targetCount || null}
 Chi tra JSON hop le.
 `;
 
-        const response = await client.chat.completions.create(
-            {
-                model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+        const request = {
+                model,
                 temperature: 0.1,
                 max_tokens: 700,
+                response_format: { type: 'json_object' },
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: userPrompt }
                 ]
-            },
-            { signal: controller.signal }
-        );
+            };
+
+        let response;
+        try {
+            response = await createCompletionWithTimeout(client, request, timeoutMs);
+        } catch (firstError) {
+            if (!shouldRetryGroq(firstError)) throw firstError;
+            console.warn('[LLM] groq retry reason=', classifyGroqError(firstError));
+            response = await createCompletionWithTimeout(client, request, Math.min(timeoutMs, 5000));
+        }
 
         const content = response?.choices?.[0]?.message?.content;
+        if (!content || !String(content).trim()) {
+            return {
+                ok: false,
+                provider: 'groq',
+                reason: 'EMPTY_RESPONSE'
+            };
+        }
+
         const parsed = safeParseJson(content);
 
         if (!parsed || typeof parsed !== 'object') {
@@ -160,34 +226,24 @@ Chi tra JSON hop le.
         return {
             ok: true,
             provider: 'groq',
-            intent: parsed
+            intent: parsed,
+            model,
+            latencyMs: Date.now() - startedAt
         };
     } catch (error) {
-        console.warn('[Groq Intent Parser] fallback:', {
-            name: error?.name,
-            status: error?.status,
-            code: error?.code,
-            message: error?.message
-        });
-
-        if (error?.status === 429) {
-            return { ok: false, provider: 'groq', reason: 'GROQ_RATE_LIMIT' };
-        }
-
-        if (error?.name === 'AbortError') {
-            return { ok: false, provider: 'groq', reason: 'GROQ_TIMEOUT' };
-        }
+        console.warn('[Groq Intent Parser] fallback:', getSafeErrorInfo(error));
 
         return {
             ok: false,
             provider: 'groq',
-            reason: error?.code || error?.name || 'GROQ_API_ERROR'
+            reason: classifyGroqError(error),
+            model,
+            latencyMs: Date.now() - startedAt
         };
-    } finally {
-        clearTimeout(timer);
     }
 }
 
 module.exports = {
-    parseIntentWithGroq
+    parseIntentWithGroq,
+    safeParseJson
 };

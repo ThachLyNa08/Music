@@ -67,6 +67,15 @@ exports.downloadInstrumental = async (req, res) => {
   }
 };
 
+exports.downloadSongInstrumental = async (req, res) => {
+  try {
+    const filePath = await stemService.getInstrumentalDownloadForSong(Number(req.params.songId), req.user);
+    return res.download(filePath, path.basename(filePath));
+  } catch (err) {
+    return sendError(res, err);
+  }
+};
+
 exports.updateJobFromAiService = async (req, res) => {
   try {
     const expectedToken = process.env.STEM_CALLBACK_TOKEN || process.env.JWT_SECRET || '';

@@ -6,6 +6,97 @@ const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 const GENRE_INSIGHTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const genreMemoryCache = new Map();
 let genreInsightsRefreshPromise = null;
+const GENRE_STATUSES = ['active', 'hidden'];
+const GENRE_MARKETS = ['VPOP', 'KPOP', 'USUK', 'OTHER'];
+const GENRE_ROLES = ['primary', 'secondary'];
+
+function normalizePositiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function normalizePositiveIdList(values, max = 500, { strict = false } = {}) {
+  if (!Array.isArray(values)) return [];
+  if (strict && values.length > max) return null;
+  const ids = values.map(normalizePositiveId);
+  if (strict && ids.some(id => !id)) return null;
+  return [...new Set(ids.filter(Boolean))].slice(0, max);
+}
+
+function normalizeNonNegativeInteger(value, defaultValue = undefined) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    const error = new Error('Thứ tự sắp xếp không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  return number;
+}
+
+function normalizeText(value, maxLength, { required = false, field = 'Giá trị' } = {}) {
+  if (value === undefined || value === null) {
+    if (required) {
+      const error = new Error(`${field} là bắt buộc`);
+      error.statusCode = 400;
+      throw error;
+    }
+    return undefined;
+  }
+  const text = String(value).trim();
+  if (required && !text) {
+    const error = new Error(`${field} là bắt buộc`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (text.length > maxLength) {
+    const error = new Error(`${field} không được vượt quá ${maxLength} ký tự`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return text || null;
+}
+
+function normalizeBoolean(value, defaultValue = undefined) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  if (value === true || value === 1 || value === '1' || value === 'true') return 1;
+  if (value === false || value === 0 || value === '0' || value === 'false') return 0;
+  const error = new Error('Giá trị boolean không hợp lệ');
+  error.statusCode = 400;
+  throw error;
+}
+
+function normalizeGenreStatus(value, defaultValue = undefined) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const status = String(value).trim();
+  if (!GENRE_STATUSES.includes(status)) {
+    const error = new Error('Trạng thái thể loại không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  return status;
+}
+
+function normalizeGenreMarket(value, defaultValue = null) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const market = String(value).trim().toUpperCase();
+  if (!GENRE_MARKETS.includes(market)) {
+    const error = new Error('Market thể loại không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  return market;
+}
+
+function slugifyGenre(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 function getCachedValue(cacheKey) {
   const entry = genreMemoryCache.get(cacheKey);
@@ -140,18 +231,28 @@ exports.getGenreDetail = async (req, res, next) => {
 
 exports.createGenre = async (req, res, next) => {
   try {
-    const {
-      name, slug, description, color, icon, is_featured, sort_order, status,
-      market, parent_id, use_in_recommendation, use_in_cold_start, use_in_ai_playlist
-    } = req.body;
-    let finalSlug = slug;
-
-    if (!name) {
-      return res.status(400).json({ success: false, message: 'Tên thể loại là bắt buộc' });
-    }
+    const name = normalizeText(req.body.name, 100, { required: true, field: 'Tên thể loại' });
+    const description = normalizeText(req.body.description, 1000, { field: 'Mô tả' });
+    const color = normalizeText(req.body.color, 20, { field: 'Màu sắc' });
+    const icon = normalizeText(req.body.icon, 50, { field: 'Icon' });
+    const sortOrder = normalizeNonNegativeInteger(req.body.sort_order, 0);
+    const status = normalizeGenreStatus(req.body.status, 'active');
+    const market = normalizeGenreMarket(req.body.market, null);
+    const parentId = req.body.parent_id === undefined || req.body.parent_id === null || req.body.parent_id === ''
+      ? null
+      : normalizePositiveId(req.body.parent_id);
+    let finalSlug = normalizeText(req.body.slug, 100, { field: 'Slug' });
 
     if (!finalSlug) {
-      finalSlug = name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+      finalSlug = slugifyGenre(name);
+    } else {
+      finalSlug = slugifyGenre(finalSlug);
+    }
+    if (!finalSlug) {
+      return res.status(400).json({ success: false, message: 'Slug thể loại không hợp lệ' });
+    }
+    if (req.body.parent_id !== undefined && req.body.parent_id !== null && req.body.parent_id !== '' && !parentId) {
+      return res.status(400).json({ success: false, message: 'Thể loại cha không hợp lệ' });
     }
 
     // Kiểm tra trùng lặp
@@ -178,14 +279,14 @@ exports.createGenre = async (req, res, next) => {
       color || null,
       icon || null,
       cover_url,
-      is_featured === 'true' || is_featured === true ? 1 : 0,
-      parseInt(sort_order) || 0,
-      status || 'active',
-      market || null,
-      parent_id ? parseInt(parent_id) : null,
-      use_in_recommendation === undefined ? 1 : (use_in_recommendation === 'true' || use_in_recommendation === true ? 1 : 0),
-      use_in_cold_start === undefined ? 1 : (use_in_cold_start === 'true' || use_in_cold_start === true ? 1 : 0),
-      use_in_ai_playlist === undefined ? 1 : (use_in_ai_playlist === 'true' || use_in_ai_playlist === true ? 1 : 0)
+      normalizeBoolean(req.body.is_featured, 0),
+      sortOrder,
+      status,
+      market,
+      parentId,
+      normalizeBoolean(req.body.use_in_recommendation, 1),
+      normalizeBoolean(req.body.use_in_cold_start, 1),
+      normalizeBoolean(req.body.use_in_ai_playlist, 1)
     ]);
 
     res.status(201).json({ success: true, message: 'Thêm thể loại thành công', data: { id: result.insertId } });
@@ -197,10 +298,39 @@ exports.createGenre = async (req, res, next) => {
 exports.updateGenre = async (req, res, next) => {
   try {
     const id = req.params.id;
-    const {
-      name, slug, description, color, icon, is_featured, sort_order, status,
-      market, parent_id, use_in_recommendation, use_in_cold_start, use_in_ai_playlist
-    } = req.body;
+    const hasName = Object.prototype.hasOwnProperty.call(req.body, 'name');
+    const hasSlug = Object.prototype.hasOwnProperty.call(req.body, 'slug');
+    const name = hasName ? normalizeText(req.body.name, 100, { required: true, field: 'Tên thể loại' }) : undefined;
+    const description = Object.prototype.hasOwnProperty.call(req.body, 'description')
+      ? normalizeText(req.body.description, 1000, { field: 'Mô tả' })
+      : undefined;
+    const color = Object.prototype.hasOwnProperty.call(req.body, 'color')
+      ? normalizeText(req.body.color, 20, { field: 'Màu sắc' })
+      : undefined;
+    const icon = Object.prototype.hasOwnProperty.call(req.body, 'icon')
+      ? normalizeText(req.body.icon, 50, { field: 'Icon' })
+      : undefined;
+    let slug = hasSlug ? normalizeText(req.body.slug, 100, { field: 'Slug' }) : undefined;
+    if (slug !== undefined && slug !== null) {
+      slug = slugifyGenre(slug);
+      if (!slug) return res.status(400).json({ success: false, message: 'Slug thể loại không hợp lệ' });
+    }
+    const status = normalizeGenreStatus(req.body.status, undefined);
+    const market = Object.prototype.hasOwnProperty.call(req.body, 'market')
+      ? normalizeGenreMarket(req.body.market, null)
+      : undefined;
+    const parentId = Object.prototype.hasOwnProperty.call(req.body, 'parent_id')
+      ? (req.body.parent_id === null || req.body.parent_id === '' ? null : normalizePositiveId(req.body.parent_id))
+      : undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'parent_id') && req.body.parent_id !== null && req.body.parent_id !== '' && !parentId) {
+      return res.status(400).json({ success: false, message: 'Thể loại cha không hợp lệ' });
+    }
+    if (parentId && Number(parentId) === Number(id)) {
+      return res.status(400).json({ success: false, message: 'Thể loại không thể là cha của chính nó' });
+    }
+    const sortOrder = Object.prototype.hasOwnProperty.call(req.body, 'sort_order')
+      ? normalizeNonNegativeInteger(req.body.sort_order)
+      : undefined;
 
     // Kiểm tra tồn tại
     const [current] = await pool.query('SELECT * FROM genres WHERE id = ?', [id]);
@@ -254,14 +384,14 @@ exports.updateGenre = async (req, res, next) => {
       color !== undefined ? color : current[0].color,
       icon !== undefined ? icon : current[0].icon,
       cover_url,
-      is_featured !== undefined ? (is_featured === 'true' || is_featured === true ? 1 : 0) : current[0].is_featured,
-      sort_order !== undefined ? parseInt(sort_order) : current[0].sort_order,
+      req.body.is_featured !== undefined ? normalizeBoolean(req.body.is_featured, current[0].is_featured) : current[0].is_featured,
+      sortOrder !== undefined ? sortOrder : current[0].sort_order,
       status,
       market !== undefined ? market : current[0].market,
-      parent_id !== undefined ? (parent_id ? parseInt(parent_id) : null) : current[0].parent_id,
-      use_in_recommendation !== undefined ? (use_in_recommendation === 'true' || use_in_recommendation === true ? 1 : 0) : current[0].use_in_recommendation,
-      use_in_cold_start !== undefined ? (use_in_cold_start === 'true' || use_in_cold_start === true ? 1 : 0) : current[0].use_in_cold_start,
-      use_in_ai_playlist !== undefined ? (use_in_ai_playlist === 'true' || use_in_ai_playlist === true ? 1 : 0) : current[0].use_in_ai_playlist,
+      parentId !== undefined ? parentId : current[0].parent_id,
+      req.body.use_in_recommendation !== undefined ? normalizeBoolean(req.body.use_in_recommendation, current[0].use_in_recommendation) : current[0].use_in_recommendation,
+      req.body.use_in_cold_start !== undefined ? normalizeBoolean(req.body.use_in_cold_start, current[0].use_in_cold_start) : current[0].use_in_cold_start,
+      req.body.use_in_ai_playlist !== undefined ? normalizeBoolean(req.body.use_in_ai_playlist, current[0].use_in_ai_playlist) : current[0].use_in_ai_playlist,
       id
     ]);
 
@@ -297,8 +427,11 @@ exports.deleteGenre = async (req, res, next) => {
 
 exports.updateGenreStatus = async (req, res, next) => {
   try {
-    const { status } = req.body;
-    await pool.query('UPDATE genres SET status = ? WHERE id = ?', [status, req.params.id]);
+    const id = normalizePositiveId(req.params.id);
+    const status = normalizeGenreStatus(req.body.status);
+    if (!id) return res.status(400).json({ success: false, message: 'ID thể loại không hợp lệ' });
+    const [result] = await pool.query('UPDATE genres SET status = ? WHERE id = ?', [status, id]);
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Không tìm thấy thể loại' });
     res.json({ success: true, message: 'Cập nhật trạng thái thành công' });
   } catch (err) {
     next(err);
@@ -307,8 +440,12 @@ exports.updateGenreStatus = async (req, res, next) => {
 
 exports.updateGenreFeatured = async (req, res, next) => {
   try {
-    const { is_featured } = req.body;
-    await pool.query('UPDATE genres SET is_featured = ? WHERE id = ?', [is_featured ? 1 : 0, req.params.id]);
+    const id = normalizePositiveId(req.params.id);
+    const isFeatured = normalizeBoolean(req.body.is_featured);
+    if (!id) return res.status(400).json({ success: false, message: 'ID thể loại không hợp lệ' });
+    if (isFeatured === undefined) return res.status(400).json({ success: false, message: 'Thiếu trạng thái featured' });
+    const [result] = await pool.query('UPDATE genres SET is_featured = ? WHERE id = ?', [isFeatured, id]);
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Không tìm thấy thể loại' });
     res.json({ success: true, message: 'Cập nhật featured thành công' });
   } catch (err) {
     next(err);
@@ -318,9 +455,10 @@ exports.updateGenreFeatured = async (req, res, next) => {
 exports.mergeGenres = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const { sourceGenreId, targetGenreId } = req.body;
+    const sourceGenreId = normalizePositiveId(req.body.sourceGenreId);
+    const targetGenreId = normalizePositiveId(req.body.targetGenreId);
 
-    if (!sourceGenreId || !targetGenreId || sourceGenreId == targetGenreId) {
+    if (!sourceGenreId || !targetGenreId || sourceGenreId === targetGenreId) {
       return res.status(400).json({ success: false, message: 'ID nguồn và đích không hợp lệ' });
     }
 
@@ -413,10 +551,20 @@ exports.getGenreSongs = async (req, res, next) => {
 exports.bulkAssignGenre = async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const { songIds, genreId, role = 'primary' } = req.body;
+    const songIds = normalizePositiveIdList(req.body.songIds, 500);
+    const genreId = normalizePositiveId(req.body.genreId);
+    const role = String(req.body.role || 'primary').trim();
 
-    if (!Array.isArray(songIds) || songIds.length === 0 || !genreId) {
+    if (songIds.length === 0 || !genreId) {
       return res.status(400).json({ success: false, message: 'Dữ liệu không hợp lệ' });
+    }
+    if (!GENRE_ROLES.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Vai trò thể loại không hợp lệ' });
+    }
+
+    const [[genreRow]] = await connection.query('SELECT id FROM genres WHERE id = ? LIMIT 1', [genreId]);
+    if (!genreRow) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy thể loại' });
     }
 
     await connection.beginTransaction();
@@ -702,6 +850,8 @@ exports.getGenreDetailFull = async (req, res, next) => {
 
 exports.updateTaxonomyFlags = async (req, res, next) => {
   try {
+    const id = normalizePositiveId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'ID thể loại không hợp lệ' });
     const { use_in_recommendation, use_in_cold_start, use_in_ai_playlist } = req.body;
 
     // Build dynamic update
@@ -709,23 +859,24 @@ exports.updateTaxonomyFlags = async (req, res, next) => {
     let params = [];
     if (use_in_recommendation !== undefined) {
       updates.push('use_in_recommendation = ?');
-      params.push(use_in_recommendation ? 1 : 0);
+      params.push(normalizeBoolean(use_in_recommendation));
     }
     if (use_in_cold_start !== undefined) {
       updates.push('use_in_cold_start = ?');
-      params.push(use_in_cold_start ? 1 : 0);
+      params.push(normalizeBoolean(use_in_cold_start));
     }
     if (use_in_ai_playlist !== undefined) {
       updates.push('use_in_ai_playlist = ?');
-      params.push(use_in_ai_playlist ? 1 : 0);
+      params.push(normalizeBoolean(use_in_ai_playlist));
     }
 
     if (updates.length === 0) {
       return res.json({ success: true, message: 'Nothing to update' });
     }
 
-    params.push(req.params.id);
-    await pool.query(`UPDATE genres SET ${updates.join(', ')} WHERE id = ?`, params);
+    params.push(id);
+    const [result] = await pool.query(`UPDATE genres SET ${updates.join(', ')} WHERE id = ?`, params);
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Không tìm thấy thể loại' });
 
     res.json({ success: true, message: 'Cập nhật flags thành công' });
   } catch (err) {
@@ -735,10 +886,12 @@ exports.updateTaxonomyFlags = async (req, res, next) => {
 
 exports.bulkActionGenres = async (req, res, next) => {
   try {
-    const { genreIds, action, value } = req.body;
+    const genreIds = normalizePositiveIdList(req.body.genreIds, 500, { strict: true });
+    const action = String(req.body.action || '').trim();
+    const { value } = req.body;
 
-    if (!Array.isArray(genreIds) || genreIds.length === 0) {
-      return res.status(400).json({ success: false, message: 'Vui lòng chọn ít nhất 1 thể loại' });
+    if (!genreIds || genreIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Danh sách ID thể loại không hợp lệ' });
     }
 
     const placeholders = genreIds.map(() => '?').join(',');
@@ -748,19 +901,28 @@ exports.bulkActionGenres = async (req, res, next) => {
     switch (action) {
       case 'status':
         query = `UPDATE genres SET status = ? WHERE id IN (${placeholders})`;
-        params = [value, ...genreIds];
+        params = [normalizeGenreStatus(value), ...genreIds];
         break;
       case 'featured':
+        {
+          const featuredValue = normalizeBoolean(value);
+          if (featuredValue === undefined) {
+            return res.status(400).json({ success: false, message: 'Thiếu trạng thái featured' });
+          }
         query = `UPDATE genres SET is_featured = ? WHERE id IN (${placeholders})`;
-        params = [value ? 1 : 0, ...genreIds];
+          params = [featuredValue, ...genreIds];
+        }
         break;
       case 'taxonomy':
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          return res.status(400).json({ success: false, message: 'Giá trị taxonomy không hợp lệ' });
+        }
         // value is an object { use_in_recommendation, ... }
         let updates = [];
         let taxonomyParams = [];
-        if (value.use_in_recommendation !== undefined) { updates.push('use_in_recommendation = ?'); taxonomyParams.push(value.use_in_recommendation ? 1 : 0); }
-        if (value.use_in_cold_start !== undefined) { updates.push('use_in_cold_start = ?'); taxonomyParams.push(value.use_in_cold_start ? 1 : 0); }
-        if (value.use_in_ai_playlist !== undefined) { updates.push('use_in_ai_playlist = ?'); taxonomyParams.push(value.use_in_ai_playlist ? 1 : 0); }
+        if (value.use_in_recommendation !== undefined) { updates.push('use_in_recommendation = ?'); taxonomyParams.push(normalizeBoolean(value.use_in_recommendation)); }
+        if (value.use_in_cold_start !== undefined) { updates.push('use_in_cold_start = ?'); taxonomyParams.push(normalizeBoolean(value.use_in_cold_start)); }
+        if (value.use_in_ai_playlist !== undefined) { updates.push('use_in_ai_playlist = ?'); taxonomyParams.push(normalizeBoolean(value.use_in_ai_playlist)); }
 
         if (updates.length > 0) {
           query = `UPDATE genres SET ${updates.join(', ')} WHERE id IN (${placeholders})`;
@@ -773,8 +935,8 @@ exports.bulkActionGenres = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Hành động không hợp lệ' });
     }
 
-    await pool.query(query, params);
-    res.json({ success: true, message: 'Thao tác hàng loạt thành công' });
+    const [result] = await pool.query(query, params);
+    res.json({ success: true, message: 'Thao tác hàng loạt thành công', affectedRows: result.affectedRows });
   } catch (err) {
     next(err);
   }

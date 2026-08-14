@@ -4,6 +4,7 @@ const upload = require('../middleware/upload.middleware');
 
 const router = express.Router();
 
+router.get('/appeals/lock', accountAppealController.getLockAppealStatus);
 router.post('/appeals/lock', upload.single('evidence'), accountAppealController.submitLockAppeal);
 
 module.exports = router;

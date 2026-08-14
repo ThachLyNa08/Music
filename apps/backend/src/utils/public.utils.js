@@ -46,9 +46,16 @@ function effectiveReleaseStatusExpression(alias = 's') {
 
 const VALID_RELEASE_STATUSES = new Set(['draft', 'scheduled', 'published', 'hidden']);
 
-function normalizeReleaseStatus(value, fallback = 'draft') {
+function normalizeReleaseStatus(value, fallback = 'draft', options = {}) {
+  const provided = options.provided ?? !(value === undefined || value === null);
+  if (!provided) return fallback;
+
   const status = String(value || '').trim().toLowerCase();
-  return VALID_RELEASE_STATUSES.has(status) ? status : fallback;
+  if (VALID_RELEASE_STATUSES.has(status)) return status;
+
+  const err = new Error('release_status khong hop le');
+  err.statusCode = 400;
+  throw err;
 }
 
 function normalizeDateTimeInput(value) {
@@ -62,8 +69,10 @@ function normalizeReleasePayload(body = {}, options = {}) {
   const fallback = options.defaultStatus || 'draft';
   const nowSql = options.nowSql || 'NOW()';
   const isCreate = options.isCreate !== false;
+  const hasReleaseStatus = Object.prototype.hasOwnProperty.call(body, 'release_status')
+    || Object.prototype.hasOwnProperty.call(body, 'releaseStatus');
   const rawStatus = body.release_status ?? body.releaseStatus;
-  const releaseStatus = normalizeReleaseStatus(rawStatus, fallback);
+  const releaseStatus = normalizeReleaseStatus(rawStatus, fallback, { provided: hasReleaseStatus });
   const releaseAt = normalizeDateTimeInput(body.release_at ?? body.releaseAt);
 
   if (releaseStatus === 'scheduled') {

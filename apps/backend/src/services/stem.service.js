@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
+const { getExistingColumns } = require('../utils/dbIntrospection');
 const { getIo, notifyUser } = require('./socket.service');
 const { createNotification } = require('./notification.service');
 
@@ -331,6 +332,25 @@ async function getJobForUser(jobId, user) {
   return normalizeJob(job);
 }
 
+async function getJobForInstrumentalDownload(jobId, user) {
+  const [rows] = await pool.query('SELECT * FROM stem_separation_jobs WHERE id = ? LIMIT 1', [jobId]);
+  const job = rows[0];
+  if (job) {
+    const normalized = normalizeJob(job);
+    if (normalized.status === STEM_STATUSES.COMPLETED && normalized.instrumental_url) {
+      return normalized;
+    }
+    if (!isAdmin(user) && Number(job.user_id) !== getUserId(user)) {
+      const err = new Error('Khong co quyen tai beat nay');
+      err.statusCode = 403;
+      throw err;
+    }
+    return normalized;
+  }
+
+  return getSongStemById(jobId, getUserId(user));
+}
+
 async function getSongStemById(stemId, userId = null) {
   try {
     const [rows] = await pool.query('SELECT * FROM song_stems WHERE id = ? LIMIT 1', [stemId]);
@@ -655,8 +675,15 @@ async function requestSeparation(user, songId) {
 }
 
 async function isPremiumUser(userId) {
+  if (!userId) return false;
+
+  const columns = await getExistingColumns('users', ['premium_expires_at', 'premium_expired_at']);
+  const selectParts = ['id'];
+  if (columns.premium_expires_at) selectParts.push('premium_expires_at');
+  if (columns.premium_expired_at) selectParts.push('premium_expired_at');
+
   const [rows] = await pool.query(
-    `SELECT premium_expires_at, premium_expired_at
+    `SELECT ${selectParts.join(', ')}
      FROM users
      WHERE id = ? AND status = 'active'
      LIMIT 1`,
@@ -669,12 +696,20 @@ async function isPremiumUser(userId) {
 }
 
 async function getInstrumentalDownload(jobId, user) {
-  const job = await getJobForUser(jobId, user);
+  const job = await getJobForInstrumentalDownload(jobId, user);
   if (!job) {
     const err = new Error('Khong tim thay stem job');
     err.statusCode = 404;
     throw err;
   }
+
+  const song = await getSong(Number(job.song_id));
+  if (!song) {
+    const err = new Error('Bai hat khong ton tai hoac chua duoc phat hanh');
+    err.statusCode = 404;
+    throw err;
+  }
+
   if (job.status !== STEM_STATUSES.COMPLETED || !job.instrumental_url) {
     const err = new Error('Beat chua san sang de tai');
     err.statusCode = 400;
@@ -687,6 +722,60 @@ async function getInstrumentalDownload(jobId, user) {
   }
 
   const filePath = publicUrlToUploadsPath(job.instrumental_url);
+  if (!filePath || !filePath.startsWith(UPLOADS_ROOT + path.sep) || !fileExistsAndNonEmpty(filePath)) {
+    const err = new Error('Khong tim thay file beat');
+    err.statusCode = 404;
+    throw err;
+  }
+  return filePath;
+}
+
+async function getInstrumentalDownloadForSong(songId, user) {
+  const normalizedSongId = Number(songId);
+  if (!Number.isInteger(normalizedSongId) || normalizedSongId <= 0) {
+    const err = new Error('ID bai hat khong hop le');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const song = await getSong(normalizedSongId);
+  if (!song) {
+    const err = new Error('Bai hat khong ton tai hoac chua duoc phat hanh');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (!(await isPremiumUser(getUserId(user)))) {
+    const err = new Error('Tinh nang tai beat yeu cau tai khoan Premium');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const stem = await getSongStem(normalizedSongId, null);
+  let instrumentalUrl = stem?.status === STEM_STATUSES.COMPLETED ? stem.instrumental_url : null;
+
+  if (!instrumentalUrl) {
+    const [rows] = await pool.query(
+      `SELECT instrumental_url
+       FROM stem_separation_jobs
+       WHERE song_id = ?
+         AND status = 'completed'
+         AND instrumental_url IS NOT NULL
+         AND TRIM(instrumental_url) <> ''
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [normalizedSongId]
+    );
+    instrumentalUrl = rows[0]?.instrumental_url || null;
+  }
+
+  if (!instrumentalUrl) {
+    const err = new Error('Beat chua san sang de tai');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const filePath = publicUrlToUploadsPath(instrumentalUrl);
   if (!filePath || !filePath.startsWith(UPLOADS_ROOT + path.sep) || !fileExistsAndNonEmpty(filePath)) {
     const err = new Error('Khong tim thay file beat');
     err.statusCode = 404;
@@ -901,6 +990,7 @@ module.exports = {
   getJobForUser,
   getLatestJob,
   getInstrumentalDownload,
+  getInstrumentalDownloadForSong,
   getReadyKaraokeSongs,
   getStemTimeoutMinutes,
   hasStemOutputFiles,

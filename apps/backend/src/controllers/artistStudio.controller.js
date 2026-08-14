@@ -106,6 +106,90 @@ async function getSongColumns() {
   return cachedSongColumns;
 }
 
+const ARTIST_SONG_STATUSES = ['draft', 'approved', 'pending_review', 'rejected', 'changes_required'];
+const ARTIST_SONG_SORTS = ['newest', 'most_played', 'most_liked', 'title_asc', 'title_desc'];
+const SONG_TITLE_MAX_LENGTH = 255;
+const ALBUM_TITLE_MAX_LENGTH = 255;
+const TEXT_COLUMN_MAX_LENGTH = 65535;
+
+function normalizePositiveInt(value, { defaultValue, max } = {}) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || (max && number > max)) return null;
+  return number;
+}
+
+function normalizePositiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function parseSongIdsPayload(value) {
+  let raw = value;
+  if (raw === undefined || raw === null || raw === '') return [];
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch (_err) {
+      return null;
+    }
+  }
+  if (!Array.isArray(raw)) return null;
+
+  const ids = raw.map((id) => {
+    if (typeof id === 'number') {
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+    const text = String(id ?? '').trim();
+    if (!/^[1-9]\d*$/.test(text)) return null;
+    return Number(text);
+  });
+  if (ids.some(id => !id)) return null;
+  return [...new Set(ids)];
+}
+
+function normalizeEnum(value, allowed, defaultValue) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const normalized = String(value).trim();
+  return allowed.includes(normalized) ? normalized : null;
+}
+
+function normalizeSearchText(value, max = 100) {
+  if (value === undefined || value === null) return '';
+  const text = String(value).trim();
+  return text.length <= max ? text : null;
+}
+
+function validationError(message) {
+  const err = new Error(message);
+  err.statusCode = 400;
+  return err;
+}
+
+function normalizeRequiredTextInput(value, maxLength, field) {
+  const text = String(value ?? '').trim();
+  if (!text) throw validationError(`${field} la bat buoc.`);
+  if (text.length > maxLength) throw validationError(`${field} khong duoc vuot qua ${maxLength} ky tu.`);
+  return text;
+}
+
+function normalizeOptionalTextInput(value, maxLength, field, { preserveWhitespace = false } = {}) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const text = preserveWhitespace ? String(value) : String(value).trim();
+  if (!text.trim()) return null;
+  if (text.length > maxLength) throw validationError(`${field} khong duoc vuot qua ${maxLength} ky tu.`);
+  return text;
+}
+
+function normalizeDraftTitleInput(value) {
+  if (value === undefined) return undefined;
+  const text = String(value ?? '').trim();
+  if (!text) return 'Bản nháp chưa đặt tên';
+  if (text.length > SONG_TITLE_MAX_LENGTH) throw validationError(`Ten bai hat khong duoc vuot qua ${SONG_TITLE_MAX_LENGTH} ky tu.`);
+  return text;
+}
+
 function normalizeReleaseDateInput(value) {
   if (value === undefined || value === null || String(value).trim() === '') return null;
   const normalized = String(value).trim();
@@ -460,9 +544,67 @@ function sendDuplicateAudioResponse(res, duplicate) {
 
 const editableArtistSongStatuses = new Set(['draft', 'rejected', 'changes_required']);
 
+function normalizeSongTitleForDuplicateCheck(title) {
+  return String(title || '').trim().toLowerCase();
+}
+
+async function findArtistSongTitleDuplicate(artistId, title, excludeSongId = null) {
+  const normalizedTitle = normalizeSongTitleForDuplicateCheck(title);
+  if (!artistId || !normalizedTitle) return null;
+
+  const params = [artistId, normalizedTitle];
+  let excludeSql = '';
+  if (excludeSongId) {
+    excludeSql = 'AND id != ?';
+    params.push(excludeSongId);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, title, review_status
+     FROM songs
+     WHERE artist_id = ?
+       AND LOWER(TRIM(title)) = ?
+       ${excludeSql}
+     ORDER BY
+       CASE review_status
+         WHEN 'pending_review' THEN 0
+         WHEN 'approved' THEN 1
+         WHEN 'draft' THEN 2
+         WHEN 'changes_required' THEN 3
+         WHEN 'rejected' THEN 4
+         ELSE 5
+       END,
+       id ASC
+     LIMIT 1`,
+    params
+  );
+
+  return rows[0] || null;
+}
+
+async function assertUniqueArtistSongTitleForSubmission(artistId, title, excludeSongId = null) {
+  const duplicate = await findArtistSongTitleDuplicate(artistId, title, excludeSongId);
+  if (!duplicate) return;
+
+  const err = new Error(`Bạn đã có bài hát "${duplicate.title}" trùng tên 100%. Vui lòng đổi tên bài hát trước khi gửi Admin duyệt.`);
+  err.statusCode = 409;
+  err.code = 'DUPLICATE_ARTIST_SONG_TITLE';
+  err.payload = {
+    success: false,
+    code: 'DUPLICATE_ARTIST_SONG_TITLE',
+    message: err.message,
+    duplicate: {
+      id: duplicate.id,
+      title: duplicate.title,
+      reviewStatus: duplicate.review_status
+    }
+  };
+  throw err;
+}
+
 async function validateArtistSongAlbum(albumId, artistId) {
-  const album = albumId ? parseInt(albumId, 10) : null;
-  if (albumId && !album) {
+  const album = albumId === undefined || albumId === null || albumId === '' ? null : normalizePositiveId(albumId);
+  if (albumId !== undefined && albumId !== null && albumId !== '' && !album) {
     const err = new Error('Album khong hop le.');
     err.statusCode = 400;
     throw err;
@@ -1131,14 +1273,20 @@ exports.getUploadOptions = async (req, res, next) => {
 exports.getSongs = async (req, res, next) => {
   try {
     const artistId = req.artist.id;
-    const { q, status, page = 1, limit = 20, sort = 'newest' } = req.query;
+    const q = normalizeSearchText(req.query.q);
+    const status = normalizeEnum(req.query.status, ARTIST_SONG_STATUSES, undefined);
+    const page = normalizePositiveInt(req.query.page, { defaultValue: 1 });
+    const limitNum = normalizePositiveInt(req.query.limit, { defaultValue: 20, max: 100 });
+    const sort = normalizeEnum(req.query.sort, ARTIST_SONG_SORTS, 'newest');
+    if (q === null || status === null || page === null || limitNum === null || !sort) {
+      return res.status(400).json({ success: false, message: 'Tham số lọc không hợp lệ' });
+    }
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
     const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
     const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
-    const offset = (Number(page) - 1) * Number(limit);
-    const limitNum = Number(limit);
+    const offset = (page - 1) * limitNum;
 
     let whereClause = 'WHERE s.artist_id = ?';
     const queryParams = [artistId];
@@ -1276,7 +1424,7 @@ exports.getSongs = async (req, res, next) => {
         changesRequiredCount
       },
       pagination: {
-        page: Number(page),
+        page,
         limit: limitNum,
         total,
         totalPages: Math.ceil(total / limitNum)
@@ -1368,17 +1516,20 @@ exports.uploadSong = async (req, res, next) => {
     const artistId = req.artist.id;
     const userId = req.user.id;
     const { title, albumId, lyrics, submissionNote, reviewNote } = req.body;
-    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
-    assertReleaseLeadTime(normalizedReleaseAt, 'Thời điểm phát hành');
     const uploadedFiles = [
       ...(req.files?.audio || []),
       ...(req.files?.cover || [])
     ];
-
-    if (!title || !title.trim()) {
-      cleanupUploadedFiles(uploadedFiles);
-      return res.status(400).json({ success: false, message: 'Ten bai hat la bat buoc.' });
-    }
+    const normalizedReleaseAt = resolveArtistReleaseAt(req.body);
+    assertReleaseLeadTime(normalizedReleaseAt, 'Thời điểm phát hành');
+    const cleanTitle = normalizeRequiredTextInput(title, SONG_TITLE_MAX_LENGTH, 'Ten bai hat');
+    const cleanLyrics = normalizeOptionalTextInput(lyrics, Number.MAX_SAFE_INTEGER, 'Loi bai hat', { preserveWhitespace: true });
+    const cleanSubmissionNote = normalizeOptionalTextInput(
+      submissionNote !== undefined ? submissionNote : reviewNote,
+      TEXT_COLUMN_MAX_LENGTH,
+      'Ghi chu gui duyet'
+    );
+    await assertUniqueArtistSongTitleForSubmission(artistId, cleanTitle);
 
     let audioUrl = null;
     let coverUrl = null;
@@ -1461,18 +1612,18 @@ exports.uploadSong = async (req, res, next) => {
 
     const [dupRows] = await pool.query(
       "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND LOWER(title) = LOWER(?)",
-      [artistId, title.trim()]
+      [artistId, cleanTitle]
     );
     const duplicateTitleCount = dupRows[0]?.count || 0;
 
     const songColumns = await getSongColumns();
     const songEvalResult = evaluateSongSubmission({
-      title: title.trim(),
+      title: cleanTitle,
       coverUrl,
       audioUrl,
-      lyrics,
+      lyrics: cleanLyrics,
       genreId: genre,
-      submissionNote: submissionNote || reviewNote,
+      submissionNote: cleanSubmissionNote,
       duration: null,
       resubmissionCount: 0,
     }, {
@@ -1497,7 +1648,7 @@ exports.uploadSong = async (req, res, next) => {
     ];
     const placeholders = ['?', '?', '?', '?', '?', '?', '?', "'pending_review'", '?', '?', 'NOW()', 'NULL', '0'];
     const values = [
-      title.trim(), artistId, genre, album || null, audioUrl, coverUrl, lyrics || null, artistId, userId
+      cleanTitle, artistId, genre, album || null, audioUrl, coverUrl, cleanLyrics || null, artistId, userId
     ];
 
     if (songColumns.has('metadata_score')) {
@@ -1531,7 +1682,7 @@ exports.uploadSong = async (req, res, next) => {
       const reviewIndex = fields.indexOf('review_status');
       fields.splice(reviewIndex, 0, 'submission_note');
       placeholders.splice(reviewIndex, 0, '?');
-      values.splice(7, 0, submissionNote || reviewNote || null);
+      values.splice(7, 0, cleanSubmissionNote || null);
     }
     if (songColumns.has('release_date')) {
       fields.push('release_date');
@@ -1573,10 +1724,10 @@ exports.uploadSong = async (req, res, next) => {
     // Notify admins and artist
     try {
       await notificationService.notifyAdminsNewArtistSubmission({
-        contentType: 'song', contentId: newSongId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+        contentType: 'song', contentId: newSongId, title: cleanTitle, artistId, artistName: req.artist?.name || 'Nghệ sĩ'
       });
       await notificationService.notifyArtistSubmissionReceived({
-        userId, contentType: 'song', contentId: newSongId, title: title.trim()
+        userId, contentType: 'song', contentId: newSongId, title: cleanTitle
       });
     } catch (err) {
       console.warn('Notification service error:', err);
@@ -1600,6 +1751,15 @@ exports.createSongDraft = async (req, res, next) => {
     ];
 
     const finalTitle = title && title.trim() ? title.trim() : 'Bản nháp chưa đặt tên';
+    if (finalTitle.length > SONG_TITLE_MAX_LENGTH) {
+      throw validationError(`Ten bai hat khong duoc vuot qua ${SONG_TITLE_MAX_LENGTH} ky tu.`);
+    }
+    const cleanLyrics = normalizeOptionalTextInput(lyrics, Number.MAX_SAFE_INTEGER, 'Loi bai hat', { preserveWhitespace: true });
+    const cleanSubmissionNote = normalizeOptionalTextInput(
+      submissionNote !== undefined ? submissionNote : reviewNote,
+      TEXT_COLUMN_MAX_LENGTH,
+      'Ghi chu gui duyet'
+    );
     const fileData = await prepareArtistSongFiles(req, uploadedFiles);
     const artistGenre = await resolveArtistUploadGenre(artistId);
     const genre = artistGenre?.genre?.id || null;
@@ -1629,7 +1789,7 @@ exports.createSongDraft = async (req, res, next) => {
       album || null,
       fileData.audioUrl,
       fileData.coverUrl,
-      lyrics || null,
+      cleanLyrics || null,
       artistId,
       userId
     ];
@@ -1638,7 +1798,7 @@ exports.createSongDraft = async (req, res, next) => {
       const reviewIndex = fields.indexOf('review_status');
       fields.splice(reviewIndex, 0, 'submission_note');
       placeholders.splice(reviewIndex, 0, '?');
-      values.splice(7, 0, submissionNote || reviewNote || null);
+      values.splice(7, 0, cleanSubmissionNote || null);
     }
     if (songColumns.has('release_date')) {
       fields.push('release_date');
@@ -1716,6 +1876,7 @@ exports.updateSong = async (req, res, next) => {
     const values = [];
 
     if (title !== undefined) {
+      normalizeDraftTitleInput(title);
       updateFields.push('title = ?');
       values.push(title && title.trim() ? title.trim() : 'Bản nháp chưa đặt tên');
     }
@@ -1728,8 +1889,13 @@ exports.updateSong = async (req, res, next) => {
       values.push(lyrics ? lyrics.trim() : null);
     }
     if (songColumns.has('submission_note') && (submissionNote !== undefined || reviewNote !== undefined)) {
+      const cleanSubmissionNote = normalizeOptionalTextInput(
+        submissionNote !== undefined ? submissionNote : reviewNote,
+        TEXT_COLUMN_MAX_LENGTH,
+        'Ghi chu gui duyet'
+      );
       updateFields.push('submission_note = ?');
-      values.push(submissionNote || reviewNote || null);
+      values.push(cleanSubmissionNote);
     }
     if (req.body.release_at !== undefined || req.body.releaseAt !== undefined || req.body.release_date !== undefined || req.body.releaseDate !== undefined) {
       if (songColumns.has('release_date')) {
@@ -1797,6 +1963,7 @@ exports.submitSong = async (req, res, next) => {
 
     assertReleaseLeadTime(song.release_at || song.release_date, 'Thời điểm phát hành');
     validateSongReadyForSubmission(song);
+    await assertUniqueArtistSongTitleForSubmission(artistId, song.title, songId);
 
     if (song.audio_hash) {
       const duplicate = await findDuplicateAudioHash(song.audio_hash, songId);
@@ -2135,30 +2302,24 @@ exports.createAlbum = async (req, res, next) => {
     const normalizedAlbumReleaseAt = resolveArtistReleaseAt(req.body);
     const normalizedAlbumReleaseDate = normalizedAlbumReleaseAt ? normalizedAlbumReleaseAt.slice(0, 10) : null;
     assertReleaseLeadTime(normalizedAlbumReleaseAt, 'Thời điểm phát hành');
-    let songIds = [];
-    if (req.body.songIds) {
-      try {
-        songIds = JSON.parse(req.body.songIds);
-      } catch (e) {
-        throw new Error('Định dạng songIds không hợp lệ');
-      }
-    }
+    let songIds = parseSongIdsPayload(req.body.songIds);
+    const cleanTitle = normalizeRequiredTextInput(title, ALBUM_TITLE_MAX_LENGTH, 'Ten album');
+    const cleanDescription = normalizeOptionalTextInput(description, TEXT_COLUMN_MAX_LENGTH, 'Mo ta album');
+    const cleanSubmissionNote = normalizeOptionalTextInput(submissionNote, TEXT_COLUMN_MAX_LENGTH, 'Ghi chu gui duyet');
 
     if (!title) {
       await connection.rollback();
       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (title)' });
     }
 
+    if (songIds === null) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    }
+
     if (!Array.isArray(songIds) || songIds.length === 0) {
       await connection.rollback();
       return res.status(400).json({ success: false, message: 'Phải chọn ít nhất 1 bài hát cho album' });
-    }
-
-    // Validate songIds integers and remove duplicates
-    songIds = [...new Set(songIds)].map(id => parseInt(id, 10));
-    if (songIds.some(isNaN)) {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
 
     // Verify songs in DB
@@ -2183,7 +2344,7 @@ exports.createAlbum = async (req, res, next) => {
 
     const fields = ['artist_id', 'title'];
     const placeholders = ['?', '?'];
-    const values = [artistId, title];
+    const values = [artistId, cleanTitle];
 
     if (albumColumns.has('genre_id')) {
       fields.push('genre_id');
@@ -2193,7 +2354,7 @@ exports.createAlbum = async (req, res, next) => {
     if (albumColumns.has('description')) {
       fields.push('description');
       placeholders.push('?');
-      values.push(description || null);
+      values.push(cleanDescription);
     }
     if (albumColumns.has('cover_url')) {
       fields.push('cover_url');
@@ -2213,7 +2374,7 @@ exports.createAlbum = async (req, res, next) => {
     if (albumColumns.has('submission_note')) {
       fields.push('submission_note');
       placeholders.push('?');
-      values.push(submissionNote || null);
+      values.push(cleanSubmissionNote);
     }
     if (albumColumns.has('review_status')) {
       fields.push('review_status');
@@ -2243,15 +2404,15 @@ exports.createAlbum = async (req, res, next) => {
 
     const [dupAlbumRows] = await connection.query(
       "SELECT COUNT(*) as count FROM albums WHERE artist_id = ? AND LOWER(title) = LOWER(?)",
-      [artistId, title.trim()]
+      [artistId, cleanTitle]
     );
     const duplicateTitleCount = dupAlbumRows[0]?.count || 0;
 
     const albumEvalResult = evaluateAlbumSubmission({
-      title: title.trim(),
+      title: cleanTitle,
       coverUrl,
-      description,
-      submissionNote,
+      description: cleanDescription,
+      submissionNote: cleanSubmissionNote,
       resubmissionCount: 0,
     }, validSongs, {
       approvedSongCount,
@@ -2296,7 +2457,7 @@ exports.createAlbum = async (req, res, next) => {
       message: 'Album đã được gửi Admin duyệt.',
       album: {
         id: newAlbumId,
-        title,
+        title: cleanTitle,
         reviewStatus: 'pending_review'
       }
     });
@@ -2304,10 +2465,10 @@ exports.createAlbum = async (req, res, next) => {
     // Notify admins and artist
     try {
       await notificationService.notifyAdminsNewArtistSubmission({
-        contentType: 'album', contentId: newAlbumId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+        contentType: 'album', contentId: newAlbumId, title: cleanTitle, artistId, artistName: req.artist?.name || 'Nghệ sĩ'
       });
       await notificationService.notifyArtistSubmissionReceived({
-        userId: req.user.id, contentType: 'album', contentId: newAlbumId, title: title.trim()
+        userId: req.user.id, contentType: 'album', contentId: newAlbumId, title: cleanTitle
       });
     } catch (err) {
       console.warn('Notification service error:', err);
@@ -2344,6 +2505,10 @@ exports.resubmitSong = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Tên bài hát là bắt buộc.' });
     }
 
+    const cleanTitle = normalizeRequiredTextInput(title, SONG_TITLE_MAX_LENGTH, 'Ten bai hat');
+    const cleanLyrics = normalizeOptionalTextInput(lyrics, Number.MAX_SAFE_INTEGER, 'Loi bai hat', { preserveWhitespace: true });
+    const cleanSubmissionNote = normalizeOptionalTextInput(submissionNote, TEXT_COLUMN_MAX_LENGTH, 'Ghi chu gui duyet');
+
     const [songRows] = await pool.query(
       "SELECT * FROM songs WHERE id = ? AND artist_id = ? AND review_status = 'rejected'",
       [songId, artistId]
@@ -2359,6 +2524,8 @@ exports.resubmitSong = async (req, res, next) => {
       cleanupUploadedFiles(uploadedFiles);
       return res.status(400).json({ success: false, message: 'Nội dung đã đạt số lần gửi lại tối đa. Vui lòng liên hệ quản trị viên.' });
     }
+
+    await assertUniqueArtistSongTitleForSubmission(artistId, cleanTitle, songId);
 
     let audioUrl = songRecord.audio_url;
     let coverUrl = songRecord.cover_url;
@@ -2414,18 +2581,18 @@ exports.resubmitSong = async (req, res, next) => {
 
     const [dupRows] = await pool.query(
       "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND id != ? AND LOWER(title) = LOWER(?)",
-      [artistId, songId, title.trim()]
+      [artistId, songId, cleanTitle]
     );
     const duplicateTitleCount = dupRows[0]?.count || 0;
 
     const nextResubmitCount = (songRecord.resubmission_count || 0) + 1;
     const songEvalResult = evaluateSongSubmission({
-      title: title.trim(),
+      title: cleanTitle,
       coverUrl,
       audioUrl,
-      lyrics,
+      lyrics: cleanLyrics,
       genreId,
-      submissionNote,
+      submissionNote: cleanSubmissionNote,
       duration: songRecord.duration_sec || songRecord.duration || null,
       resubmissionCount: nextResubmitCount,
     }, {
@@ -2453,7 +2620,7 @@ exports.resubmitSong = async (req, res, next) => {
       'moderation_flags = ?'
     ];
     const values = [
-      title.trim(), lyrics || null, audioUrl, coverUrl, 'pending_review',
+      cleanTitle, cleanLyrics || null, audioUrl, coverUrl, 'pending_review',
       songEvalResult.metadataScore, songEvalResult.riskScore, songEvalResult.moderationLevel, JSON.stringify(songEvalResult.moderationFlags)
     ];
 
@@ -2464,7 +2631,7 @@ exports.resubmitSong = async (req, res, next) => {
 
     if (songColumns.has('submission_note')) {
       updateFields.push('submission_note = ?');
-      values.push(submissionNote || null);
+      values.push(cleanSubmissionNote || null);
     }
     if (songColumns.has('release_date')) {
       updateFields.push('release_date = ?');
@@ -2518,17 +2685,17 @@ exports.resubmitSong = async (req, res, next) => {
       message: 'Bài hát đã được gửi lại để Admin duyệt.',
       song: {
         id: songId,
-        title: title.trim(),
+        title: cleanTitle,
         reviewStatus: 'pending_review'
       }
     });
 
     try {
       await notificationService.notifyAdminsNewArtistSubmission({
-        contentType: 'song', contentId: songId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+        contentType: 'song', contentId: songId, title: cleanTitle, artistId, artistName: req.artist?.name || 'Nghệ sĩ'
       });
       await notificationService.notifyArtistSubmissionReceived({
-        userId: req.user.id, contentType: 'song', contentId: songId, title: title.trim()
+        userId: req.user.id, contentType: 'song', contentId: songId, title: cleanTitle
       });
     } catch (err) {
       console.warn('Notification service error:', err);
@@ -2551,29 +2718,24 @@ exports.resubmitAlbum = async (req, res, next) => {
     const normalizedAlbumReleaseAt = resolveArtistReleaseAt(req.body);
     const normalizedAlbumReleaseDate = normalizedAlbumReleaseAt ? normalizedAlbumReleaseAt.slice(0, 10) : null;
     assertReleaseLeadTime(normalizedAlbumReleaseAt, 'Thời điểm phát hành');
-    let songIds = [];
-    if (req.body.songIds) {
-      try {
-        songIds = JSON.parse(req.body.songIds);
-      } catch (e) {
-        throw new Error('Định dạng songIds không hợp lệ');
-      }
-    }
+    let songIds = parseSongIdsPayload(req.body.songIds);
+    const cleanTitle = normalizeRequiredTextInput(title, ALBUM_TITLE_MAX_LENGTH, 'Ten album');
+    const cleanDescription = normalizeOptionalTextInput(description, TEXT_COLUMN_MAX_LENGTH, 'Mo ta album');
+    const cleanSubmissionNote = normalizeOptionalTextInput(submissionNote, TEXT_COLUMN_MAX_LENGTH, 'Ghi chu gui duyet');
 
     if (!title || !title.trim()) {
       await connection.rollback();
       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (title)' });
     }
 
+    if (songIds === null) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    }
+
     if (!Array.isArray(songIds) || songIds.length === 0) {
       await connection.rollback();
       return res.status(400).json({ success: false, message: 'Phải chọn ít nhất 1 bài hát cho album' });
-    }
-
-    songIds = [...new Set(songIds)].map(id => parseInt(id, 10));
-    if (songIds.some(isNaN)) {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
 
     const [albumRows] = await connection.query(
@@ -2618,16 +2780,16 @@ exports.resubmitAlbum = async (req, res, next) => {
 
     const [dupAlbumRows] = await connection.query(
       "SELECT COUNT(*) as count FROM albums WHERE artist_id = ? AND id != ? AND LOWER(title) = LOWER(?)",
-      [artistId, albumId, title.trim()]
+      [artistId, albumId, cleanTitle]
     );
     const duplicateTitleCount = dupAlbumRows[0]?.count || 0;
 
     const nextResubmitCount = (albumRecord.resubmission_count || 0) + 1;
     const albumEvalResult = evaluateAlbumSubmission({
-      title: title.trim(),
+      title: cleanTitle,
       coverUrl,
-      description,
-      submissionNote,
+      description: cleanDescription,
+      submissionNote: cleanSubmissionNote,
       resubmissionCount: nextResubmitCount,
     }, validSongs, {
       approvedSongCount,
@@ -2651,7 +2813,7 @@ exports.resubmitAlbum = async (req, res, next) => {
       'moderation_flags = ?'
     ];
     const values = [
-      title.trim(),
+      cleanTitle,
       coverUrl,
       'pending_review',
       albumEvalResult.metadataScore,
@@ -2662,7 +2824,7 @@ exports.resubmitAlbum = async (req, res, next) => {
 
     if (albumColumns.has('description')) {
       updateFields.push('description = ?');
-      values.push(description || null);
+      values.push(cleanDescription);
     }
     if (albumColumns.has('release_date')) {
       updateFields.push('release_date = ?');
@@ -2674,7 +2836,7 @@ exports.resubmitAlbum = async (req, res, next) => {
     }
     if (albumColumns.has('submission_note')) {
       updateFields.push('submission_note = ?');
-      values.push(submissionNote || null);
+      values.push(cleanSubmissionNote);
     }
 
     values.push(albumId);
@@ -2711,17 +2873,17 @@ exports.resubmitAlbum = async (req, res, next) => {
       message: 'Album đã được gửi lại để Admin duyệt.',
       album: {
         id: albumId,
-        title: title.trim(),
+        title: cleanTitle,
         reviewStatus: 'pending_review'
       }
     });
 
     try {
       await notificationService.notifyAdminsNewArtistSubmission({
-        contentType: 'album', contentId: albumId, title: title.trim(), artistId, artistName: req.artist?.name || 'Nghệ sĩ'
+        contentType: 'album', contentId: albumId, title: cleanTitle, artistId, artistName: req.artist?.name || 'Nghệ sĩ'
       });
       await notificationService.notifyArtistSubmissionReceived({
-        userId: req.user.id, contentType: 'album', contentId: albumId, title: title.trim()
+        userId: req.user.id, contentType: 'album', contentId: albumId, title: cleanTitle
       });
     } catch (err) {
       console.warn('Notification service error:', err);
@@ -2741,4 +2903,14 @@ exports.resubmitAlbum = async (req, res, next) => {
   } finally {
     connection.release();
   }
+};
+
+exports.__test = {
+  SONG_TITLE_MAX_LENGTH,
+  ALBUM_TITLE_MAX_LENGTH,
+  TEXT_COLUMN_MAX_LENGTH,
+  normalizeRequiredTextInput,
+  normalizeOptionalTextInput,
+  normalizeDraftTitleInput,
+  parseSongIdsPayload,
 };

@@ -29,6 +29,32 @@ function normalizeProvider(value) {
   return ['sepay', 'vnpay', 'momo', 'manual'].includes(provider) ? provider : 'manual';
 }
 
+function normalizeStrictPositiveId(value, field) {
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) return value;
+    const err = new Error(`${field} is invalid`);
+    err.statusCode = 400;
+    throw err;
+  }
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) {
+    const err = new Error(`${field} is invalid`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return Number(text);
+}
+
+function normalizePaymentCode(value) {
+  const code = String(value ?? '').trim();
+  if (!code || code.length > 64 || !/^MF[A-Z0-9]{1,62}$/.test(code)) {
+    const err = new Error('Payment code is invalid');
+    err.statusCode = 400;
+    throw err;
+  }
+  return code;
+}
+
 exports.getPlans = async (_req, res) => {
   try {
     const [plans] = await pool.query(
@@ -48,41 +74,15 @@ exports.getPlans = async (_req, res) => {
   }
 };
 
-exports.fixPrices = async (req, res) => {
-  try {
-    await pool.query("UPDATE premium_plans SET price = 2000 WHERE duration_days = 30");
-    await pool.query("UPDATE premium_plans SET price = 5000 WHERE duration_days = 90");
-    await pool.query("UPDATE premium_plans SET price = 9000 WHERE duration_days = 365");
-    const [plans] = await pool.query("SELECT id, name, duration_days, price FROM premium_plans");
-    res.json({ success: true, message: "Prices fixed", data: plans });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-exports.simulatePayment = async (req, res, next) => {
-  req.body = {
-    transferAmount: 99999999, // bypass amount mismatch
-    content: req.params.paymentCode,
-    referenceCode: 'SIMULATE_' + Date.now()
-  };
-  req.headers.authorization = 'Bearer ' + process.env.SEPAY_WEBHOOK_SECRET;
-  return exports.handleSepayWebhook(req, res);
-};
-
 exports.createTransaction = async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const userId = req.user.id;
-    const { plan_id } = req.body;
-
-    if (!plan_id) {
-      return res.status(400).json({ success: false, message: 'plan_id is required' });
-    }
+    const planId = normalizeStrictPositiveId(req.body?.plan_id, 'plan_id');
 
     const [plans] = await conn.query(
       'SELECT id, name, duration_days, price FROM premium_plans WHERE id = ? AND is_active = 1',
-      [plan_id]
+      [planId]
     );
     if (!plans.length) {
       return res.status(404).json({ success: false, message: 'Plan not found or inactive' });
@@ -161,7 +161,7 @@ exports.createTransaction = async (req, res, next) => {
 exports.cancelTransaction = async (req, res, next) => {
   let conn;
   try {
-    const { paymentCode } = req.params;
+    const paymentCode = normalizePaymentCode(req.params.paymentCode);
     const userId = req.user.id;
     
     conn = await pool.getConnection();
@@ -252,7 +252,7 @@ exports.handleSepayWebhook = async (req, res) => {
 
 exports.getTransactionStatus = async (req, res, next) => {
   try {
-    const { orderCode } = req.params;
+    const orderCode = normalizePaymentCode(req.params.orderCode);
     const userId = req.user.id;
 
     const [txs] = await pool.query(
@@ -480,4 +480,9 @@ exports.adminReconcilePending = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+exports.__test = {
+  normalizeStrictPositiveId,
+  normalizePaymentCode,
 };

@@ -17,7 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isArtist = computed(() => user.value?.role === 'artist')
   const userRole = computed(() => user.value?.role || 'guest')
   const isPremium = computed(() => {
-    const expiresAt = user.value?.premium_expires_at || user.value?.premium_expired_at
+    const expiresAt = user.value?.premium_expires_at || user.value?.premium_expired_at || user.value?.premiumExpiresAt
     if (!expiresAt) return false
     return new Date(expiresAt) > new Date()
   })

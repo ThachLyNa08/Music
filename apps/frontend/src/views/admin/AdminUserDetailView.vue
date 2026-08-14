@@ -1558,11 +1558,18 @@ function toggleStatus() {
     type: isLocked ? 'default' : 'warning',
     action: async () => {
       try {
-        await api.put(`/admin/users/${userId}/status`, { status: newStatus })
+        const payload = isLocked
+          ? { status: newStatus }
+          : {
+              status: newStatus,
+              locked_reason: 'Khóa từ trang chi tiết người dùng',
+              allow_appeal: true,
+            }
+        await api.put(`/admin/users/${userId}/status`, payload)
         await fetchUserDetail()
         toast.showToast(isLocked ? 'Đã mở khóa tài khoản' : 'Đã khóa tài khoản', 'success')
       } catch (err) {
-        toast.showToast('Không thể cập nhật trạng thái người dùng', 'error')
+        toast.showToast(err.response?.data?.message || 'Không thể cập nhật trạng thái người dùng', 'error')
       }
     }
   })

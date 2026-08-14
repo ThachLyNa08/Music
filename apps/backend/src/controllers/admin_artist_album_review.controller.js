@@ -2,6 +2,29 @@ const { pool } = require('../config/database');
 const { getIo, notifyUser } = require('../services/socket.service');
 const notificationService = require('../services/notification.service');
 
+const REVIEW_STATUSES = ['all', 'pending_review', 'approved', 'rejected', 'needs_revision'];
+const MODERATION_LEVELS = ['low', 'medium', 'high'];
+const REVIEW_SORTS = ['newest', 'oldest', 'risk_desc'];
+
+function normalizePositiveInt(value, { defaultValue, max } = {}) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || (max && number > max)) return null;
+  return number;
+}
+
+function normalizeEnum(value, allowed, defaultValue) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const normalized = String(value).trim();
+  return allowed.includes(normalized) ? normalized : null;
+}
+
+function normalizeSearchText(value, max = 100) {
+  if (value === undefined || value === null) return '';
+  const text = String(value).trim();
+  return text.length <= max ? text : null;
+}
+
 let cachedSongColumns = null;
 async function getSongColumns() {
   if (cachedSongColumns) return cachedSongColumns;
@@ -13,8 +36,20 @@ async function getSongColumns() {
 // GET /api/admin/artist-album-reviews
 exports.getArtistAlbumReviews = async (req, res) => {
   try {
-    const { status = 'pending_review', q, artistId, level, flag, page = 1, limit = 20, sort = 'newest' } = req.query;
-    const offset = (page - 1) * limit;
+    const status = normalizeEnum(req.query.status, REVIEW_STATUSES, 'pending_review');
+    const level = normalizeEnum(req.query.level, MODERATION_LEVELS, undefined);
+    const sort = normalizeEnum(req.query.sort, REVIEW_SORTS, 'newest');
+    const page = normalizePositiveInt(req.query.page, { defaultValue: 1 });
+    const limitNum = normalizePositiveInt(req.query.limit, { defaultValue: 20, max: 100 });
+    const artistId = req.query.artistId === undefined || req.query.artistId === 'all'
+      ? undefined
+      : normalizePositiveInt(req.query.artistId);
+    const q = normalizeSearchText(req.query.q);
+    const flag = normalizeSearchText(req.query.flag, 80);
+    if (!status || !sort || page === null || limitNum === null || artistId === null || q === null || flag === null) {
+      return res.status(400).json({ success: false, message: 'Tham số lọc không hợp lệ' });
+    }
+    const offset = (page - 1) * limitNum;
 
     let whereConditions = ['al.submitted_by_artist_id IS NOT NULL'];
     const queryParams = [];
@@ -24,7 +59,7 @@ exports.getArtistAlbumReviews = async (req, res) => {
       queryParams.push(status);
     }
 
-    if (level && ['low', 'medium', 'high'].includes(level)) {
+    if (level) {
       whereConditions.push('al.moderation_level = ?');
       queryParams.push(level);
     }
@@ -34,7 +69,7 @@ exports.getArtistAlbumReviews = async (req, res) => {
       queryParams.push(flag);
     }
 
-    if (artistId && artistId !== 'all') {
+    if (artistId) {
       whereConditions.push('al.artist_id = ?');
       queryParams.push(artistId);
     }
@@ -79,7 +114,7 @@ exports.getArtistAlbumReviews = async (req, res) => {
       ${orderClause}
       LIMIT ? OFFSET ?
     `;
-    const [albums] = await pool.query(dataQuery, [...queryParams, parseInt(limit), parseInt(offset)]);
+    const [albums] = await pool.query(dataQuery, [...queryParams, limitNum, offset]);
 
     const formattedAlbums = albums.map(a => {
       let parsedFlags = [];
@@ -115,9 +150,9 @@ exports.getArtistAlbumReviews = async (req, res) => {
       data: formattedAlbums,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit) || 1
+        page,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum) || 1
       }
     });
   } catch (error) {

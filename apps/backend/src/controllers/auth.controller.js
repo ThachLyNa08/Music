@@ -11,12 +11,67 @@ const { sendSystemEmail } = require('../services/email.service');
 const { welcomeEmail } = require('../services/systemEmailTemplates.service');
 // Legacy invitation flow is currently unused by direct Artist Account mode.
 
+const EMAIL_MAX_LENGTH = 255;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ONBOARDING_MAX_SELECTIONS = 20;
+
 let cachedUserColumns = null;
 async function getUserColumns() {
   if (cachedUserColumns) return cachedUserColumns;
   const [rows] = await pool.query('SHOW COLUMNS FROM users');
   cachedUserColumns = new Set(rows.map(row => row.Field));
   return cachedUserColumns;
+}
+
+function normalizeIdList(values) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(
+    values
+      .map(value => Number(value))
+      .filter(value => Number.isInteger(value) && value > 0)
+  )];
+}
+
+function normalizeStrictIdList(values, field) {
+  if (!Array.isArray(values)) {
+    const err = new Error(`${field} must be an array`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (values.length > ONBOARDING_MAX_SELECTIONS) {
+    const err = new Error(`${field} must not exceed ${ONBOARDING_MAX_SELECTIONS} items`);
+    err.statusCode = 400;
+    throw err;
+  }
+  const normalized = values.map((value) => {
+    if (typeof value === 'number') {
+      return Number.isInteger(value) && value > 0 ? value : null;
+    }
+    const text = String(value ?? '').trim();
+    if (!/^[1-9]\d*$/.test(text)) return null;
+    return Number(text);
+  });
+  if (normalized.some((value) => !value)) {
+    const err = new Error(`${field} contains invalid ID`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return [...new Set(normalized)];
+}
+
+function normalizeEmailInput(value) {
+  const email = String(value ?? '').trim().toLowerCase();
+  if (!email) {
+    const err = new Error('Email is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (email.length > EMAIL_MAX_LENGTH || !EMAIL_REGEX.test(email)) {
+    const err = new Error('Email is invalid');
+    err.statusCode = 400;
+    throw err;
+  }
+  return email;
 }
 
 // ── Helper: tạo cặp token ────────────────────────
@@ -37,10 +92,7 @@ function generateTokens(user) {
 // ── GET /api/auth/check-email ────────────────────
 exports.checkEmail = async (req, res, next) => {
   try {
-    const { email } = req.query;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
-    }
+    const email = normalizeEmailInput(req.query.email);
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     return res.json({ success: true, exists: existing.length > 0 });
   } catch (err) {
@@ -57,7 +109,27 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { email, password, display_name, genre_ids, artist_ids } = req.body;
+    const { email, password } = req.body;
+    const display_name = String(req.body.display_name || '').trim();
+    const genreIds = normalizeStrictIdList(req.body.genre_ids, 'genre_ids');
+    const artistIds = normalizeStrictIdList(req.body.artist_ids, 'artist_ids');
+
+    if (genreIds.length < 3) {
+      return res.status(400).json({ success: false, message: 'Chọn ít nhất 3 thể loại yêu thích khác nhau' });
+    }
+    if (artistIds.length < 1) {
+      return res.status(400).json({ success: false, message: 'Chọn ít nhất 1 nghệ sĩ yêu thích' });
+    }
+
+    const [[genreCountRow]] = await pool.query('SELECT COUNT(*) AS count FROM genres WHERE id IN (?)', [genreIds]);
+    if (Number(genreCountRow.count) !== genreIds.length) {
+      return res.status(400).json({ success: false, message: 'Danh sách thể loại có mục không hợp lệ' });
+    }
+
+    const [[artistCountRow]] = await pool.query('SELECT COUNT(*) AS count FROM artists WHERE id IN (?)', [artistIds]);
+    if (Number(artistCountRow.count) !== artistIds.length) {
+      return res.status(400).json({ success: false, message: 'Danh sách nghệ sĩ có mục không hợp lệ' });
+    }
 
     // 2. Kiểm tra email đã tồn tại chưa
     const [existing] = await pool.query(
@@ -82,8 +154,8 @@ exports.register = async (req, res, next) => {
       const userId = result.insertId;
 
       // 5. Lưu sở thích thể loại ban đầu (Cold Start)
-      if (genre_ids && genre_ids.length > 0) {
-        const genreValues = genre_ids.map((gid) => [userId, gid, 1]);
+      if (genreIds.length > 0) {
+        const genreValues = genreIds.map((gid) => [userId, gid, 1]);
         await conn.query(
           'INSERT IGNORE INTO user_genre_preferences (user_id, genre_id, weight) VALUES ?',
           [genreValues]
@@ -91,8 +163,8 @@ exports.register = async (req, res, next) => {
       }
 
       // 5.1. Lưu sở thích nghệ sĩ ban đầu
-      if (artist_ids && artist_ids.length > 0) {
-        const artistValues = artist_ids.map((aid) => [userId, aid, 1]);
+      if (artistIds.length > 0) {
+        const artistValues = artistIds.map((aid) => [userId, aid, 1]);
         await conn.query(
           'INSERT IGNORE INTO user_artist_preferences (user_id, artist_id, weight) VALUES ?',
           [artistValues]
@@ -123,8 +195,8 @@ exports.register = async (req, res, next) => {
         'SELECT id, email, display_name, role FROM users WHERE id = ?', [userId]
       );
       const user = users[0];
-      user.selected_genres = genre_ids || [];
-      user.selected_artists = artist_ids || [];
+      user.selected_genres = genreIds;
+      user.selected_artists = artistIds;
 
       // 7. Tạo token
       const { accessToken, refreshToken } = generateTokens(user);
@@ -400,6 +472,8 @@ exports.refreshToken = async (req, res, next) => {
       [payload.id]
     );
     if (!rows.length || rows[0].status === 'locked') {
+      await deleteCache(`refresh:${payload.id}`);
+      return res.status(401).json({ success: false, message: 'Tài khoản không còn hợp lệ' });
     }
 
     const user = rows[0];
@@ -472,4 +546,11 @@ exports.getMe = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+exports.__test = {
+  EMAIL_MAX_LENGTH,
+  ONBOARDING_MAX_SELECTIONS,
+  normalizeEmailInput,
+  normalizeStrictIdList,
 };

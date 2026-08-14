@@ -22,6 +22,27 @@ function toPublicUsername(email) {
   return username || null;
 }
 
+function normalizeProfileText(value, maxLength, fieldLabel, required = false) {
+  if (value === undefined || value === null) {
+    if (!required) return null;
+    const error = new Error(`${fieldLabel} không được để trống`);
+    error.statusCode = 400;
+    throw error;
+  }
+  const text = String(value).trim();
+  if (required && !text) {
+    const error = new Error(`${fieldLabel} không được để trống`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (text.length > maxLength) {
+    const error = new Error(`${fieldLabel} không được vượt quá ${maxLength} ký tự`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return text || null;
+}
+
 function listeningTimeExpr(alias = 'lh') {
   return `COALESCE(${alias}.listened_at, ${alias}.created_at)`;
 }
@@ -463,11 +484,8 @@ exports.getFullProfile = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, bio } = req.body;
-
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Tên không được để trống' });
-    }
+    const name = normalizeProfileText(req.body.name, 100, 'Tên', true);
+    const bio = normalizeProfileText(req.body.bio, 1000, 'Tiểu sử');
 
     const [cols] = await pool.query("SHOW COLUMNS FROM users LIKE 'bio'");
     if (cols.length === 0) {
@@ -476,7 +494,7 @@ exports.updateProfile = async (req, res, next) => {
 
     await pool.query(
       'UPDATE users SET display_name = ?, bio = ? WHERE id = ?',
-      [name.trim(), bio ? bio.trim() : null, userId]
+      [name, bio, userId]
     );
 
     const [users] = await pool.query('SELECT id, display_name as name, email, avatar_url, bio FROM users WHERE id = ?', [userId]);

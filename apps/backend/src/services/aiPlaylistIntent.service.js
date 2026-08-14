@@ -298,6 +298,16 @@ function restoreOriginalSlice(originalPrompt, normalizedCandidate) {
 
 function detectSeedAndArtists(intent, prompt, normalizedPrompt) {
     let textForHardMatch = normalizedPrompt;
+    const knownArtists = [
+        'Son Tung',
+        'Son Tung M-TP',
+        'BLACKPINK',
+        'Taylor Swift',
+        'Den Vau',
+        'My Tam',
+        'Erik',
+        'Hoa Minzy'
+    ];
 
     const songSeedMatch = textForHardMatch.match(
         /\b(?:giong|kieu|cung vibe|tuong tu|vibe cua|vibe)\s+(?:bai|ca khuc|track)\s+(.+?)(?:\s+(?:nhung|ma|de|voi)\b|$)/
@@ -351,16 +361,16 @@ function detectSeedAndArtists(intent, prompt, normalizedPrompt) {
         }
     }
 
-    const knownArtists = [
-        'Son Tung',
-        'Son Tung M-TP',
-        'BLACKPINK',
-        'Taylor Swift',
-        'Den Vau',
-        'My Tam',
-        'Erik',
-        'Hoa Minzy'
-    ];
+    if (/\b(?:khong co|dung co|loai tru|tru|avoid|exclude|no)\b/.test(normalizedPrompt)) {
+        for (const artist of knownArtists) {
+            if (!hasPhrase(normalizedPrompt, artist)) continue;
+            const restored = restoreOriginalSlice(prompt, artist) || artist;
+            addUnique(intent.hardConstraints.exclude_artists, restored);
+            addUnique(intent.negativeConstraints.artists, restored);
+            addMatchedKeywords(intent, 'exclude_artist', [restored]);
+        }
+    }
+
     if (intent.seed.seed_type !== 'none' || intent.hardConstraints.include_artists.length > 0) return;
 
     for (const artist of knownArtists) {
@@ -576,6 +586,8 @@ function applyRuleBasedIntent(prompt, targetCount) {
             intent.softPreferences.activity = 'gym';
         } else if (tempoIntent.activity === 'focus') {
             intent.softPreferences.activity = intent.softPreferences.activity || 'study';
+        } else if (tempoIntent.activity === 'relax') {
+            intent.softPreferences.activity = intent.softPreferences.activity || 'relax';
         } else {
             intent.softPreferences.activity = tempoIntent.activity;
         }
@@ -585,6 +597,21 @@ function applyRuleBasedIntent(prompt, targetCount) {
         if (tempoIntent.activity === 'relax') addUnique(intent.softPreferences.mood, 'chill');
         if (tempoIntent.activity === 'party') addUnique(intent.softPreferences.mood, 'party');
         if (tempoIntent.activity === 'workout') addUnique(intent.softPreferences.mood, 'energetic');
+    }
+
+    if (intent.negativeConstraints.energy.includes('high') && intent.softPreferences.energy === 'high') {
+        const hasCalmSignal = intent.softPreferences.mood.some((mood) => ['chill', 'calm'].includes(mood))
+            || hasPhrase(normalizedPrompt, 'nhe nhang')
+            || hasPhrase(normalizedPrompt, 'thu gian');
+        intent.softPreferences.energy = hasCalmSignal ? 'low' : 'medium';
+        if (intent.softPreferences.tempo === 'fast') {
+            intent.softPreferences.tempo = hasCalmSignal ? 'slow' : 'medium';
+        }
+        if (intent.softPreferences.activity === 'party' && intent.negativeConstraints.mood.includes('party')) {
+            intent.softPreferences.activity = hasCalmSignal ? 'relax' : null;
+        }
+        intent.softPreferences.mood = removeValues(intent.softPreferences.mood, intent.negativeConstraints.mood);
+        addMatchedKeywords(intent, 'guard:avoid_high_energy', ['avoid_high_energy']);
     }
 
     applyCalmFocusEnergyGuard(intent, normalizedPrompt);
@@ -815,6 +842,23 @@ function calculateConfidence(intent, usedLlm) {
     return Number(Math.min(score, 0.95).toFixed(2));
 }
 
+function getIntentDebugSummary(intent = {}) {
+    return {
+        mode: intent.mode,
+        market: intent.hardConstraints?.market,
+        genres: intent.hardConstraints?.genre_family,
+        includeArtists: intent.hardConstraints?.include_artists,
+        excludeArtists: intent.hardConstraints?.exclude_artists,
+        mood: intent.softPreferences?.mood,
+        context: intent.softPreferences?.context,
+        activity: intent.softPreferences?.activity,
+        tempo: intent.softPreferences?.tempo,
+        energy: intent.softPreferences?.energy,
+        targetCount: intent.playlist?.target_count,
+        matchedKeywords: intent.raw?.matchedKeywords
+    };
+}
+
 async function normalizeAiPlaylistIntent(input = {}, options = {}) {
     const prompt = String(input.prompt || '').trim();
     const targetCount = clampTargetCount(input.targetCount);
@@ -838,13 +882,17 @@ async function normalizeAiPlaylistIntent(input = {}, options = {}) {
 
         intent = intentResult.intent;
         usedLlm = intentResult.provider !== 'taxonomy';
+        intent.raw = {
+            ...(intent.raw || {}),
+            provider: intentResult.provider
+        };
 
         console.log('[AI Playlist Intent]', {
             provider: intentResult.provider,
             fallbackUsed: intentResult.fallbackUsed,
             fallbackReason: intentResult.fallbackReason,
             parsedIntent: intentResult.parsedIntent,
-            intent
+            intent: process.env.NODE_ENV === 'production' ? getIntentDebugSummary(intent) : intent
         });
 
         if (intentResult.fallbackReason) {

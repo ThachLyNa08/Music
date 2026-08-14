@@ -6,6 +6,8 @@ const router  = express.Router();
 const authController = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
+const ONBOARDING_MAX_SELECTIONS = 20;
+
 // Disable caching for auth routes to prevent 304 and stale user state
 router.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -19,9 +21,13 @@ router.use((req, res, next) => {
 const registerRules = [
   body('email').isEmail().withMessage('Email không hợp lệ').normalizeEmail(),
   body('password').isLength({ min: 6 }).withMessage('Mật khẩu tối thiểu 6 ký tự'),
-  body('display_name').trim().notEmpty().withMessage('Tên hiển thị không được để trống'),
+  body('display_name').trim().isLength({ min: 1, max: 100 }).withMessage('Tên hiển thị không hợp lệ'),
   body('genre_ids').isArray({ min: 3 }).withMessage('Chọn ít nhất 3 thể loại yêu thích'),
+  body('genre_ids').custom((value) => Array.isArray(value) && value.length <= ONBOARDING_MAX_SELECTIONS).withMessage('Chọn tối đa 20 thể loại yêu thích'),
+  body('genre_ids.*').isInt({ min: 1 }).withMessage('Thể loại không hợp lệ'),
   body('artist_ids').isArray({ min: 1 }).withMessage('Chọn ít nhất 1 nghệ sĩ yêu thích'),
+  body('artist_ids').custom((value) => Array.isArray(value) && value.length <= ONBOARDING_MAX_SELECTIONS).withMessage('Chọn tối đa 20 nghệ sĩ yêu thích'),
+  body('artist_ids.*').isInt({ min: 1 }).withMessage('Nghệ sĩ không hợp lệ'),
 ];
 
 const loginRules = [

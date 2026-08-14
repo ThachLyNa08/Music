@@ -382,7 +382,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useScroll } from '@vueuse/core'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useLibraryStore } from '@/stores/library'
 import { songApi } from '@/api/song'
@@ -395,6 +395,7 @@ import SongActionMenu from '@/components/common/SongActionMenu.vue'
 import MediaCard from '@/components/common/MediaCard.vue'
 import ArtistCard from '@/components/common/ArtistCard.vue'
 
+const route = useRoute()
 const router = useRouter()
 const player = usePlayerStore()
 const library = useLibraryStore()
@@ -427,6 +428,7 @@ const userTopGenres = ref([])
 
 let suggestionTimer = null
 let suggestionAbortController = null
+let routeSyncedBySearch = null
 const normalSearchPlaceholder = 'Bạn muốn nghe gì?'
 const aiSearchPlaceholder = 'Bạn muốn nghe gì? Ví dụ: mở nhạc buồn nhẹ...'
 
@@ -467,6 +469,26 @@ const shouldShowResults = computed(() => {
 const showSuggestions = computed(() => {
   return !isAiMode.value && isInputFocused.value && isTypingSearch.value
 })
+
+function normalizeRouteQueryValue(value) {
+  if (Array.isArray(value)) return String(value[0] || '').trim()
+  return String(value || '').trim()
+}
+
+function resetNormalSearchState() {
+  committedQuery.value = ''
+  lastQuery.value = ''
+  completedQuery.value = ''
+  lastSettledQuery.value = ''
+  isGenreMode.value = false
+  explicitGenreName.value = null
+  songResults.value = []
+  artistResults.value = []
+  albumResults.value = []
+  genreResults.value = []
+  suggestions.value = []
+  isSearching.value = false
+}
 
 const isGenreMode = ref(false)
 const explicitGenreName = ref(null)
@@ -642,6 +664,36 @@ onMounted(() => {
   Promise.allSettled([loadPopular(), loadProfile()])
 })
 
+watch(
+  () => route.query.q,
+  (value) => {
+    const routeQuery = normalizeRouteQueryValue(value)
+    if (!routeQuery || isAiMode.value) {
+      if (!routeQuery && route.name === 'Search') {
+        query.value = ''
+        resetNormalSearchState()
+      }
+      return
+    }
+
+    if (query.value !== routeQuery) {
+      query.value = routeQuery
+    }
+
+    if (routeSyncedBySearch === routeQuery) {
+      routeSyncedBySearch = null
+      return
+    }
+
+    if (committedQuery.value !== routeQuery || completedQuery.value !== routeQuery) {
+      clearTimeout(suggestionTimer)
+      suggestions.value = []
+      executeSearch(routeQuery)
+    }
+  },
+  { immediate: true }
+)
+
 // ── Real-time search as user types ──
 watch(query, (val) => {
   if (explicitGenreName.value && val !== explicitGenreName.value) {
@@ -765,8 +817,35 @@ async function executeSearch(q) {
   }
 }
 
-async function submitSearch() {
-  const q = query.value.trim()
+async function commitNormalSearch(term) {
+  const q = String(term || '').trim()
+  if (!q) return
+
+  clearTimeout(suggestionTimer)
+  if (suggestionAbortController) {
+    suggestionAbortController.abort()
+    suggestionAbortController = null
+  }
+
+  isInputFocused.value = false
+  suggestions.value = []
+  query.value = q
+  saveRecent(q)
+
+  const currentRouteQuery = normalizeRouteQueryValue(route.query.q)
+  if (route.name === 'Search' && currentRouteQuery !== q) {
+    routeSyncedBySearch = q
+    router.replace({ name: 'Search', query: { ...route.query, q } }).catch((err) => {
+      routeSyncedBySearch = null
+      console.warn('Failed to sync search query to route:', err)
+    })
+  }
+
+  await executeSearch(q)
+}
+
+async function submitSearch(event = null) {
+  const q = String(event?.target?.value ?? query.value).trim()
   if (!q) return
 
   if (isAiMode.value) {
@@ -774,12 +853,7 @@ async function submitSearch() {
     return
   }
 
-  clearTimeout(suggestionTimer)
-  isInputFocused.value = false
-  suggestions.value = []
-  saveRecent(q)
-
-  await executeSearch(q)
+  await commitNormalSearch(q)
 }
 
 async function submitAiSearch(prompt) {
@@ -847,18 +921,15 @@ function applySuggestion(s) {
   } else if (s.type === 'playlist' && s.id) {
     router.push(`/playlist/${s.id}`)
   } else if (s.type === 'genre') {
-    query.value = term
-    submitSearch()
+    commitNormalSearch(term)
   } else {
-    query.value = term
-    submitSearch()
+    commitNormalSearch(term)
   }
   isInputFocused.value = false
 }
 
-function applyRecentSearch(term) {
-  query.value = term
-  submitSearch()
+async function applyRecentSearch(term) {
+  await commitNormalSearch(term)
 }
 
 function scrollPopularArtists(direction) {
@@ -884,20 +955,15 @@ function clearSearch() {
   }
 
   query.value = ''
-  committedQuery.value = ''
-  lastQuery.value = ''
-  completedQuery.value = ''
-  lastSettledQuery.value = ''
-  isGenreMode.value = false
-  explicitGenreName.value = null
   aiError.value = ''
   aiResult.value = null
-  songResults.value = []
-  artistResults.value = []
-  albumResults.value = []
-  genreResults.value = []
-  suggestions.value = []
-  isSearching.value = false
+  resetNormalSearchState()
+
+  if (route.name === 'Search' && normalizeRouteQueryValue(route.query.q)) {
+    const nextQuery = { ...route.query }
+    delete nextQuery.q
+    router.replace({ name: 'Search', query: nextQuery }).catch(() => {})
+  }
 
   nextTick(() => {
     searchInput.value?.focus()

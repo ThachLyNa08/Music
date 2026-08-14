@@ -44,7 +44,21 @@ function shapePreviewSong(song, req) {
 
 function normalizeSongIds(songIds) {
     if (!Array.isArray(songIds)) return [];
-    return [...new Set(songIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+    const normalized = songIds.map((id) => {
+        if (typeof id === 'number') {
+            if (Number.isInteger(id) && id > 0) return id;
+            return null;
+        }
+        const text = String(id ?? '').trim();
+        if (!/^[1-9]\d*$/.test(text)) return null;
+        return Number(text);
+    });
+    if (normalized.some((id) => !id)) {
+        const err = new Error('Danh sach ID bai hat khong hop le');
+        err.statusCode = 400;
+        throw err;
+    }
+    return [...new Set(normalized)];
 }
 
 function safeJsonParse(value, fallback = null) {
@@ -990,6 +1004,7 @@ async function saveGenerationHistory({ userId, historyId, visibility = 'private'
 }
 
 module.exports = {
+    normalizeSongIds,
     previewAiPlaylist,
     refineAiPlaylist,
     saveAiPlaylist,

@@ -154,6 +154,7 @@ apps/backend/scripts/run_*_migration.js
 
 # Local thesis/doc backups
 docs/thesis/backup/
+docs/reports/
 
 *.bak-mojibake
 database/exports/

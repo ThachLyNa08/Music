@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const spotifyService = require('../services/spotify.service');
 const recommendationService = require('../services/recommendation.service');
+const fs = require('fs');
 const { ensureLyricsSemanticIndexReady, searchLyricsSemantic } = require('../services/lyricsSemanticSearch.service');
 const { computeTempoMatchScore } = require('../utils/tempoFeature.util');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
@@ -47,6 +48,24 @@ function isMeaningfulReverseMatch(query, value) {
 
 function sqlSearchExpr(field) {
   return `REPLACE(LOWER(COALESCE(${field}, '')), 'đ', 'd')`;
+}
+
+async function warmLyricsSemanticIndexWithoutBlocking(timeoutMs = 150) {
+  let timedOut = false;
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => {
+      timedOut = true;
+      resolve(null);
+    }, timeoutMs);
+  });
+
+  try {
+    await Promise.race([ensureLyricsSemanticIndexReady(), timeout]);
+  } catch (error) {
+    console.warn('[Search] lyrics semantic index warmup skipped:', error.message);
+  }
+
+  return !timedOut;
 }
 
 // Lyrics search helpers
@@ -463,35 +482,86 @@ async function hydrateLikedState(rows, userId) {
   return rows;
 }
 
-exports.uploadSong = async (req, res, next) => {
-  const { title, artist_name, album_title, genre_id, duration_sec } = req.body;
+function createValidationError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
 
-  const missing = [];
-  if (!title) missing.push('title');
-  if (!artist_name) missing.push('artist_name');
-  if (!genre_id) missing.push('genre_id');
+function normalizeRequiredText(value, maxLength, field) {
+  const text = String(value ?? '').trim();
+  if (!text) throw createValidationError(`${field} la bat buoc`);
+  if (text.length > maxLength) throw createValidationError(`${field} khong duoc vuot qua ${maxLength} ky tu`);
+  return text;
+}
 
-  if (missing.length > 0) {
-    return res.status(400).json({
-      success: false,
-      missing,
-      message: 'Thiếu thông tin bắt buộc'
+function normalizeOptionalText(value, maxLength, field) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const text = String(value).trim();
+  if (text.length > maxLength) throw createValidationError(`${field} khong duoc vuot qua ${maxLength} ky tu`);
+  return text;
+}
+
+function normalizeStrictPositiveId(value, field) {
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) return value;
+    throw createValidationError(`${field} khong hop le`);
+  }
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) throw createValidationError(`${field} khong hop le`);
+  return Number(text);
+}
+
+function normalizeDurationSec(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return 0;
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text)) throw createValidationError('Thoi luong bai hat khong hop le');
+  const duration = Number(text);
+  if (!Number.isInteger(duration) || duration < 0 || duration > 65535) {
+    throw createValidationError('Thoi luong bai hat khong hop le');
+  }
+  return duration;
+}
+
+function getUploadedFiles(req) {
+  const files = [];
+  if (req.file) files.push(req.file);
+  if (Array.isArray(req.files)) {
+    files.push(...req.files);
+  } else {
+    Object.values(req.files || {}).forEach((value) => {
+      if (Array.isArray(value)) files.push(...value);
+      else if (value) files.push(value);
     });
   }
+  return files.filter(Boolean);
+}
 
-  if (!req.files || !req.files.audio) {
-    return res.status(400).json({ success: false, message: 'Thiếu file âm thanh' });
-  }
+function cleanupUploadedFiles(files = []) {
+  files.forEach((file) => {
+    if (!file?.path) return;
+    try {
+      fs.unlinkSync(file.path);
+    } catch (_err) {}
+  });
+}
 
-  let releasePayload;
+exports.uploadSong = async (req, res, next) => {
+  const uploadedFiles = getUploadedFiles(req);
+  let conn;
   try {
-    releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
+    const title = normalizeRequiredText(req.body.title, 255, 'Ten bai hat');
+    const artistName = normalizeRequiredText(req.body.artist_name, 255, 'Ten nghe si');
+    const albumTitle = normalizeOptionalText(req.body.album_title, 255, 'Ten album');
+    const genreId = normalizeStrictPositiveId(req.body.genre_id, 'The loai');
+    const durationSec = normalizeDurationSec(req.body.duration_sec);
+    const releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: true });
 
-  const conn = await pool.getConnection();
-  try {
+    if (!req.files || !req.files.audio || req.files.audio.length === 0) {
+      throw createValidationError('Thieu file am thanh');
+    }
+
+    conn = await pool.getConnection();
     await conn.beginTransaction();
 
     const audioUrl = '/uploads/audio/' + req.files.audio[0].filename;
@@ -501,11 +571,16 @@ exports.uploadSong = async (req, res, next) => {
     }
 
     // 1. Tìm hoặc tạo Artist
-    let [artists] = await conn.query('SELECT id FROM artists WHERE name = ? LIMIT 1', [artist_name]);
+    const [genres] = await conn.query('SELECT id FROM genres WHERE id = ? LIMIT 1', [genreId]);
+    if (!genres.length) {
+      throw createValidationError('The loai khong ton tai', 404);
+    }
+
+    let [artists] = await conn.query('SELECT id FROM artists WHERE name = ? LIMIT 1', [artistName]);
     let artistId;
     let isNewArtist = false;
     if (artists.length === 0) {
-      const [artistRes] = await conn.query('INSERT INTO artists (name) VALUES (?)', [artist_name]);
+      const [artistRes] = await conn.query('INSERT INTO artists (name) VALUES (?)', [artistName]);
       artistId = artistRes.insertId;
       isNewArtist = true;
     } else {
@@ -514,10 +589,10 @@ exports.uploadSong = async (req, res, next) => {
 
     // 2. Tìm hoặc tạo Album
     let albumId = null;
-    if (album_title) {
-      let [albums] = await conn.query('SELECT id FROM albums WHERE title = ? AND artist_id = ? LIMIT 1', [album_title, artistId]);
+    if (albumTitle) {
+      let [albums] = await conn.query('SELECT id FROM albums WHERE title = ? AND artist_id = ? LIMIT 1', [albumTitle, artistId]);
       if (albums.length === 0) {
-        const [albumRes] = await conn.query('INSERT INTO albums (title, artist_id) VALUES (?, ?)', [album_title, artistId]);
+        const [albumRes] = await conn.query('INSERT INTO albums (title, artist_id) VALUES (?, ?)', [albumTitle, artistId]);
         albumId = albumRes.insertId;
       } else {
         albumId = albums[0].id;
@@ -526,7 +601,7 @@ exports.uploadSong = async (req, res, next) => {
 
     // 3. Tạo Song
     const fields = ['title', 'artist_id', 'album_id', 'genre_id', 'duration_sec', 'audio_url', 'cover_url'];
-    const values = [title, artistId, albumId, genre_id, duration_sec || 0, audioUrl, coverUrl];
+    const values = [title, artistId, albumId, genreId, durationSec, audioUrl, coverUrl];
     pushReleaseFields(fields, values, releasePayload, null);
     const insertParts = buildInsertParts(fields, values);
     const [songRes] = await conn.query(
@@ -536,6 +611,7 @@ exports.uploadSong = async (req, res, next) => {
 
     await conn.commit();
     conn.release();
+    conn = null;
 
     // Phản hồi thành công ngay lập tức để tránh client timeout
     res.json({ success: true, message: 'Upload thành công', song_id: songRes.insertId });
@@ -561,7 +637,7 @@ exports.uploadSong = async (req, res, next) => {
             notificationService.createNotification({
               userId: f.user_id,
               title: 'Nghệ sĩ bạn theo dõi vừa ra mắt bài hát mới!',
-              message: `Nghệ sĩ ${artist_name} vừa phát hành bài hát mới: ${title}`,
+              message: `Nghệ sĩ ${artistName} vừa phát hành bài hát mới: ${title}`,
               type: 'new_song',
               link: `/song/${songRes.insertId}`
             })
@@ -576,7 +652,7 @@ exports.uploadSong = async (req, res, next) => {
       try {
         await notificationService.createGlobalNotification({
           title: 'Bài hát mới',
-          message: `Bài hát ${title} của ${artist_name} vừa được thêm vào hệ thống!`,
+          message: `Bài hát ${title} của ${artistName} vừa được thêm vào hệ thống!`,
           type: 'new_song',
           link: `/song/${songRes.insertId}`
         });
@@ -589,6 +665,10 @@ exports.uploadSong = async (req, res, next) => {
     if (conn) {
       try { await conn.rollback(); } catch (e) {}
       conn.release();
+    }
+    cleanupUploadedFiles(uploadedFiles);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, message: err.message });
     }
     next(err);
   }
@@ -718,7 +798,7 @@ exports.searchSongs = async (req, res, next) => {
     const tokens = q.split(/\s+/).filter(t => t.length > 0);
     const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
     if (includeLyrics) {
-      await ensureLyricsSemanticIndexReady();
+      await warmLyricsSemanticIndexWithoutBlocking();
     }
     const semanticMatches = includeLyrics ? searchLyricsSemantic(q, { limit: 25 }) : [];
     const semanticBySongId = new Map(semanticMatches.map(match => [Number(match.songId), match]));

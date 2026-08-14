@@ -1,12 +1,12 @@
 const { GoogleGenAI, Type } = require('@google/genai');
 
-const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const DEFAULT_GEMINI_TIMEOUT_MS = 6000;
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_TIMEOUT_MS = 12000;
 const DEPRECATED_GEMINI_MODELS = new Set([
+    'gemini-1.5-flash',
+    'models/gemini-1.5-flash',
     'gemini-2.5-flash-lite',
-    'models/gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
-    'models/gemini-2.5-flash'
+    'models/gemini-2.5-flash-lite'
 ]);
 
 function getGeminiApiKey() {
@@ -27,7 +27,8 @@ function resolveTimeoutMs(value) {
 
 function resolveGeminiModel() {
     const configured = String(process.env.GEMINI_MODEL || '').trim();
-    if (!configured || DEPRECATED_GEMINI_MODELS.has(configured)) {
+    const normalizedConfigured = configured.startsWith('models/') ? configured.slice('models/'.length) : configured;
+    if (!configured || DEPRECATED_GEMINI_MODELS.has(configured) || DEPRECATED_GEMINI_MODELS.has(normalizedConfigured)) {
         if (configured && configured !== DEFAULT_GEMINI_MODEL) {
             console.warn('[Gemini Intent Parser] deprecated_model_fallback:', {
                 configuredModel: configured,
@@ -40,6 +41,12 @@ function resolveGeminiModel() {
 }
 
 function getSafeGeminiErrorCode(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    if (error?.code === 'GEMINI_TIMEOUT') return 'GEMINI_TIMEOUT';
+    if (status === 408) return 'GEMINI_TIMEOUT';
+    if (status === 429) return 'GEMINI_RATE_LIMIT';
+    if (status >= 500 && status <= 599) return `GEMINI_${status}`;
+    if (status === 404) return 'GEMINI_MODEL_NOT_FOUND';
     return error?.code || error?.name || 'GEMINI_INTENT_FAILED';
 }
 
@@ -84,6 +91,8 @@ async function extractIntent(prompt, options = {}) {
     const ai = new GoogleGenAI({ apiKey });
     const model = resolveGeminiModel();
     const timeoutMs = resolveTimeoutMs(options.timeoutMs || process.env.GEMINI_TIMEOUT_MS);
+    const startedAt = Date.now();
+    console.log(`[LLM] provider=gemini model=${model}`);
 
     const systemInstruction = `
 Bạn là một chuyên gia phân tích âm nhạc cho hệ thống MusicFlow.
@@ -222,11 +231,20 @@ Quy tac so luong playlist:
 
         const textResponse = response.text;
         if (!textResponse) {
-            throw new Error('Empty response from Gemini');
+            const emptyError = new Error('Empty response from Gemini');
+            emptyError.code = 'EMPTY_RESPONSE';
+            throw emptyError;
         }
 
-        // Parse JSON
-        const intent = JSON.parse(textResponse);
+        let intent;
+        try {
+            intent = JSON.parse(textResponse);
+        } catch (parseError) {
+            parseError.code = 'INVALID_JSON';
+            throw parseError;
+        }
+        intent._model = model;
+        intent._latencyMs = Date.now() - startedAt;
         return intent;
     } catch (error) {
         console.warn('[Gemini Intent Parser] fallback:', getSafeGeminiErrorInfo(error));
@@ -265,7 +283,9 @@ async function parseIntentWithGemini(prompt, options = {}) {
                 excludeGenres: [],
                 targetCount: intent?.targetCount || options.targetCount || null,
                 confidence: 0.75
-            }
+            },
+            model: intent?._model || resolveGeminiModel(),
+            latencyMs: intent?._latencyMs || null
         };
     } catch (error) {
         return {

@@ -1,9 +1,17 @@
 const { pool } = require('../config/database');
 
+function normalizePositiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 async function assertCanEditPlaylist(req, res, next) {
   try {
     const userId = req.user.id;
-    const playlistId = req.params.id;
+    const playlistId = normalizePositiveId(req.params.id);
+    if (!playlistId) {
+      return res.status(400).json({ success: false, message: 'ID playlist không hợp lệ' });
+    }
 
     const [rows] = await pool.query(
       `SELECT id, user_id, type, is_system, system_key
@@ -52,7 +60,10 @@ async function assertCanEditPlaylist(req, res, next) {
 async function assertCanDeletePlaylist(req, res, next) {
   try {
     const userId = req.user.id;
-    const playlistId = req.params.id;
+    const playlistId = normalizePositiveId(req.params.id);
+    if (!playlistId) {
+      return res.status(400).json({ success: false, message: 'ID playlist không hợp lệ' });
+    }
 
     const [rows] = await pool.query(
       `SELECT id, user_id, type, is_system, system_key

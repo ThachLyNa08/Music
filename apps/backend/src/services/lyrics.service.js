@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { publicSongCondition } = require('../utils/public.utils');
 
 const SYNC_TYPES = {
   LINE_SYNCED: 'LINE_SYNCED',
@@ -109,7 +110,7 @@ function safeParseJson(value) {
   }
 }
 
-async function getLyricsBySongId(songId) {
+async function getLyricsBySongId(songId, options = {}) {
   const numericSongId = Number(songId);
   if (!Number.isInteger(numericSongId) || numericSongId <= 0) {
     return {
@@ -120,6 +121,7 @@ async function getLyricsBySongId(songId) {
     };
   }
 
+  const publicWhere = options.publicOnly ? ` AND ${publicSongCondition('s')}` : '';
   const [rows] = await pool.query(
     `SELECT
        s.id AS song_id,
@@ -131,6 +133,7 @@ async function getLyricsBySongId(songId) {
      FROM songs s
      LEFT JOIN song_lyrics sl ON s.id = sl.song_id
      WHERE s.id = ?
+       ${publicWhere}
      LIMIT 1`,
     [numericSongId]
   );

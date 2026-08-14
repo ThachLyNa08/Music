@@ -42,7 +42,7 @@ async function main() {
         });
         assert(preview.intent, 'preview should include intent');
         assert(preview.songs.length > 0, 'preview should return songs');
-        assert(preview.songs.length <= 8, 'preview should not exceed target');
+        assert(preview.songs.length <= preview.intent.playlist.target_count, 'preview should not exceed normalized target');
 
         const refined = await refineAiPlaylist({
             originalPrompt: 'Nhạc buồn nhưng đừng quá thảm',

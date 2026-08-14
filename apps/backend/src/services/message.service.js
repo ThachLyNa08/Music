@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
 
 const MAX_MESSAGE_LENGTH = 1000;
+const MAX_USER_SEARCH_QUERY_LENGTH = 100;
 
 function normalizeUserId(value) {
   const id = Number(value);
@@ -11,6 +12,23 @@ function normalizeUserId(value) {
 function normalizeConversationId(value) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function normalizeOptionalPositiveId(value, field) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) return value;
+    const error = new Error(`${field} khong hop le`);
+    error.statusCode = 400;
+    throw error;
+  }
+  const text = String(value).trim();
+  if (!/^[1-9]\d*$/.test(text)) {
+    const error = new Error(`${field} khong hop le`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return Number(text);
 }
 
 function buildDirectKey(userA, userB) {
@@ -680,9 +698,8 @@ async function createMessage(conversationId, senderId, body, replyToMessageId = 
   await assertParticipant(id, senderId);
 
   let validReplyTo = null;
-  if (replyToMessageId) {
-    const rId = Number(replyToMessageId);
-    if (Number.isInteger(rId) && rId > 0) {
+  const rId = normalizeOptionalPositiveId(replyToMessageId, 'replyToMessageId');
+  if (rId) {
       const [rRows] = await pool.query(
         'SELECT id, conversation_id, message_type FROM messages WHERE id = ? AND deleted_at IS NULL',
         [rId]
@@ -693,7 +710,6 @@ async function createMessage(conversationId, senderId, body, replyToMessageId = 
         throw error;
       }
       validReplyTo = rId;
-    }
   }
 
   const cleanBody = sanitizeBody(body);
@@ -822,9 +838,8 @@ async function shareEntity(conversationId, senderId, { type, entityId, body = ''
   const cleanBody = sanitizeBody(body) || `Đã chia sẻ: ${entity.title}`;
   let validReplyTo = null;
 
-  if (replyToMessageId) {
-    const rId = Number(replyToMessageId);
-    if (Number.isInteger(rId) && rId > 0) {
+  const rId = normalizeOptionalPositiveId(replyToMessageId, 'replyToMessageId');
+  if (rId) {
       const [rRows] = await pool.query(
         'SELECT id, conversation_id FROM messages WHERE id = ? AND deleted_at IS NULL',
         [rId]
@@ -835,7 +850,6 @@ async function shareEntity(conversationId, senderId, { type, entityId, body = ''
         throw error;
       }
       validReplyTo = rId;
-    }
   }
 
   const [result] = await pool.query(
@@ -856,9 +870,8 @@ async function createSongShareMessage(conversationId, senderId, songId, body = '
   const cleanBody = sanitizeBody(body) || `Đã chia sẻ: ${song.title}`;
 
   let validReplyTo = null;
-  if (replyToMessageId) {
-    const rId = Number(replyToMessageId);
-    if (Number.isInteger(rId) && rId > 0) {
+  const rId = normalizeOptionalPositiveId(replyToMessageId, 'replyToMessageId');
+  if (rId) {
       const [rRows] = await pool.query(
         'SELECT id, conversation_id, message_type FROM messages WHERE id = ? AND deleted_at IS NULL',
         [rId]
@@ -869,7 +882,6 @@ async function createSongShareMessage(conversationId, senderId, songId, body = '
         throw error;
       }
       validReplyTo = rId;
-    }
   }
 
   const [result] = await pool.query(
@@ -921,6 +933,11 @@ async function markRead(conversationId, userId) {
 async function searchUsers(currentUserId, query) {
   const q = String(query || '').trim();
   if (q.length < 1) return [];
+  if (q.length > MAX_USER_SEARCH_QUERY_LENGTH) {
+    const error = new Error(`Tu khoa tim kiem khong duoc vuot qua ${MAX_USER_SEARCH_QUERY_LENGTH} ky tu`);
+    error.statusCode = 400;
+    throw error;
+  }
 
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -1420,6 +1437,8 @@ async function createSystemMessage({ conversationId, actorUserId, eventType, bod
 
 module.exports = {
   MAX_MESSAGE_LENGTH,
+  MAX_USER_SEARCH_QUERY_LENGTH,
+  normalizeOptionalPositiveId,
   assertParticipant,
   createMessage,
   createSongShareMessage,

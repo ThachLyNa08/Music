@@ -9,11 +9,15 @@
         </p>
       </header>
 
-      <div v-if="!token" class="m-6 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-        {{ copy.invalidLink }}
+      <div v-if="checking" class="m-6 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+        {{ copy.checking }}
       </div>
 
-      <form v-else class="space-y-5 px-6 py-6" @submit.prevent="submitAppeal">
+      <div v-else-if="linkError" class="m-6 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
+        {{ linkError }}
+      </div>
+
+      <form v-else-if="token" class="space-y-5 px-6 py-6" @submit.prevent="submitAppeal">
         <label class="block" for="appeal-reason">
           <span class="text-sm font-bold text-slate-100">Lý do khiếu nại</span>
           <textarea
@@ -70,13 +74,14 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { accountApi } from '@/api/account'
 import { useAuthStore } from '@/stores/auth'
 
 const copy = {
   invalidLink: 'Liên kết khiếu nại không hợp lệ hoặc đã hết hạn.',
+  checking: 'Đang kiểm tra liên kết khiếu nại...',
   submitting: 'Đang gửi...',
   submit: 'Gửi khiếu nại',
   shortReason: 'Vui lòng nhập lý do khiếu nại chi tiết hơn.',
@@ -86,24 +91,50 @@ const copy = {
 }
 
 const route = useRoute()
-const router = useRouter()
 const authStore = useAuthStore()
 const token = computed(() => String(route.query.token || '').trim())
 const reason = ref('')
 const evidenceFile = ref(null)
 const evidencePreview = ref('')
+const checking = ref(false)
+const linkError = ref('')
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
 
 onMounted(async () => {
-  await nextTick()
-  document.getElementById('appeal-reason')?.focus()
+  await verifyAppealLink()
+})
+
+watch(token, async () => {
+  await verifyAppealLink()
 })
 
 onBeforeUnmount(() => {
   revokeEvidencePreview()
 })
+
+async function verifyAppealLink() {
+  linkError.value = ''
+  error.value = ''
+  success.value = ''
+
+  if (!token.value) {
+    linkError.value = copy.invalidLink
+    return
+  }
+
+  checking.value = true
+  try {
+    await accountApi.getLockAppealStatus(token.value)
+    await nextTick()
+    document.getElementById('appeal-reason')?.focus()
+  } catch (err) {
+    linkError.value = err.response?.data?.message || copy.invalidLink
+  } finally {
+    checking.value = false
+  }
+}
 
 function revokeEvidencePreview() {
   if (evidencePreview.value) URL.revokeObjectURL(evidencePreview.value)
@@ -146,7 +177,6 @@ async function submitAppeal() {
     const res = await accountApi.submitLockAppeal(formData)
     success.value = res.data?.message || copy.fallbackSuccess
     authStore.logoutSilently()
-    await router.replace('/login')
   } catch (err) {
     error.value = err.response?.data?.message || copy.fallbackError
   } finally {

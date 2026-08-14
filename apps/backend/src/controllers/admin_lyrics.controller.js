@@ -2,6 +2,76 @@ const { pool } = require('../config/database');
 const { jsonToCsv, createCsvFilename, sendCsv } = require('../utils/csv.util');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 
+const LYRIC_STATUSES = ['missing', 'has_lyrics', 'synced', 'plain'];
+const SYNC_TYPES = ['NONE', 'PLAIN_TEXT', 'LINE_SYNCED'];
+const MAX_LYRICS_LENGTH = 50000;
+
+function normalizePositiveInt(value, { defaultValue, max } = {}) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || (max && number > max)) return null;
+  return number;
+}
+
+function normalizeSearchText(value, max = 100) {
+  if (value === undefined || value === null) return '';
+  const text = String(value).trim();
+  return text.length <= max ? text : null;
+}
+
+function normalizeOptionalLyrics(value, field) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  if (text.length > MAX_LYRICS_LENGTH) {
+    const error = new Error(`${field} không được vượt quá ${MAX_LYRICS_LENGTH} ký tự`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return text || null;
+}
+
+function applyLyricsFilters({ q, status, provider }, whereConditions, queryParams) {
+  const search = normalizeSearchText(q);
+  if (search === null) {
+    const error = new Error('Từ khóa tìm kiếm không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (search) {
+    whereConditions.push(`(s.title LIKE ? OR a.name LIKE ?)`);
+    queryParams.push(`%${search}%`, `%${search}%`);
+  }
+
+  if (status) {
+    if (!LYRIC_STATUSES.includes(status)) {
+      const error = new Error('Trạng thái lyrics không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (status === 'missing') {
+      whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
+    } else if (status === 'has_lyrics') {
+      whereConditions.push(HAS_ANY_LYRICS_SQL);
+    } else if (status === 'synced') {
+      whereConditions.push(HAS_SYNCED_LYRICS_SQL);
+    } else if (status === 'plain') {
+      whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
+    }
+  }
+
+  const normalizedProvider = normalizeSearchText(provider, 50);
+  if (normalizedProvider === null) {
+    const error = new Error('Provider không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (normalizedProvider && normalizedProvider !== 'all') {
+    whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
+    queryParams.push(normalizedProvider);
+  }
+}
+
 const APPROVED_CATALOG_WHERE = `
   COALESCE(s.review_status, 'approved') = 'approved'
   AND (s.is_active = 1 OR s.is_active IS NULL)
@@ -59,9 +129,11 @@ exports.getSummary = async (req, res, next) => {
 
 exports.getList = async (req, res, next) => {
   try {
-    const { q, status, provider } = req.query;
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const page = normalizePositiveInt(req.query.page, { defaultValue: 1 });
+    const limit = normalizePositiveInt(req.query.limit, { defaultValue: 20, max: 100 });
+    if (page === null || limit === null) {
+      return res.status(400).json({ success: false, message: 'Phân trang không hợp lệ' });
+    }
     const offset = (page - 1) * limit;
 
     let whereConditions = [
@@ -69,27 +141,7 @@ exports.getList = async (req, res, next) => {
     ];
     let queryParams = [];
 
-    if (q) {
-      whereConditions.push(`(s.title LIKE ? OR a.name LIKE ?)`);
-      queryParams.push(`%${q}%`, `%${q}%`);
-    }
-
-    if (status) {
-      if (status === 'missing') {
-        whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
-      } else if (status === 'has_lyrics') {
-        whereConditions.push(HAS_ANY_LYRICS_SQL);
-      } else if (status === 'synced') {
-        whereConditions.push(HAS_SYNCED_LYRICS_SQL);
-      } else if (status === 'plain') {
-        whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
-      }
-    }
-
-    if (provider && provider !== 'all') {
-      whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
-      queryParams.push(provider);
-    }
+    applyLyricsFilters(req.query, whereConditions, queryParams);
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
@@ -123,7 +175,7 @@ exports.getList = async (req, res, next) => {
       LIMIT ? OFFSET ?
     `;
 
-    const [rows] = await pool.query(dataQuery, [...queryParams, parseInt(limit), parseInt(offset)]);
+    const [rows] = await pool.query(dataQuery, [...queryParams, limit, offset]);
 
     const mappedRows = rows.map(row => {
       let effective_sync_type = 'NONE';
@@ -152,8 +204,8 @@ exports.getList = async (req, res, next) => {
       data: mappedRows,
       pagination: {
         total: parseInt(total),
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         totalPages: Math.ceil(total / limit)
       }
     });
@@ -164,7 +216,8 @@ exports.getList = async (req, res, next) => {
 
 exports.getDetail = async (req, res, next) => {
   try {
-    const { songId } = req.params;
+    const songId = normalizePositiveInt(req.params.songId);
+    if (!songId) return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
 
     const [[song]] = await pool.query(`
       SELECT s.id as song_id, s.title, a.name as artist_name, al.title as album_name,
@@ -239,8 +292,16 @@ exports.getDetail = async (req, res, next) => {
 
 exports.updateLyrics = async (req, res, next) => {
   try {
-    const { songId } = req.params;
-    const { plain_lyrics, synced_lyrics, sync_type } = req.body;
+    const songId = normalizePositiveInt(req.params.songId);
+    if (!songId) return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
+    const plain_lyrics = normalizeOptionalLyrics(req.body.plain_lyrics, 'Lyrics thường');
+    const synced_lyrics = normalizeOptionalLyrics(req.body.synced_lyrics, 'Lyrics đồng bộ');
+    const sync_type = req.body.sync_type === undefined || req.body.sync_type === null || req.body.sync_type === ''
+      ? undefined
+      : String(req.body.sync_type).trim();
+    if (sync_type && !SYNC_TYPES.includes(sync_type)) {
+      return res.status(400).json({ success: false, message: 'Sync type không hợp lệ' });
+    }
 
     // Check if song exists and is approved catalog song
     const [[song]] = await pool.query(`
@@ -317,34 +378,12 @@ exports.exportAudit = async (req, res, next) => {
 
 exports.exportLyrics = async (req, res, next) => {
   try {
-    const { q, status, provider } = req.query;
-
     let whereConditions = [
       APPROVED_CATALOG_WHERE
     ];
     let queryParams = [];
 
-    if (q) {
-      whereConditions.push(`(s.title LIKE ? OR a.name LIKE ?)`);
-      queryParams.push(`%${q}%`, `%${q}%`);
-    }
-
-    if (status) {
-      if (status === 'missing') {
-        whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
-      } else if (status === 'has_lyrics') {
-        whereConditions.push(HAS_ANY_LYRICS_SQL);
-      } else if (status === 'synced') {
-        whereConditions.push(HAS_SYNCED_LYRICS_SQL);
-      } else if (status === 'plain') {
-        whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
-      }
-    }
-
-    if (provider && provider !== 'all') {
-      whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
-      queryParams.push(provider);
-    }
+    applyLyricsFilters(req.query, whereConditions, queryParams);
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 

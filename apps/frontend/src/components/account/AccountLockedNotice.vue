@@ -29,6 +29,10 @@
           </p>
         </div>
 
+        <div v-else-if="appealSubmitted" class="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-emerald-100">
+          Bạn đã gửi khiếu nại cho lần khóa tài khoản này. Vui lòng chờ quản trị viên xử lý.
+        </div>
+
         <div v-else class="rounded-xl border border-rose-300/20 bg-rose-400/10 p-4 text-rose-100">
           Tài khoản này hiện không được phép gửi khiếu nại qua hệ thống.
         </div>
@@ -70,6 +74,7 @@ defineEmits(['logout'])
 
 const router = useRouter()
 const lockedReason = computed(() => props.account?.locked_reason || 'Không có lý do cụ thể.')
+const appealSubmitted = computed(() => Boolean(props.account?.appeal_submitted))
 const canAppeal = computed(() => Boolean(props.account?.allow_appeal && props.account?.appeal_token))
 
 function goToAppeal() {

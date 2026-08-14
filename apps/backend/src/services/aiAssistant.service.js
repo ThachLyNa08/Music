@@ -387,7 +387,18 @@ async function parseIntentWithLlmFallback(prompt = '') {
     fallbackUsed: intentResult.fallbackUsed,
     fallbackReason: intentResult.fallbackReason,
     parsedIntent: guardedParsedIntent,
-    intent: guardedIntent
+    intent: process.env.NODE_ENV === 'production'
+      ? {
+        action: guardedIntent.action,
+        mode: guardedIntent.mode,
+        market: guardedIntent.market,
+        energy: guardedIntent.energy,
+        keywords: guardedIntent.keywords,
+        excludeGenres: guardedIntent.excludeGenres,
+        excludeArtists: guardedIntent.excludeArtists,
+        llmProvider: guardedIntent.llmProvider
+      }
+      : guardedIntent
   });
 
   return {

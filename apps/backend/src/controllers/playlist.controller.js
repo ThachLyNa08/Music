@@ -1,5 +1,4 @@
 const { pool } = require('../config/database');
-const spotifyService = require('../services/spotify.service');
 const { normalizeCoverUrl } = require('../utils/imageUrl.util');
 const { VALID_SYSTEM_KEYS } = require('../services/systemPlaylist.service');
 const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
@@ -63,6 +62,15 @@ function isUserDeletablePlaylist(playlist) {
   );
 }
 
+function normalizeStrictPositiveId(value) {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  return Number(text);
+}
+
 async function getPlaylistSongs(conn, playlistId, userId) {
   const [songs] = await conn.query(
     `SELECT
@@ -122,10 +130,32 @@ function clearPlaylistCache(userId) {
   playlistsCache.delete(`user_${userId}`);
 }
 
+function normalizePlaylistText(value, maxLength, fieldLabel) {
+  if (value === undefined) return undefined;
+  const text = String(value || '').trim();
+  if (text.length > maxLength) {
+    const error = new Error(`${fieldLabel} không được vượt quá ${maxLength} ký tự`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return text;
+}
+
+function parsePlaylistVisibility(value, defaultValue = 0) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  if (value === true || value === 'true' || value === 1 || value === '1') return 1;
+  if (value === false || value === 'false' || value === 0 || value === '0') return 0;
+  const error = new Error('Trạng thái công khai playlist không hợp lệ');
+  error.statusCode = 400;
+  throw error;
+}
+
 exports.createPlaylist = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, description, is_public } = req.body;
+    const name = normalizePlaylistText(req.body.name, 255, 'Tên playlist');
+    const description = normalizePlaylistText(req.body.description, 1000, 'Mô tả playlist');
+    const isPublicVal = parsePlaylistVisibility(req.body.is_public, 0);
 
     if (!name) return res.status(400).json({ success: false, message: 'Tên playlist là bắt buộc' });
 
@@ -137,7 +167,7 @@ exports.createPlaylist = async (req, res, next) => {
     const [result] = await pool.query(
       `INSERT INTO playlists (user_id, name, description, cover_url, is_public)
        VALUES (?, ?, ?, ?, ?)`,
-      [userId, name, description || '', coverUrl, is_public === 'true' || is_public === true ? 1 : 0]
+      [userId, name, description || '', coverUrl, isPublicVal]
     );
 
     clearPlaylistCache(userId);
@@ -382,10 +412,17 @@ exports.addSongToPlaylist = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
 
-    if (isNaN(song_id)) {
-      song_id = await spotifyService.resolveSpotifyTrack(song_id);
-    } else {
-      song_id = Number(song_id);
+    song_id = normalizeStrictPositiveId(song_id);
+    if (!song_id) {
+      return res.status(400).json({ success: false, message: 'ID bĂ i hĂ¡t khĂ´ng há»£p lá»‡' });
+    }
+
+    const [songs] = await pool.query(
+      `SELECT id FROM songs s WHERE id = ? AND ${publicSongCondition('s')} LIMIT 1`,
+      [song_id]
+    );
+    if (!songs.length) {
+      return res.status(404).json({ success: false, message: 'BĂ i hĂ¡t khĂ´ng tá»“n táº¡i hoáº·c chÆ°a cĂ´ng khai' });
     }
 
     await pool.query(
@@ -528,10 +565,9 @@ exports.removeSongFromPlaylist = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
 
-    if (isNaN(song_id)) {
-      song_id = await spotifyService.resolveSpotifyTrack(song_id);
-    } else {
-      song_id = Number(song_id);
+    song_id = normalizeStrictPositiveId(song_id);
+    if (!song_id) {
+      return res.status(400).json({ success: false, message: 'ID bĂ i hĂ¡t khĂ´ng há»£p lá»‡' });
     }
 
     await pool.query(`DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?`, [id, song_id]);
@@ -546,17 +582,26 @@ exports.updatePlaylist = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { name, description, is_public } = req.body;
+    const name = normalizePlaylistText(req.body.name, 255, 'Tên playlist');
+    const description = normalizePlaylistText(req.body.description, 1000, 'Mô tả playlist');
+    const { is_public } = req.body;
 
-    const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
-    if (playlists.length === 0 || String(playlists[0].user_id) !== String(userId)) {
+    let playlist = req.playlist;
+    if (!playlist) {
+      const [playlists] = await pool.query(`SELECT user_id, type, is_system, system_key FROM playlists WHERE id = ?`, [id]);
+      playlist = playlists[0];
+    }
+    if (!playlist || String(playlist.user_id) !== String(userId)) {
       return res.status(403).json({ success: false, message: 'Không có quyền sửa playlist này' });
     }
-    if (playlists[0].is_system === 1 || playlists[0].system_key) {
+    if (playlist.is_system === 1 || playlist.system_key) {
       return res.status(403).json({ success: false, message: 'Không thể đổi tên/ảnh playlist hệ thống' });
     }
-    if (!isManualEditablePlaylist(playlists[0])) {
+    if (!isManualEditablePlaylist(playlist)) {
       return res.status(403).json({ success: false, message: 'Chỉ có thể chỉnh sửa playlist thủ công' });
+    }
+    if (name !== undefined && !name) {
+      return res.status(400).json({ success: false, message: 'Tên playlist là bắt buộc' });
     }
 
     let coverUrl = null;
@@ -566,7 +611,7 @@ exports.updatePlaylist = async (req, res, next) => {
 
     let isPublicVal = null;
     if (is_public !== undefined && is_public !== null && is_public !== '') {
-      isPublicVal = (is_public === 'true' || is_public === true) ? 1 : 0;
+      isPublicVal = parsePlaylistVisibility(is_public, null);
     }
 
     const updateFields = [];
@@ -739,4 +784,9 @@ exports.clonePlaylist = async (req, res, next) => {
   } finally {
     conn.release();
   }
+};
+
+exports.__test = {
+  normalizeStrictPositiveId,
+  isManualEditablePlaylist,
 };

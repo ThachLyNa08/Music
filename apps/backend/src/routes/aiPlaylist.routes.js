@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const aiPlaylistController = require('../controllers/aiPlaylist.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -13,9 +13,42 @@ const validate = (req, res, next) => {
     next();
 };
 
+const isStrictPositiveInteger = (value) => {
+    if (typeof value === 'number') return Number.isInteger(value) && value > 0;
+    return /^[1-9]\d*$/.test(String(value ?? '').trim());
+};
+
+const validateIdArray = (field) => body(field).optional().custom((value) => {
+    if (!Array.isArray(value)) {
+        throw new Error(`${field} must be an array`);
+    }
+    for (const item of value) {
+        if (!isStrictPositiveInteger(item)) {
+            throw new Error(`${field} must contain only positive integer IDs`);
+        }
+    }
+    return true;
+});
+
+const validateAiPlaylistIdInputs = (req, res, next) => {
+    for (const field of ['previousSongIds', 'songIds']) {
+        if (req.body?.[field] === undefined) continue;
+        if (!Array.isArray(req.body[field])) {
+            return res.status(400).json({ success: false, message: `${field} must be an array` });
+        }
+        const invalid = req.body[field].find((item) => !isStrictPositiveInteger(item));
+        if (invalid !== undefined) {
+            return res.status(400).json({ success: false, message: `${field} must contain only positive integer IDs` });
+        }
+    }
+    next();
+};
+
 router.get('/suggestions', aiPlaylistController.getSuggestions);
 
 router.get('/quota', authenticate, aiPlaylistController.getQuota);
+
+router.use(validateAiPlaylistIdInputs);
 
 router.get('/history',
     authenticate,
@@ -24,11 +57,15 @@ router.get('/history',
 
 router.get('/history/:id',
     authenticate,
+    param('id').custom(isStrictPositiveInteger).withMessage('historyId invalid'),
+    validate,
     aiPlaylistController.getHistoryDetail
 );
 
 router.post('/history/:id/save',
     authenticate,
+    param('id').custom(isStrictPositiveInteger).withMessage('historyId invalid'),
+    validate,
     aiPlaylistController.saveHistory
 );
 

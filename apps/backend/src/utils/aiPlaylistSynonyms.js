@@ -33,7 +33,7 @@ const SYNONYM_RULES = [
     },
     {
         id: 'chill_calm',
-        phrases: ['chill', 'nhe nhang', 'em', 'thu gian', 'de nghe', 'nhe dau', 'khong gat', 'khong on', 'diu', 'binh yen', 'buoi toi', 'toi', 'cham', 'lofi'],
+        phrases: ['chill', 'nhe nhang', 'em', 'thu gian', 'de nghe', 'nhe dau', 'khong gat', 'khong on', 'diu', 'binh yen', 'buoi toi', 'toi nay', 'cham', 'lofi'],
         apply: {
             mood: ['chill', 'calm'],
             energy: 'low',
@@ -122,7 +122,7 @@ const ACTIVITY_RULES = [
     { activity: 'coding', phrases: ['coding', 'code', 'lap trinh'] },
     { activity: 'work', phrases: ['lam viec', 'deadline', 'chay deadline', 'tap trung', 'focus', 'work', 'reading'] },
     { activity: 'gym', phrases: ['tap gym', 'gym', 'workout', 'the duc', 'van dong', 'dance'] },
-    { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax', 'buoi toi', 'toi', 'chill'] },
+    { activity: 'relax', phrases: ['thu gian', 'nghi ngoi', 'relax', 'buoi toi', 'toi nay', 'chill'] },
     { activity: 'sleep', phrases: ['ngu', 'de ngu', 'ru ngu'] },
     { activity: 'party', phrases: ['party', 'tiec', 'quay', 'club', 'bar'] },
     { activity: 'travel', phrases: ['du lich', 'di choi', 'di xa'] },
@@ -134,7 +134,7 @@ const ACTIVITY_RULES = [
 const CONTEXT_RULES = [
     { context: 'morning', phrases: ['sang', 'buoi sang'] },
     { context: 'afternoon', phrases: ['chieu', 'buoi chieu'] },
-    { context: 'night', phrases: ['buoi toi', 'toi nay', 'ban dem', 'dem', 'toi'] },
+    { context: 'night', phrases: ['buoi toi', 'toi nay', 'ban dem', 'dem'] },
     { context: 'late_night', phrases: ['khuya', 'dem muon', 'dem khuya'] },
     { context: 'rain', phrases: ['mua', 'troi mua', 'ngay mua'] },
     { context: 'deadline', phrases: ['deadline', 'chay deadline'] },
@@ -176,12 +176,12 @@ const NEGATIVE_RULES = [
     {
         id: 'avoid_dance',
         phrases: ['dung qua dance', 'khong qua dance', 'tranh dance'],
-        apply: { genre_family: ['dance'], mood: ['party'], energy: ['high'], keywords: ['dance'] }
+        apply: { genre_family: ['dance'], mood: ['party'], energy: ['high'], keywords: ['dance'], energyValue: 'low' }
     },
     {
         id: 'avoid_sad',
-        phrases: ['khong buon', 'dung buon', 'tranh nhac buon'],
-        apply: { mood: ['sad', 'heartbreak'], keywords: ['buon'] }
+        phrases: ['khong buon', 'dung buon', 'khong qua buon', 'dung qua buon', 'tranh nhac buon'],
+        apply: { mood: ['sad', 'heartbreak'], keywords: ['buon'], mood_intensity: 'light' }
     },
     {
         id: 'avoid_rap',

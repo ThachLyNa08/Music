@@ -1,6 +1,7 @@
 import api from './axios'
 
 export const accountApi = {
+  getLockAppealStatus: (token) => api.get('/account/appeals/lock', { params: { token } }),
   submitLockAppeal: (payload) => {
     if (payload instanceof FormData) {
       return api.post('/account/appeals/lock', payload, {

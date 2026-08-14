@@ -13,8 +13,6 @@ const { authenticate } = require('../middleware/auth.middleware');
 
 // Public routes
 router.get('/plans', getPlans);
-router.get('/fix-prices', require('../controllers/payments.controller').fixPrices);
-router.get('/simulate/:paymentCode', require('../controllers/payments.controller').simulatePayment);
 router.post('/sepay/webhook', handleSepayWebhook);
 
 // Protected routes

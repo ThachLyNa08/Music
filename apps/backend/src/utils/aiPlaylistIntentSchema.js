@@ -157,6 +157,9 @@ function sanitizeAiPlaylistIntent(intent) {
     safe.explanation = String(intent?.explanation || '').trim();
     safe.raw.prompt = String(intent?.raw?.prompt || '');
     safe.raw.matchedKeywords = uniqueStrings(intent?.raw?.matchedKeywords);
+    if (intent?.raw?.provider) {
+        safe.raw.provider = String(intent.raw.provider).trim();
+    }
     if (intent?.tempoIntent && typeof intent.tempoIntent === 'object') {
         safe.tempoIntent = {
             tempoBucket: intent.tempoIntent.tempoBucket || null,

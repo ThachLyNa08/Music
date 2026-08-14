@@ -22,6 +22,10 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+const USER_ROLES = ['user', 'artist', 'admin'];
+const ADMIN_CREATABLE_ROLES = ['user', 'admin'];
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function getFrontendUrl() {
   return String(process.env.APP_FRONTEND_URL || process.env.FRONTEND_URL || 'http://127.0.0.1:5173').replace(/\/+$/, '');
 }
@@ -169,22 +173,122 @@ function normalizeNullableId(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function parseSongIds(value) {
-  if (Array.isArray(value)) {
-    return [...new Set(value.map(Number).filter(id => Number.isFinite(id) && id > 0))];
-  }
+function normalizePositiveId(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
+function normalizePositiveIdList(values, max = 500) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map(normalizePositiveId).filter(Boolean))].slice(0, max);
+}
+
+function normalizeText(value, maxLength, { required = false, field = 'Giá trị' } = {}) {
+  if (value === undefined || value === null) {
+    if (!required) return undefined;
+    const err = new Error(`${field} là bắt buộc`);
+    err.statusCode = 400;
+    throw err;
+  }
+  const text = String(value).trim();
+  if (required && !text) {
+    const err = new Error(`${field} là bắt buộc`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (text.length > maxLength) {
+    const err = new Error(`${field} không được vượt quá ${maxLength} ký tự`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return text || null;
+}
+
+function createValidationError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+function normalizeStrictPositiveId(value, field = 'ID') {
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) return value;
+    throw createValidationError(`${field} khong hop le`);
+  }
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) {
+    throw createValidationError(`${field} khong hop le`);
+  }
+  return Number(text);
+}
+
+function normalizeStrictNullableId(value, field = 'ID') {
+  if (value === undefined) return undefined;
+  if (value === null || String(value).trim() === '') return null;
+  return normalizeStrictPositiveId(value, field);
+}
+
+function parseStrictBoolean(value, field = 'Gia tri boolean') {
+  if (value === true || value === 1) return 1;
+  if (value === false || value === 0) return 0;
+  const text = String(value ?? '').trim().toLowerCase();
+  if (text === 'true' || text === '1') return 1;
+  if (text === 'false' || text === '0') return 0;
+  throw createValidationError(`${field} khong hop le`);
+}
+
+function getUploadedFiles(req) {
+  const files = [];
+  if (req.file) files.push(req.file);
+  if (Array.isArray(req.files)) {
+    files.push(...req.files);
+  } else {
+    Object.values(req.files || {}).forEach((value) => {
+      if (Array.isArray(value)) files.push(...value);
+      else if (value) files.push(value);
+    });
+  }
+  return files.filter(Boolean);
+}
+
+function cleanupUploadedFiles(files = []) {
+  files.forEach((file) => {
+    if (!file?.path) return;
+    try {
+      fs.unlinkSync(file.path);
+    } catch (_err) {}
+  });
+}
+
+function parseSongIds(value) {
   if (value === undefined || value === null || value === '') return [];
 
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) return parseSongIds(parsed);
-  } catch { }
+  let raw = value;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      raw = Array.isArray(parsed) ? parsed : raw;
+    } catch { }
+  }
 
-  return String(value)
-    .split(',')
-    .map(Number)
-    .filter(id => Number.isFinite(id) && id > 0);
+  if (!Array.isArray(raw)) {
+    raw = String(raw).split(',');
+  }
+
+  const ids = raw.map((item) => {
+    if (typeof item === 'number') {
+      return Number.isInteger(item) && item > 0 ? item : null;
+    }
+    const text = String(item ?? '').trim();
+    if (!/^[1-9]\d*$/.test(text)) return null;
+    return Number(text);
+  });
+
+  if (ids.some(id => !id)) {
+    throw createValidationError('Danh sach bai hat khong hop le');
+  }
+
+  return [...new Set(ids)];
 }
 
 function deriveMarketFromGenre(market, genreName) {
@@ -1378,6 +1482,7 @@ exports.updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     let { display_name, email, role } = req.body;
+    role = role === undefined || role === null || role === '' ? undefined : String(role).trim();
 
     if (!display_name || !display_name.trim()) {
       return res.status(400).json({ success: false, message: 'Tên hiển thị không được để trống' });
@@ -1385,19 +1490,35 @@ exports.updateUser = async (req, res, next) => {
     if (!email || !email.trim()) {
       return res.status(400).json({ success: false, message: 'Email không được để trống' });
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!EMAIL_REGEX.test(email.trim())) {
       return res.status(400).json({ success: false, message: 'Email không đúng định dạng' });
     }
-    if (role && !['user', 'admin'].includes(role)) {
+    if (role && !USER_ROLES.includes(role)) {
       return res.status(400).json({ success: false, message: 'Vai trò không hợp lệ' });
     }
 
     display_name = display_name.trim();
     email = email.trim();
+    if (display_name.length > 100) {
+      return res.status(400).json({ success: false, message: 'Tên hiển thị không được vượt quá 100 ký tự' });
+    }
 
-    if (req.user && req.user.id === parseInt(id) && role === 'user') {
+    const [targetRows] = await pool.query('SELECT id, role FROM users WHERE id = ? LIMIT 1', [id]);
+    if (!targetRows.length) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+    }
+
+    role = role || targetRows[0].role;
+
+    if (req.user && req.user.id === parseInt(id) && role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Không thể tự hạ quyền Admin của chính mình' });
+    }
+
+    if (role === 'artist') {
+      const [artistRows] = await pool.query('SELECT id FROM artists WHERE user_id = ? LIMIT 1', [id]);
+      if (!artistRows.length) {
+        return res.status(400).json({ success: false, message: 'Không thể gán vai trò artist khi người dùng chưa liên kết hồ sơ nghệ sĩ' });
+      }
     }
 
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, id]);
@@ -1889,8 +2010,8 @@ exports.getUserDetail = async (req, res, next) => {
 exports.updateUserRole = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-    if (!['user', 'admin'].includes(role)) {
+    const role = String(req.body.role || '').trim();
+    if (!USER_ROLES.includes(role)) {
       return res.status(400).json({ success: false, message: 'Vai trò không hợp lệ' });
     }
     const [users] = await pool.query(
@@ -1902,6 +2023,15 @@ exports.updateUserRole = async (req, res, next) => {
     }
 
     const targetUser = users[0];
+    if (req.user && Number(req.user.id) === Number(id) && role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Không thể tự hạ quyền Admin của chính mình' });
+    }
+    if (role === 'artist') {
+      const [artistRows] = await pool.query('SELECT id FROM artists WHERE user_id = ? LIMIT 1', [id]);
+      if (!artistRows.length) {
+        return res.status(400).json({ success: false, message: 'Không thể gán vai trò artist khi người dùng chưa liên kết hồ sơ nghệ sĩ' });
+      }
+    }
     await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
 
     if (targetUser.role !== 'admin' && role === 'admin' && targetUser.email) {
@@ -2040,20 +2170,32 @@ exports.updateUserStatus = async (req, res, next) => {
 
 exports.updateUserPremium = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const id = normalizePositiveId(req.params.id);
     const { premium_expires_at } = req.body;
     const expiresVal = premium_expires_at ? new Date(premium_expires_at) : null;
 
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID người dùng không hợp lệ' });
+    }
+    if (premium_expires_at && (!expiresVal || Number.isNaN(expiresVal.getTime()))) {
+      return res.status(400).json({ success: false, message: 'Ngày hết hạn Premium không hợp lệ' });
+    }
+    if (expiresVal && expiresVal <= new Date()) {
+      return res.status(400).json({ success: false, message: 'Ngày hết hạn Premium phải ở tương lai' });
+    }
+
     if (expiresVal) {
-      await pool.query(
+      const [result] = await pool.query(
         'UPDATE users SET premium_started_at = COALESCE(premium_started_at, NOW()), premium_expires_at = ? WHERE id = ?',
         [expiresVal, id]
       );
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     } else {
-      await pool.query(
+      const [result] = await pool.query(
         'UPDATE users SET premium_started_at = NULL, premium_expires_at = NULL, premium_plan_id = NULL WHERE id = ?',
         [id]
       );
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
     }
 
     res.json({ success: true, message: 'Cập nhật premium thành công' });
@@ -2230,9 +2372,25 @@ exports.rejectAccountAppeal = async (req, res, next) => {
 
 exports.createUser = async (req, res, next) => {
   try {
-    const { email, password, display_name, role } = req.body;
-    if (!email || !password || !display_name) {
+    const email = String(req.body.email || '').trim();
+    const password = String(req.body.password || '');
+    const displayName = String(req.body.display_name || '').trim();
+    const role = String(req.body.role || 'user').trim();
+
+    if (!email || !password || !displayName) {
       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc' });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ success: false, message: 'Email không đúng định dạng' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu tối thiểu 6 ký tự' });
+    }
+    if (displayName.length > 100) {
+      return res.status(400).json({ success: false, message: 'Tên hiển thị không được vượt quá 100 ký tự' });
+    }
+    if (!ADMIN_CREATABLE_ROLES.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Vai trò tạo mới không hợp lệ' });
     }
 
     // Check if email exists
@@ -2242,11 +2400,10 @@ exports.createUser = async (req, res, next) => {
     }
 
     const password_hash = await bcrypt.hash(password, 12);
-    const userRole = role === 'admin' ? 'admin' : 'user';
 
     await pool.query(
       'INSERT INTO users (email, password_hash, display_name, role, status) VALUES (?, ?, ?, ?, ?)',
-      [email, password_hash, display_name, userRole, 'active']
+      [email, password_hash, displayName, role, 'active']
     );
 
     res.status(201).json({ success: true, message: 'Thêm thành viên thành công' });
@@ -2430,12 +2587,37 @@ exports.getAllSongs = async (req, res, next) => {
 };
 
 exports.updateSong = async (req, res, next) => {
+  const uploadedFiles = getUploadedFiles(req);
   try {
-    const { id } = req.params;
+    const id = normalizeStrictPositiveId(req.params.id, 'ID bai hat');
     const { title, artist_name, album_title, genre_id, is_active, artist_id: reqArtistId, album_id: reqAlbumId } = req.body;
     const songColumns = await getTableColumns('songs');
     const hasReleaseStatus = req.body.release_status !== undefined || req.body.releaseStatus !== undefined;
     let releasePayload = null;
+    let requestedReleasePayload = null;
+
+    const normalizedTitle = title !== undefined
+      ? normalizeText(title, 255, { required: true, field: 'Ten bai hat' })
+      : undefined;
+    const normalizedArtistName = artist_name !== undefined
+      ? normalizeText(artist_name, 255, { field: 'Ten nghe si' })
+      : undefined;
+    const normalizedAlbumTitle = album_title !== undefined
+      ? normalizeText(album_title, 255, { field: 'Ten album' })
+      : undefined;
+    const bodyHasArtistId = Object.prototype.hasOwnProperty.call(req.body, 'artist_id');
+    const bodyHasAlbumId = Object.prototype.hasOwnProperty.call(req.body, 'album_id');
+    const bodyHasGenreId = Object.prototype.hasOwnProperty.call(req.body, 'genre_id');
+    const parsedArtistId = bodyHasArtistId ? normalizeStrictNullableId(reqArtistId, 'ID nghe si') : undefined;
+    const parsedAlbumId = bodyHasAlbumId ? normalizeStrictNullableId(reqAlbumId, 'ID album') : undefined;
+    const parsedGenreId = bodyHasGenreId ? normalizeStrictNullableId(genre_id, 'ID the loai') : undefined;
+    if (bodyHasArtistId && parsedArtistId === null) {
+      throw createValidationError('ID nghe si khong hop le');
+    }
+    const parsedIsActive = is_active !== undefined ? parseStrictBoolean(is_active, 'Trang thai bai hat') : undefined;
+    if (hasReleaseStatus) {
+      requestedReleasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: false });
+    }
 
     const conn = await pool.getConnection();
     try {
@@ -2460,15 +2642,21 @@ exports.updateSong = async (req, res, next) => {
           existingReleaseAt <= Date.now()
         );
       if (hasReleaseStatus && !isReleasePublished) {
-        releasePayload = normalizeReleasePayload(req.body, { defaultStatus: 'published', isCreate: false });
+        releasePayload = requestedReleasePayload;
       }
 
-      let artistId = reqArtistId || null;
+      let artistId = parsedArtistId ?? null;
       let isNewArtist = false;
-      if (!artistId && artist_name) {
-        let [artists] = await conn.query('SELECT id FROM artists WHERE name = ? LIMIT 1', [artist_name]);
+      if (artistId) {
+        const [artists] = await conn.query('SELECT id FROM artists WHERE id = ? LIMIT 1', [artistId]);
+        if (!artists.length) {
+          throw createValidationError('Nghe si khong ton tai', 404);
+        }
+      }
+      if (!artistId && normalizedArtistName) {
+        let [artists] = await conn.query('SELECT id FROM artists WHERE name = ? LIMIT 1', [normalizedArtistName]);
         if (artists.length === 0) {
-          const [artistRes] = await conn.query('INSERT INTO artists (name) VALUES (?)', [artist_name]);
+          const [artistRes] = await conn.query('INSERT INTO artists (name) VALUES (?)', [normalizedArtistName]);
           artistId = artistRes.insertId;
           isNewArtist = true;
         } else {
@@ -2476,32 +2664,44 @@ exports.updateSong = async (req, res, next) => {
         }
       }
 
-      let albumId = reqAlbumId || null;
-      if (!albumId && album_title && artistId) {
-        let [albums] = await conn.query('SELECT id FROM albums WHERE title = ? AND artist_id = ? LIMIT 1', [album_title, artistId]);
+      let albumId = parsedAlbumId === undefined ? null : parsedAlbumId;
+      if (albumId) {
+        const [albums] = await conn.query('SELECT id FROM albums WHERE id = ? LIMIT 1', [albumId]);
+        if (!albums.length) {
+          throw createValidationError('Album khong ton tai', 404);
+        }
+      }
+      if (!albumId && normalizedAlbumTitle && artistId) {
+        let [albums] = await conn.query('SELECT id FROM albums WHERE title = ? AND artist_id = ? LIMIT 1', [normalizedAlbumTitle, artistId]);
         if (albums.length === 0) {
-          const [albumRes] = await conn.query('INSERT INTO albums (title, artist_id) VALUES (?, ?)', [album_title, artistId]);
+          const [albumRes] = await conn.query('INSERT INTO albums (title, artist_id) VALUES (?, ?)', [normalizedAlbumTitle, artistId]);
           albumId = albumRes.insertId;
         } else {
           albumId = albums[0].id;
+        }
+      }
+      if (parsedGenreId) {
+        const [genres] = await conn.query('SELECT id FROM genres WHERE id = ? LIMIT 1', [parsedGenreId]);
+        if (!genres.length) {
+          throw createValidationError('The loai khong ton tai', 404);
         }
       }
 
       const updateFields = [];
       const updateParams = [];
 
-      if (title !== undefined) { updateFields.push('title = ?'); updateParams.push(title); }
-      if (artistId !== null) { updateFields.push('artist_id = ?'); updateParams.push(artistId); }
-      if (albumId !== null) { updateFields.push('album_id = ?'); updateParams.push(albumId); }
-      if (genre_id !== undefined) { updateFields.push('genre_id = ?'); updateParams.push(genre_id); }
-      if (is_active !== undefined) {
+      if (normalizedTitle !== undefined) { updateFields.push('title = ?'); updateParams.push(normalizedTitle); }
+      if (bodyHasArtistId || normalizedArtistName) { updateFields.push('artist_id = ?'); updateParams.push(artistId); }
+      if (bodyHasAlbumId || (normalizedAlbumTitle && artistId)) { updateFields.push('album_id = ?'); updateParams.push(albumId); }
+      if (bodyHasGenreId) { updateFields.push('genre_id = ?'); updateParams.push(parsedGenreId); }
+      if (parsedIsActive !== undefined) {
         updateFields.push('is_active = ?');
-        updateParams.push(is_active);
+        updateParams.push(parsedIsActive);
         if (!hasReleaseStatus && songColumns.has('release_status')) {
-          if (Number(is_active) === 0) {
+          if (parsedIsActive === 0) {
             updateFields.push('release_status = ?');
             updateParams.push('hidden');
-          } else if (Number(is_active) === 1) {
+          } else if (parsedIsActive === 1) {
             updateFields.push('release_status = ?');
             updateParams.push('published');
           }
@@ -2517,7 +2717,7 @@ exports.updateSong = async (req, res, next) => {
         if (releasePayload.release_status === 'hidden' && songColumns.has('is_active')) {
           updateFields.push('is_active = ?');
           updateParams.push(0);
-        } else if (releasePayload.release_status !== 'hidden' && songColumns.has('is_active') && is_active === undefined) {
+        } else if (releasePayload.release_status !== 'hidden' && songColumns.has('is_active') && parsedIsActive === undefined) {
           updateFields.push('is_active = ?');
           updateParams.push(1);
         }
@@ -2566,11 +2766,13 @@ exports.updateSong = async (req, res, next) => {
       res.json({ success: true, message: 'Cập nhật bài hát thành công' });
     } catch (err) {
       await conn.rollback();
+      cleanupUploadedFiles(uploadedFiles);
       throw err;
     } finally {
       conn.release();
     }
   } catch (error) {
+    cleanupUploadedFiles(uploadedFiles);
     console.error('updateSong Error:', error);
     next(error);
   }
@@ -2759,13 +2961,17 @@ exports.getSongStatistics = async (req, res, next) => {
 
 exports.bulkUpdateSongsStatus = async (req, res, next) => {
   try {
-    const { songIds, status } = req.body;
-    if (!Array.isArray(songIds) || songIds.length === 0) {
+    const songIds = normalizePositiveIdList(req.body.songIds, 500);
+    const status = String(req.body.status || '').trim();
+    if (songIds.length === 0) {
       return res.status(400).json({ success: false, message: 'Danh sách bài hát rỗng' });
     }
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Trạng thái bài hát không hợp lệ' });
+    }
     const isActive = status === 'active' ? 1 : 0;
-    await pool.query('UPDATE songs SET is_active = ? WHERE id IN (?)', [isActive, songIds]);
-    res.json({ success: true, message: `Đã cập nhật trạng thái cho ${songIds.length} bài hát` });
+    const [result] = await pool.query('UPDATE songs SET is_active = ? WHERE id IN (?)', [isActive, songIds]);
+    res.json({ success: true, message: `Đã cập nhật trạng thái cho ${songIds.length} bài hát`, affectedRows: result.affectedRows });
   } catch (error) {
     console.error('bulkUpdateSongsStatus Error:', error);
     next(error);
@@ -2774,15 +2980,16 @@ exports.bulkUpdateSongsStatus = async (req, res, next) => {
 
 exports.bulkUpdateSongsMarket = async (req, res, next) => {
   try {
-    const { songIds, market } = req.body;
-    if (!Array.isArray(songIds) || songIds.length === 0) {
+    const songIds = normalizePositiveIdList(req.body.songIds, 500);
+    const market = String(req.body.market || '').trim().toUpperCase();
+    if (songIds.length === 0) {
       return res.status(400).json({ success: false, message: 'Danh sách bài hát rỗng' });
     }
     if (!['VPOP', 'KPOP', 'USUK', 'OTHER'].includes(market)) {
       return res.status(400).json({ success: false, message: 'Market không hợp lệ' });
     }
-    await pool.query('UPDATE songs SET market = ? WHERE id IN (?)', [market, songIds]);
-    res.json({ success: true, message: `Đã gán nhóm ${market} cho ${songIds.length} bài hát` });
+    const [result] = await pool.query('UPDATE songs SET market = ? WHERE id IN (?)', [market, songIds]);
+    res.json({ success: true, message: `Đã gán nhóm ${market} cho ${songIds.length} bài hát`, affectedRows: result.affectedRows });
   } catch (error) {
     console.error('bulkUpdateSongsMarket Error:', error);
     next(error);
@@ -3326,8 +3533,9 @@ exports.getArtistDetails = async (req, res, next) => {
 
 exports.createArtist = async (req, res, next) => {
   try {
-    const { name, bio, region } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Tên nghệ sĩ là bắt buộc' });
+    const name = normalizeText(req.body.name, 255, { required: true, field: 'Tên nghệ sĩ' });
+    const bio = normalizeText(req.body.bio, 5000, { field: 'Tiểu sử nghệ sĩ' }) || null;
+    const region = normalizeText(req.body.region, 50, { field: 'Khu vực' }) || 'Khác';
 
     let avatarUrl = null;
     if (req.file) {
@@ -3337,7 +3545,7 @@ exports.createArtist = async (req, res, next) => {
 
     const [result] = await pool.query(
       'INSERT INTO artists (name, bio, region, avatar_url) VALUES (?, ?, ?, ?)',
-      [name, bio, region || 'Khác', avatarUrl]
+      [name, bio, region, avatarUrl]
     );
 
     const artistId = result.insertId;
@@ -5222,8 +5430,14 @@ exports.getAiStatus = async (req, res, next) => {
 
 exports.updateArtist = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { name, bio, region } = req.body;
+    const id = normalizePositiveId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'ID nghệ sĩ không hợp lệ' });
+    const hasName = Object.prototype.hasOwnProperty.call(req.body, 'name');
+    const hasBio = Object.prototype.hasOwnProperty.call(req.body, 'bio');
+    const hasRegion = Object.prototype.hasOwnProperty.call(req.body, 'region');
+    const name = hasName ? normalizeText(req.body.name, 255, { required: true, field: 'Tên nghệ sĩ' }) : undefined;
+    const bio = hasBio ? normalizeText(req.body.bio, 5000, { field: 'Tiểu sử nghệ sĩ' }) : undefined;
+    const region = hasRegion ? normalizeText(req.body.region, 50, { field: 'Khu vực' }) : undefined;
 
     const updateFields = [];
     const updateParams = [];
@@ -5241,7 +5455,8 @@ exports.updateArtist = async (req, res, next) => {
 
     if (updateFields.length > 0) {
       updateParams.push(id);
-      await pool.query(`UPDATE artists SET ${updateFields.join(', ')} WHERE id = ?`, updateParams);
+      const [result] = await pool.query(`UPDATE artists SET ${updateFields.join(', ')} WHERE id = ?`, updateParams);
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Không tìm thấy nghệ sĩ' });
     }
 
     res.json({ success: true, message: 'Cập nhật nghệ sĩ thành công' });
@@ -6523,4 +6738,8 @@ exports.getSystemPlaylistsActivityLog = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+exports.__test = {
+  parseSongIds,
 };

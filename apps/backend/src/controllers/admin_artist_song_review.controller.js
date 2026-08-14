@@ -5,6 +5,43 @@ const { findDuplicateAudioHash } = require('../services/audioDuplicate.service')
 const { computeFileSha256 } = require('../utils/fileHash.util');
 const { resolveUploadUrl } = require('../utils/uploadPathResolver');
 
+const REVIEW_STATUSES = ['all', 'pending_review', 'approved', 'rejected', 'needs_revision'];
+const MODERATION_LEVELS = ['low', 'medium', 'high'];
+const REVIEW_SORTS = ['newest', 'oldest', 'risk_desc'];
+
+function normalizePositiveInt(value, { defaultValue, max } = {}) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || (max && number > max)) return null;
+  return number;
+}
+
+function normalizeEnum(value, allowed, defaultValue) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const normalized = String(value).trim();
+  return allowed.includes(normalized) ? normalized : null;
+}
+
+function normalizeSearchText(value, max = 100) {
+  if (value === undefined || value === null) return '';
+  const text = String(value).trim();
+  return text.length <= max ? text : null;
+}
+
+function normalizePositiveIdList(values, max = 50) {
+  if (!Array.isArray(values) || values.length === 0 || values.length > max) return null;
+  const ids = values.map(value => normalizePositiveInt(value));
+  if (ids.some(id => !id)) return null;
+  return [...new Set(ids)];
+}
+
+function normalizeReviewReason(value, max = 1000) {
+  if (value === undefined || value === null) return null;
+  const reason = String(value).trim();
+  if (!reason || reason.length > max) return null;
+  return reason;
+}
+
 const DUPLICATE_APPROVE_REJECTION_REASON = 'File âm thanh đã tồn tại trong thư viện.';
 
 let cachedSongColumns = null;
@@ -88,14 +125,25 @@ async function checkDuplicateBeforeApprove(song, adminId) {
 
 exports.getArtistSongReviews = async (req, res, next) => {
   try {
-    const { status = 'pending_review', q, level, flag, artistId, page = 1, limit = 20, sort = 'newest' } = req.query;
+    const status = normalizeEnum(req.query.status, REVIEW_STATUSES, 'pending_review');
+    const level = normalizeEnum(req.query.level, MODERATION_LEVELS, undefined);
+    const sort = normalizeEnum(req.query.sort, REVIEW_SORTS, 'newest');
+    const page = normalizePositiveInt(req.query.page, { defaultValue: 1 });
+    const limitNum = normalizePositiveInt(req.query.limit, { defaultValue: 20, max: 100 });
+    const artistId = req.query.artistId === undefined || req.query.artistId === 'all'
+      ? undefined
+      : normalizePositiveInt(req.query.artistId);
+    const q = normalizeSearchText(req.query.q);
+    const flag = normalizeSearchText(req.query.flag, 80);
+    if (!status || !sort || page === null || limitNum === null || artistId === null || q === null || flag === null) {
+      return res.status(400).json({ success: false, message: 'Tham số lọc không hợp lệ' });
+    }
     const songColumns = await getSongColumns();
     const submissionNoteSelect = songColumns.has('submission_note') ? 's.submission_note,' : 'NULL AS submission_note,';
     const releaseDateSelect = songColumns.has('release_date') ? 's.release_date,' : 'NULL AS release_date,';
     const releaseAtSelect = songColumns.has('release_at') ? 's.release_at,' : 'NULL AS release_at,';
 
-    const offset = (Number(page) - 1) * Number(limit);
-    const limitNum = Number(limit);
+    const offset = (page - 1) * limitNum;
 
     let whereClause = "WHERE s.submitted_by_artist_id IS NOT NULL AND s.review_status <> 'draft'";
     const queryParams = [];
@@ -105,7 +153,7 @@ exports.getArtistSongReviews = async (req, res, next) => {
       queryParams.push(status);
     }
 
-    if (level && ['low', 'medium', 'high'].includes(level)) {
+    if (level) {
       whereClause += ' AND s.moderation_level = ?';
       queryParams.push(level);
     }
@@ -115,7 +163,7 @@ exports.getArtistSongReviews = async (req, res, next) => {
       queryParams.push(flag);
     }
 
-    if (artistId && artistId !== 'all') {
+    if (artistId) {
       whereClause += ' AND s.artist_id = ?';
       queryParams.push(artistId);
     }
@@ -248,7 +296,7 @@ exports.getArtistSongReviews = async (req, res, next) => {
       reviews,
       pagination: {
         total,
-        page: Number(page),
+        page,
         limit: limitNum,
         totalPages: Math.ceil(total / limitNum) || 1
       },
@@ -622,9 +670,9 @@ exports.getSummary = async (req, res, next) => {
 exports.bulkApproveArtistSongs = async (req, res, next) => {
   try {
     const adminId = req.user.id;
-    const { ids } = req.body;
+    const ids = normalizePositiveIdList(req.body.ids, 50);
 
-    if (!Array.isArray(ids) || ids.length === 0) {
+    if (!ids) {
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp danh sách ID bài hát.' });
     }
     if (ids.length > 50) {
@@ -644,7 +692,7 @@ exports.bulkApproveArtistSongs = async (req, res, next) => {
     const skipped = [];
 
     for (const id of ids) {
-      const song = songMap.get(Number(id)) || songMap.get(id);
+      const song = songMap.get(id);
       if (!song) {
         skipped.push({ id, reason: 'Bài hát không tồn tại hoặc không đủ thẩm quyền.' });
         continue;
@@ -759,12 +807,20 @@ exports.bulkRejectArtistSongs = async (req, res, next) => {
 
     let targetItems = [];
     if (Array.isArray(items) && items.length > 0) {
-      targetItems = items;
+      targetItems = items.map(item => ({
+        id: normalizePositiveInt(item && item.id),
+        reason: normalizeReviewReason(item && item.reason),
+      }));
     } else if (Array.isArray(ids) && ids.length > 0) {
-      if (!reason || !reason.trim()) {
+      const normalizedReason = normalizeReviewReason(reason);
+      const normalizedIds = normalizePositiveIdList(ids, 50);
+      if (!normalizedReason) {
         return res.status(400).json({ success: false, message: 'Vui lòng nhập lý do từ chối chung.' });
       }
-      targetItems = ids.map(id => ({ id, reason: reason.trim() }));
+      if (!normalizedIds) {
+        return res.status(400).json({ success: false, message: 'Danh sĂ¡ch tá»« chá»‘i khĂ´ng há»£p lá»‡.' });
+      }
+      targetItems = normalizedIds.map(id => ({ id, reason: normalizedReason }));
     } else {
       return res.status(400).json({ success: false, message: 'Danh sách từ chối không hợp lệ.' });
     }
@@ -772,6 +828,11 @@ exports.bulkRejectArtistSongs = async (req, res, next) => {
     if (targetItems.length > 50) {
       return res.status(400).json({ success: false, message: 'Tối đa 50 bài hát mỗi lần từ chối.' });
     }
+
+    if (targetItems.some(item => !item.id || !item.reason)) {
+      return res.status(400).json({ success: false, message: 'Danh sĂ¡ch tá»« chá»‘i khĂ´ng há»£p lá»‡.' });
+    }
+    targetItems = Array.from(new Map(targetItems.map(item => [item.id, item])).values());
 
     const itemIds = targetItems.map(i => i.id);
     const [songs] = await pool.query(
@@ -787,8 +848,8 @@ exports.bulkRejectArtistSongs = async (req, res, next) => {
     const skipped = [];
 
     for (const item of targetItems) {
-      const song = songMap.get(Number(item.id)) || songMap.get(item.id);
-      const itemReason = item.reason && String(item.reason).trim();
+      const song = songMap.get(item.id);
+      const itemReason = item.reason;
 
       if (!song) {
         skipped.push({ id: item.id, reason: 'Bài hát không tồn tại.' });

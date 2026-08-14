@@ -1,5 +1,42 @@
 const { pool } = require('../config/database');
 const { publicSongCondition } = require('../utils/public.utils');
+const MAX_LISTEN_SECONDS = 24 * 60 * 60;
+
+function normalizePositiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function normalizeNonNegativeSeconds(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_LISTEN_SECONDS) {
+    const error = new Error('Thời lượng nghe không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  return Math.floor(seconds);
+}
+
+function normalizeRate(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const rate = Number(value);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+    const error = new Error('Tỷ lệ hoàn thành không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  return rate;
+}
+
+function normalizeBoolean(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === true || value === 1 || value === '1' || value === 'true') return true;
+  if (value === false || value === 0 || value === '0' || value === 'false') return false;
+  const error = new Error('Giá trị boolean không hợp lệ');
+  error.statusCode = 400;
+  throw error;
+}
 
 /**
  * Track user listening history & update song play_count
@@ -9,12 +46,11 @@ const { publicSongCondition } = require('../utils/public.utils');
 exports.trackListening = async (req, res, next) => {
   try {
     const userId = req.user ? req.user.id : null;
-    let songId = req.body.songId || req.body.song_id || req.params.id;
+    const songId = normalizePositiveId(req.body.songId || req.body.song_id || req.params.id);
 
-    if (!songId || isNaN(songId)) {
+    if (!songId) {
       return res.status(400).json({ success: false, message: 'ID bài hát không hợp lệ' });
     }
-    songId = Number(songId);
 
     // Validate song exists, is approved and active
     const [songs] = await pool.query(
@@ -30,33 +66,42 @@ exports.trackListening = async (req, res, next) => {
     const rawPlayedSec = req.body.playedSeconds ?? req.body.listen_duration ?? req.body.listenDuration ?? 0;
     const rawDurationSec = req.body.durationSeconds ?? req.body.song_duration ?? req.body.songDuration ?? songRecord.duration_sec ?? 0;
 
-    const listenDuration = Math.max(0, Math.floor(Number(rawPlayedSec) || 0));
-    const songDuration = Math.max(0, Math.floor(Number(rawDurationSec) || 0));
+    const listenDuration = normalizeNonNegativeSeconds(rawPlayedSec, 0);
+    const songDuration = normalizeNonNegativeSeconds(rawDurationSec, Number(songRecord.duration_sec || 0));
 
     let completionRate = req.body.completion_rate ?? req.body.completionRate;
-    if (completionRate === undefined || completionRate === null) {
-      completionRate = songDuration > 0 ? (listenDuration / songDuration) : 0;
+    if (completionRate === undefined || completionRate === null || completionRate === '') {
+      completionRate = songDuration > 0 ? Math.min(1, Math.max(0, listenDuration / songDuration)) : 0;
     } else {
-      completionRate = Number(completionRate) || 0;
+      completionRate = normalizeRate(completionRate, 0);
     }
-    completionRate = Math.min(1, Math.max(0, completionRate));
 
     let isCompleted = req.body.completed ?? req.body.is_completed ?? req.body.isCompleted;
     if (isCompleted === undefined || isCompleted === null) {
       isCompleted = completionRate >= 0.8;
     } else {
-      isCompleted = Boolean(isCompleted);
+      isCompleted = normalizeBoolean(isCompleted);
     }
 
     let isSkipped = req.body.skipped ?? req.body.is_skipped ?? req.body.isSkipped;
     if (isSkipped === undefined || isSkipped === null) {
       isSkipped = !isCompleted && listenDuration < 30 && completionRate < 0.3;
     } else {
-      isSkipped = Boolean(isSkipped);
+      isSkipped = normalizeBoolean(isSkipped);
     }
 
     const source = String(req.body.source || 'player').trim();
-    const historyId = req.body.history_id || req.body.historyId || null;
+    if (!source || source.length > 50) {
+      return res.status(400).json({ success: false, message: 'Nguồn nghe không hợp lệ' });
+    }
+    const rawHistoryId = req.body.history_id ?? req.body.historyId;
+    const hasHistoryId = rawHistoryId !== undefined && rawHistoryId !== null && rawHistoryId !== '';
+    const historyId = hasHistoryId
+      ? normalizePositiveId(rawHistoryId)
+      : null;
+    if (hasHistoryId && !historyId) {
+      return res.status(400).json({ success: false, message: 'history_id không hợp lệ' });
+    }
 
     // Check eligibility for 1 play count increment
     const isEligibleForCount = isCompleted === true || listenDuration >= 30 || completionRate >= 0.5;

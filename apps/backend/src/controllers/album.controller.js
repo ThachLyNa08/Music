@@ -2,6 +2,15 @@ const { pool } = require('../config/database');
 const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.util');
 const { publicSongCondition, publicAlbumCondition } = require('../utils/public.utils');
 
+function normalizeStrictPositiveId(value) {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  return Number(text);
+}
+
 exports.getAlbumDetails = async (req, res, next) => {
   try {
     const albumId = req.params.id;
@@ -95,14 +104,14 @@ exports.getAlbumDetails = async (req, res, next) => {
 
 exports.addToLibrary = async (req, res, next) => {
   try {
-    const albumId = Number(req.params.id);
+    const albumId = normalizeStrictPositiveId(req.params.id);
     const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập' });
     }
 
-    if (!Number.isFinite(albumId)) {
+    if (!albumId) {
       return res.status(400).json({ success: false, message: 'Album không hợp lệ' });
     }
 
@@ -138,11 +147,15 @@ exports.addToLibrary = async (req, res, next) => {
 
 exports.removeFromLibrary = async (req, res, next) => {
   try {
-    const albumId = Number(req.params.id);
+    const albumId = normalizeStrictPositiveId(req.params.id);
     const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập' });
+    }
+
+    if (!albumId) {
+      return res.status(400).json({ success: false, message: 'Album khong hop le' });
     }
 
     await pool.query(
@@ -158,4 +171,8 @@ exports.removeFromLibrary = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+exports.__test = {
+  normalizeStrictPositiveId,
 };

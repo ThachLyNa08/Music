@@ -932,6 +932,10 @@ const applyUploadError = (err, fallback) => {
   } else if (duplicateMessage) {
     uploadError.value = duplicateMessage
     toast.showToast(duplicateMessage, 'error')
+  } else if (errCode === 'DUPLICATE_ARTIST_SONG_TITLE') {
+    const msg = errMsg || 'Ten bai hat da trung 100% voi mot bai hat cua ban. Vui long doi ten truoc khi gui duyet.'
+    uploadError.value = msg
+    toast.showToast(msg, 'error')
   } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
     const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
     uploadError.value = msg
@@ -1074,6 +1078,10 @@ const handleUpload = async () => {
     } else if (duplicateMessage) {
       uploadError.value = duplicateMessage
       toast.showToast(duplicateMessage, 'error')
+    } else if (errCode === 'DUPLICATE_ARTIST_SONG_TITLE') {
+      const msg = errMsg || 'Ten bai hat da trung 100% voi mot bai hat cua ban. Vui long doi ten truoc khi gui duyet.'
+      uploadError.value = msg
+      toast.showToast(msg, 'error')
     } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
       const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
       uploadError.value = msg
@@ -1247,6 +1255,10 @@ const handleResubmit = async () => {
     } else if (duplicateMessage) {
       resubmitError.value = duplicateMessage
       toast.showToast(duplicateMessage, 'error')
+    } else if (errCode === 'DUPLICATE_ARTIST_SONG_TITLE') {
+      const msg = errMsg || 'Ten bai hat da trung 100% voi mot bai hat cua ban. Vui long doi ten truoc khi gui duyet.'
+      resubmitError.value = msg
+      toast.showToast(msg, 'error')
     } else if (errCode === 'DUPLICATE_AUDIO_APPROVED') {
       const msg = 'File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.'
       resubmitError.value = msg

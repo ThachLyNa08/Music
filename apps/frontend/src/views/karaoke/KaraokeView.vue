@@ -263,7 +263,7 @@ import LyricsPanel from '@/components/player/LyricsPanel.vue'
 import MicInputCard from '@/components/user/MicInputCard.vue'
 import { normalizeImageUrl } from '@/utils/imageUrl'
 import { useToastStore } from '@/stores/toast'
-import { toBackendAssetUrl } from '@/config/runtime'
+import { API_BASE_URL, toBackendAssetUrl } from '@/config/runtime'
 
 const auth = useAuthStore()
 const player = usePlayerStore()
@@ -536,27 +536,50 @@ async function toggleKaraokePlay() {
   await player.togglePlay()
 }
 
+async function getDownloadErrorMessage(err, fallback = 'Khong the tai beat.') {
+  if (err?.message) return err.message
+  const data = err.response?.data
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text()
+      if (!text) return fallback
+      const parsed = JSON.parse(text)
+      return parsed?.message || fallback
+    } catch {
+      return fallback
+    }
+  }
+  return data?.message || fallback
+}
+
 async function downloadBeat() {
   if (!isPremium.value) {
     toast.showToast('Vui lòng nâng cấp Premium để tải beat nhạc nền.', 'warning')
     return
   }
-  if (!stemJob.value?.id || !isStemCompleted.value) return
+  if (!currentSongId.value || !isStemCompleted.value) return
+  const token = localStorage.getItem('accessToken')
+  if (!token) {
+    toast.showToast('Vui long dang nhap lai de tai beat.', 'warning')
+    return
+  }
+
   downloadingBeat.value = true
   try {
-    const response = await stemApi.downloadInstrumental(stemJob.value.id)
-    const blobUrl = URL.createObjectURL(response.data)
     const link = document.createElement('a')
-    link.href = blobUrl
+    link.href = `${API_BASE_URL}/stem/songs/${encodeURIComponent(currentSongId.value)}/download/instrumental?token=${encodeURIComponent(token)}`
     link.download = `${player.currentSong?.title || 'instrumental'}-instrumental.mp3`
+    link.rel = 'noopener'
     document.body.appendChild(link)
     link.click()
     link.remove()
-    URL.revokeObjectURL(blobUrl)
+    toast.showToast('Dang tai beat nhac nen...', 'success')
   } catch (err) {
-    toast.showToast(err.response?.data?.message || 'Không thể tải beat.', 'error')
+    toast.showToast(await getDownloadErrorMessage(err), 'error')
   } finally {
-    downloadingBeat.value = false
+    window.setTimeout(() => {
+      downloadingBeat.value = false
+    }, 800)
   }
 }
 

@@ -209,13 +209,13 @@ function detectTempoIntent(text = '') {
   const includesAny = (terms) => terms.some((term) => normalized.includes(normalizeText(term)));
 
   const fastTerms = [
-    'nhanh', 'soi dong', 'boc', 'chay', 'manh', 'dance', 'party', 'tap gym', 'gym', 'workout', 'chay bo', 'cardio',
+    'nhanh', 'soi dong', 'boc', 'manh', 'dance', 'party', 'tap gym', 'gym', 'workout', 'chay bo', 'cardio',
     'beat manh', 'beat cang', 'beat day', 'bass manh', 'bass day', 'nhip manh', 'nhip nhanh', 'nhip don dap',
     'trong ro', 'dance beat', 'beat de quay', 'beat de gym', 'beat de chay bo', 'quay'
   ];
   const mediumTerms = ['tiet tau vua', 'vua phai', 'hoc bai', 'lam viec', 'tap trung', 'coding', 'doc sach', 'study', 'focus', 'work', 'reading'];
   const slowTerms = [
-    'cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi', 'ngu', 'acoustic', 'sau lang', 'buon', 'suy', 'diu', 'lofi', 'binh yen',
+    'cham', 'nhe', 'nhe nhang', 'chill', 'thu gian', 'buoi toi', 'toi nay', 'ngu', 'acoustic', 'sau lang', 'buon', 'suy', 'diu', 'lofi', 'binh yen',
     'beat cham', 'nhip cham', 'beat chill', 'beat nhe'
   ];
 

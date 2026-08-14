@@ -8,15 +8,35 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
-async function getAppealTokenForLockedUser(user) {
-  if (Number(user.lock_appeal_allowed) !== 1) return null;
+async function getAppealStateForLockedUser(user) {
+  const [appeals] = await pool.query(
+    `SELECT id, status, created_at
+     FROM account_lock_appeals
+     WHERE user_id = ?
+       AND (? IS NULL OR created_at >= ?)
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [user.id, user.locked_at || null, user.locked_at || null]
+  );
+  if (appeals.length) {
+    return {
+      token: null,
+      submitted: true,
+      status: appeals[0].status,
+      created_at: appeals[0].created_at,
+    };
+  }
+
+  if (Number(user.lock_appeal_allowed) !== 1) {
+    return { token: null, submitted: false, status: null, created_at: null };
+  }
 
   const expiresAt = user.lock_appeal_token_expires_at
     ? new Date(user.lock_appeal_token_expires_at)
     : null;
 
   if (user.lock_appeal_token && expiresAt && expiresAt > new Date()) {
-    return user.lock_appeal_token;
+    return { token: user.lock_appeal_token, submitted: false, status: null, created_at: null };
   }
 
   const rawToken = crypto.randomBytes(32).toString('hex');
@@ -30,7 +50,7 @@ async function getAppealTokenForLockedUser(user) {
     [rawToken, hashToken(rawToken), tokenExpiresAt, user.id]
   );
   user.lock_appeal_token_expires_at = tokenExpiresAt;
-  return rawToken;
+  return { token: rawToken, submitted: false, status: null, created_at: null };
 }
 
 function invalidToken(res) {
@@ -75,7 +95,7 @@ async function authenticate(req, res, next) {
     };
 
     if (dbUser.status === 'locked') {
-      const appealToken = await getAppealTokenForLockedUser(dbUser);
+      const appealState = await getAppealStateForLockedUser(dbUser);
       return res.status(423).json({
         success: false,
         code: 'ACCOUNT_LOCKED',
@@ -87,7 +107,10 @@ async function authenticate(req, res, next) {
           locked_at: dbUser.locked_at,
           locked_reason: dbUser.locked_reason,
           allow_appeal: Number(dbUser.lock_appeal_allowed) === 1,
-          appeal_token: appealToken,
+          appeal_token: appealState.token,
+          appeal_submitted: appealState.submitted,
+          appeal_status: appealState.status,
+          appeal_created_at: appealState.created_at,
           appeal_token_expires_at: dbUser.lock_appeal_token_expires_at,
         },
       });
