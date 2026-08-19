@@ -34,11 +34,8 @@
                   <button @click="openEditModal(detail.album)" class="admin-icon-button text-indigo-500 hover:bg-indigo-50" title="Chỉnh sửa">
                     <MfIcon name="edit" size="20" />
                   </button>
-                  <button v-if="detail.album.release_status !== 'published'" @click="quickRelease(detail.album, 'published')" class="admin-icon-button text-emerald-600 hover:bg-emerald-50" title="Phát hành">
+                  <button v-if="!isAlbumPublished(detail.album)" @click="quickRelease(detail.album, 'published')" class="admin-icon-button text-emerald-600 hover:bg-emerald-50" title="Phát hành">
                     <MfIcon name="publish" size="20" />
-                  </button>
-                  <button v-if="detail.album.release_status === 'published'" @click="quickRelease(detail.album, 'hidden')" class="admin-icon-button text-rose-600 hover:bg-rose-50" title="Ẩn">
-                    <MfIcon name="visibility_off" size="20" />
                   </button>
                 </div>
               </div>
@@ -281,13 +278,16 @@
               </div>
               <div class="rounded-xl border border-gray-100 dark:border-bg-border p-4 bg-gray-50/70 dark:bg-bg-card/50">
                 <label class="admin-label">Trạng thái phát hành</label>
-                <select v-model="form.release_status" class="admin-input">
+                <select v-model="form.release_status" class="admin-input" :disabled="isEditingPublishedAlbum">
                   <option value="draft">Nháp</option>
-                  <option value="published">Phát hành ngay</option>
+                  <option value="published">{{ isEditingPublishedAlbum ? 'Đã phát hành' : 'Phát hành ngay' }}</option>
                   <option value="scheduled">Lên lịch phát hành</option>
                   <option value="hidden">Ẩn</option>
                 </select>
-                <input v-if="form.release_status === 'scheduled'" v-model="form.release_at" type="datetime-local" class="admin-input mt-3" required />
+                <input v-if="form.release_status === 'scheduled'" v-model="form.release_at" type="datetime-local" class="admin-input mt-3" :disabled="isEditingPublishedAlbum" required />
+                <p v-if="isEditingPublishedAlbum" class="mt-2 text-xs font-semibold text-gray-500">
+                  Album đã phát hành nên trạng thái phát hành được khóa.
+                </p>
                 <p v-if="form.release_status === 'published' && selectedSongs.length === 0" class="mt-2 text-xs font-semibold text-rose-600">
                   Album rỗng không thể phát hành.
                 </p>
@@ -664,6 +664,8 @@ const selectedGenreMarket = computed(() => {
   return deriveMarketFromGenreName(genre?.name)
 })
 
+const isEditingPublishedAlbum = computed(() => editingAlbum.value ? isAlbumPublished(editingAlbum.value) : false)
+
 const coverPreviewSrc = computed(() => {
   if (coverObjectUrl.value) return coverObjectUrl.value
   if (form.cover_url && String(form.cover_url).trim()) {
@@ -770,6 +772,27 @@ onUnmounted(() => {
 
 let currentRequestId = 0
 
+function isAlbumPublished(album) {
+  if (!album) return false
+  if (album.effective_release_status === 'published') return true
+  if (album.release_status === 'published') return true
+  if (album.release_status === 'scheduled' && album.release_at) {
+    const releaseTime = new Date(album.release_at).getTime()
+    return !Number.isNaN(releaseTime) && releaseTime <= Date.now()
+  }
+  return false
+}
+
+function getAlbumReleaseYear(album) {
+  if (album?.release_year) return album.release_year
+  const rawDate = album?.release_date || album?.releaseDate || album?.published_at || album?.publishedAt || album?.release_at || album?.releaseAt
+  if (!rawDate) return ''
+  const date = new Date(rawDate)
+  if (!Number.isNaN(date.getTime())) return date.getFullYear()
+  const match = String(rawDate).match(/\b(19|20|21)\d{2}\b/)
+  return match ? match[0] : ''
+}
+
 function getAlbumActions(album) {
   const actions = []
 
@@ -791,7 +814,7 @@ function getAlbumActions(album) {
     onClick: () => openEditModal(album)
   })
 
-  if (album.release_status !== 'published') {
+  if (!isAlbumPublished(album)) {
     actions.push({
       label: 'Phát hành',
       icon: 'publish',
@@ -800,16 +823,7 @@ function getAlbumActions(album) {
     })
   }
 
-  if (album.release_status === 'published') {
-    actions.push({
-      label: 'Ẩn album',
-      icon: 'visibility_off',
-      variant: 'warning',
-      onClick: () => quickRelease(album, 'hidden')
-    })
-  }
-
-  if (album.release_status === 'scheduled') {
+  if (album.release_status === 'scheduled' && !isAlbumPublished(album)) {
     actions.push({
       label: 'Chuyển về nháp',
       icon: 'undo',
@@ -985,8 +999,8 @@ async function openEditModal(album) {
   const artistObj = formData.artists.find(a => Number(a.id) === Number(form.artist_id))
   artistSearchQuery.value = artistObj ? artistObj.name : ''
   form.genre_id = editingAlbum.value.genre_id || ''
-  form.release_year = editingAlbum.value.release_year || ''
-  form.release_status = editingAlbum.value.release_status || 'draft'
+  form.release_year = getAlbumReleaseYear(editingAlbum.value)
+  form.release_status = isAlbumPublished(editingAlbum.value) ? 'published' : (editingAlbum.value.release_status || 'draft')
   form.release_at = toDateTimeLocal(editingAlbum.value.release_at)
   form.cover_url = editingAlbum.value.stored_cover_url || editingAlbum.value.cover_url || ''
   selectedSongs.value = data?.songs ? [...data.songs] : []
@@ -1072,8 +1086,10 @@ async function submitAlbum() {
     payload.append('artist_id', form.artist_id)
     payload.append('genre_id', form.genre_id || '')
     payload.append('release_year', form.release_year || '')
-    payload.append('release_status', form.release_status || 'draft')
-    payload.append('release_at', form.release_status === 'scheduled' ? form.release_at : '')
+    if (!isEditingPublishedAlbum.value) {
+      payload.append('release_status', form.release_status || 'draft')
+      payload.append('release_at', form.release_status === 'scheduled' ? form.release_at : '')
+    }
     payload.append('cover_url', form.cover_url || '')
     payload.append('song_ids', JSON.stringify(selectedSongs.value.map(song => song.id)))
     if (form.cover) payload.append('cover', form.cover)
@@ -1098,6 +1114,10 @@ async function submitAlbum() {
 }
 
 function quickRelease(album, status) {
+  if (isAlbumPublished(album) && status !== album.release_status) {
+    toastStore.showToast('Album đã phát hành không thể chỉnh sửa trạng thái phát hành.', 'warning')
+    return
+  }
   const isPublish = status === 'published'
   const actionLabel = isPublish ? 'phát hành' : (status === 'hidden' ? 'ẩn' : 'hoàn tác')
   openConfirm({

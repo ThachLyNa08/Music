@@ -409,7 +409,8 @@
                 </div>
                 <div class="form-group">
                   <label>Thể loại</label>
-                  <input type="text" class="input-dark readonly-field" :value="uploadArtistGenreName" readonly disabled />
+                  <input type="text" class="input-dark readonly-field" :value="resubmitGenreName" readonly disabled />
+                  <div class="helper-text">Được gán theo hồ sơ nghệ sĩ khi gửi lại</div>
                 </div>
               </div>
             </div>
@@ -1171,6 +1172,7 @@ const resubmitError = ref('')
 const resubmitForm = ref({
   id: null,
   title: '',
+  genreName: '',
   release_date: '',
   release_time: '',
   lyrics: '',
@@ -1180,11 +1182,18 @@ const resubmitForm = ref({
   coverFile: null
 })
 
-const openResubmitModal = (song) => {
+const resubmitGenreName = computed(() => (
+  resubmitForm.value.genreName ||
+  uploadOptions.value.artist?.genreName ||
+  'Chưa được gán thể loại'
+))
+
+const openResubmitModal = async (song) => {
   const releaseParts = splitReleaseAtValue(song.releaseAt || song.release_at || song.releaseDate || song.release_date)
   resubmitForm.value = {
     id: song.id,
     title: song.title || '',
+    genreName: song.genre?.name || song.genreName || song.genre_name || '',
     release_date: releaseParts.release_date,
     release_time: releaseParts.release_time,
     lyrics: song.lyrics || '',
@@ -1195,6 +1204,7 @@ const openResubmitModal = (song) => {
   }
   resubmitError.value = ''
   showResubmitModal.value = true
+  await fetchUploadOptions()
 }
 
 const closeResubmitModal = () => {

@@ -1,6 +1,7 @@
 const intentService = require('../services/aiPlaylistIntent.service');
 const aiPlaylistService = require('../services/aiPlaylist.service');
 const quotaService = require('../services/aiPlaylistQuota.service');
+const { clearPlaylistCache } = require('./playlist.controller');
 
 exports.getQuota = async (req, res) => {
     try {
@@ -199,6 +200,7 @@ exports.savePlaylist = async (req, res) => {
             historyId: req.body.history_id || req.body.historyId || null,
             req
         });
+        clearPlaylistCache(req.user.id);
 
         return res.status(201).json({
             ...result,
@@ -257,6 +259,7 @@ exports.saveHistory = async (req, res) => {
             visibility: req.body.visibility || 'private',
             req
         });
+        clearPlaylistCache(req.user.id);
 
         return res.status(201).json(result);
     } catch (error) {

@@ -130,6 +130,8 @@ function clearPlaylistCache(userId) {
   playlistsCache.delete(`user_${userId}`);
 }
 
+exports.clearPlaylistCache = clearPlaylistCache;
+
 function normalizePlaylistText(value, maxLength, fieldLabel) {
   if (value === undefined) return undefined;
   const text = String(value || '').trim();

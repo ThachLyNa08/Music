@@ -107,6 +107,10 @@ async function ensureLyricsSemanticIndexReady() {
   return initializeLyricsSemanticIndex();
 }
 
+function isLyricsSemanticIndexReady() {
+  return Boolean(cache.index && Array.isArray(cache.index.chunks));
+}
+
 function highlightSemanticSnippet(snippet, query = '') {
   const importantTokens = new Set(tokenize(query).filter(token => !STOP_WORDS.has(token) && token.length >= 3));
   const escaped = escapeHtml(snippet || '');
@@ -161,5 +165,6 @@ module.exports = {
   buildSparseVector,
   initializeLyricsSemanticIndex,
   ensureLyricsSemanticIndexReady,
+  isLyricsSemanticIndexReady,
   searchLyricsSemantic,
 };

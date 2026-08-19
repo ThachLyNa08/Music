@@ -42,8 +42,6 @@ async function bootstrap() {
 
   await connectRedis();
 
-  await initializeLyricsSemanticIndex();
-
   const { ensureLogTableExists, ensureGenerationRunsTableExists, recoverStaleSystemPlaylistRuns } = require('./services/systemPlaylistRunLog.service');
   await ensureLogTableExists();
   await ensureGenerationRunsTableExists();
@@ -88,6 +86,13 @@ async function bootstrap() {
     console.log(`\n🚀 MusicFlow backend running on http://localhost:${PORT}`);
     console.log(`   Environment : ${process.env.NODE_ENV || 'development'}`);
     console.log(`   AI Service  : ${process.env.AI_SERVICE_URL}\n`);
+    if (process.env.PRELOAD_LYRICS_SEMANTIC_INDEX === 'true') {
+      setTimeout(() => {
+        initializeLyricsSemanticIndex().catch((error) => {
+          console.warn('[LyricsSemanticSearch] background preload failed:', error.message);
+        });
+      }, 1000);
+    }
     try {
       const { startSystemPlaylistCron } = require('./schedulers/systemPlaylistCron.scheduler');
       startSystemPlaylistCron();

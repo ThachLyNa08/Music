@@ -89,6 +89,14 @@ async function testLocalPromptCoverage() {
     assert.strictEqual(exclude.hardConstraints.market, 'VPOP');
     assert(exclude.hardConstraints.exclude_artists.some((artist) => artist.includes('Sơn Tùng') || artist.includes('Son Tung')));
 
+    const coffee = await normalizeAiPlaylistIntent({
+        prompt: 'Nhac chill uong ca phe',
+        targetCount: 10,
+        useLLM: false
+    });
+    assert.strictEqual(coffee.softPreferences.activity, 'coffee');
+    assert.strictEqual(coffee.softPreferences.energy, 'low');
+
     return true;
 }
 
@@ -118,7 +126,7 @@ async function testFallbackRouter() {
         geminiResult: {
             ok: true,
             provider: 'gemini',
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.6-flash',
             intent: { action: 'create_playlist', mood: ['chill'], confidence: 0.7 }
         }
     });
@@ -133,7 +141,7 @@ async function testFallbackRouter() {
         geminiResult: {
             ok: true,
             provider: 'gemini',
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.6-flash',
             latencyMs: 15,
             intent: {
                 action: 'create_playlist',
@@ -150,6 +158,31 @@ async function testFallbackRouter() {
     assert.strictEqual(intent.raw.provider, 'gemini');
     assert.strictEqual(intent.hardConstraints.market, 'VPOP');
     assert(intent.raw.matchedKeywords.includes('llm_fallback:GROQ_RATE_LIMIT'));
+
+    clearIntentModules();
+    mockProviders({
+        groqResult: {
+            ok: true,
+            provider: 'groq',
+            model: 'openai/gpt-oss-120b',
+            latencyMs: 10,
+            intent: {
+                action: 'create_playlist',
+                mode: 'mood_context',
+                mood: ['chill'],
+                activity: 'study',
+                energy: 'low_or_medium',
+                avoidEnergy: 'high',
+                confidence: 0.7
+            }
+        },
+        geminiResult: { ok: false, provider: 'gemini', reason: 'GEMINI_RATE_LIMIT', latencyMs: 8 }
+    });
+    ({ normalizeAiPlaylistIntent } = require('../../src/services/aiPlaylistIntent.service'));
+    intent = await normalizeAiPlaylistIntent({ prompt: 'Nhac chill uong ca phe', targetCount: 10, useLLM: true });
+    assert.strictEqual(intent.raw.provider, 'groq');
+    assert.strictEqual(intent.softPreferences.activity, 'coffee');
+    assert.strictEqual(intent.softPreferences.energy, 'low');
 
     clearIntentModules();
     mockProviders({
@@ -179,7 +212,7 @@ async function main() {
         localTaxonomy: local ? 'PASS' : 'FAIL',
         fallbackRouter: fallback ? 'PASS' : 'FAIL',
         groqModel: 'openai/gpt-oss-120b',
-        geminiModel: 'gemini-2.5-flash'
+        geminiModel: 'gemini-3.6-flash'
     }, null, 2));
 }
 

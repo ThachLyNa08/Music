@@ -3,10 +3,15 @@ const notificationService = require('../services/notification.service');
 const spotifyService = require('../services/spotify.service');
 const recommendationService = require('../services/recommendation.service');
 const fs = require('fs');
-const { ensureLyricsSemanticIndexReady, searchLyricsSemantic } = require('../services/lyricsSemanticSearch.service');
+const {
+  isLyricsSemanticIndexReady,
+  searchLyricsSemantic,
+} = require('../services/lyricsSemanticSearch.service');
 const { computeTempoMatchScore } = require('../utils/tempoFeature.util');
 const { resolveArtistAvatar } = require('../utils/imageUrl.util');
 const { normalizeVietnamese, normalizeLyricsQueryIntent, escapeHtml } = require('../utils/vietnameseText.util');
+const { calculateFileSha256 } = require('../utils/fileHash.util');
+const { findDuplicateAudioHash, buildDuplicateAudioPayload } = require('../services/audioDuplicate.service');
 const {
   publicSongCondition,
   publicAlbumCondition,
@@ -50,22 +55,12 @@ function sqlSearchExpr(field) {
   return `REPLACE(LOWER(COALESCE(${field}, '')), 'đ', 'd')`;
 }
 
-async function warmLyricsSemanticIndexWithoutBlocking(timeoutMs = 150) {
-  let timedOut = false;
-  const timeout = new Promise((resolve) => {
-    setTimeout(() => {
-      timedOut = true;
-      resolve(null);
-    }, timeoutMs);
-  });
+function shouldSearchLyrics(query = '') {
+  const normalized = normalizeSearchText(query);
+  if (!normalized) return false;
 
-  try {
-    await Promise.race([ensureLyricsSemanticIndexReady(), timeout]);
-  } catch (error) {
-    console.warn('[Search] lyrics semantic index warmup skipped:', error.message);
-  }
-
-  return !timedOut;
+  const intentQuery = normalizeLyricsQueryIntent(query);
+  return Boolean(intentQuery && intentQuery !== normalized);
 }
 
 // Lyrics search helpers
@@ -546,6 +541,73 @@ function cleanupUploadedFiles(files = []) {
   });
 }
 
+async function getTableColumns(tableName) {
+  const [rows] = await pool.query(`SHOW COLUMNS FROM \`${tableName}\``);
+  return new Set(rows.map(row => row.Field));
+}
+
+async function findSongTitleDuplicate(artistId, title, excludeSongId = null) {
+  const normalizedTitle = String(title || '').trim().toLowerCase();
+  if (!artistId || !normalizedTitle) return null;
+
+  const params = [artistId, normalizedTitle];
+  let excludeSql = '';
+  if (excludeSongId) {
+    excludeSql = 'AND id <> ?';
+    params.push(excludeSongId);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, title, review_status, release_status
+     FROM songs
+     WHERE artist_id = ?
+       AND LOWER(TRIM(title)) = ?
+       ${excludeSql}
+     ORDER BY id ASC
+     LIMIT 1`,
+    params
+  );
+
+  return rows[0] || null;
+}
+
+function createDuplicateTitleError(duplicate) {
+  const err = new Error(`Bài hát "${duplicate.title}" đã tồn tại cho nghệ sĩ này.`);
+  err.statusCode = 409;
+  err.payload = {
+    success: false,
+    code: 'DUPLICATE_SONG_TITLE',
+    message: err.message,
+    duplicate: {
+      id: duplicate.id,
+      title: duplicate.title,
+      reviewStatus: duplicate.review_status,
+      releaseStatus: duplicate.release_status,
+    },
+  };
+  return err;
+}
+
+function createDuplicateAudioError(duplicate) {
+  const payload = buildDuplicateAudioPayload(duplicate);
+  const err = new Error(payload?.body?.message || 'File audio này đã tồn tại trong hệ thống.');
+  err.statusCode = payload?.statusCode || 409;
+  err.payload = payload?.body || {
+    success: false,
+    code: 'DUPLICATE_AUDIO',
+    message: err.message,
+  };
+  return err;
+}
+
+function isReleasePublicNow(releasePayload) {
+  if (!releasePayload || releasePayload.release_status !== 'published') return false;
+  const releaseAt = releasePayload.release_at;
+  if (!releaseAt || (typeof releaseAt === 'object' && releaseAt.raw)) return true;
+  const timestamp = new Date(releaseAt).getTime();
+  return !Number.isNaN(timestamp) && timestamp <= Date.now();
+}
+
 exports.uploadSong = async (req, res, next) => {
   const uploadedFiles = getUploadedFiles(req);
   let conn;
@@ -564,7 +626,20 @@ exports.uploadSong = async (req, res, next) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const audioUrl = '/uploads/audio/' + req.files.audio[0].filename;
+    const audioFile = req.files.audio[0];
+    const audioUrl = '/uploads/audio/' + audioFile.filename;
+    let audioHash = null;
+    try {
+      audioHash = await calculateFileSha256(audioFile.path);
+    } catch (hashErr) {
+      console.error('Error calculating upload audio SHA-256 hash:', hashErr.message);
+    }
+
+    if (audioHash) {
+      const duplicateAudio = await findDuplicateAudioHash(audioHash);
+      if (duplicateAudio) throw createDuplicateAudioError(duplicateAudio);
+    }
+
     let coverUrl = null;
     if (req.files.cover) {
       coverUrl = '/uploads/images/' + req.files.cover[0].filename;
@@ -587,6 +662,9 @@ exports.uploadSong = async (req, res, next) => {
       artistId = artists[0].id;
     }
 
+    const duplicateTitle = await findSongTitleDuplicate(artistId, title);
+    if (duplicateTitle) throw createDuplicateTitleError(duplicateTitle);
+
     // 2. Tìm hoặc tạo Album
     let albumId = null;
     if (albumTitle) {
@@ -600,8 +678,21 @@ exports.uploadSong = async (req, res, next) => {
     }
 
     // 3. Tạo Song
+    const songColumns = await getTableColumns('songs');
     const fields = ['title', 'artist_id', 'album_id', 'genre_id', 'duration_sec', 'audio_url', 'cover_url'];
     const values = [title, artistId, albumId, genreId, durationSec, audioUrl, coverUrl];
+    if (songColumns.has('audio_hash') && audioHash) {
+      fields.push('audio_hash');
+      values.push(audioHash);
+    }
+    if (songColumns.has('audio_file_size')) {
+      fields.push('audio_file_size');
+      values.push(audioFile.size || null);
+    }
+    if (songColumns.has('audio_mime_type')) {
+      fields.push('audio_mime_type');
+      values.push(audioFile.mimetype || null);
+    }
     pushReleaseFields(fields, values, releasePayload, null);
     const insertParts = buildInsertParts(fields, values);
     const [songRes] = await conn.query(
@@ -623,6 +714,10 @@ exports.uploadSong = async (req, res, next) => {
         ensureArtistAvatar(artistId).catch(error => {
           console.error("Auto fetch artist avatar in uploadSong failed:", error.message);
         });
+      }
+
+      if (!isReleasePublicNow(releasePayload)) {
+        return;
       }
 
       // Gửi thông báo cho người theo dõi nghệ sĩ
@@ -667,8 +762,11 @@ exports.uploadSong = async (req, res, next) => {
       conn.release();
     }
     cleanupUploadedFiles(uploadedFiles);
+    if (err.payload) {
+      return res.status(err.statusCode || 409).json(err.payload);
+    }
     if (err.statusCode) {
-      return res.status(err.statusCode).json({ success: false, message: err.message });
+      return res.status(err.statusCode).json({ success: false, message: err.message, code: err.code });
     }
     next(err);
   }
@@ -776,7 +874,8 @@ exports.searchSongs = async (req, res, next) => {
     const userId = getUserId(req);
     const q = (req.query.q || '').trim();
     const limit = Math.min(parseInt(req.query.limit) || 10, 30);
-    const includeLyrics = String(req.query.includeLyrics || 'true') !== 'false';
+    const includeLyricsRequested = String(req.query.includeLyrics || 'false') === 'true';
+    const includeLyrics = includeLyricsRequested || shouldSearchLyrics(q);
 
     if (!q || q.length < 1) {
       return res.json({ success: true, data: { songs: [], artists: [], albums: [], genres: [] } });
@@ -797,10 +896,8 @@ exports.searchSongs = async (req, res, next) => {
     // ── 1. Tìm bài hát (hỗ trợ tiếng Việt có dấu, không dấu, LOWER case, token matching + genre aliases) ──
     const tokens = q.split(/\s+/).filter(t => t.length > 0);
     const normTokens = normalizedQ.split(/\s+/).filter(t => t.length > 0);
-    if (includeLyrics) {
-      await warmLyricsSemanticIndexWithoutBlocking();
-    }
-    const semanticMatches = includeLyrics ? searchLyricsSemantic(q, { limit: 25 }) : [];
+    const canSearchSemanticLyrics = includeLyrics && isLyricsSemanticIndexReady();
+    const semanticMatches = canSearchSemanticLyrics ? searchLyricsSemantic(q, { limit: 25 }) : [];
     const semanticBySongId = new Map(semanticMatches.map(match => [Number(match.songId), match]));
     const lyricProbeTokens = includeLyrics ? getLyricProbeTokens(lyricsIntentQ, 5) : [];
     const lyricRequiredTokens = lyricProbeTokens.slice(0, Math.min(3, lyricProbeTokens.length));

@@ -422,6 +422,22 @@ function applyCalmFocusEnergyGuard(intent, normalizedPrompt) {
     addMatchedKeywords(intent, 'guard:calm_focus_low_or_medium', ['low_or_medium_energy', 'avoid_high_energy']);
 }
 
+function applyCoffeeActivityGuard(intent, normalizedPrompt) {
+    const hasCoffeeSignal = ['ca phe', 'cafe', 'coffee', 'uong ca phe', 'di cafe']
+        .some((phrase) => hasPhrase(normalizedPrompt, phrase));
+    if (!hasCoffeeSignal) return;
+
+    intent.softPreferences.activity = 'coffee';
+    intent.softPreferences.energy = intent.softPreferences.energy === 'high' ? 'medium' : 'low';
+    if (intent.softPreferences.tempo === 'fast') {
+        intent.softPreferences.tempo = 'medium';
+    }
+    addUnique(intent.softPreferences.mood, 'chill');
+    addUnique(intent.softPreferences.mood, 'calm');
+    addUnique(intent.negativeConstraints.energy, 'high');
+    addMatchedKeywords(intent, 'guard:coffee_activity', ['coffee']);
+}
+
 const COUNT_PATTERNS = [
     /(\d+)\s*(?:bai|songs?|tracks?)/i
 ];
@@ -615,6 +631,7 @@ function applyRuleBasedIntent(prompt, targetCount) {
     }
 
     applyCalmFocusEnergyGuard(intent, normalizedPrompt);
+    applyCoffeeActivityGuard(intent, normalizedPrompt);
 
     if (hasPhrase(normalizedPrompt, 'nhe hon')) {
         intent.softPreferences.energy = intent.softPreferences.energy === 'high' ? 'medium' : 'low';
@@ -886,6 +903,7 @@ async function normalizeAiPlaylistIntent(input = {}, options = {}) {
             ...(intent.raw || {}),
             provider: intentResult.provider
         };
+        applyCoffeeActivityGuard(intent, normalizeText(prompt));
 
         console.log('[AI Playlist Intent]', {
             provider: intentResult.provider,

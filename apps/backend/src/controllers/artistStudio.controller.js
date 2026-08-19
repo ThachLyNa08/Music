@@ -2571,7 +2571,7 @@ exports.resubmitSong = async (req, res, next) => {
     }
 
     const artistGenre = await resolveArtistUploadGenre(artistId);
-    const genreId = artistGenre?.genre?.id || null;
+    const genreId = artistGenre?.genre?.id || songRecord.genre_id || null;
 
     const [approvedSongRows] = await pool.query(
       "SELECT COUNT(*) as count FROM songs WHERE artist_id = ? AND review_status = 'approved'",

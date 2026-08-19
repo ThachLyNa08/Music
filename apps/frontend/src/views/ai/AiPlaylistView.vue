@@ -429,6 +429,7 @@ import { useRouter } from 'vue-router'
 import { aiPlaylistApi } from '@/api/aiPlaylist'
 import { useToastStore } from '@/stores/toast'
 import { usePlayerStore } from '@/stores/player'
+import { useLibraryStore } from '@/stores/library'
 import { formatImageUrl } from '@/utils/formatters'
 import AiPlaylistPromptBox from '@/components/ai/AiPlaylistPromptBox.vue'
 import AiPlaylistIntentSummary from '@/components/ai/AiPlaylistIntentSummary.vue'
@@ -438,6 +439,7 @@ import PromptSuggestionChips from '@/components/ai/PromptSuggestionChips.vue'
 const router = useRouter()
 const toast = useToastStore()
 const playerStore = usePlayerStore()
+const libraryStore = useLibraryStore()
 
 const prompt = ref('')
 const targetCount = ref(20)
@@ -710,6 +712,7 @@ async function handleSave() {
     })
     savedPlaylist.value = data.playlist
     currentPreviewStatus.value = 'saved'
+    await libraryStore.fetchMyPlaylists(true)
     if (isHistoryOpen.value) await loadHistory()
     toast.showToast('Đã lưu playlist vào thư viện', 'success')
     showSavePanel.value = false

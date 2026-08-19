@@ -19,6 +19,13 @@ function normalizeSearchText(value, max = 100) {
   return text.length <= max ? text : null;
 }
 
+function normalizeFilterValue(value, max = 50) {
+  const text = normalizeSearchText(value, max);
+  if (text === null) return null;
+  if (!text || text.toLowerCase() === 'all') return '';
+  return text;
+}
+
 function normalizeOptionalLyrics(value, field) {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -43,30 +50,36 @@ function applyLyricsFilters({ q, status, provider }, whereConditions, queryParam
     queryParams.push(`%${search}%`, `%${search}%`);
   }
 
-  if (status) {
-    if (!LYRIC_STATUSES.includes(status)) {
+  const normalizedStatus = normalizeFilterValue(status, 50);
+  if (normalizedStatus === null) {
+    const error = new Error('Trạng thái lyrics không hợp lệ');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (normalizedStatus) {
+    if (!LYRIC_STATUSES.includes(normalizedStatus)) {
       const error = new Error('Trạng thái lyrics không hợp lệ');
       error.statusCode = 400;
       throw error;
     }
-    if (status === 'missing') {
+    if (normalizedStatus === 'missing') {
       whereConditions.push(`NOT ${HAS_ANY_LYRICS_SQL}`);
-    } else if (status === 'has_lyrics') {
+    } else if (normalizedStatus === 'has_lyrics') {
       whereConditions.push(HAS_ANY_LYRICS_SQL);
-    } else if (status === 'synced') {
+    } else if (normalizedStatus === 'synced') {
       whereConditions.push(HAS_SYNCED_LYRICS_SQL);
-    } else if (status === 'plain') {
+    } else if (normalizedStatus === 'plain') {
       whereConditions.push(`${HAS_PLAIN_LYRICS_SQL} AND NOT ${HAS_SYNCED_LYRICS_SQL}`);
     }
   }
 
-  const normalizedProvider = normalizeSearchText(provider, 50);
+  const normalizedProvider = normalizeFilterValue(provider, 50);
   if (normalizedProvider === null) {
     const error = new Error('Provider không hợp lệ');
     error.statusCode = 400;
     throw error;
   }
-  if (normalizedProvider && normalizedProvider !== 'all') {
+  if (normalizedProvider) {
     whereConditions.push(`UPPER(${EFFECTIVE_PROVIDER_SQL}) = UPPER(?)`);
     queryParams.push(normalizedProvider);
   }

@@ -1,10 +1,12 @@
 const { GoogleGenAI, Type } = require('@google/genai');
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 const DEFAULT_GEMINI_TIMEOUT_MS = 12000;
 const DEPRECATED_GEMINI_MODELS = new Set([
     'gemini-1.5-flash',
     'models/gemini-1.5-flash',
+    'gemini-2.5-flash',
+    'models/gemini-2.5-flash',
     'gemini-2.5-flash-lite',
     'models/gemini-2.5-flash-lite'
 ]);

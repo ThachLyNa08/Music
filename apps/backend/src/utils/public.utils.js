@@ -77,12 +77,12 @@ function normalizeReleasePayload(body = {}, options = {}) {
 
   if (releaseStatus === 'scheduled') {
     if (!releaseAt) {
-      const err = new Error('release_at la bat buoc khi len lich phat hanh');
+      const err = new Error('Vui lòng chọn thời điểm phát hành khi lên lịch bài hát.');
       err.statusCode = 400;
       throw err;
     }
     if (isCreate && new Date(releaseAt).getTime() <= Date.now()) {
-      const err = new Error('release_at phai la thoi diem tuong lai khi len lich moi');
+      const err = new Error('Thời điểm phát hành phải sau thời điểm hiện tại. Vui lòng chọn lại lịch phát hành.');
       err.statusCode = 400;
       throw err;
     }

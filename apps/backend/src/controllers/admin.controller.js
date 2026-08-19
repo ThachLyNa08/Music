@@ -57,6 +57,8 @@ const {
 const { normalizeCoverUrl, resolveArtistAvatar } = require('../utils/imageUrl.util');
 const { getArtistTotalPlaysQuery } = require('../utils/artistStats.util');
 const { getArtistStats } = require('../services/artistStats.service');
+const { calculateFileSha256 } = require('../utils/fileHash.util');
+const { findDuplicateAudioHash, buildDuplicateAudioPayload } = require('../services/audioDuplicate.service');
 const {
   publicSongCondition,
   effectiveReleaseStatusExpression,
@@ -210,6 +212,60 @@ function createValidationError(message, statusCode = 400) {
   return err;
 }
 
+async function findSongTitleDuplicate(artistId, title, excludeSongId = null) {
+  const normalizedTitle = String(title || '').trim().toLowerCase();
+  if (!artistId || !normalizedTitle) return null;
+
+  const params = [artistId, normalizedTitle];
+  let excludeSql = '';
+  if (excludeSongId) {
+    excludeSql = 'AND id <> ?';
+    params.push(excludeSongId);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, title, review_status, release_status
+     FROM songs
+     WHERE artist_id = ?
+       AND LOWER(TRIM(title)) = ?
+       ${excludeSql}
+     ORDER BY id ASC
+     LIMIT 1`,
+    params
+  );
+
+  return rows[0] || null;
+}
+
+function createDuplicateTitleError(duplicate) {
+  const err = new Error(`Bài hát "${duplicate.title}" đã tồn tại cho nghệ sĩ này.`);
+  err.statusCode = 409;
+  err.payload = {
+    success: false,
+    code: 'DUPLICATE_SONG_TITLE',
+    message: err.message,
+    duplicate: {
+      id: duplicate.id,
+      title: duplicate.title,
+      reviewStatus: duplicate.review_status,
+      releaseStatus: duplicate.release_status,
+    },
+  };
+  return err;
+}
+
+function createDuplicateAudioError(duplicate) {
+  const payload = buildDuplicateAudioPayload(duplicate);
+  const err = new Error(payload?.body?.message || 'File audio này đã tồn tại trong hệ thống.');
+  err.statusCode = payload?.statusCode || 409;
+  err.payload = payload?.body || {
+    success: false,
+    code: 'DUPLICATE_AUDIO',
+    message: err.message,
+  };
+  return err;
+}
+
 function normalizeStrictPositiveId(value, field = 'ID') {
   if (typeof value === 'number') {
     if (Number.isInteger(value) && value > 0) return value;
@@ -306,6 +362,13 @@ function releaseDateFromYear(value) {
   const year = parseInt(value, 10);
   if (!Number.isFinite(year) || year < 1900 || year > 2100) return null;
   return `${year}-01-01`;
+}
+
+function isPublishedReleaseState(item = {}) {
+  if (item.release_status === 'published') return true;
+  if (item.release_status !== 'scheduled' || !item.release_at) return false;
+  const releaseAt = new Date(item.release_at).getTime();
+  return !Number.isNaN(releaseAt) && releaseAt <= Date.now();
 }
 
 function albumCoverPathFromUpload(file) {
@@ -1236,11 +1299,23 @@ exports.updateAdminAlbum = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Nghe si la bat buoc' });
     }
 
-    const [existingAlbums] = await conn.query('SELECT id, artist_id FROM albums WHERE id = ? LIMIT 1', [albumId]);
+    const [existingAlbums] = await conn.query('SELECT id, artist_id, release_status, release_at FROM albums WHERE id = ? LIMIT 1', [albumId]);
     if (existingAlbums.length === 0) {
       return res.status(404).json({ success: false, message: 'Khong tim thay album' });
     }
-    const targetArtistId = artistId || existingAlbums[0].artist_id;
+    const existingAlbum = existingAlbums[0];
+    if (
+      hasReleaseStatus &&
+      isPublishedReleaseState(existingAlbum) &&
+      releasePayload?.release_status !== existingAlbum.release_status
+    ) {
+      return res.status(400).json({
+        success: false,
+        code: 'PUBLISHED_ALBUM_RELEASE_STATUS_LOCKED',
+        message: 'Album đã phát hành không thể chỉnh sửa trạng thái phát hành.'
+      });
+    }
+    const targetArtistId = artistId || existingAlbum.artist_id;
 
     if (hasSongIds && songIds.length > 0) {
       const [candidateSongs] = await conn.query(`
@@ -2624,7 +2699,7 @@ exports.updateSong = async (req, res, next) => {
       await conn.beginTransaction();
 
       const [[existingSong]] = await conn.query(
-        'SELECT release_status, release_at FROM songs WHERE id = ? LIMIT 1',
+        'SELECT title, artist_id, release_status, release_at FROM songs WHERE id = ? LIMIT 1',
         [id]
       );
       if (!existingSong) {
@@ -2662,6 +2737,13 @@ exports.updateSong = async (req, res, next) => {
         } else {
           artistId = artists[0].id;
         }
+      }
+
+      const effectiveArtistId = (bodyHasArtistId || normalizedArtistName) ? artistId : existingSong.artist_id;
+      const effectiveTitle = normalizedTitle !== undefined ? normalizedTitle : existingSong.title;
+      if (normalizedTitle !== undefined || bodyHasArtistId || normalizedArtistName) {
+        const duplicateTitle = await findSongTitleDuplicate(effectiveArtistId, effectiveTitle, id);
+        if (duplicateTitle) throw createDuplicateTitleError(duplicateTitle);
       }
 
       let albumId = parsedAlbumId === undefined ? null : parsedAlbumId;
@@ -2726,10 +2808,34 @@ exports.updateSong = async (req, res, next) => {
       // Handle file uploads if any
       if (req.files) {
         if (req.files.audio && req.files.audio[0]) {
-          const relativePath = path.relative(path.join(__dirname, '..', '..', 'uploads'), req.files.audio[0].path);
+          const audioFile = req.files.audio[0];
+          let audioHash = null;
+          try {
+            audioHash = await calculateFileSha256(audioFile.path);
+          } catch (hashErr) {
+            console.error('Error calculating admin update audio SHA-256 hash:', hashErr.message);
+          }
+          if (audioHash) {
+            const duplicateAudio = await findDuplicateAudioHash(audioHash, id);
+            if (duplicateAudio) throw createDuplicateAudioError(duplicateAudio);
+          }
+
+          const relativePath = path.relative(path.join(__dirname, '..', '..', 'uploads'), audioFile.path);
           const audioUrl = '/uploads/' + relativePath.split(path.sep).join('/');
           updateFields.push('audio_url = ?');
           updateParams.push(audioUrl);
+          if (songColumns.has('audio_hash') && audioHash) {
+            updateFields.push('audio_hash = ?');
+            updateParams.push(audioHash);
+          }
+          if (songColumns.has('audio_file_size')) {
+            updateFields.push('audio_file_size = ?');
+            updateParams.push(audioFile.size || null);
+          }
+          if (songColumns.has('audio_mime_type')) {
+            updateFields.push('audio_mime_type = ?');
+            updateParams.push(audioFile.mimetype || null);
+          }
         }
         if (req.files.cover && req.files.cover[0]) {
           const relativePath = path.relative(path.join(__dirname, '..', '..', 'uploads'), req.files.cover[0].path);
@@ -2774,6 +2880,9 @@ exports.updateSong = async (req, res, next) => {
   } catch (error) {
     cleanupUploadedFiles(uploadedFiles);
     console.error('updateSong Error:', error);
+    if (error.payload) {
+      return res.status(error.statusCode || 409).json(error.payload);
+    }
     next(error);
   }
 };

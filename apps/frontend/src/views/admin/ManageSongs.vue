@@ -567,6 +567,27 @@ function closeModal() {
   isModalOpen.value = false;
 }
 
+function getDuplicateSongMessage(errorData = {}) {
+  const duplicate = errorData.duplicate || {};
+  const suffix = duplicate.title
+    ? ` Trùng với: ${duplicate.title}${duplicate.artist_name ? ` - ${duplicate.artist_name}` : ''}.`
+    : '';
+
+  if (errorData.code === 'DUPLICATE_SONG_TITLE' || errorData.code === 'DUPLICATE_ARTIST_SONG_TITLE') {
+    return 'Tên bài hát đã tồn tại cho nghệ sĩ này. Vui lòng đổi tên trước khi lưu.';
+  }
+  if (errorData.code === 'DUPLICATE_AUDIO_EXISTING_SONG' || errorData.code === 'DUPLICATE_AUDIO_APPROVED') {
+    return `File audio này đã tồn tại trong hệ thống ở một bài hát đã được duyệt.${suffix}`;
+  }
+  if (errorData.code === 'DUPLICATE_AUDIO_PENDING_SUBMISSION' || errorData.code === 'DUPLICATE_AUDIO_PENDING') {
+    return `File audio này đang trùng với một bài hát khác đang chờ duyệt.${suffix}`;
+  }
+  if (errorData.code === 'DUPLICATE_AUDIO' || errorData.code === 'DUPLICATE_AUDIO_ON_APPROVAL') {
+    return `File audio này đã tồn tại trong hệ thống.${suffix}`;
+  }
+  return '';
+}
+
 async function submitForm(submitData) {
   saving.value = true;
   statusMessage.value = '';
@@ -591,6 +612,8 @@ async function submitForm(submitData) {
 
   } catch (err) {
     statusMessage.value = err.response?.data?.message || 'Có lỗi xảy ra khi lưu dữ liệu.';
+    const duplicateMessage = getDuplicateSongMessage(err.response?.data);
+    if (duplicateMessage) statusMessage.value = duplicateMessage;
     isError.value = true;
     toast.showToast(statusMessage.value, 'error');
   } finally {
