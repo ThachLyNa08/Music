@@ -1,44 +1,37 @@
 # Backend Scripts
 
-Thu muc nay gom cac script van hanh/bao tri backend theo nhom chuc nang. Nen chay tu thu muc `apps/backend` de cac duong dan tuong doi va file `.env` duoc nap dung.
+Thư mục này chỉ giữ các script vận hành/bảo trì còn hữu ích cho phiên bản hiện tại. Chạy từ `apps/backend` để `.env` và các đường dẫn tương đối được nạp đúng.
 
-## Quy tac an toan
+## Quy tắc an toàn
 
-- Khong chay import, migration, repair, crawl/fetch hang loat neu chua kiem tra tham so va moi truong database.
-- Cac script co the ghi database hoac ghi file bao cao/backup; doc file script truoc khi them co `--apply`, `--force`, `--resetCursor`.
-- Khong thay doi runtime URL `/uploads`; cac script van tao URL dang `/uploads/...` khi can.
-- Thu muc runtime `apps/backend/uploads/` khong nam trong cay scripts va khong nen di chuyen.
+- Không chạy import, migration, repair hoặc crawl/fetch hàng loạt nếu chưa kiểm tra database và tham số.
+- Ưu tiên dry-run khi script hỗ trợ.
+- Không đổi runtime URL `/uploads` hoặc di chuyển `apps/backend/uploads/`.
+- Các harness kiểm thử theo từng vòng, file debug tạm, report sinh ra và backup repair cũ không được giữ trong source nộp.
 
-## Nhom script
+## Nhóm script còn lại
 
-- `audit/`: script kiem tra du lieu va file, vi du audit audio, audit discography, test query profile.
-- `import/`: script import/dong bo du lieu nhac va discography.
-- `fetch/`: script fetch avatar artist, cover album, cover song.
-- `lyrics/`: script crawl, normalize, va import lyrics.
-- `migrations/`: script migration schema/database. Cac npm scripts migration trong `package.json` da tro vao day.
-- `repair/`: script sua/phan loai lai du lieu va cac file backup lien quan.
-- `playlist/`: script seed va cleanup system playlists.
-- `health/`: script kiem tra nhanh tinh trang schema/tinh nang.
-- `reports/`: file bao cao text sinh ra hoac dung de doi chieu.
+- `admin/`: thao tác quản trị có kiểm soát.
+- `audit/`: audit dữ liệu/file còn dùng được.
+- `fetch/`: fetch avatar/cover.
+- `health/`: kiểm tra nhanh database/runtime.
+- `import/`: import/đồng bộ dữ liệu nhạc.
+- `lyrics/`: crawl, normalize và import lyrics.
+- `maintenance/`: audio features, semantic profiles, scheduler/recovery.
+- `migrations/`: migration schema; `npm run migrate` sử dụng `migrations/migrate.js`.
+- `playlist/`: seed playlist hệ thống.
+- `repair/`: công cụ repair có chủ đích.
+- `search/`: build/test lyrics search theo npm script.
+- `tests/`: test kỹ thuật còn liên quan đến runtime hiện tại.
 
-## Cach chay
+## Lệnh thường dùng
 
-Tu `apps/backend`:
-
-```bash
+```powershell
 npm run migrate
 npm run migrate-region
-npm run migrate-premium
-node scripts/audit/auditSongAudioFiles.js
-node scripts/fetch/fetch_song_covers.js
-node scripts/lyrics/normalizeLyrics.js --limit=10
+npm run scheduler:audit
+npm run scheduler:once
+node scripts/health/test_db.js
 ```
 
-Voi script repair, uu tien dry-run neu script ho tro. Vi du:
-
-```bash
-node scripts/repair/repairSongAudioPaths.js
-node scripts/repair/repairSongAudioPaths.js --apply
-```
-
-Chi dung `--apply` sau khi da doc output dry-run va chac chan DB/file path dung.
+Với script có khả năng ghi dữ liệu, đọc source và xác nhận `.env` trước khi chạy.

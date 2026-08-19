@@ -51,7 +51,9 @@ apps/ai-service/cache/
 apps/ai-service/exports/
 storage/
 
-# Generated/local datasets
+# External demo bundle / generated datasets
+demo-data/
+MusicFlow-demo-data*.zip
 datasets/
 
 # Local database dumps (tracked schema/migrations/seeds are exceptions)
@@ -91,6 +93,15 @@ playlist_gallery.html
 backup_working_changes.patch
 migration_error.txt
 folder-tree-after-phase1.txt
+
+# One-off validation / generated audit files
+**/*_harness.js
+**/temp_*.js
+apps/backend/schema.txt
+apps/backend/scripts/reports/
+apps/backend/scripts/repair/backup_*_repair_*.json
+scripts/maintenance/_*.js
+scripts/recommendation/patch_eval_*.js
 
 # One-off local runners
 apps/backend/check_msg.js
