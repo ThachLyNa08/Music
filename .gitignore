@@ -161,3 +161,19 @@ database/exports/
 *.sql.bak-*
 *.bak
 *.tmp
+
+# AI coding-agent / local assistant instructions
+AGENTS.md
+**/AGENTS.md
+agent-skills/
+**/agent-skills/
+CLAUDE.md
+**/CLAUDE.md
+CODEX.md
+**/CODEX.md
+GEMINI.md
+**/GEMINI.md
+.claude/
+**/.claude/
+.codex/
+**/.codex/
