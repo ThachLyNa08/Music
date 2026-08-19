@@ -1,26 +1,38 @@
-# Tài liệu Hệ thống Gợi ý (Recommendation)
+# Recommendation trong MusicFlow
 
-Thư mục này chứa toàn bộ báo cáo, thiết kế thuật toán và kiến trúc của hệ thống Gợi ý Âm nhạc MusicFlow. Dựa trên số liệu đánh giá V3 mới nhất, mô hình lõi đang được sử dụng là **BPR-MF**.
+Thư mục này chỉ giữ tài liệu của pipeline recommendation đang dùng trong phiên bản hiện tại của MusicFlow.
 
-## Nhóm Hiện Tại (Current / V3)
-- `01_CURRENT_RECOMMENDATION_SYSTEM.md` - Tổng quan kiến trúc hiện tại.
-- `02_V2_TO_CURRENT_MIGRATION_NOTES.md` - Ghi chú sự khác biệt V2 và V3.
-- `algorithm-evaluation.md` - Đánh giá thuật toán V3 (Metric chính).
-- `bpr-selection-report.md` - Báo cáo lý do chọn BPR-MF.
-- `experimental-data.md` - Bộ dữ liệu giả lập 200 User.
-- `serving.md` - Luồng API và Controller.
-- `scheduler.md` - Hẹn giờ chạy tiến trình tạo Playlist.
-- `daily-mix.md`, `weekly-mix.md` - Chức năng Auto-playlist.
-- `final_recommendation_v3_evaluation_report.md` - Báo cáo kết quả đánh giá V3 chi tiết.
+## Kiến trúc hiện tại
 
-## Nhóm Lịch sử (Legacy / V2)
-*Lưu ý: Các tài liệu này phản ánh giai đoạn V2 (dựa chủ yếu vào Semantic/Contextual Mood) và hiện được giữ lại để làm minh chứng quá trình phát triển.*
-- `contextual-mood-evaluation.md`
-- `contextual-mood-playlists.md`
-- `contextual-mood-recommendation.md`
-- `song_semantic_profile_report.md`
-- `final_semantic_v2_evaluation_report.md`
+Luồng chính:
 
-## Hướng dẫn cho Báo cáo Luận văn
-> [!IMPORTANT]
-> Hãy sử dụng số liệu từ `final_recommendation_v3_evaluation_report.md` và `bpr-selection-report.md` làm nền tảng khoa học cho chương Đề xuất Hệ thống Gợi ý. Tuyệt đối không dùng lại các bảng Precision/Recall của báo cáo V2.
+```text
+Implicit feedback / onboarding
+          ↓
+Candidate generation
+          ↓
+LightGCN Hybrid + Content-Based / fallback
+          ↓
+Re-ranking theo mức độ phù hợp và đa dạng
+          ↓
+Tempo-aware layer khi có ngữ cảnh thời điểm / hoạt động
+          ↓
+Recommendation / Daily Mix / Weekly Mix / System Playlist
+```
+
+LightGCN Hybrid được dùng làm mô hình gợi ý lõi cho người dùng có đủ lịch sử. BPR-MF Hybrid vẫn được giữ trong phần đánh giá để so sánh. Với người dùng mới hoặc khi model không sẵn sàng, hệ thống dùng onboarding, Content-Based và các tầng fallback từ dữ liệu thật trong cơ sở dữ liệu.
+
+## Tài liệu nên đọc
+
+- `v4/RECOMMENDATION_V4_REPORT.md`: kết quả đánh giá các phương pháp V4.
+- `v4/recommendation_v4_architecture.mmd`: sơ đồ kiến trúc recommendation V4.
+- `v4/recommendation_v4_flow.mmd`: luồng xử lý recommendation V4.
+- `TEMPO_AWARE_RECOMMENDATION.md`: lớp xếp hạng lại theo BPM, năng lượng và ngữ cảnh nghe.
+- `ai_playlist_rag_notes.md`: Semantic RAG của AI Playlist Generator.
+- `serving.md`: luồng phục vụ recommendation ở backend.
+- `daily-mix.md`, `weekly-mix.md`: cách tạo playlist tự động.
+- `scheduler.md`: lịch làm mới Daily Mix và Weekly Mix.
+
+## Lưu ý
+
+Các báo cáo V2/V3, audit nội bộ, migration notes và tài liệu thử nghiệm cũ đã được loại khỏi repository để tránh nhầm với kiến trúc hiện tại. Dữ liệu đánh giá lịch sử vẫn có thể xem qua Git history khi cần.

@@ -12,10 +12,8 @@ scikit-learn==1.5.0
 pandas==2.2.2
 numpy==1.26.4
 scipy==1.13.1
-#scikit-surprise==1.1.4
 
-# Audio processing (cài sau khi setup xong cơ bản)
-# spleeter==2.3.2
+# Audio processing
 librosa==0.10.2
 soundfile==0.12.1
 

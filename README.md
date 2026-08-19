@@ -1,443 +1,399 @@
 # MusicFlow
 
-MusicFlow is a music streaming and recommendation project with a Vue frontend, an Express backend, and a FastAPI AI service.
+MusicFlow là hệ thống nghe nhạc trực tuyến tích hợp cá nhân hóa, hệ thống gợi ý, playlist tự động, AI Search, AI Playlist Generator, Karaoke tách vocal/instrumental và các chức năng dành cho nghệ sĩ/quản trị viên.
 
-## Project Structure
+## Công nghệ chính
+
+- **Frontend:** Vue 3, Vite, Tailwind CSS, Pinia, Socket.IO Client
+- **Backend:** Node.js, Express, MySQL, Redis, Socket.IO
+- **AI Service:** FastAPI, Demucs, Librosa, scikit-learn
+- **Recommendation:** LightGCN Hybrid, Content-Based fallback, Hybrid Re-ranking, Tempo-aware
+- **AI Playlist:** LLM intent parsing + Semantic RAG + MySQL validation + re-ranking
+
+## Cấu trúc repository
 
 ```text
-Luan_Van/
-+-- apps/
-|   +-- backend/       # Express API, Socket.IO, backend scripts, runtime uploads
-|   +-- frontend/      # Vue/Vite frontend
-|   +-- ai-service/    # FastAPI AI service and helper scripts
-+-- database/
-|   +-- schema/
-|   +-- migrations/
-|   +-- seeds/
-+-- datasets/
-|   +-- raw/
-|   +-- processed/
-+-- docs/
-|   +-- thesis/
-|   +-- design/
-|   +-- reports/
-+-- storage/
-|   +-- images/
-+-- agent-skills/
-+-- AGENTS.md
-+-- docker-compose.yml
-+-- README.md
+Music/
+├─ apps/
+│  ├─ backend/       # REST API, Socket.IO, scheduler, recommendation services
+│  ├─ frontend/      # Vue 3 + Vite
+│  └─ ai-service/    # FastAPI + Demucs
+├─ database/         # Schema, migrations, seed tối thiểu
+├─ scripts/
+│  ├─ audio_features/
+│  ├─ maintenance/
+│  └─ recommendation/v4/   # Pipeline thực nghiệm Recommendation V4
+├─ docs/
+│  ├─ DEMO_DATA.md
+│  └─ recommendation/
+└─ README.md
 ```
 
-## Run Backend
+# Chạy lại demo từ máy mới
+
+Luồng khuyến nghị:
+
+```text
+git clone
+   ↓
+tải demo data
+   ↓
+import musicflow_demo.sql
+   ↓
+đặt dataset / model-artifact / media đúng thư mục
+   ↓
+cấu hình .env
+   ↓
+MySQL + Redis
+   ↓
+Backend :3000
+   ↓
+AI Service :8000
+   ↓
+Frontend :5173
+   ↓
+đăng nhập tài khoản demo
+   ↓
+chạy checklist chức năng
+```
+
+## 1. Yêu cầu môi trường
+
+Cài sẵn:
+
+- Git
+- Node.js 22.x và npm
+- Python 3.10+
+- MySQL 8.0+
+- Redis
+- Chrome hoặc Edge
+
+Để chạy Karaoke tách stem mới, Python cần cài được Demucs và các dependency audio trong `apps/ai-service/requirements.txt`.
+
+## 2. Clone mã nguồn
 
 ```powershell
-cd apps/backend
+git clone https://github.com/ThachLyNa08/Music.git
+cd Music
+```
+
+Kiểm tra branch:
+
+```powershell
+git branch --show-current
+```
+
+Kết quả mong đợi: `main`.
+
+## 3. Tải dữ liệu demo
+
+Đọc trước:
+
+- `docs/DEMO_DATA.md`
+
+Thư mục Drive bàn giao dữ liệu lớn:
+
+https://drive.google.com/drive/folders/1CB_ZKqI-5H6pEKiS0QVh3I8pVON5F5Bj
+
+Bộ demo đầy đủ cần có:
+
+- `musicflow_demo.sql`
+- semantic dataset chứa `song_semantic_profiles.csv`
+- recommendation/model artifacts
+- `apps/backend/uploads/` gồm media cần cho demo
+- `DEMO_ACCOUNTS.txt`
+
+Nếu dùng gói `MusicFlow-demo-data.zip` theo cấu trúc trong `docs/DEMO_DATA.md`, đặt ZIP tại root repository và chạy:
+
+```powershell
+Expand-Archive .\MusicFlow-demo-data.zip -DestinationPath . -Force
+```
+
+Kiểm tra nhanh:
+
+```powershell
+Test-Path .\demo-data\musicflow_demo.sql
+Test-Path .\datasets\processed\semantic\profiles\song_semantic_profiles.csv
+Test-Path .\storage
+Test-Path .\apps\backend\uploads
+```
+
+Với gói demo đầy đủ, bốn lệnh trên phải trả `True`.
+
+## 4. Import `musicflow_demo.sql`
+
+Tạo database:
+
+```powershell
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS musicflow CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+Import dữ liệu:
+
+```powershell
+cmd /c "mysql -u root -p musicflow < demo-data\musicflow_demo.sql"
+```
+
+Nếu **không có database demo** và chỉ cần kiểm tra source khởi động, có thể dùng schema tối thiểu:
+
+```powershell
+cmd /c "mysql -u root -p < database\schema\musicflow_schema.sql"
+```
+
+Sau đó có thể chạy các seed trong `database/seeds/`, nhưng dữ liệu này không tái tạo đầy đủ demo luận văn.
+
+## 5. Cấu hình Backend
+
+```powershell
+cd apps\backend
+npm ci
+Copy-Item .env.example .env
+```
+
+Mở `apps/backend/.env` và kiểm tra tối thiểu:
+
+```env
+PORT=3000
+NODE_ENV=development
+
+JWT_SECRET=change-this-secret
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_SECRET=change-this-refresh-secret
+JWT_REFRESH_EXPIRES_IN=3d
+
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=musicflow
+DB_USER=root
+DB_PASSWORD=<MAT_KHAU_MYSQL>
+
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+FRONTEND_URL=http://127.0.0.1:5173
+APP_FRONTEND_URL=http://127.0.0.1:5173
+APP_BACKEND_URL=http://127.0.0.1:3000
+AI_SERVICE_URL=http://127.0.0.1:8000
+```
+
+Các API key Groq, Gemini, Spotify, Last.fm, email hoặc SePay chỉ điền khi cần kiểm tra chức năng tương ứng. Không commit file `.env`.
+
+Đồng bộ migration hiện hành:
+
+```powershell
+npm run migrate
+```
+
+Quay về root:
+
+```powershell
+cd ..\..
+```
+
+## 6. Chạy Redis
+
+Redis phải hoạt động trước khi kiểm tra đầy đủ auth/refresh lock và các chức năng dùng cache/lock.
+
+Nếu Redis chạy trong WSL/Ubuntu:
+
+```powershell
+wsl -d Ubuntu -- sudo service redis-server start
+wsl -d Ubuntu -- redis-cli PING
+```
+
+Hoặc nếu `redis-cli` đã có trực tiếp trên máy:
+
+```powershell
+redis-cli PING
+```
+
+Kết quả mong đợi:
+
+```text
+PONG
+```
+
+## 7. Chạy Backend
+
+Mở PowerShell mới:
+
+```powershell
+cd Music\apps\backend
 npm run dev
 ```
 
-## Run Frontend
+Backend:
 
-```powershell
-cd apps/frontend
-npm run dev
+```text
+http://127.0.0.1:3000
 ```
 
-## Run AI Service
+Giữ terminal này mở.
 
-For demo or stem/karaoke separation, run Uvicorn without `--reload` so the Demucs process is not interrupted by the file watcher:
+## 8. Chạy AI Service
 
-```powershell
-cd apps/ai-service
-.\.venv\Scripts\Activate.ps1    
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-level debug
-```
-
-When developing API code and reload is needed, restrict the watcher to the app source folder. Do not watch output/cache/stems/uploads/exports while separating stems:
+Mở PowerShell mới:
 
 ```powershell
-cd apps/ai-service
+cd Music\apps\ai-service
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process Bypass
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app --log-level debug
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-## Git Notes
-
-Do not commit `.env`, `node_modules`, `dist`, runtime uploads, `storage`, generated logs, or music/audio files. Runtime media is currently kept under `apps/backend/uploads/` so existing app and database paths continue to work.
-
-
-## Crash
-
-netstat -ano | findstr :3000
-taskkill /PID [PID] /F
-
-## Bật scheduler thật
-
-Trong .env backend:
-
-ENABLE_RECOMMENDATION_SCHEDULER=true
-RECOMMENDATION_SCHEDULER_TEST_MODE=false
-
-Hoặc bỏ hẳn dòng test mode.
-
-Test nhanh scheduler
-
-Chỉ dùng khi test:
-
-ENABLE_RECOMMENDATION_SCHEDULER=true
-RECOMMENDATION_SCHEDULER_TEST_MODE=true
-
-Test xong phải tắt lại:
-
-RECOMMENDATION_SCHEDULER_TEST_MODE=false
-
-
-## Song Semantic Profiles Pipeline
-
-### 1. Mục đích
-
-`song_semantic_profiles` là lớp dữ liệu ngữ nghĩa cho từng bài hát trong MusicFlow. Bảng này dùng để bổ sung thông tin về:
-
-* Chủ đề chính của bài hát (`main_theme`)
-* Cảm xúc / mood (`mood_tags`)
-* Ngữ cảnh nghe phù hợp (`situation_tags`)
-* Từ khóa lời bài hát (`lyrical_keywords`)
-* Mức độ cảm xúc (`emotion_intensity`)
-* Độ tin cậy của phân tích (`meaning_confidence`)
-* Trạng thái cần kiểm tra lại (`review_status`)
-* Mức bằng chứng phân tích (`evidence_level`)
-
-Dữ liệu này phục vụ cho:
-
-* Content-Based Filtering
-* AI Playlist Generator
-* Tìm kiếm / gợi ý theo mood, chủ đề, hoàn cảnh nghe
-* Giảm phụ thuộc vào popularity-only recommendation
-
-Pipeline hiện tại chạy offline/local, không gọi Gemini/API mặc định.
-
----
-
-### 2. Bảng dữ liệu
-
-Migration:
-
-```txt
-database/migrations/add_song_semantic_profiles.sql
-```
-
-Bảng được tạo:
-
-```txt
-song_semantic_profiles
-```
-
-Các cột chính:
-
-```txt
-id
-song_id
-summary_vi
-main_theme
-sub_themes
-mood_tags
-situation_tags
-lyrical_keywords
-emotion_intensity
-meaning_confidence
-semantic_text
-source
-generated_by
-evidence_level
-review_status
-external_refs
-created_at
-updated_at
-```
-
-Lưu ý quan trọng:
-
-```txt
-songs.id = int unsigned
-song_semantic_profiles.song_id = int unsigned
-```
-
-Nếu `song_id` dùng `BIGINT` sẽ bị lỗi foreign key:
-
-```txt
-ERROR 3780: Referencing column 'song_id' and referenced column 'id' are incompatible.
-```
-
----
-
-### 3. Apply migration
-
-Từ root project:
+Tạo `.env` từ file mẫu:
 
 ```powershell
-cd D:\CaNhan\Luan_Van
-cmd /c "mysql -u root -p musicflow < database\migrations\add_song_semantic_profiles.sql"
+Copy-Item .env.example .env
 ```
 
-Nếu thấy warning này thì bỏ qua được:
-
-```txt
-mysql: Unknown OS character set 'cp1258'.
-mysql: Switching to the default character set 'utf8mb4'.
-```
-
-Nếu chạy lại migration và gặp lỗi:
-
-```txt
-Duplicate key name 'idx_song_semantic_profiles_theme'
-```
-
-thì nghĩa là bảng/index đã được tạo rồi. Không cần chạy lại migration nữa.
-
----
-
-### 4. Kiểm tra bảng sau migration
+Chạy FastAPI:
 
 ```powershell
-mysql -u root -p musicflow -e "SHOW TABLES LIKE 'song_semantic_profiles';"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+Kiểm tra:
 
 ```powershell
-mysql -u root -p musicflow -e "SHOW FULL COLUMNS FROM song_semantic_profiles;"
+Invoke-RestMethod http://127.0.0.1:8000/health
 ```
+
+Kết quả phải có `status = ok`.
+
+Khi chạy Demucs/Karaoke, không nên bật Uvicorn `--reload` vì file watcher có thể làm gián đoạn tác vụ tách stem.
+
+## 9. Chạy Frontend
+
+Mở PowerShell mới:
 
 ```powershell
-mysql -u root -p musicflow -e "SHOW INDEX FROM song_semantic_profiles;"
+cd Music\apps\frontend
+npm ci
+Copy-Item .env.example .env
+npm run dev
 ```
 
-Cần có đủ các cột quan trọng:
+Frontend:
 
-```txt
-song_id
-summary_vi
-main_theme
-mood_tags
-situation_tags
-lyrical_keywords
-meaning_confidence
-semantic_text
-source
-generated_by
-evidence_level
-review_status
+```text
+http://127.0.0.1:5173
 ```
 
----
+Mở URL trên bằng Chrome hoặc Edge.
 
-### 5. Generate semantic profiles
+## 10. Tài khoản demo
 
-Script Python:
+Tài khoản demo và mật khẩu **không lưu trong GitHub public**. Dùng file `demo-data/DEMO_ACCOUNTS.txt` đi kèm gói dữ liệu.
 
-```txt
-apps/ai-service/scripts/recommendation/generate_song_semantic_profiles.py
+Các vai trò nên có:
+
+```text
+User có lịch sử nghe
+User Premium
+Artist
+Admin
+User cold-start đã onboarding
 ```
 
-Chạy thử giới hạn 500 bài:
+Các tài khoản này phải tồn tại trong `musicflow_demo.sql`.
+
+## 11. Checklist chạy lại demo
+
+Sau khi cả MySQL, Redis, Backend, AI Service và Frontend đã chạy, kiểm tra theo thứ tự:
+
+- [ ] Mở `http://127.0.0.1:5173` không lỗi trắng trang.
+- [ ] Đăng nhập bằng tài khoản User.
+- [ ] Phát được một bài hát; play/pause/seek hoạt động.
+- [ ] Recently Played hoặc lịch sử nghe được ghi nhận.
+- [ ] Home hiển thị gợi ý cá nhân hóa / playlist hệ thống.
+- [ ] User cold-start vẫn có nội dung dựa trên onboarding/fallback.
+- [ ] AI Search trả bài hát thật trong MusicFlow khi provider/dataset được cấu hình.
+- [ ] AI Playlist trả **preview** trước khi lưu và không sinh bài hát ngoài catalog.
+- [ ] Karaoke mở được bài đã có vocal/instrumental trong media demo.
+- [ ] Đăng nhập Artist mở được Artist Studio.
+- [ ] Đăng nhập Admin mở được khu vực quản trị.
+- [ ] Trang Premium/Payment hiển thị dữ liệu demo; không cần phát sinh giao dịch thật.
+
+## 12. Recommendation V4
+
+Các script tái lập thực nghiệm hiện hành được giữ tại:
+
+```text
+scripts/recommendation/v4/
+```
+
+Trong đó có pipeline tạo dữ liệu, temporal split, huấn luyện BPR-MF/LightGCN, Hybrid Re-ranking và đánh giá. Các script V2/V3, patch/audit tạm và pre-defense harness đã được loại khỏi cây source nộp để tránh nhầm với pipeline hiện tại.
+
+Tài liệu:
+
+- `docs/recommendation/README.md`
+- `docs/recommendation/v4/RECOMMENDATION_V4_REPORT.md`
+- `docs/recommendation/TEMPO_AWARE_RECOMMENDATION.md`
+- `docs/recommendation/ai_playlist_rag_notes.md`
+- `docs/recommendation/serving.md`
+
+## 13. Scheduler
+
+Scheduler recommendation/system playlist nên để tắt khi cài mới. Chỉ bật sau khi database và dữ liệu demo đã sẵn sàng.
+
+Tài liệu:
+
+- `docs/recommendation/scheduler.md`
+- `docs/deployment/system-playlist-node-cron.md`
+
+Không bật test mode scheduler ngoài lúc kiểm thử local.
+
+## 14. Xử lý lỗi nhanh
+
+Backend không lên:
 
 ```powershell
-cd D:\CaNhan\Luan_Van
-python apps\ai-service\scripts\recommendation\generate_song_semantic_profiles.py --limit=500 --dry-run
+Test-NetConnection 127.0.0.1 -Port 3000
 ```
 
-Chạy full catalog:
+AI Service không lên:
 
 ```powershell
-cd D:\CaNhan\Luan_Van
-python apps\ai-service\scripts\recommendation\generate_song_semantic_profiles.py --limit=10000 --dry-run
+Test-NetConnection 127.0.0.1 -Port 8000
+Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
-Output chính:
-
-```txt
-datasets/processed/semantic/previews/song_semantic_profiles_python_preview.csv
-datasets/processed/semantic/embeddings/song_semantic_embeddings.npy
-datasets/processed/semantic/embeddings/song_semantic_embeddings_meta.csv
-datasets/processed/semantic/reports/song_semantic_profiles_python_summary.json
-```
-
-Lưu ý: nếu không truyền `--limit`, script có thể mặc định chỉ chạy `20` bài. Không import file preview nếu lỡ bị ghi đè còn 20 dòng.
-
----
-
-### 6. Evaluate semantic profiles
+Redis:
 
 ```powershell
-cd D:\CaNhan\Luan_Van
-
-python apps\ai-service\scripts\recommendation\evaluate_song_semantic_profiles.py --input datasets\processed\semantic\previews\song_semantic_profiles_python_preview.csv
+redis-cli PING
 ```
 
-Các chỉ số cần xem:
+Frontend gọi API lỗi: kiểm tra `apps/frontend/.env`, `apps/backend/.env` rồi restart cả Vite và Backend.
 
-```txt
-empty_mood_count
-empty_situation_count
-other_theme_rate
-average_confidence
-life_reflection_rate
-generic_summary_rate
-source_distribution
-evidence_distribution
-low_confidence_count
-```
-
----
-
-### 7. Import semantic profiles vào MySQL
-
-Script import:
-
-```txt
-apps/backend/scripts/maintenance/importSongSemanticProfiles.js
-```
-
-Dry-run trước, không ghi DB:
+AI Playlist không có semantic candidate: kiểm tra file:
 
 ```powershell
-cd D:\CaNhan\Luan_Van\apps\backend
-
-node scripts\maintenance\importSongSemanticProfiles.js --input=..\..\datasets\processed\semantic\previews\song_semantic_profiles_python_preview.csv --dry-run
+Test-Path .\datasets\processed\semantic\profiles\song_semantic_profiles.csv
 ```
 
-Nếu cần test nhỏ:
+Media/Karaoke lỗi: kiểm tra:
 
 ```powershell
-node scripts\maintenance\importSongSemanticProfiles.js --input=..\..\datasets\processed\semantic\previews\song_semantic_profiles_python_preview.csv --limit=20 --dry-run
+Test-Path .\apps\backend\uploads
 ```
 
-Import thật:
+## 15. Trước khi nộp
 
 ```powershell
-node scripts\maintenance\importSongSemanticProfiles.js --input=..\..\datasets\processed\semantic\previews\song_semantic_profiles_python_preview.csv --apply
+git status
+git branch --show-current
+git log -1 --oneline
 ```
 
-Script import có cơ chế:
+Bộ bàn giao được xem là hoàn chỉnh khi:
 
-```txt
-- convert tags string sang JSON array
-- validate required fields
-- upsert theo song_id
-- tự tính review_status
-- mặc định dry-run nếu không có --apply
-```
-
----
-
-### 8. Kết quả import hiện tại
-
-Đã import full catalog thành công:
-
-```txt
-Total rows in song_semantic_profiles: 7661
-```
-
-Phân bố `review_status`:
-
-```txt
-auto: 6922
-needs_review: 739
-```
-
-Phân bố `evidence_level`:
-
-```txt
-lyrics_based: 5153
-metadata_only: 2508
-```
-
-Phân bố `main_theme`:
-
-```txt
-healing: 3208
-love: 2466
-heartbreak: 717
-self_confidence: 431
-party: 346
-life_reflection: 161
-friendship: 148
-nostalgia: 138
-conflict: 46
-```
-
-Các lệnh kiểm tra:
-
-```powershell
-mysql -u root -p musicflow -e "SELECT COUNT(*) AS total FROM song_semantic_profiles;"
-```
-
-```powershell
-mysql -u root -p musicflow -e "SELECT review_status, COUNT(*) AS total FROM song_semantic_profiles GROUP BY review_status;"
-```
-
-```powershell
-mysql -u root -p musicflow -e "SELECT evidence_level, COUNT(*) AS total FROM song_semantic_profiles GROUP BY evidence_level;"
-```
-
-```powershell
-mysql -u root -p musicflow -e "SELECT main_theme, COUNT(*) AS total FROM song_semantic_profiles GROUP BY main_theme ORDER BY total DESC;"
-```
-
----
-
-### 9. Ý nghĩa các trường chất lượng
-
-`evidence_level`:
-
-```txt
-lyrics_based    : Có lyrics hoặc text đủ mạnh để phân tích
-metadata_only   : Chủ yếu dựa trên title/artist/genre/audio features
-```
-
-`review_status`:
-
-```txt
-auto            : Có thể dùng bình thường
-needs_review    : Nên giảm trọng số hoặc kiểm tra lại
-approved        : Đã được duyệt thủ công
-```
-
-Khi tích hợp recommendation, nên xử lý:
-
-```txt
-lyrics_based + auto       => dùng trọng số đầy đủ
-metadata_only + auto      => dùng trọng số vừa phải
-needs_review              => giảm trọng số
-```
-
----
-
-### 10. Ghi chú tích hợp tiếp theo
-
-Bước tiếp theo không cần sửa frontend ngay. Nên tích hợp backend trước:
-
-```txt
-1. Tạo service đọc song_semantic_profiles
-2. Join semantic profile vào candidate songs
-3. Content-Based Filtering cộng điểm theo:
-   - main_theme
-   - mood_tags
-   - situation_tags
-   - semantic_text
-4. AI Playlist Generator dùng semantic profile để match prompt tốt hơn
-5. Giảm trọng số các bài metadata_only hoặc needs_review
-```
-
-Ví dụ logic scoring:
-
-```txt
-same main_theme        + cao
-overlap mood_tags      + vừa
-overlap situation_tags + vừa
-semantic_text match    + vừa
-metadata_only          x 0.75
-needs_review           x 0.50
-```
-
-Không nên xóa hoặc ghi đè bảng `song_semantic_profiles` khi chưa backup hoặc chưa chạy dry-run.
-
-### Ngày 26/06/2026: Promote model recommendation_bpr_model_final_semantic_v2.json sang storage/recommendation/models/bpr_mf_latest.json sau khi evaluation full 194 users.
+- `main` chứa source mới nhất.
+- README chạy từ đầu đến cuối không phụ thuộc file bí mật đã commit.
+- `docs/DEMO_DATA.md` trỏ tới Drive có đủ database, dataset, artifacts và media.
+- `DEMO_ACCOUNTS.txt` đi kèm gói dữ liệu nhưng không public mật khẩu trên GitHub.
+- Đã thử clone sang một thư mục mới và chạy lại theo đúng README.

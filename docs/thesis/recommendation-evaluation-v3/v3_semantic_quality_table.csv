@@ -1,5 +1,0 @@
-algorithm,attached_rate,lyrics_based_rate,metadata_only_rate,needs_review_rate,mood_match_rate,average_semantic_confidence
-Most Popular,1,0.7072,0.2928,0,0.5111,0.6649
-Content-Based + Semantic,1,0.782,0.218,0,0.8879,0.68
-BPR-MF,1,0.7858,0.2142,0,0.5018,0.6672
-Hybrid + Semantic,1,0.8601,0.1399,0,0.7523,0.6843
