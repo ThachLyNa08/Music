@@ -1,163 +1,104 @@
-# Environment and secrets
+# Environment / secrets
 .env
 .env.*
 !.env.example
-apps/backend/.env
-apps/frontend/.env
-apps/ai-service/.env
-apps/backend/.env.local
-apps/frontend/.env.local
-apps/ai-service/.env.local
-apps/backend/.env.*.local
-apps/frontend/.env.*.local
-apps/ai-service/.env.*.local
+**/.env
+**/.env.*
+!**/.env.example
 spotify_tokens.json
-backend/spotify_tokens.json
-apps/backend/spotify_tokens.json
 
-# Dependencies
+# Node dependencies
 node_modules/
-backend/node_modules/
-frontend/node_modules/
-apps/backend/node_modules/
-apps/frontend/node_modules/
+**/node_modules/
 
-# Build output
+# Python virtual environments
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# Build / caches
+build/
 dist/
-frontend/dist/
-apps/frontend/dist/
 dist-ssr/
+.cache/
+.vite/
+.vite-temp/
+__pycache__/
+*.py[cod]
 
-# Logs
+# Logs / temporary files
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Runtime/cache artifacts
-__pycache__/
-*.py[cod]
-*.part
-.vite/
-.vite-temp/
-
-# Runtime media/storage
-backend/uploads/
-apps/backend/uploads/
-storage/
-uploads/
-
-# OS/editor files
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/*
-!.vscode/extensions.json
-migration_error.txt
-backend/migration_error.txt
-apps/backend/migration_error.txt
-folder-tree-after-phase1.txt
-
-# dependencies
-node_modules/
-apps/*/node_modules/
-venv/
-.env
-.env.*
-!.env.example
-
-# build/cache
-dist/
-build/
-.cache/
-__pycache__/
-*.pyc
-
-# logs
-*.log
-npm-debug.log*
-yarn-debug.log*
 yarn-error.log*
-
-# IDE
-.vscode/
-.idea/
-.DS_Store
-
-# runtime uploads / media
-apps/backend/uploads/
-storage/audio/
-storage/images/
-storage/playlist_covers/
-
-# datasets
-datasets/raw/
-datasets/processed/
-
-# generated AI/audio outputs
-apps/ai-service/outputs/
-apps/ai-service/temp/
-apps/ai-service/cache/
-
-# database local dumps
-*.sql
-*.dump
-*.backup
-
-# OS
-Thumbs.db
-
-*.sql
-!database/migrations/*.sql
-!database/schema/*.sql
-!database/seeds/*.sql
-
-# Python virtual environments
-.venv/
-**/.venv/
-apps/ai-service/.venv/
-
-# Local generated files
-apps/backend/uploads/
-apps/backend/exports/
-apps/ai-service/exports/
-*.log
+pnpm-debug.log*
+*.tmp
+*.bak
+*.bak-*
+*.part
 out.txt
 grep.txt
 scratch_*.js
 
-# Local prototype files
+# Runtime uploads / generated outputs
+apps/backend/uploads/
+apps/backend/exports/
+apps/ai-service/outputs/
+apps/ai-service/temp/
+apps/ai-service/cache/
+apps/ai-service/exports/
+storage/
+
+# Generated/local datasets
+datasets/
+
+# Local database dumps (tracked schema/migrations/seeds are exceptions)
+*.sql
+*.dump
+*.backup
+!database/schema/*.sql
+!database/migrations/*.sql
+!database/seeds/*.sql
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# AI coding-agent / local assistant instructions
+AGENTS.md
+**/AGENTS.md
+agent-skills/
+**/agent-skills/
+CLAUDE.md
+**/CLAUDE.md
+CODEX.md
+**/CODEX.md
+GEMINI.md
+**/GEMINI.md
+.claude/
+**/.claude/
+.codex/
+**/.codex/
+
+# Local prototypes and patch files
 musicflow_liquid_glass.html
 musicflow_user_dashboard.html
 playlist_gallery.html
+backup_working_changes.patch
+migration_error.txt
+folder-tree-after-phase1.txt
 
-# Local debug / temporary scripts
+# One-off local runners
 apps/backend/check_msg.js
 apps/backend/query_db.js
 apps/backend/scripts/run_migration.js
-
-# Local backup patch
-backup_working_changes.patch
-
-# Generated / local datasets
-datasets/
-
-# Temporary exports / reports
-*.tmp
-*.bak
-*.log
-
-# Local one-off migration runners
 apps/backend/scripts/run_*_migration.js
 
-# Local thesis/doc backups
+# Local thesis/report backups
 docs/thesis/backup/
 docs/reports/
-
-*.bak-mojibake
 database/exports/
-*.sql.bak-*
-*.bak
-*.tmp
