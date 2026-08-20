@@ -1,119 +1,151 @@
 # MusicFlow Recommendation Serving
 
-Bản ghi chép về cách tích hợp mô hình BPR-MF đã huấn luyện vào backend phục vụ API recommendation cho frontend.
+Tài liệu này mô tả cách backend MusicFlow phục vụ recommendation hiện tại. Mô hình lõi đang dùng là **LightGCN Hybrid V4**. BPR-MF Hybrid chỉ còn là mô hình so sánh trong đánh giá V4, không phải model serving chính.
 
----
+## 1. Model artifacts
 
-## 1. Model Artifact
-
-Đường dẫn mặc định:
+`apps/backend/src/services/recommendationModel.service.js` đọc artifact V4 tại:
 
 ```text
-storage/recommendation/models/v3/bpr_mf_v3.json
+storage/recommendation/evaluation/v4/
 ```
 
-Artifact hiện tại:
+Các artifact được loader khai báo:
 
-| Field | Value |
-|---|---|
-| `algorithm` | `BPR-MF` |
-| `generated_at` | `2026-07-06T03:53:08.412Z` |
-| `trained_users` | 194 |
-| `trained_items` | 2700 |
-| `train_positive_pairs` | 70319 |
-| `factors` | 32 |
-| `hyperparameters` | factors=32, epochs=50, lr=0.02, reg=0.01, neg=5, seed=42 |
-| `dataset_source` | experiment seed (controlled dataset) |
+| Key | File | Vai trò |
+|---|---|---|
+| `serving` | `lightgcn_hybrid_serving_recs_v4.json` | Serving artifact ưu tiên cho user ID thật trong MySQL. |
+| `lightgcn` | `lightgcn_hybrid_recs_v4.json` | LightGCN Hybrid V4 recommendations dùng khi serving artifact không có entry hợp lệ. |
+| `bpr` | `bpr_hybrid_recs_v4.json` | Artifact so sánh/evaluation V4, không phải đường serving chính. |
+| `cb` | `content_based_recs_v4.json` | Artifact Content-Based V4 cho đánh giá/tái tạo pipeline. |
+| `popular` | `most_popular_recs_v4.json` | Artifact Most Popular V4 cho đánh giá/tái tạo pipeline. |
 
-Artifact chứa:
+Loader cache JSON trong memory. `tryLoadArtifact(key)` trả `{ ok: false }` khi thiếu hoặc lỗi JSON để service có thể đi tiếp bằng fallback. Metadata public trả `algorithm: LightGCN Hybrid V4`, `dataset_source: v4_serving`, `fallback_policy` nếu artifact có metadata.
 
-- `user_index_map` — map `user_id (string)` → `idx (int)`.
-- `song_index_map` — map `song_id (string)` → `idx (int)`.
-- `user_factors` — mảng 2D shape `[194][32]`.
-- `item_factors` — mảng 2D shape `[7653][32]`.
-- `user_biases`, `item_biases` — vector cùng số dòng tương ứng.
+Không còn dùng `storage/recommendation/models/v3/bpr_mf_v3.json` làm artifact serving chính, và không còn env override `BPR_MF_MODEL_PATH` trong loader hiện tại.
 
-Có thể override path bằng env `BPR_MF_MODEL_PATH` (relative hoặc absolute).
+## 2. Serving strategy
 
----
-
-## 2. Serving Strategy
-
-Phân tầng fallback rõ ràng trong `recommendation.service.js`:
+Luồng chính nằm trong `apps/backend/src/services/recommendation.service.js`:
 
 ```text
-1. BPR-MF + rerank     (user nằm trong model + >= 5 candidates)
-2. Content-Based       (user có listening_history nhưng không trong model, hoặc BPR trả quá ít)
-3. Most Popular        (fallback cuối cùng)
+User request
+  -> kiểm tra feedback status
+  -> nếu có implicit feedback:
+       1. đọc serving artifact LightGCN V4
+       2. nếu không đủ bài hợp lệ, đọc LightGCN V4 artifact
+       3. nếu vẫn không đủ, build Content-Based runtime
+  -> nếu cold-start hoặc các bước trên không đủ:
+       4. chạy cold-start multi-tier
+       5. fallback cuối cùng là Most Popular / bài public active
+  -> xác thực song_id trong MySQL
+  -> Tempo-aware layer khi áp dụng
+  -> response API
 ```
 
-**BPR-MF serving score** (sau khi re-rank):
+Fallback thực tế:
 
 ```text
-final_score =
-  0.70 * normalized_bpr_score
-+ 0.15 * (content_preference + artist_boost)
-+ 0.10 * normalized_popularity
-+ 0.05 * normalized_novelty
-- 0.05 * recent_artist_penalty
-- 0.04 * recent_song_penalty
+LightGCN Hybrid V4
+  -> Content-Based V4 / cold-start
+  -> Most Popular V4
 ```
 
-BPR raw score:
+Chi tiết theo code:
 
-```text
-bpr_score = dot(user_factors[u], item_factors[i]) + user_bias[u] + item_bias[i]
-```
+- User có implicit feedback là user có `listenCount >= 5`, hoặc có like, hoặc có bài trong manual playlist.
+- Backend ưu tiên `lightgcn_hybrid_serving_recs_v4.json` qua `tryLoadArtifact('serving')`.
+- Nếu serving artifact thiếu user, thiếu recommendation, hoặc sau khi validate còn ít hơn `min(5, limit)` bài hợp lệ, backend thử `lightgcn_hybrid_recs_v4.json`.
+- Nếu LightGCN artifact vẫn không đủ, backend build Content-Based runtime từ `listening_history`, `market`, `genre_id`, `artist_id`, popularity và semantic profile nếu có.
+- Với user cold-start hoặc không đủ candidate, backend chạy cold-start multi-tier: onboarding artists, onboarding genres, system playlists theo thời điểm, trending/popular songs, diverse discovery và default active songs.
 
-Sau khi sort theo `final_score`, áp dụng giới hạn mềm:
+## 3. Ranking và personalization runtime
 
-- Max 2 bài cùng artist trong top 10
-- Max 4 bài cùng artist trong top 20
+Hybrid ranking của artifact V4 đã được tạo trong pipeline offline. Runtime serving không huấn luyện lại model; backend đọc recommendation đã chuẩn bị, xác thực `song_id` trong MySQL, rồi áp dụng các lớp runtime khi cần.
 
-**Exclusion rules:**
+Phân tách theo code hiện tại:
 
-- Bài user đã nghe trong 30 ngày gần đây bị loại khỏi candidate.
-- Nếu candidate pool < 5 sau khi loại, fallback content-based.
-- Không bao giờ trùng `song_id` (greedy rerank đảm bảo).
+- LightGCN V4 artifact: dùng điểm đã có trong `lightgcn_hybrid_serving_recs_v4.json` hoặc `lightgcn_hybrid_recs_v4.json`.
+- Runtime LightGCN: sau khi xác thực bài hát hợp lệ trong MySQL, có thể áp dụng Tempo-aware layer.
+- Content-Based fallback: build scoring/ranking runtime riêng từ `listening_history` join với metadata bài hát.
+- Cold-start/onboarding: dùng `user_genre_preferences` và `user_artist_preferences`, system playlists theo thời điểm, trending/popular và default active songs.
 
-**Không phụ thuộc audio features** ở serving layer — chỉ dùng `market`, `genre_id`, `artist_id`, `play_count`. Nếu dữ liệu content thiếu, component `content_preference` đơn giản về 0, các thành phần khác vẫn hoạt động.
+Nguồn dữ liệu personalization trong runtime:
 
----
+- `listening_history` là nguồn chính để build market/genre/artist preference cho Content-Based runtime qua `buildUserPreferenceMap(...)` và `buildUserTasteProfile(...)`.
+- `song_likes` tham gia semantic preference trong `songSemanticProfile.service.buildUserSemanticPreference(...)`, không phải nguồn trực tiếp cho market/genre/artist scoring của Content-Based runtime.
+- Manual playlist songs được dùng trong `getUserFeedbackStatus(...)` để xác định user có implicit feedback hay không; không phải nguồn trực tiếp cho Content-Based scoring.
+- `user_genre_preferences` và `user_artist_preferences` phục vụ onboarding/cold-start.
 
-## 3. API Endpoint
+Trong Content-Based runtime, service lấy các bài user đã nghe để loại khỏi candidate. Sau đó ranking kết hợp các tín hiệu như market, genre, artist preference, semantic score, dominant-market guard và artist diversity:
+
+- tối đa 2 bài cùng artist trong top 10
+- tối đa 4 bài cùng artist trong top 20
+- ưu tiên dominant market khi user có gu thị trường đủ mạnh
+
+Một số hàm hoặc trường nội bộ còn tên legacy như `bprScore`/`bprRaw`; đây là di sản đặt tên trong source, không phải bằng chứng rằng BPR-MF V3 là đường serving chính.
+
+## 4. Tempo-aware layer
+
+`applyTempoAwareLayer` chỉ re-rank khi strategy là `lightgcn_hybrid_v4`. Layer này:
+
+- build user tempo profile qua `userTempoProfile.service`
+- yêu cầu confidence `>= 0.2` và có preferred tempo bucket
+- đọc audio features của các bài candidate
+- kết hợp LightGCN score với tempo affinity, energy, danceability và diversity
+- trả thêm `tempoAware`, `tempoProfile`, `audioFeatureCoverage` và các trường BPM/tempo reason khi có feature
+
+Nếu không phải LightGCN V4, không đủ tempo profile, hoặc không có audio features, service giữ thứ tự hiện có và đánh dấu `tempoAware: false`.
+
+## 5. MySQL validation
+
+Backend không trả trực tiếp `song_id` từ artifact nếu bài không còn hợp lệ trong database. Hàm `fetchValidSongs(songIds)` query MySQL và chỉ giữ bài:
+
+- thỏa `publicSongCondition('s')`
+- có `audio_url IS NOT NULL`
+- `audio_url <> ''`
+- `s.id IN (...)`
+
+Kết quả query join thêm artists, albums và genres để response có metadata đầy đủ. Nếu số bài hợp lệ còn ít hơn `min(5, limit)`, service coi artifact đó không đủ và chuyển sang fallback tiếp theo.
+
+## 6. API endpoint
 
 ### `GET /api/recommend/home-songs`
 
-Auth: required (Bearer token).
+Auth: required.
 
 Query params:
 
-| Param | Type | Default | Mô tả |
+| Param | Type | Default | Ghi chú |
 |---|---|---|---|
-| `limit` | int | 20 | Số bài trả về, max 50 |
+| `limit` | int | 20 | `recommendation.service` clamp trong khoảng `1..200`. |
 
-Response shape:
+Response có các trường chính:
 
 ```json
 {
   "success": true,
-  "strategy": "bpr_mf_rerank",
-  "strategy_reason": "ok",
-  "generatedAt": "2026-06-18T...",
-  "model": {
-    "algorithm": "BPR-MF",
-    "generatedAt": "2026-07-06T03:53:08.412Z",
-    "trainedUsers": 194,
-    "trainedItems": 2700,
-    "trainPositivePairs": 70319,
-    "factors": 32,
-    "datasetSource": "experiment_seed",
-    "limitations": [...]
+  "strategy": "model_personalized",
+  "strategyLabel": "Gợi ý cá nhân hóa",
+  "servingVersion": "v4",
+  "coreModel": "LightGCN Hybrid V4",
+  "fallbackUsed": false,
+  "fallbackReason": null,
+  "legacyV3Used": false,
+  "tempoAware": true,
+  "serving": {
+    "strategy": "lightgcn_hybrid_v4",
+    "strategyLabel": "LightGCN Hybrid V4",
+    "servingVersion": "v4",
+    "coreModel": "LightGCN Hybrid V4",
+    "fallbackUsed": false,
+    "legacyV3Used": false,
+    "tempoAware": true
   },
-  "model_load": {
-    "ok": true,
-    "error": null,
-    "loaded_at": "..."
+  "fallbackChain": [],
+  "model": {
+    "algorithm": "LightGCN Hybrid V4",
+    "datasetSource": "v4_serving"
   },
   "items": [
     {
@@ -131,91 +163,55 @@ Response shape:
       "audio_url": "http://host:port/uploads/...",
       "play_count": 12345,
       "recommendation_score": 0.8132,
-      "reason": "Dựa trên hành vi nghe nhạc tương tự của bạn (BPR-MF)"
+      "bpm": 120,
+      "tempoBucket": "medium",
+      "reason": "Dựa trên hành vi nghe nhạc tương tự của bạn"
     }
   ]
 }
 ```
 
-Các giá trị `strategy` có thể gặp:
+Các strategy nội bộ thường gặp:
 
-| Value | Nghĩa |
+| Strategy | Ý nghĩa |
 |---|---|
-| `bpr_mf_rerank` | BPR-MF chính + rerank nội bộ |
-| `content_based_fallback` | User không trong model hoặc BPR trả quá ít, dùng market/genre/artist |
-| `popular_fallback` | Không đủ signal, dùng top play_count |
+| `lightgcn_hybrid_v4` | LightGCN Hybrid V4 đủ candidate hợp lệ. |
+| `content_based_v4` | Fallback Content-Based runtime cho user có tín hiệu nghe/sở thích. |
+| `content_based_v4_runtime` | Biến thể runtime được chuẩn hóa về Content-Based V4 trong metadata. |
+| `cold_start_preferences` | Cold-start dựa trên onboarding artists/genres và các tier fallback. |
+| `most_popular_v4` | Fallback popular/trending khi không đủ tín hiệu cá nhân hóa. |
 
----
+Controller có thể gom strategy public thành `model_personalized`, `content_based_onboarding` hoặc `most_popular_fallback`, nhưng trường `serving.strategy` vẫn giữ strategy nội bộ V4.
 
-## 4. Files
+## 7. Tái tạo V4
 
-| File | Vai trò |
-|---|---|
-| `apps/backend/src/services/recommendationModel.service.js` | Loader + cache BPR-MF model |
-| `apps/backend/src/services/recommendation.service.js` | Scoring + rerank + fallback |
-| `apps/backend/src/controllers/recommendation.controller.js` | Thêm method `getHomeSongRecommendations` |
-| `apps/backend/src/routes/recommendation.routes.js` | Route `GET /home-songs` |
-| `scripts/recommendation/testRecommendationServing.js` | Smoke test e2e (không phải unit test) |
+Các script V4 hiện còn trong repository nằm tại:
 
-Các file hiện có được giữ nguyên:
-
-- `recommendation.controller.js` — chỉ thêm method, không sửa `getHomeRecommendations`.
-- `recommendation.routes.js` — chỉ thêm 1 route, không đổi route cũ.
-- Không tạo file trùng kiểu `recommendationService2.js`.
-
----
-
-## 5. Test
-
-Chạy smoke test (cần backend `.env` + DB sẵn sàng):
-
-```bash
-# Từ project root
-NODE_PATH=apps/backend/node_modules node scripts/recommendation/testRecommendationServing.js
+```text
+scripts/recommendation/v4/
 ```
 
-Test cases tự động chạy:
+Các entry point liên quan:
 
-1. **`exp_vpop` user** (trong model): strategy `bpr_mf_rerank`, top đúng market VPOP.
-2. **`exp_kpop` user** (trong model): strategy `bpr_mf_rerank`, top đúng market KPOP.
-3. **`exp_usuk` user** (trong model): strategy `bpr_mf_rerank`, top đúng market USUK.
-4. **Real user** (không trong model, listening_history có dữ liệu): strategy `popular_fallback` hoặc `content_based_fallback` tuỳ signal.
-5. **Model missing** (file tạm rename): strategy `content_based_fallback`, không crash.
+- `run_v4_pipeline.py`
+- `run_v4_all_users_pipeline.bat`
+- `train_lightgcn_v4.py`
+- `train_bpr_mf_v4.py`
+- `generate_content_based_v4.py`
+- `generate_most_popular_v4.py`
+- `hybrid_rerank_v4.py`
+- `evaluate_v4_models.py`
+- `evaluate_tempo_aware.py`
+- `generate_serving_recs_v4.js`
+- `generate_serving_recs_v4_all.js`
+- `generate_v4_report.py`
+- `import_v4_to_db.py`
 
-Mỗi case in ra:
+Chỉ dùng script thực sự còn trong `scripts/recommendation/v4/` khi cần tái tạo artifact. Tài liệu này không dùng các script V3 đã bị loại khỏi repository.
 
-- `strategy` / `strategy_reason`
-- `items returned` (count)
-- `duplicate song count` (phải = 0)
-- `recent-listened leak count` (phải = 0)
-- `elapsed` (ms)
-- `top 5` (id, artist, market, title, score)
-- URL sanity cho `cover_url` + `audio_url`
+## 8. Ghi chú vận hành
 
----
-
-## 6. Limitations (Honest)
-
-1. **Experimental data only.** Mô hình train từ 200 user mô phỏng + bài hát thật trong DB. Không phản ánh hành vi thật của người dùng MusicFlow.
-2. **User not in model:** index lookup trả `-1`, fallback content-based. Real users mới phải qua fallback cho đến khi BPR-MF được cập nhật bằng offline training script.
-3. **Cold start:** user chưa nghe gì cũng đi vào fallback path vì `buildContentBasedRecommendations` cần ít nhất 1 preference count.
-4. **No streaming recompute.** BPR-MF serve từ artifact JSON, không train real-time. Cần cập nhật artifact định kỳ bằng offline script `scripts/recommendation/evaluateRecommendationAlgorithms.js` (kèm `--write-bpr-model`) khi có batch listening_history mới.
-5. **Item factors dimension:** 7653 (đủ bài cho 194 user, 2700 trained items). User mới ngoài model sẽ không có vector nên chỉ nhận fallback.
-6. **No audio features in serving score.** Energy, danceability, mood chỉ phục vụ evaluation. Có thể bổ sung khi cần `context_mood_score` cho production.
-7. **Không cache kết quả.** Mỗi request đều chạy lại pipeline. Có thể thêm Redis cache TTL ~5 phút cho user in-model nếu traffic tăng.
-
----
-
-## 7. Cách cập nhật model artifact bằng offline script
-
-```bash
-node scripts/recommendation/evaluateRecommendationAlgorithms.js --full --write-bpr-model
-```
-
-Sau khi offline script hoàn tất, artifact mới sẽ ghi đè `bpr_mf_v3.json`. Backend sẽ tự reload artifact trong request tiếp theo (cache check theo mtime).
-
----
-
-## 8. Khi nào cần Restart Backend?
-
-Không cần. Service `recommendationModel.service.js` cache theo `mtimeMs` của file. Sau khi file model được thay, request tiếp theo tự load version mới (không cần restart Node process).
+- Backend không train online trong request; recommendation serve từ artifact JSON V4 và fallback runtime.
+- Nếu thiếu `serving` hoặc `lightgcn` artifact, code không mặc định crash ở `home-songs`; `tryLoadArtifact` trả lỗi và service tiếp tục thử Content-Based/cold-start/Most Popular.
+- `modelService.load()` vẫn yêu cầu đủ 5 artifact nếu gọi trực tiếp. Đường recommendation chính dùng `tryLoadArtifact` để fallback mềm theo từng artifact.
+- `legacyV3Used` luôn là `false` trong metadata serving hiện tại.

@@ -3,8 +3,9 @@
 //
 // Strategy:
 //   - Reuses recommendation.service.getRecommendationsForUser which already
-//     dispatches BPR-MF / content_based / popular fallback and returns deduped,
-//     public-songs-only items with cover_url + audio_url.
+//     dispatches Recommendation V4:
+//     LightGCN Hybrid V4 -> Content-Based/cold-start -> Most Popular fallback,
+//     then returns deduped, public-songs-only items with cover_url + audio_url.
 //   - Persists a per-user, system-owned playlist keyed by SYSTEM_KEY below.
 //   - Idempotent: if a playlist with the same (user_id, system_key) already
 //     exists, we keep the same id and refresh its songs/description/updated_at.

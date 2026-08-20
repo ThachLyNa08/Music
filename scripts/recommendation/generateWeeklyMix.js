@@ -1,12 +1,11 @@
 // scripts/recommendation/generateWeeklyMix.js
 // Manual CLI for generating Weekly Mix playlists based on the recommendation
-// service. Mirrors the smoke test pattern used by
-// scripts/recommendation/testRecommendationServing.js.
+// service.
 //
 // Usage:
 //   node scripts/recommendation/generateWeeklyMix.js --user-id=218
 //   node scripts/recommendation/generateWeeklyMix.js --user-id=218 --dry-run
-//   node scripts/recommendation/generateWeeklyMix.js --user-id=218 --limit=30
+//   node scripts/recommendation/generateWeeklyMix.js --user-id=218 --limit=50
 //   node scripts/recommendation/generateWeeklyMix.js --all
 //   node scripts/recommendation/generateWeeklyMix.js --date=2026-06-21 --user-id=11 --dry-run
 
@@ -64,7 +63,7 @@ Options:
   --user-id=<id>   Generate for a single user.
   --all            Generate for all active users.
   --date=YYYY-MM-DD Simulate generation for a specific date.
-  --limit=<n>      Override the per-user candidate limit (default 25, capped at 30).
+  --limit=<n>      Override the per-user candidate limit (default 35, capped at 50).
   --dry-run        Do not write to DB. Print summary only.
   --help, -h       Show this help.`);
 }

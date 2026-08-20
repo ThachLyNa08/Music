@@ -40,7 +40,7 @@ tải demo data
    ↓
 import musicflow_demo.sql
    ↓
-đặt dataset / model-artifact / media đúng thư mục
+đặt semantic dataset / recommendation artifact / media đúng thư mục
    ↓
 cấu hình .env
    ↓
@@ -102,6 +102,11 @@ Bộ demo đầy đủ cần có:
 - recommendation/model artifacts
 - `apps/backend/uploads/` gồm media cần cho demo
 - `DEMO_ACCOUNTS.txt`
+
+Ba CSV catalog nguồn đã có sẵn trong repository để đối chiếu metadata nhạc:
+`docs/music_database_kpop.csv`, `docs/music_database_usuk.csv`,
+`docs/music_database_vpop.csv`. Các file này không thay thế database dump,
+semantic dataset hoặc recommendation artifacts.
 
 Nếu dùng gói `MusicFlow-demo-data.zip` theo cấu trúc trong `docs/DEMO_DATA.md`, đặt ZIP tại root repository và chạy:
 

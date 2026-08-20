@@ -16,7 +16,7 @@ Each CSV row is treated as one retrievable document keyed by `song_id`. The runt
 4. Retrieve top semantic candidates, normally top 300 `song_id` values.
 5. Query MusicFlow DB using those IDs, then apply playable/public filters and strict market, genre, and artist constraints.
 6. Fall back to the old DB candidate tiers only when RAG candidates are not enough.
-7. Rerank with `semanticRag`, intent match, BPR-MF when available, audio features, user history, popularity, semantic DB profile score, and diversity.
+7. Rerank with `semanticRag`, intent match, LightGCN V4 personalization when available, audio features, user history, popularity, semantic DB profile score, and diversity.
 8. Diversify final songs by limiting repeated artists unless the prompt explicitly asks for one artist.
 9. Return preview songs plus `retrieval` metadata for debugging and thesis evaluation.
 
@@ -30,7 +30,9 @@ Semantic RAG is the recall layer. It finds likely song IDs from text meaning.
 
 The DB query is the truth layer. It verifies song existence, audio URL availability, public/release status, market, genre, and artist constraints.
 
-The reranker is the listening-quality layer. It combines RAG relevance with existing AI Playlist scoring signals: BPR-MF personalization, audio features, intent match, popularity, and artist diversity.
+The reranker is the listening-quality layer. It combines RAG relevance with existing AI Playlist scoring signals: LightGCN V4 personalization, audio features, intent match, popularity, and artist diversity.
+
+The implementation reads personalization scores from the V4 serving artifact first, then the LightGCN V4 artifact. Some internal variables still use `bpr`/`bprScore` legacy names, but BPR-MF V3 is not the active AI Playlist personalization source.
 
 ## Example checks
 

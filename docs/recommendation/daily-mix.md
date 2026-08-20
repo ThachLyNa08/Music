@@ -71,8 +71,8 @@ thuộc (anchor) không bị dồn cục ở đầu playlist.
 Quan trọng:
 
 - `dailymix_06` chỉ map duy nhất 1 playlist, dù target date là Sat hay Sun.
-  Scheduler chỉ chạy 00:10 Thứ Hai (1 lần) để analyze cả weekend range.
-- **Không** có cron Daily Mix nào chạy 00:10 Chủ Nhật.
+  Schedule rule hiện tại xử lý `dailymix_06` vào Thứ Bảy 00:00 theo `systemPlaylistSchedule.util.js`.
+- Chủ Nhật 00:00 hiện dành cho schedule rule `weekly_mix`.
 
 ## 3. Idempotency & Read-only
 
@@ -207,11 +207,12 @@ Các trường quan trọng:
 Xem chi tiết: `docs/recommendation/scheduler.md`.
 
 Tóm tắt: scheduler recommendation **mặc định TẮT** (an toàn), chỉ bật
-khi `ENABLE_RECOMMENDATION_SCHEDULER=true` rõ ràng. Khi bật:
-- 6 cron Daily Mix chạy 00:10 ICT mỗi ngày (trừ Chủ Nhật).
-- 1 cron Weekly Mix chạy 03:30 Thứ Hai.
-- Nếu thêm `RECOMMENDATION_SCHEDULER_TEST_MODE=true` thì gộp thành 2 cron
-  test `*/2 * * * *` (CHỈ dùng cho local dev).
+khi `ENABLE_RECOMMENDATION_SCHEDULER=true` rõ ràng. Khi bật, code hiện ưu tiên
+shared runner chạy `0 0 * * *` theo timezone `Asia/Ho_Chi_Minh` và xử lý các
+schedule rule đến hạn trong `systemPlaylistSchedule.util.js`. Daily Mix 01-06
+có rule theo tuần từ Thứ Hai đến Thứ Bảy lúc 00:00; Weekly Mix có rule Chủ Nhật
+00:00. Nếu thêm `RECOMMENDATION_SCHEDULER_TEST_MODE=true`, shared runner chạy
+`*/2 * * * *` để test nhanh.
 
 ## 8. Verification
 
